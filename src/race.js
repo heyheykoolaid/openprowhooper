@@ -193,7 +193,7 @@
     if (!t || !Array.isArray(t.gates)) throw new Error('not a track file');
     const n = x => (typeof x === 'number' && isFinite(x) ? x : 0);
     return { format: 'pro-whooper-track/1', id: String(t.id || ('t' + Date.now().toString(36))), name: String(t.name || 'Track').slice(0, 60), env: ENVIRONMENTS[t.env] ? t.env : 'livingroom',
-      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false, nextOnly: !!t.nextOnly, section: Math.max(U, Math.min(3, n(t.section) || U)),
+      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false, nextOnly: !!t.nextOnly, showNext: t.showNext !== false, section: Math.max(U, Math.min(3, n(t.section) || U)),
       gates: t.gates.filter(g => GATE_TYPES[g.type]).slice(0, 300).map(g => ({ id: String(g.id || ('g' + nextId++)), type: g.type, pos: (g.pos || [0, 0, 0]).slice(0, 3).map(n), rot: (g.rot || [0, 0, 0]).slice(0, 3).map(n),
         scale: Math.min(4, Math.max(0.25, n(g.scale) || 1)), w: Math.min(12, Math.max(0.125, n(g.w) || GATE_TYPES[g.type].defaults.w)), h: Math.min(12, Math.max(0.125, n(g.h) || GATE_TYPES[g.type].defaults.h)),
         lift: Math.min(8, Math.max(0, g.lift == null ? GATE_TYPES[g.type].defaults.lift : n(g.lift))), color: COLORS[g.color] ? g.color : 'white', required: g.required !== false && !GATE_TYPES[g.type].prop, bidir: !!g.bidir })) };

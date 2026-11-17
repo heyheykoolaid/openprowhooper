@@ -147,7 +147,7 @@ function ghostMeshFor(color) {
   g.scale.setScalar(1.6); g.visible = false; scene.add(g); return g;
 }
 function raceStart(track, rmode, opts = {}) {
-  document.body.classList.remove('editing'); $('#editorUI').classList.add('hide');
+  document.body.classList.remove('editing'); $('#editorUI').classList.add('hide'); GZ.grp.visible = false;
   ghostOff(); train.on = false; renderTrain(); if (typeof ask !== 'undefined') ask.pending = [];
   const W = RC.buildTrackWorld(track, world); race.W = W; race.track = track; race.mode = rmode; race.laps = opts.laps || race.opts.laps || 3; race.fromEditor = !!opts.fromEditor;
   setEnv(track.env); useWorld(W); ed.extras.visible = false; if (ed.flightMesh) ed.flightMesh.visible = false; cutaway(null);
@@ -246,7 +246,7 @@ function raceVisuals(dt) {
   const s = race.sess; if (!s) return; race.msgT -= dt;
   // the next gate glows (and its connectors keep the PVC look)
   const want = s.state === 'waiting' || s.holeshot ? s.req[0] : s.state === 'racing' ? s.req[s.next] : -1;
-  race.meshes.forEach((m, i) => { const hot = i === want, col = race.track.gates[i].color || 'white'; for (const p of m.userData.pipes) p.material = hot ? PVC[col + 'Hot'] : PVC[col]; if (m.userData.panel) m.userData.panel.visible = hot; });
+  race.meshes.forEach((m, i) => { const hot = i === want, col = race.track.gates[i].color || 'white'; for (const p of m.userData.pipes) p.material = hot && race.track.showNext !== false ? PVC[col + 'Hot'] : PVC[col]; if (m.userData.panel) m.userData.panel.visible = hot && race.track.showNext !== false; });
   // ghosts
   const lapU = s.state === 'racing' && s.lapT0 != null ? race.t - s.lapT0 : -1, winU = s.state === 'racing' ? race.t - race.winStart : -1;
   const place = (k, rec, u, on) => { const m = race.gm[k]; const g = on && rec && u >= 0 ? RC.ghostAt(rec, u) : null; m.visible = !!g; if (g) { m.position.set(g.pos.x, g.pos.y, g.pos.z); m.quaternion.set(g.q.x, g.q.y, g.q.z, g.q.w); } };
@@ -327,13 +327,13 @@ function openEditor(track, keepCam) {
   if (track.env === 'playground') { setEnv('playground'); } else setEnv(track.env);
   if (!keepCam) { const E = RC.ENVIRONMENTS[track.env], sz = E.build ? E.build().size : { x: 30, z: 30, h: 8 }; ed.cam.t.set(0, 0.3, 0); ed.cam.dist = Math.max(sz.x, sz.z) * 0.9; ed.cam.yaw = 0.5; ed.cam.pitch = 0.8; }
   mode = 'editor'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#editorUI').classList.remove('hide'); ed.extras.visible = true; document.body.classList.add('editing');
-  $('#edName').value = track.name; $('#edSF').checked = track.startFinish !== false; $('#edNext').checked = !!track.nextOnly;
+  $('#edName').value = track.name; $('#edSF').checked = track.startFinish !== false; $('#edNext').checked = !!track.nextOnly; $('#edShow').checked = track.showNext !== false;
   $('#edEnv').textContent = `Room: ${RC.ENVIRONMENTS[track.env].label} — ${RC.ENVIRONMENTS[track.env].desc}`;
   $('#edLib').innerHTML = Object.entries(RC.GATE_TYPES).filter(([k, T]) => !T.hidden).map(([k, T]) => `<button data-ed="lib:${k}" title="${T.desc}">${T.label}</button>`).join('');
   $('#edColor').innerHTML = Object.keys(RC.COLORS).map(c => `<option ${c === ed.color ? 'selected' : ''}>${c}</option>`).join('');
   edRebuild(); edPanels(); edToolbar(); resize();
 }
-function editorClose() { if (ed.flightMesh) ed.flightMesh.visible = false; $('#editorUI').classList.add('hide'); document.body.classList.remove('editing'); clearGroup(gateRoot); clearGroup(ed.extras); cutaway(null); setEnv('playground'); }
+function editorClose() { GZ.grp.visible = false; if (ed.flightMesh) ed.flightMesh.visible = false; $('#editorUI').classList.add('hide'); document.body.classList.remove('editing'); clearGroup(gateRoot); clearGroup(ed.extras); cutaway(null); setEnv('playground'); }
 const edSnapshot = () => JSON.stringify(ed.track);
 function edPush() { ed.undo.push(edSnapshot()); if (ed.undo.length > 120) ed.undo.shift(); ed.redo = []; ed.dirty = true; }
 function edUndo() { if (!ed.undo.length) return; ed.redo.push(edSnapshot()); ed.track = JSON.parse(ed.undo.pop()); edAfter(); }
@@ -389,6 +389,29 @@ function edMagnet(ids) {
   for (const g of list) { g.pos[0] = +(g.pos[0] + best.x).toFixed(4); g.pos[1] = Math.max(0, +(g.pos[1] + best.y).toFixed(4)); g.pos[2] = +(g.pos[2] + best.z).toFixed(4); }
   return true;
 }
+// Viewport manipulators, like a 3D modelling program: arrows to move along an axis, rings to rotate about one, a cube to
+// scale. They sit on the selection (red X, green Y, blue Z), keep a constant size on screen, and follow the Local/Global
+// switch. Dragging the part itself still slides it over the floor.
+const AXV_ = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+const GZ = { grp: new THREE.Group(), move: new THREE.Group(), rot: new THREE.Group(), scl: new THREE.Group() };
+(() => { const col = { x: 0xff4b4b, y: 0x5fd35f, z: 0x4b8bff }, mat = c => new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.95 });
+  for (const ax of ['x', 'y', 'z']) { const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), AXV_[ax]);
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 8), mat(col[ax])); sh.position.copy(AXV_[ax]).multiplyScalar(0.5); sh.quaternion.copy(q);
+    const hd = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.26, 12), mat(col[ax])); hd.position.copy(AXV_[ax]).multiplyScalar(1.0); hd.quaternion.copy(q);
+    const a = new THREE.Group(); a.add(sh, hd); a.userData.giz = { mode: 'move', axis: ax }; GZ.move.add(a);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.035, 8, 48), mat(col[ax])); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), AXV_[ax]); ring.userData.giz = { mode: 'rotate', axis: ax }; GZ.rot.add(ring); }
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), mat(0xffd34d)); cube.userData.giz = { mode: 'scale', axis: null }; GZ.scl.add(cube);
+  GZ.grp.add(GZ.move, GZ.rot, GZ.scl); GZ.grp.traverse(o => { o.renderOrder = 20; }); GZ.grp.visible = false; scene.add(GZ.grp); })();
+function gizPivot() { const ids = [...ed.sel]; if (!ids.length) return null; const c = new THREE.Vector3();
+  for (const id of ids) { const p = id === 'launch' ? ed.track.launch.pos : (gateById(id) || { pos: [0, 0, 0] }).pos; c.add(new THREE.Vector3(p[0], p[1], p[2])); } return c.multiplyScalar(1 / ids.length); }
+function gizUpdate(cam) {
+  const pv = mode === 'editor' && !ed.place && ['move', 'rotate', 'scale'].includes(ed.tool) ? gizPivot() : null; GZ.grp.visible = !!pv; if (!pv) return;
+  GZ.grp.position.copy(pv); GZ.grp.scale.setScalar((ed.ortho ? ed.cam.dist * 0.5 : cam.position.distanceTo(pv)) * 0.13);
+  const one = ed.sel.size === 1 && !ed.sel.has('launch') ? gateById([...ed.sel][0]) : null; if (ed.space === 'local' && one) GZ.grp.quaternion.copy(rotQ(one.rot)); else GZ.grp.quaternion.identity();
+  GZ.move.visible = ed.tool === 'move'; GZ.rot.visible = ed.tool === 'rotate'; GZ.scl.visible = ed.tool === 'scale' && !ed.sel.has('launch');
+}
+function gizPick(e) { if (!GZ.grp.visible) return null; const hits = edRay(e).intersectObjects(GZ.grp.children, true);
+  for (const h of hits) { let o = h.object; while (o && !o.userData.giz) o = o.parent; if (o && o.parent.visible) return o.userData.giz; } return null; }
 function edSelBox() {
   if (ed.box) { ed.extras.remove(ed.box); ed.box.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.userData.ownMat) o.material.dispose(); }); ed.box = null; }
   const grp = new THREE.Group(); for (const id of ed.sel) { const m = ed.meshes.get(id); if (!m) continue; const h = new THREE.BoxHelper(m, 0xffd34d); h.userData.ownMat = true; grp.add(h); }
@@ -402,7 +425,7 @@ function edCam() {
   return cam;
 }
 function editorFrame(dt) {
-  const cam = edCam(); cutaway(cam); edFlightTick(dt);
+  const cam = edCam(); cutaway(cam); edFlightTick(dt); gizUpdate(cam);
   droneMesh.visible = false;
   renderer.render(scene, cam); droneMesh.visible = true;
   ed.validT -= dt;
@@ -471,6 +494,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 2 || e.button === 1) { ed.drag = { kind: e.button === 1 || e.shiftKey ? 'pan' : 'orbit', x: e.clientX, y: e.clientY }; return; }
   if (e.button !== 0) return;
   if (ed.tool === 'define') { const c = edCorner(e); if (!c) return;
+    ed.defDown = { x: e.clientX, y: e.clientY };
     if (!ed.defA) { ed.defA = c; const m = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), PVC.arrowGo); m.position.set(c.x, c.y, c.z); ed.extras.add(m); edHint('First corner set. Now click the opposite (diagonal) corner. Esc cancels.'); }
     else { const a = ed.defA; ed.defA = null; if (!edDefine(a, c)) edRebuild(); }
     return; }
@@ -478,6 +502,11 @@ canvas.addEventListener('mousedown', e => {
     const type = ed.place || 'gate', g = edPlace(type, p); if (prev) { faceAlong(prev, ed.paint.prevPrev || prev.pos, g.pos); faceAlong(g, prev.pos, g.pos); }
     ed.paint = { last: g.id, prevPrev: prev ? prev.pos : null }; edRebuild(); edPanels(); return; }
   if (ed.place) { const p = RC.GATE_TYPES[ed.place].loose ? edCorner(e) : edFloor(e); if (p) { edPlace(ed.place, p); if (!e.shiftKey) { ed.place = null; edToolbar(); } } return; }
+  const gz = gizPick(e);
+  if (gz) { const items = [...ed.sel].map(sid => sid === 'launch' ? { id: sid, pos: ed.track.launch.pos.slice(), rot: [ed.track.launch.yaw || 0, 0, 0], scale: 1 } : { id: sid, pos: gateById(sid).pos.slice(), rot: gateById(sid).rot.slice(), scale: gateById(sid).scale });
+    const pv = gizPivot(), cam = ed.ortho ? edCamO : edCamP, r = canvas.getBoundingClientRect(), px = v => { const q = v.clone().project(cam); return new THREE.Vector2((q.x + 1) / 2 * r.width + r.left, (1 - q.y) / 2 * r.height + r.top); };
+    const axW = gz.axis ? AXV[gz.axis].clone().applyQuaternion(GZ.grp.quaternion) : null, p0 = px(pv), p1 = axW ? px(pv.clone().add(axW)) : p0;
+    ed.drag = { kind: 'xf', giz: gz, x: e.clientX, y: e.clientY, items, pv, axW, sdir: p1.clone().sub(p0), sc: p0, toward: axW ? axW.dot(cam.position.clone().sub(pv)) : 1, a0: Math.atan2(e.clientY - p0.y, e.clientX - p0.x), snap: edSnapshot(), moved: false }; return; }
   const id = edPick(e);
   if (!id) { if (!e.shiftKey) { ed.sel.clear(); edSelBox(); edPanels(); } return; }
   if (e.shiftKey) { if (ed.sel.has(id)) ed.sel.delete(id); else ed.sel.add(id); edSelBox(); edPanels(); return; }
@@ -494,6 +523,16 @@ addEventListener('mousemove', e => {
     ed.cam.t.x += (-dx * c - dy * s) * k; ed.cam.t.z += (dx * s - dy * c) * k; d.x = e.clientX; d.y = e.clientY; return; }
   if (d.kind !== 'xf') return; d.moved = true;
   const set = (it, fn) => { if (it.id === 'launch') { const L = ed.track.launch; const r = fn({ pos: L.pos.slice(), rot: [L.yaw || 0, 0, 0], scale: 1 }, it); L.pos = [r.pos[0], 0.03, r.pos[2]]; L.yaw = r.rot[0]; } else { const g = gateById(it.id); const r = fn(g, it); g.pos = r.pos; g.rot = r.rot; g.scale = r.scale; } };
+  if (d.giz) {   // dragging a manipulator
+    const g = d.giz, loc = ed.space === 'local' && d.items.length === 1;
+    if (g.mode === 'move') { const L2 = d.sdir.lengthSq() || 1, m = snapG((dx * d.sdir.x + dy * d.sdir.y) / L2), v = d.axW.clone().multiplyScalar(m);
+      for (const it of d.items) set(it, (gg, o) => ({ pos: clampToRoom([+(o.pos[0] + v.x).toFixed(4), Math.max(0, +(o.pos[1] + v.y).toFixed(4)), +(o.pos[2] + v.z).toFixed(4)]), rot: gg.rot, scale: gg.scale })); }
+    if (g.mode === 'rotate') { let a = (Math.atan2(e.clientY - d.sc.y, e.clientX - d.sc.x) - d.a0) * 180 / Math.PI; while (a > 180) a -= 360; while (a < -180) a += 360; const da = snapA(d.toward >= 0 ? -a : a);
+      for (const it of d.items) set(it, (gg, o) => { if (it.id === 'launch') return { pos: o.pos, rot: [(((o.rot[0] + (g.axis === 'y' ? da : 0)) % 360) + 360) % 360, 0, 0], scale: 1 };
+        const r = rotated(o, g.axis, da, d.items.length > 1 ? d.pv : new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2]), loc); return { pos: r.pos, rot: r.rot, scale: gg.scale }; }); }
+    if (g.mode === 'scale') { const f = Math.exp(-dy * 0.006); for (const it of d.items) if (it.id !== 'launch') set(it, (gg, o) => ({ pos: gg.pos, rot: gg.rot, scale: Math.round(Math.max(0.25, Math.min(4, o.scale * f)) * 100) / 100 })); }
+    edRebuild(); edPropsLive(); return;
+  }
   if (ed.tool === 'move' || ed.tool === 'paint') {
     if (d.vertical || ed.axis === 'y') { const dyM = -dy * ed.cam.dist * 0.0015; for (const it of d.items) set(it, (g, o) => ({ pos: clampToRoom([o.pos[0], snapG(Math.max(0, o.pos[1] + dyM)), o.pos[2]]), rot: g.rot, scale: g.scale })); }
     else { const f = edFloor(e, d.y0); if (!f || !d.f0) return; const ox = ed.axis === 'z' ? 0 : f.x - d.f0.x, oz = ed.axis === 'x' ? 0 : f.z - d.f0.z;
@@ -511,7 +550,11 @@ addEventListener('mousemove', e => {
 });
 addEventListener('mouseup', () => {
   if (mode !== 'editor' || !ed.drag) return; const d = ed.drag; ed.drag = null;
-  if (d.kind === 'xf' && d.moved) { ed.undo.push(d.snap); ed.redo = []; ed.dirty = true; if (ed.tool !== 'scale' && edMagnet(d.items.map(x => x.id))) { edRebuild(); edHint('Snapped onto the pipe ✓ (Magnet is on)'); } edPanels(); }
+  if (d.kind === 'xf' && d.moved) { ed.undo.push(d.snap); ed.redo = []; ed.dirty = true; if (ed.tool !== 'scale' && !(d.giz && d.giz.mode === 'scale') && edMagnet(d.items.map(x => x.id))) { edRebuild(); edHint('Snapped onto the pipe ✓ (Magnet is on)'); } edPanels(); }
+});
+addEventListener('mouseup', e => {   // Define gate: press on one corner, drag, release on the opposite corner (or just click the two corners)
+  if (mode !== 'editor' || ed.tool !== 'define' || !ed.defA || !ed.defDown) return; const moved = Math.hypot(e.clientX - ed.defDown.x, e.clientY - ed.defDown.y); ed.defDown = null;
+  if (moved < 12) return; const c = edCorner(e), a = ed.defA; ed.defA = null; if (!c || !edDefine(a, c)) edRebuild();
 });
 canvas.addEventListener('wheel', e => { if (mode !== 'editor') return; e.preventDefault(); ed.cam.dist = Math.max(0.6, Math.min(80, ed.cam.dist * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
 // ---- keyboard
@@ -571,7 +614,7 @@ function edToolbar() {
   $('#edSpace').textContent = ed.space === 'global' ? 'Global' : 'Local'; $('#edGrid').textContent = 'Grid: ' + (ed.grid ? '6 in' : 'off'); $('#edOrtho').textContent = ed.ortho ? 'Ortho' : 'Persp';
   $('#edSnap').value = String(ed.snap); $('#edAngle').textContent = 'Angle snap: ' + (ed.snap ? ed.snap + '°' : 'off'); $('#edAngle').classList.toggle('on', !!ed.snap); $('#edAxis').textContent = 'Axis: ' + (ed.axis ? ed.axis.toUpperCase() : 'free'); $('#edAxis').classList.toggle('on', !!ed.axis);
   $('#edMagnet').textContent = 'Snap: ' + (ed.magnet ? 'on' : 'off'); $('#edMagnet').classList.toggle('on', ed.magnet); $('#edFlight').classList.toggle('on', ed.flight);
-  edHint(ed.tool === 'define' ? 'Define gate: click two opposite corners of any opening or open space. Corners snap to pipe ends; elsewhere they land on the floor. Same height = a flat gate to dive through.' : ed.tool === 'paint' ? `Paint path: click the floor to lay ${RC.GATE_TYPES[ed.place || 'gate'].label}s in order — each one turns to face along the path. Esc to stop.`
+  edHint(ed.tool === 'define' ? 'Define gate: drag from one corner to the opposite corner (or click the two corners) of any opening or open space. Corners snap to pipe ends; elsewhere they land on the floor. Same height = a flat gate to dive through.' : ed.tool === 'paint' ? `Paint path: click the floor to lay ${RC.GATE_TYPES[ed.place || 'gate'].label}s in order — each one turns to face along the path. Esc to stop.`
     : ed.place ? `Click in the room to place a ${RC.GATE_TYPES[ed.place].label} (Shift+click to place several). Esc to cancel.`
     : ed.sel.size ? `${ed.tool === 'move' ? 'Drag to move (Alt+drag or Axis Y: up/down; X / Z lock a direction)' : ed.tool === 'rotate' ? `Drag sideways to rotate about ${(ed.axis || 'y').toUpperCase()} (press X / Y / Z to pick the axis; Shift+X/Y/Z = quarter turn)` : 'Drag up/down to scale'} · arrows nudge · PgUp/PgDn height · [ ] rotate · Ctrl+D clone · Del delete`
     : 'Click a gate to select it (Shift+click adds). Pick a part on the left to place it.');
@@ -583,7 +626,7 @@ function edPanels() {
   const nLoose = T.gates.filter(g => RC.GATE_TYPES[g.type].loose).length;
   $('#edOrder').innerHTML = (nLoose ? `<div class="oRow opt"><span class="n">–</span><span class="lb">${nLoose} loose pipes (the structure)</span></div>` : '') + T.gates.map((g, i) => { if (RC.GATE_TYPES[g.type].loose) return ''; const req = g.required && !RC.isProp(g); if (req) num++;
     return `<div class="oRow ${ed.sel.has(g.id) ? 'sel' : ''} ${req ? '' : 'opt'}" data-oi="${i}"><span class="n">${req ? num + (num === 1 ? '▶' : '') : '–'}</span><span class="lb">${RC.GATE_TYPES[g.type].label}${g.color !== 'white' ? ' · ' + g.color : ''}${g.bidir ? ' ⇄' : ''}</span>
-      <button data-oup="${i}" title="Earlier">↑</button><button data-odn="${i}" title="Later">↓</button></div>`; }).join('') + `<div class="oRow ${ed.sel.has('launch') ? 'sel' : ''}" data-olaunch><span class="n">▣</span><span class="lb">Launch pad</span></div>`;
+      ${req ? `<button data-odir="${i}" title="Reverse the direction this gate is flown from">⇅</button><button data-obi="${i}" class="${g.bidir ? 'on' : ''}" title="Either direction counts">⇄</button>` : ''}<button data-oup="${i}" title="Earlier">↑</button><button data-odn="${i}" title="Later">↓</button></div>`; }).join('') + `<div class="oRow ${ed.sel.has('launch') ? 'sel' : ''}" data-olaunch><span class="n">▣</span><span class="lb">Launch pad</span></div>`;
   $('#edCount').textContent = `(${RC.required(T).length} gates)`; $('#edNext').checked = !!T.nextOnly;
   const stt = RC.trackStats(T, ed.W.geoms), hasLoose = T.gates.some(g => RC.GATE_TYPES[g.type].loose);
   $('#edStats').innerHTML = hasLoose ? `PVC: <b>${stt.sections}</b> / 20 sections of ${stt.sectionIn}″ ${stt.sections > 20.05 ? '<span class="warn">(over the RaceGOW 20)</span>' : ''}<br>Footprint: ${stt.footprint[0]} × ${stt.footprint[1]} sections ${stt.fits ? '<span class="ok">fits 4′ × 6′ at 24″</span>' : '<span class="warn">bigger than RaceGOW\'s 2 × 3</span>'}` : `Gate size ${stt.sectionIn}″`;
@@ -619,6 +662,7 @@ document.addEventListener('change', e => {
   if (mode !== 'editor') return; const t = e.target;
   if (t.id === 'edName') { ed.track.name = t.value.trim() || 'Track'; ed.dirty = true; return; }
   if (t.id === 'edSF') { edPush(); ed.track.startFinish = t.checked; edRebuild(); edPanels(); return; }
+  if (t.id === 'edShow') { ed.track.showNext = t.checked; ed.dirty = true; return; }
   if (t.id === 'edNext') { edPush(); ed.track.nextOnly = t.checked; edRebuild(); edPanels(); return; }
   if (t.id === 'edSnap') { ed.snap = +t.value; edToolbar(); return; }
   if (t.id === 'edColor') { ed.color = t.value; return; }
@@ -636,6 +680,9 @@ document.addEventListener('change', e => {
 document.addEventListener('click', e => {
   if (mode !== 'editor') return; const T = ed.track;
   const up = e.target.closest('[data-oup]'), dn = e.target.closest('[data-odn]'), row = e.target.closest('[data-oi]'), lr = e.target.closest('[data-olaunch]'), fn = e.target.closest('[data-pfn]');
+  const od = e.target.closest('[data-odir]'), ob = e.target.closest('[data-obi]');
+  if (od || ob) { const g = T.gates[+(od || ob).dataset[od ? 'odir' : 'obi']]; edPush(); if (ob) g.bidir = !g.bidir; else if (Math.abs(g.rot[1]) > 45) g.rot[1] = -g.rot[1]; else g.rot[0] = (g.rot[0] + 180) % 360;
+    ed.sel.clear(); ed.sel.add(g.id); edRebuild(); edPanels(); return; }
   if (up || dn) { const i = +(up || dn).dataset[up ? 'oup' : 'odn'], j = i + (up ? -1 : 1); if (j < 0 || j >= T.gates.length) return; edPush(); [T.gates[i], T.gates[j]] = [T.gates[j], T.gates[i]]; edRebuild(); edPanels(); return; }
   if (row) { const id = T.gates[+row.dataset.oi].id; if (e.shiftKey) { ed.sel.has(id) ? ed.sel.delete(id) : ed.sel.add(id); } else { ed.sel.clear(); ed.sel.add(id); } edSelBox(); edPanels(); return; }
   if (lr) { ed.sel.clear(); ed.sel.add('launch'); edSelBox(); edPanels(); return; }
@@ -652,5 +699,6 @@ document.addEventListener('click', e => {
     edRebuild(); edPanels(); }
 });
 window.__pw.race = { start: (t, m, o) => raceStart(t, m, o), get state() { return race; }, editor: t => openEditor(t || RC.newTrack('livingroom')), get ed() { return ed; }, menu: () => openRaceMenu(), off: () => raceOff(), edAct, step: (p0, dt) => raceStep(p0, dt),
+  gizPt: (mode_, ax) => { const g = (mode_ === 'move' ? GZ.move : mode_ === 'rotate' ? GZ.rot : GZ.scl).children.find(c => (c.userData.giz.axis || null) === (ax || null)); GZ.grp.updateMatrixWorld(true); const v = (mode_ === 'move' ? AXV[ax].clone().multiplyScalar(0.7) : mode_ === 'rotate' ? (ax === 'y' ? new THREE.Vector3(0.9, 0, 0) : ax === 'x' ? new THREE.Vector3(0, 0.9, 0) : new THREE.Vector3(0.9, 0, 0)) : new THREE.Vector3()).applyMatrix4(GZ.grp.matrixWorld).project(edCam()); void g; return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; },
   projectPt: p => { const v = new THREE.Vector3(p[0], p[1], p[2]).project(edCam()); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; },
   project: id => { const i = ed.track.gates.findIndex(g => g.id === id), G = ed.W.geoms[i], p = G.pipes[2] ? S.mul(S.add(G.pipes[2][0], G.pipes[2][1]), 0.5) : G.centre, v = new THREE.Vector3(p.x, p.y, p.z).project(edCam()); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };

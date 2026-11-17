@@ -191,7 +191,7 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 .edEnv { margin: 6px 0; font-size: 12px; opacity: .85; }
 #edOrder .oRow { display: flex; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
 #edOrder .oRow:hover { background: #fff1; } #edOrder .oRow.sel { background: #ffd34d33; outline: 1px solid #ffd34d88; }
-#edOrder .oRow .n { width: 26px; font-family: var(--mono); opacity: .8; } #edOrder .oRow .lb { flex: 1; } #edOrder .oRow button { padding: 1px 6px; }
+#edOrder .oRow .n { width: 26px; font-family: var(--mono); opacity: .8; } #edOrder .oRow .lb { flex: 1; } #edOrder .oRow button { padding: 1px 5px; } #edOrder .oRow button.on { background: #ffd34d; color: #111; }
 #edOrder .oRow.opt .lb { opacity: .55; font-style: italic; }
 #edProps .pGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; } #edProps .pGrid label { margin: 0; font-size: 11px; }
 #edValid .err { color: #ff8b7d; } #edValid .warn { color: #ffd34d; } #edValid .ok { color: #7dff9a; }
@@ -338,6 +338,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <h4>Gate order <small id="edCount"></small></h4>
     <label class="chk"><input type="checkbox" id="edSF"> Start gate is also the finish (laps)</label>
     <label class="chk" title="For one-structure tracks where checkpoints share pipes and you fly through other checkpoints on the way"><input type="checkbox" id="edNext"> Only the next gate counts (structure tracks)</label>
+    <label class="chk" title="Gates are just spaces: they have no body. This only controls the green guide panel"><input type="checkbox" id="edShow"> Show the next gate as a green panel while racing</label>
     <div id="edOrder"></div>
     <h4>Selection</h4><div id="edProps"><p class="hint">Nothing selected.</p></div>
     <h4>RaceGOW sizing</h4><div id="edStats" class="hint" style="font-size:12px;opacity:.95"></div>
