@@ -223,6 +223,29 @@ A tile can hold several tricks (`extra` on the call / flag: "＋ trick in this t
 tile's span with `tile`, `order`, `of`. Handle colours on the timeline show review state (grey not reviewed, green
 approved, orange corrected, red not a trick, blue added).
 
+## Loop monitor, open loops and custom tricks (2026-11-17, from 14 shared flights and 40 labels)
+While the pitch keeps turning, every full turn is judged as it completes (`update` → `trigger(t, false, lapTok)`): if
+the path looped with it in clear air and `loopSmooth` holds (no hit, no velocity change over about 6 m/s in 50 ms, the
+turning stayed on pitch), that lap is committed as an open-air Powerloop at once (`lap: true`, hold 0) and the next
+turn is judged on its own. Open loops accept the path sweep either way round, and from half a turn of path when the
+loop climbs 1.5 m and lasts over a second. Inverted Yaw Spin accepts more than one turn (270–830). A Whiplash is
+dropped when the quad rolled upside-down under a bar or frame and came back under it (the pilot's "Rollback").
+Pilots can name new tricks in the review editor (`store 'customTricks'`, labels `custom: true`; the learner ignores
+them, tools/signatures.js lists what was measured in each: write the rule from that).
+Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in build order first); removing a
+"never used" variable still needs a grep for assignments.
+
+## The whoop's look and saved builds (src/worldview.js `makeWhoopMesh`, `WHOOP_LOOK`; src/menus.js)
+The model is built from the parts: Air frames are thin see-through rings on three legs, Meteor / 2S frames full
+ducts; motor size from its name (0702 → 7 x 2 mm), bell colour per motor; prop diameter, blade count and (3D)
+pitch; battery size by capacity and cells; the canopy that comes with the electronics (the Air one is a bridge with
+the camera out front); `spec.look` = the pilot's frame / canopy / prop colours. The Garage shows it in a small second
+renderer (`garagePreviewRefresh`, one canvas re-homed after each redraw) and saves named builds (`store 'builds'`:
+parts + colours), like rate profiles. Reference photos are the pilot's; no brand marks are drawn.
+Take-off without arming is on by default (`autoArmTick` in input.js, `store 'autoArm'`): disarmed + throttle seen at rest,
+then raised = armed; the arm switch disarms on its falling edge only. The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
+now lives under Tools & labs. The 3D mode call-out reads METALCRAFT MODE (`.popup.metal`).
+
 ## Using the data (tools/signatures.js) and the error log
 `node tools/signatures.js <data folder>` is the first thing to run on new shared data: it re-flies every flight and
 prints (1) each trick's signature as really flown (degrees per axis, rates, passes, sticks, throttle, pilot ✓/✗),

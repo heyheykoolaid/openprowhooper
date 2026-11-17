@@ -20,7 +20,7 @@ function startFlyGo(withSession) {
   session = withSession ? { timeLeft: 120, started: false } : null;
   recapReset(); if (warm.on) stopWarmup();
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
-  flash(withSession ? '<b>2:00 SESSION</b><small>timer starts when you arm</small>' : '<b>FREE FLY</b><small>Space / arm switch to arm</small>');
+  flash(withSession ? `<b>2:00 SESSION</b><small>timer starts when you ${autoArmOn() ? 'take off' : 'arm'}</small>` : `<b>FREE FLY</b><small>${autoArmOn() ? 'throttle up to take off' : 'Space / arm switch to arm'}</small>`);
 }
 function pause() { mode = 'paused'; show('#pause'); }
 function resume() { mode = 'fly'; show(null); lastT = performance.now(); }
@@ -54,14 +54,21 @@ function opt(obj, sel) { return Object.entries(obj).map(([k, v]) => `<option val
 function openGarage() { show('#garage'); renderGarage(); }
 function renderGarage() {
   const P = S.PARTS, st = params.stats, hv = S.hoverInfo(params);
-  const presetName = Object.keys(S.PRESETS).find(k => JSON.stringify(S.PRESETS[k]) === JSON.stringify(spec)) || '';
+  const PARTK = ['frame', 'motor', 'prop', 'battery', 'electronics'], sameParts = (a, b) => PARTK.every(k => a[k] === b[k]);
+  const presetName = Object.keys(S.PRESETS).find(k => sameParts(S.PRESETS[k], spec)) || '';
+  const builds = myBuilds(), buildName = (builds.find(b => sameParts(b.spec, spec) && JSON.stringify(b.spec.look || {}) === JSON.stringify(spec.look || {})) || {}).name || '', look = spec.look || {};
+  const dflt = { frame: (WHOOP_LOOK.frames[spec.frame] || {}).c ?? 0x18181c, canopy: (WHOOP_LOOK.canopies[spec.electronics] || WHOOP_LOOK.canopies.air).c, props: WHOOP_LOOK.props[spec.prop] ?? 0xe0f040 }, hex = n => '#' + n.toString(16).padStart(6, '0');
   $('#gBuild').innerHTML = `
+    <div id="gPreviewBox"></div>
+    <label>My builds<select id="gMyBuild"><option value="">${builds.length ? '— pick a saved build —' : '— none saved yet —'}</option>${builds.map(b => `<option ${b.name === buildName ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+    <div class="row"><input id="gBuildName" maxlength="30" placeholder="name this build" value="${esc(buildName)}" onkeydown="event.stopPropagation()"><button id="gBuildSave">Save</button><button id="gBuildDel" class="ghost" ${buildName ? '' : 'disabled'}>Delete</button></div>
     <label>Preset<select id="gPreset"><option value="">Custom</option>${Object.keys(S.PRESETS).map(k => `<option ${k === presetName ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
     <label>Frame<select data-part="frame">${opt(P.frames, spec.frame)}</select></label>
     <label>Motors<select data-part="motor">${opt(P.motors, spec.motor)}</select></label>
     <label>Props<select data-part="prop">${opt(P.props, spec.prop)}</select></label>
     <label>Battery<select data-part="battery">${opt(P.batteries, spec.battery)}</select></label>
     <label>Electronics<select data-part="electronics">${opt(P.electronics, spec.electronics)}</select></label>
+    <div class="row gLook"><span>Colours</span>${[['frame', 'frame'], ['canopy', 'canopy'], ['props', 'props']].map(([k, l]) => `<label title="${l} colour"><input type="color" data-look="${k}" value="${/^#[0-9a-f]{6}$/i.test(look[k] || '') ? look[k] : hex(dflt[k])}">${l}</label>`).join('')}${spec.look ? '<button id="gLookReset" class="ghost" title="Back to the parts\' own colours">reset</button>' : ''}</div>
     ${params.warnings.map(w => `<p class="warn">⚠ ${w}</p>`).join('')}
     <div class="stats">
       <div><b>${st.auw.toFixed(1)}g</b><span>all-up weight</span></div><div><b>${st.twr.toFixed(1)}:1</b><span>thrust/weight</span></div>
@@ -93,7 +100,7 @@ function renderGarage() {
     </div>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
-  drawRateCurve();
+  drawRateCurve(); garagePreviewRefresh();
 }
 function drawRateCurve() {
   const c = $('#rateCurve'); if (!c) return; const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
@@ -103,6 +110,31 @@ function drawRateCurve() {
 }
 function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(activeWorld.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
 // Named rate profiles (Garage & Tune): saved sets of rates type + roll/pitch/yaw rates, kept in this browser.
+// Whole builds, named and kept like rate profiles: the five parts and the colours.
+const myBuilds = () => { const a = store.get('builds', []); return Array.isArray(a) ? a.filter(b => b && typeof b.name === 'string' && b.spec && S.PARTS.frames[b.spec.frame] && S.PARTS.motors[b.spec.motor] && S.PARTS.props[b.spec.prop] && S.PARTS.batteries[b.spec.battery] && S.PARTS.electronics[b.spec.electronics]) : []; };
+document.addEventListener('click', e => {
+  if (e.target.id === 'gBuildSave') { const name = String($('#gBuildName').value || '').replace(/[<>"&]/g, '').trim().slice(0, 30); if (!name) { $('#gBuildName').focus(); return; }
+    const all = myBuilds().filter(b => b.name !== name); all.push({ name, spec: JSON.parse(JSON.stringify(spec)) }); all.sort((a, b) => a.name.localeCompare(b.name)); store.set('builds', all.slice(0, 40)); renderGarage(); }
+  if (e.target.id === 'gBuildDel') { const name = $('#gMyBuild').value; if (name) { store.set('builds', myBuilds().filter(b => b.name !== name)); renderGarage(); } }
+  if (e.target.id === 'gLookReset') { delete spec.look; store.set('spec', spec); buildDroneMesh(); renderGarage(); }
+});
+// the Garage's own little view of the whoop (a second, tiny renderer): what you build is what you see
+const gPrev = { r: null, scene: null, cam: null, model: null, yaw: 0.6, pitch: 0.5, drag: null, raf: 0 };
+function garagePreviewRefresh() {
+  const box = $('#gPreviewBox'); if (!box || $('#garage').classList.contains('hide')) return;
+  if (!gPrev.cv) { gPrev.cv = document.createElement('canvas'); gPrev.cv.id = 'gPreview'; gPrev.cv.width = 560; gPrev.cv.height = 300; gPrev.cv.title = 'Your whoop as built: drag to turn it'; }
+  const cv = gPrev.cv; if (cv.parentElement !== box) box.appendChild(cv);   // one canvas, one WebGL context, re-homed after every Garage redraw
+  try {
+    if (!gPrev.scene) { gPrev.scene = new THREE.Scene(); gPrev.cam = new THREE.PerspectiveCamera(32, 560 / 300, 0.005, 5); gPrev.scene.add(new THREE.HemisphereLight(0xffffff, 0x30343c, 1.15)); const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(0.3, 0.6, 0.4); gPrev.scene.add(d); const d2 = new THREE.DirectionalLight(0x88aaff, 0.6); d2.position.set(-0.4, 0.1, -0.5); gPrev.scene.add(d2); }
+    if (!gPrev.r) { gPrev.r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); gPrev.r.setPixelRatio(Math.min(2, devicePixelRatio || 1)); gPrev.r.setSize(560, 300, false); }
+    if (gPrev.model) gPrev.scene.remove(gPrev.model); gPrev.model = makeWhoopMesh(params, spec, tune).g; gPrev.scene.add(gPrev.model);
+    cancelAnimationFrame(gPrev.raf); const tick = () => { if (!gPrev.r || $('#garage').classList.contains('hide') || !document.body.contains(cv)) return; if (!gPrev.drag) gPrev.yaw += 0.006; const R = (params.arm + params.rDuct) * 4.6, cp = Math.cos(gPrev.pitch);
+      gPrev.cam.position.set(Math.sin(gPrev.yaw) * cp * R, Math.sin(gPrev.pitch) * R, Math.cos(gPrev.yaw) * cp * R); gPrev.cam.lookAt(0, 0.002, 0); gPrev.r.render(gPrev.scene, gPrev.cam); gPrev.raf = requestAnimationFrame(tick); }; tick();
+  } catch (err) { cv.style.display = 'none'; }   // no second WebGL context to spare: the Garage works without the picture
+}
+addEventListener('pointerdown', e => { if (e.target.id === 'gPreview') { gPrev.drag = { x: e.clientX, y: e.clientY, yaw: gPrev.yaw, pitch: gPrev.pitch }; e.preventDefault(); } });
+addEventListener('pointermove', e => { const d = gPrev.drag; if (!d) return; gPrev.yaw = d.yaw - (e.clientX - d.x) * 0.01; gPrev.pitch = Math.max(-1.3, Math.min(1.4, d.pitch + (e.clientY - d.y) * 0.01)); });
+addEventListener('pointerup', () => { gPrev.drag = null; });
 const rateProfiles = () => { const a = store.get('rateProfiles', []); return Array.isArray(a) ? a.filter(p => p && p.name && p.rates) : []; };
 function rateEdited() { if (tune.rateProfile) { const p = rateProfiles().find(x => x.name === tune.rateProfile); if (!p || p.ratesType !== tune.ratesType || JSON.stringify(p.rates) !== JSON.stringify(tune.rates)) { tune.rateProfile = ''; const m = $('#gRPMsg'); if (m) m.textContent = 'Changed since it was saved — press Save to keep these.'; const sel = $('#gRP'); if (sel) sel.value = ''; } } }
 document.addEventListener('click', e => {
@@ -113,7 +145,9 @@ document.addEventListener('click', e => {
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value] }; applyParts(); }
+  if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}) }; applyParts(); }
+  if (t.id === 'gMyBuild' && t.value) { const b = myBuilds().find(x => x.name === t.value); if (b) { spec = JSON.parse(JSON.stringify(b.spec)); applyParts(); } }
+  if (t.dataset.look) { spec.look = { ...(spec.look || {}), [t.dataset.look]: t.value }; store.set('spec', spec); buildDroneMesh(); }
   if (t.dataset.part) { spec[t.dataset.part] = t.value; applyParts(); }
   if (t.id === 'gRT') { tune.ratesType = t.value; rateEdited(); saveTune(); renderGarage(); }
   if (t.dataset.r) { const [ax, k] = t.dataset.r.split('.'); tune.rates[ax][k] = +t.value; rateEdited(); saveTune(); drawRateCurve(); }
@@ -156,7 +190,9 @@ function renderControls() {
       ${isR ? `<p class="note">Defaults follow EdgeTX/OpenTX AETR order: CH1 roll · CH2 pitch · CH3 throttle · CH4 yaw · CH5 arm · CH6 reset. If a stick moves the wrong way, tick Invert.</p>` : `<p class="note">Mode 2 layout: left stick throttle/yaw, right stick pitch/roll. A = arm toggle, Y = respawn.</p>`}
       <table class="tt"><tr><th>Function</th><th>${isR ? 'Channel' : 'Axis'}</th><th>Invert</th><th>Live</th><th></th></tr>
       ${AX4.map(a => `<tr><td>${a}</td><td><select data-ax="${a}">${chOpt(P.axes[a].i)}</select></td><td><input type=checkbox data-inv="${a}" ${P.axes[a].inv ? 'checked' : ''}></td><td><div class="bar"><i id="lv_${a}"></i></div></td><td><button data-detect="${a}">Detect</button></td></tr>`).join('')}
-      ${swRow('arm', P.arm)}${swRow('reset', P.reset)}
+      ${swRow('arm', P.arm)}${P.reset && P.reset.enabled === true ? swRow('reset', P.reset) : ''}
+      <tr><td colspan="6"><label class="chk"><input type="checkbox" id="autoArmOn" ${autoArmOn() ? 'checked' : ''}> Take off without arming <small>(raise the throttle from rest and it flies; off: arm first, like a real quad)</small></label></td></tr>
+      <tr><td colspan="6"><label class="chk"><input type="checkbox" id="resetSwOn" ${P.reset && P.reset.enabled === true ? 'checked' : ''}> Use a switch to reset to the start <small>(off: only the <kbd>R</kbd> key resets, and disarming just stops the motors)</small></label></td></tr>
       </table>
       ${!isR ? `<label class="chk"><input type=checkbox id="cThrC" ${P.thrCentered ? 'checked' : ''}> Spring-centred throttle (stick up from centre = throttle)</label>` : ''}
       <div class="preflight" id="preflight"></div>
@@ -195,18 +231,20 @@ function liveControls() {
 }
 document.addEventListener('click', e => {
   const t = e.target;
-  if (t.dataset && t.dataset.mode) { inputCfg.mode = t.dataset.mode; armSwitchPrev = null; saveInput(); renderControls(); }
+  if (t.dataset && t.dataset.mode) { inputCfg.mode = t.dataset.mode; saveInput(); renderControls(); }
   const d = t.dataset && t.dataset.detect; if (d) { detecting = { key: d }; t.textContent = d === 'arm' ? 'Flip switch…' : 'Move it…'; }
   if (t.id === 'cCal') { const P = prof(); if (!calib) { calib = []; t.textContent = 'Calibrating… click when done'; } else { for (const a of AX4) { const c = calib[P.axes[a].i]; if (c && c.max - c.min > 0.5) { P.axes[a].min = c.min; P.axes[a].max = c.max; } } calib = null; saveInput(); renderControls(); } }
 });
 document.addEventListener('change', e => {
   const t = e.target, P = prof(); if (!P || !$('#controls').contains(t)) return;
-  if (t.id === 'cDev') { P.device = decodeURIComponent(t.value); armSwitchPrev = null; renderControls(); }
+  if (t.id === 'cDev') { P.device = decodeURIComponent(t.value); renderControls(); }
   if (t.dataset.ax) P.axes[t.dataset.ax].i = +t.value;
   if (t.dataset.inv) P.axes[t.dataset.inv].inv = t.checked;
   if (t.dataset.swt) { P[t.dataset.swt].type = t.value; renderControls(); }
   if (t.dataset.swi) P[t.dataset.swi].i = +t.value;
   if (t.dataset.swtog !== undefined && t.matches('[data-swtog]')) P.arm.toggle = t.checked;
+  if (t.id === 'autoArmOn') { store.set('autoArm', t.checked); return; }
+  if (t.id === 'resetSwOn') { P.reset = P.reset || { type: 'axis', i: 5, th: 0.5 }; P.reset.enabled = t.checked; saveInput(); renderControls(); return; }
   if (t.id === 'cThrC') P.thrCentered = t.checked;
   if (t.id === 'cDb') P.deadband = +t.value;
   saveInput();

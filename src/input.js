@@ -50,12 +50,25 @@ let armSeen = null, armMovedAt = -1e9, resetAskAt = 0;
 let resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
 const ARM_THR_MAX = 0.08;
 // safe to arm: throttle at the bottom, or (3D mode, where the middle of the stick is zero thrust) in the middle
+// Take off without arming (pilot: "you shouldn't have to arm the drone to take off"): with the quad disarmed and the
+// throttle seen at rest (bottom, or the middle in 3D mode), raising it arms and flies. Disarming still works as before
+// (switch off / Space / arm button), and after a disarm the throttle has to come back to rest before it can arm again,
+// so a Slide Disarm is: disarm, slide, throttle down and up again. Controls has the switch to turn this off.
+const autoArmOn = () => store.get('autoArm', true) !== false;
+let armSwWas = null, armReady = false;
+function autoArmTick() {
+  if (!autoArmOn() || mode !== 'fly' || drone.armed) { if (drone.armed) armReady = false; return; }
+  if (drone.crashed) { armReady = false; return; }                      // crashes re-arm their own way (throttle to rest)
+  const thr = lastRC.thr, is3d = tune.flightMode === '3d';
+  if (thrArmOk(thr)) armReady = true;
+  else if (armReady && (is3d ? Math.abs(thr - 0.5) > 0.1 && thr > 0.12 : thr > 0.12)) { armReady = false; setArmed(true, true); }
+}
 const thrArmOk = thr => thr <= ARM_THR_MAX || (tune.flightMode === '3d' && Math.abs(thr - 0.5) <= 0.07);
 // Flight modes, as on a mode switch: 1 acro, 2 angle (self-levelling), 3 3D (reversible motors: stick middle = no thrust)
-const FLIGHT_MODES = [['acro', 'ACRO', 'rate mode'], ['angle', 'ANGLE', 'self-levelling, lean limit 55°'], ['3d', '3D', 'throttle middle = zero · below = reverse thrust']];
+const FLIGHT_MODES = [['acro', 'ACRO', 'rate mode'], ['angle', 'ANGLE', 'self-levelling, lean limit 55°'], ['3d', 'METALCRAFT', 'throttle middle = zero · below = reverse thrust']];
 function setFlightMode(m) { const F = FLIGHT_MODES.find(x => x[0] === m); if (!F || (tune.flightMode || 'acro') === m) return; tune.flightMode = m; store.set('tune', tune);
   const props3d = S.PARTS.props[spec.prop] && S.PARTS.props[spec.prop].rev > 0.8;
-  flash(`<b>${F[1]} MODE</b><small>${F[2]}${m === '3d' && drone.armed ? ' · centre the throttle to start' : ''}${m === '3d' && !props3d ? ' · these props push about half as hard backward (3D props in the Garage)' : ''}</small>`, m === '3d' ? 'warn' : undefined); }
+  flash(`<b>${F[1]} MODE</b><small>${F[2]}${m === '3d' && drone.armed ? ' · centre the throttle to start' : ''}${m === '3d' && !props3d ? ' · these props push about half as hard backward (3D props in the Garage)' : ''}</small>`, m === '3d' ? 'metal' : ''); }
 function axisVal(pad, a) { if (!pad || pad.axes[a.i] === undefined) return 0; let v = pad.axes[a.i]; v = ((v - a.min) / ((a.max - a.min) || 1)) * 2 - 1; v = Math.max(-1, Math.min(1, v)); return a.inv ? -v : v; }
 function switchOn(pad, s) { return s.type === 'axis' ? (pad.axes[s.i] ?? -1) > (s.th ?? 0.5) : !!(pad.buttons[s.i] && pad.buttons[s.i].pressed); }
 function getRC(dt) {
@@ -70,8 +83,10 @@ function getRC(dt) {
     else {
       // Switch arming: armed while the switch is on and throttle was low when it armed.
       // After a crash the switch can stay on: zero throttle rights the quad and re-arms it (play.js).
-      const sw = switchOn(pad, P.arm);
-      if (!sw) { crashLock = false; if (drone.armed) setArmed(false); armBlock = 'ARM SWITCH OFF'; }
+      // With take-off-without-arming on (the default), switching OFF disarms once (on the flick), so a quad that was
+      // armed by raising the throttle is not shut down again just because the switch happens to be off.
+      const sw = switchOn(pad, P.arm), fell = armSwWas === true && !sw; armSwWas = sw;
+      if (!sw) { crashLock = false; if (drone.armed && (fell || !autoArmOn())) setArmed(false); armBlock = drone.armed ? '' : autoArmOn() ? 'THROTTLE UP TO TAKE OFF' : 'ARM SWITCH OFF'; }
       else if (!drone.armed) {
         if (drone.crashed) { crashLock = true; armBlock = tune.flightMode === '3d' ? 'CRASHED · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
         else if (!thrArmOk(rc.thr)) armBlock = `THROTTLE HIGH (${Math.round(rc.thr * 100)}%) · ${tune.flightMode === '3d' ? 'CENTRE OR LOWER' : 'LOWER'} TO ARM`;
@@ -83,7 +98,7 @@ function getRC(dt) {
     // (two channels driven by one switch on the radio). The R key always resets.
     { const sameAsArm = P.reset && P.arm && P.reset.type === P.arm.type && P.reset.i === P.arm.i, swNow = switchOn(pad, P.arm), nowT = performance.now();
       if (swNow !== armSeen) { armSeen = swNow; armMovedAt = nowT; }
-      const rp = !sameAsArm && switchOn(pad, P.reset); if (rp && !resetPrev) resetAskAt = nowT; resetPrev = rp;
+      const rp = !sameAsArm && P.reset && P.reset.enabled === true && switchOn(pad, P.reset);   // off unless the pilot turns it on in Controls: only the R key resets (pilot: disarming kept sending the whoop back to the start) if (rp && !resetPrev) resetAskAt = nowT; resetPrev = rp;
       if (resetAskAt && nowT - resetAskAt > 150) { const withArm = Math.abs(resetAskAt - armMovedAt) < 400; resetAskAt = 0; if (!withArm) respawn(); } }
     return rc;
   }
@@ -135,9 +150,9 @@ function stickHud(rc) {
   stickUI.trail.push({ thr: rc.thr, yaw: rc.yaw, pitch: rc.pitch, roll: rc.roll }); if (stickUI.trail.length > 30) stickUI.trail.shift();
   drawSticks(cv, rc, stickUI.trail);
 }
-function setArmed(on) {
+function setArmed(on, byThrottle) {
   if (on) {
-    if (!thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
+    if (!byThrottle && !thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
     if (drone.crashed) { flipOver(); }
     drone.crashed = false; drone.armed = true; detector.onArmChange(drone, true);
     if (session && !session.started) session.started = true;

@@ -236,4 +236,12 @@ function clearLoop(c, R = 1.3, v = 5.5) { const L = 2 * P * R / v, T0 = 0.7; ret
 run('open powerloop in clear air', clearLoop(v3(6, 9, 6)), ['Powerloop']);
 run('open powerloop, big and floaty (R 2.2)', clearLoop(v3(6, 10, 6), 2.2, 5), ['Powerloop']);
 run('open powerloop above the swing bar (over it, never under)', clearLoop(v3(0, 4.6, -6), 1.2, 5.5), ['Powerloop']);
+// 2026-11-17, pilot: open powerloops flown back to back were not counted (the turns added up to something that matched
+// nothing). The loop monitor judges every full turn as it completes; a loop with a hard change of motion in it is not one.
+function manyLoops(c, laps, R = 1.6, v = 7, jolt = 0) { const L = 2 * P * R / v, T0 = 0.7; return { T: T0 + L * laps + 1.6, at: t => { if (t < T0) return { pos: v3(c.x, c.y - R, c.z + (T0 - t) * v), q: H.ID }; const tt = Math.min(t - T0, L * laps), th = tt * v / R, after = Math.max(0, t - T0 - L * laps);
+  const tk = P * 0.9 * R / v, kick = jolt && tt > tk ? jolt * (tt - tk) : 0;   // knocked sideways part-way round: from then on it is moving a different way
+  return { pos: v3(c.x + kick, c.y - R * Math.cos(th), c.z - R * Math.sin(th) - after * v), q: pitchQ(th) }; } }; }
+run('two open powerloops back to back', manyLoops(v3(6, 10, 6), 2), ['Powerloop', 'Powerloop']);
+run('three open powerloops back to back', manyLoops(v3(6, 10, 6), 3), ['Powerloop', 'Powerloop', 'Powerloop']);
+{ const ev = M.detect(manyLoops(v3(6, 10, 6), 1, 1.6, 7, 9), W, 30).map(e => e.name); total++; const ok = !ev.includes('Powerloop'); if (ok) pass++; console.log(`${ok ? '✓' : '✗'} ${'a loop with a hard jolt in the middle is not a clean loop'.padEnd(46)} -> ${ev.join(' | ') || 'nothing'}`); }
 console.log(`\n${pass}/${total} pilot-feedback flights`);

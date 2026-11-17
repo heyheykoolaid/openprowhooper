@@ -1614,6 +1614,14 @@ class StreamDetector extends TrickDetector {
     for (const x of W) { const g = Math.atan2(x.v.y, x.v.x * hx + x.v.z * hz); if (prev != null) { let d = g - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; acc += d; } prev = g; sp += Math.hypot(x.v.x, x.v.y, x.v.z); }
     const ys = W.map(x => x.p.y); return { sweep: acc * R2D, speed: sp / W.length, rise: Math.max(...ys) - Math.min(...ys) };
   }
+  // Was the loop one smooth motion? No hit, no hard change of speed or direction (more than about 12 g for a moment),
+  // and the turning stayed on the pitch axis rather than wandering onto roll and yaw.
+  loopSmooth(t0, t1, tok) {
+    if (this.contacts.some(c => c.t > t0 - 0.05 && c.t < t1 + 0.05 && c.impact > 0.6)) return false;
+    const W = this.fbIn(t0, t1); for (let i = 5; i < W.length; i++) { const a = W[i - 5].v, b = W[i].v; if (Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) > 6) return false; }
+    if (tok && tok.raw > 0 && tok.off / tok.raw > 0.6) return false;
+    return true;
+  }
   // Loops and Mattys flown in open air (pilot request): the powerloop family when the path loops round with the pitch,
   // the Matty family when the path goes forward -> down -> backward and the quad ends flying backward.
   matchOpenLoop(toks) {
@@ -1633,10 +1641,15 @@ class StreamDetector extends TrickDetector {
       const loopFam = tr.cross === 'UOU' && !tr.tap && !/Mav|Donkey|Half Mavvy|Power Swap|Power Switch|Barani|Rollani|Flipani/.test(tr.name);
       const mattyFam = tr.cross === 'OU' && tr.end === 'back';
       if (!loopFam && !mattyFam) continue;
-      if (loopFam && !(ps.sweep >= 270)) continue;
+      // The path must loop with the pitch. Shared flights (2026-11-17, pilot-labelled open powerloops read as Flip / Wall
+      // Ride): the sweep's sign depends on which way the quad happened to be travelling when the window opened, and a
+      // tall, slow loop turns the path less than a full 270 because it stalls over the top. So: either way round, and a
+      // loop that climbs 1.5 m and takes over a second counts from half a turn of path.
+      if (loopFam && !(Math.abs(ps.sweep) >= 270 || (Math.abs(ps.sweep) >= 180 && ps.rise >= 1.5 && t1 - t0 >= 1.0))) continue;
       if (mattyFam && anyCross) continue;   // a Matty near any object waits for the object's own reading (over, then back under)
       if (mattyFam && !(ps.sweep <= -120 && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
       for (const pp of tr.parsed) { const m = matchTokens(pp, toks); if (!m) continue;
+        if (loopFam && !this.loopSmooth(t0, t1, toks.length === 1 ? toks[0] : null)) continue;   // the loop monitor: a broken loop is not a loop
         const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
         if (!best || better(cand, best)) best = cand; }
     }
@@ -1711,7 +1724,7 @@ class StreamDetector extends TrickDetector {
     // in, the spin upside-down, then back upright any way that works — often a quick tug and a slow pull-out that never
     // makes a clean 180 token. Entry + inverted spin + "is upright again within 2 s" is the trick; the textbook pattern
     // (with a crisp exit) still matches first when it is there.
-    { const N = this.normalized(), ri = [...N].reverse().findIndex(k => k.ax === 'Y' && k.inv && k.raw >= 270 && k.raw <= 470), yi = ri < 0 ? -1 : N.length - 1 - ri, y = yi >= 0 ? N[yi] : null, e = y && yi > 0 ? N[yi - 1] : null;
+    { const N = this.normalized(), ri = [...N].reverse().findIndex(k => k.ax === 'Y' && k.inv && k.raw >= 270 && k.raw <= 830), yi = ri < 0 ? -1 : N.length - 1 - ri, y = yi >= 0 ? N[yi] : null, e = y && yi > 0 ? N[yi - 1] : null;
       if (y && e && t - y.t1 < 2.0 && t - y.t1 > 0.15 && e.ax !== 'Y' && e.raw >= 120 && e.raw <= 260 && y.t0 - e.t1 <= this.airAllowed(e.t1, y.t0) && this.lastD && this.lastD.up().y > 0.55
         && !N.slice(yi + 1).some(k => k.raw >= 130) && !this.claimUsed.has('iys' + y.t0.toFixed(2)) && !this.orbiting())
         mk({ name: 'Inverted Yaw Spin', toks: N.slice(yi - 1), err: 0.3, clen: 0, draft: false, claims: ['iys' + y.t0.toFixed(2)], t0: e.t0, notes: ['loose exit'] }); }
@@ -1741,7 +1754,7 @@ class StreamDetector extends TrickDetector {
       if (!obst && !pBack && !bumped && !rewound && ps.dmin < 2.0 && vf >= 0.65 && turn >= 135 && back && levelOut && rAny) {
         const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
         if (prev) mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
-        else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj });
+        else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj, underObj: toks.some(x => x.ax === 'R' && x.raw >= 150 && (x.inv === true || x.inv > x.n * 0.5)) ? (this.crossLog.find(c => c.kind === 'U' && c.t > ps.tc - 2.6 && c.t <= t && (o => o && o.obstacle && !o.round)(this.world.objs.find(o => o.id === c.obj))) || {}).obj : undefined });   /* rolled upside-down under a bar or frame (a whip stays the right way up; a tree's canopy over its own trunk does not count) */
       } else if (!obst && vf >= 0.4 && pPlus && pMinus && !bigR && back && turnC < 60) mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] });
     }
     if (fresh.includes('rewind')) { const rw = this.rewinds[this.rewinds.length - 1];
@@ -1795,6 +1808,12 @@ class StreamDetector extends TrickDetector {
     }
     if (finished || ctxEv) this.trigger(t, false);
     if (newCross) this.trigger(t, true);
+    // Loop monitor (pilot: "a system that monitors a loop"): while the pitch keeps turning, every full turn is looked at
+    // as it completes. If the flight path looped round with it, smoothly, in clear air, that lap is a Powerloop there
+    // and then; the rotation carries on and the next turn is judged on its own (loops flown back to back used to add up
+    // to something that matched nothing). A lap broken by a hit or a hard change of motion is not counted.
+    { const c = this.cur[1]; if (c) { const total = c.raw + (c.slow || 0), turned = total - (c.lapBase || 0);
+        if (turned >= 350) { c.lapBase = total; (c.laps = c.laps || []).push(t); this.trigger(t, false, c); } } }
     // tricks waiting on a situation (rewind, flying backward, …) get re-checked a few times a second
     if (this.pend.some(p => p.hold === HOLD_OBST) && t - this.lastRetrig > 0.1) { this.lastRetrig = t; this.trigger(t, false); }
     // an upside-down yaw spin just ended: keep looking for a little while to see the quad come back upright
@@ -1804,9 +1823,13 @@ class StreamDetector extends TrickDetector {
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
       // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
       const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen) ? HOLD_MAX + 1.4 : HOLD_MAX;
-      if (t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
+      if (!p.lap && t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
+      // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
+      // 'rollbacks' under the swing set were being called Whiplash)
+      if (p.name === 'Whiplash' && p.underObj != null && this.crossLog.some(c => c.kind === 'U' && c.obj === p.underObj && c.t > p.tDone - 0.1)) { this.pend = this.pend.filter(x => x !== p); continue; }
+      if (p.name === 'Whiplash' && p.underObj != null && t - p.tDone < 3.2) continue;   // give the way back under a moment to happen
       if (p.name === 'Whiplash' && t - p.tDone < 3.5 && this.lastD && !this.lastD.crashed && (() => { const P = this.poles.find(q => q.id === p.poleObj); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })()) continue;   // the second whip of a Pole Dance may follow
       this.commit(p, t);
     }
@@ -1916,8 +1939,8 @@ class StreamDetector extends TrickDetector {
     }
     return out;
   }
-  trigger(t, byCross) {
-    const variants = [{ N: this.normalized(), obstOnly: false }];
+  trigger(t, byCross, lapTok) {
+    const variants = lapTok ? [{ N: this.normalized({ partial: true, splitAt: lapTok.laps.slice(0, -1) }), obstOnly: false }] : [{ N: this.normalized(), obstOnly: false }];
     if (byCross) variants.push({ N: this.normalized({ partial: true }), obstOnly: true });
     const ups = this.crossLog.filter(c => c.kind === 'U' && !c.used && c.upY > 0.5 && t - c.t < 4).map(c => c.t);
     if (ups.length) variants.push({ N: this.normalized({ partial: byCross, splitAt: ups }), obstOnly: true });
@@ -1925,7 +1948,8 @@ class StreamDetector extends TrickDetector {
     const knocked = c => c.toks.length && !c.tapRef && this.contacts.some(x => !x.tap && x.impact > 0.8 && x.t >= c.toks[0].t0 - 0.3 && x.t <= c.toks[0].t0 + 0.15);
     const pool = [];
     for (const v of variants) pool.push(...this.candidates(v.N, v.obstOnly));
-    pool.push(...this.eventCands(t));
+    if (lapTok) { const keep = pool.filter(c => c.openAir && c.name === 'Powerloop' && c.toks.length === 1 && c.toks[0].ax === 'P'); pool.length = 0; pool.push(...keep.map(c => ({ ...c, lap: true }))); }   // mid-rotation only a plain, clean open loop is decided early
+    else pool.push(...this.eventCands(t));
     for (const c of pool) if (!knocked(c) && better(c, best)) best = c;
     if (!best) return;
     best.spans = best.toks.flatMap(x => x.spans || []); best.claims = best.claims || [];
@@ -1937,7 +1961,7 @@ class StreamDetector extends TrickDetector {
     for (const p of overlap) if (!better(best, p)) return;       // an existing pending trick is at least as good
     this.pend = this.pend.filter(p => !overlap.includes(p));
     const last = best.part && best.part[best.part.length - 1];
-    best.loopEnd = !!(last && last.kind === 'U' && last.upY > 0.5);   // ends at an upright pass under: done even if rotation carries on
+    best.loopEnd = !!(last && last.kind === 'U' && last.upY > 0.5) || !!best.lap;   // ends at an upright pass under (or a monitored open lap): done even if rotation carries on
     const ctxPre = best.toks.length && CONTEXT_TRICKS.some(tr => tr.name !== best.name && better({ name: tr.name, clen: 1, toks: best.toks }, best) &&
       [best.toks, trimNinety(best.toks)].some(tv => tv.length && tr.parsed.some(pp => matchTokens(pp, tv))) && this.reqPre(tr.req, best.toks));
     const spin = best.holdIfSpin && (this.cur.some(c => c && c.raw > 45) || this.toks.some(k => t - k.t1 < 0.3 && k.raw > 60));
@@ -1947,6 +1971,7 @@ class StreamDetector extends TrickDetector {
     const passing = !best.clen && best.toks.length && this.lastD && this.poles.some(P => { const pt = this.passTr[P.id]; return pt && !pt.lock && pt.dmin < 2.5 && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 2.6; });
     best.hold = (this.obstaclePrefix(best) || ctxPre || spin || pole || sw || passing) ? HOLD_OBST : HOLD;
     if (best.name === 'Whiplash') best.hold = Math.max(best.hold, 0.7);   // wait a hair longer before confirming
+    if (best.lap) best.hold = 0;                                          // a monitored lap is decided the moment it completes
     best.deadline = t + best.hold;
     this.pend.push(best);
   }
@@ -2495,7 +2520,7 @@ const learnClone = p => { const c = JSON.parse(JSON.stringify(p || {})); c.learn
 // runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
 function learnWindows(run) {
   const T0 = run.span ? run.span[0] : run.rows[0][0], T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && l.verdict !== 'unlabelled' && (l.actual || l.verdict === 'no'))
-    .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' ? l.actual : null, not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
+    .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' && !l.custom ? l.actual : null,   /* a trick the pilot named themselves has no rule to loosen */ not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
   const W = []; for (const l of L) { const w = W[W.length - 1], a = Math.max(T0, l.a - 4), b = Math.min(T1, l.b + 1.2); if (w && a <= w.b) { w.b = Math.max(w.b, b); w.labels.push(l); } else W.push({ a, b, labels: [l] }); }
   return W;
 }

@@ -116,9 +116,9 @@ function hud() {
   $('#osdState').textContent = noDev ? `${inputCfg.mode.toUpperCase()} NOT DETECTED · MOVE A STICK` : drone.armed ? '' :
     usingSwitch ? (armBlock || 'DISARMED') :
     drone.crashed ? (crashLock ? (tune.flightMode === '3d' ? 'CRASH · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASH · THROTTLE TO ZERO TO GO AGAIN') : drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
-    (!thrArmOk(lastRC.thr) ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
+    (!thrArmOk(lastRC.thr) ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (autoArmOn() ? 'THROTTLE UP TO TAKE OFF' : inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
   $('#osdTimer').textContent = fmtT(flightTime);
-  { const m = tune.flightMode || 'acro', el = $('#osdMode'); if (el) { el.textContent = m === '3d' ? '3D' : m.toUpperCase(); el.classList.toggle('alt', m !== 'acro'); } }
+  { const m = tune.flightMode || 'acro', el = $('#osdMode'); if (el) { el.textContent = m === '3d' ? 'METALCRAFT' : m.toUpperCase(); el.classList.toggle('metal', m === '3d'); el.classList.toggle('alt', m !== 'acro'); } }
   $('#sessionT').textContent = train.on ? 'TRAINING' : session ? fmtT(Math.max(0, session.timeLeft)) : 'FREE FLY';
   $('#washMeter').style.opacity = Math.min(1, drone.washLevel * 2);
 }
@@ -148,6 +148,7 @@ function frame(now) {
     // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).
     if (drone.crashed) { if (crashAt == null) { crashAt = now; crashLock = wasArmed; } else if (crashLock && now - crashAt > 350 && thrArmOk(lastRC.thr) && mode !== 'judge' && !race.on) { crashLock = false; setArmed(true); } }
     else { crashAt = null; wasArmed = drone.armed; }
+    autoArmTick();
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
     updateAudio(); hud(); passFeed(); stickHud(rc); if (race.on) raceHud();
