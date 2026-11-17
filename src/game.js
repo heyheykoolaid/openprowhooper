@@ -993,7 +993,7 @@ setInterval(() => {
 // ============================================================ GitHub sync: upload calibration data to the project repo
 // The token lives only in this browser (localStorage). It is never put in the game file or in exports.
 // Use a fine-grained token limited to the one repo with "Contents: Read and write".
-const gh = Object.assign({ owner: 'heyheykoolaid', repo: 'open-pro-whooper-project', branch: 'main', token: '', enabled: false, bbEnabled: false }, store.get('ghsync', {}));
+const gh = Object.assign({ owner: 'heyheykoolaid', repo: 'openprowhooper', branch: 'main', token: '', enabled: false, bbEnabled: false }, store.get('ghsync', {}));
 const ghState = { queue: [], busy: false, last: '', ok: null };
 const saveGh = () => store.set('ghsync', gh);
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
