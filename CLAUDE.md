@@ -96,7 +96,9 @@ docs/DATA.md (formats, trust weights, workflow). Run it before and after any rul
 ## Flag keys, run review, pilot warm-up (src/recap.js) — docs/RECOGNITION-ROADMAP.md
 While flying, `F` flags the last call as wrong and `Q` flags a missed trick. "Review my tricks" (pause menu / results)
 replays each call for ✓ / ✗ / "it was actually…", flagged and low-confidence (Watcher < 70%) calls first; saved as
-`pro-whooper-session/2` with `via: "review"` to `calibration/review/` (the benchmark reads it). Pilot Warm-up measures
+`pro-whooper-session/2` with `via: "review"` to `calibration/review/` (the benchmark reads it). The review screen is a full player
+(timeline of the whole run with every call on it, scrub, frame step, speed, loop); each call has a dropdown for what it
+really was, and the pilot can add a trick at the playhead (`via: "review-added"`) or remove a call ("not a trick"). Pilot Warm-up measures
 the pilot's rotation speeds and natural gap between moves; `detector.setPilot(profile)` only ever loosens (slower
 deliberate rotations, more air between segments). The roadmap doc lists what is built and what is next.
 
