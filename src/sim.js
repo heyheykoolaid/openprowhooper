@@ -506,6 +506,8 @@ function buildPlayground() {
 //   1. Tagged objects that are really slabs (a platform, a table, a deck) become direction-free: the over/under line is
 //      aimed across whatever approach the pilot takes, as wide as the slab is that way. Bars and rails keep their line.
 //   2. Untagged shapes with air beneath them (a lintel, a shelf, a bench top, a raised pipe) get an over/under of their own.
+//   3. Untagged slabs too wide to loop whole but with air beneath (a roof, a big deck) get an over/under along each edge:
+//      up over the eave and back under it is a loop round that edge.
 // Not surveyed: the ground, anything sitting on something, walls and roofs too big to loop, ramps, the pilot, poles.
 function surveyObstacles(world, opts = {}) {
   if (world._surveyed) return world; world._surveyed = true;
@@ -513,7 +515,7 @@ function surveyObstacles(world, opts = {}) {
   const flatBox = p => p.type === 'box' && Math.abs(p.m[4]) > 0.94;
   // the highest surface under a point, below height y (0 = the ground)
   const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
-  let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0); const made = [], report = { slabs: 0, found: 0 };
+  let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0); const made = [], report = { slabs: 0, found: 0, edges: 0 };
   for (const o of world.objs.slice()) {
     if (o.kind === 'pilot' || o.kind === 'gap' || o.auto) continue;
     if (o.obstacle && !o.round) {                                             // job 1
@@ -523,19 +525,33 @@ function surveyObstacles(world, opts = {}) {
       continue;
     }
     if (o.obstacle || o.round) continue;
-    const autos = [];                                                         // job 2
+    const autos = [], edges = [];                                             // jobs 2 and 3
     for (const p of o.prims) {
       const a = p.aabb, bot = a.min.y, top = a.max.y, cx = (a.min.x + a.max.x) / 2, cz = (a.min.z + a.max.z) / 2, sx = a.max.x - a.min.x, sz = a.max.z - a.min.z;
       if (p.type === 'box' ? !flatBox(p) : p.type === 'capsule' ? Math.abs(p.b.y - p.a.y) > 0.3 * len(sub(p.b, p.a)) : true) continue;
-      if (top - bot > maxThick || Math.max(sx, sz) < 0.4 || Math.min(sx, sz) > maxSpan || bot - supportUnder(cx, cz, bot, p) < minGap) continue;
+      if (top - bot > maxThick || Math.max(sx, sz) < 0.4) continue;
+      // air beneath: at the middle or at any of four points part-way out (a pillar under the middle doesn't make it solid)
+      let gap = 0; for (const [fx, fz] of [[0, 0], [0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) gap = Math.max(gap, bot - supportUnder(cx + fx * sx, cz + fz * sz, bot, p));
+      if (gap < minGap) continue;
+      if (Math.min(sx, sz) > maxSpan) {                                        // job 3: too wide to loop whole, so its edges
+        if (p.type !== 'box' || bot < 1.2) continue; const inx = Math.min(0.3, sx / 6), inz = Math.min(0.3, sz / 6);
+        for (const [ax, az, bx, bz] of [[a.min.x, a.min.z + inz, a.max.x, a.min.z + inz], [a.min.x, a.max.z - inz, a.max.x, a.max.z - inz], [a.min.x + inx, a.min.z, a.min.x + inx, a.max.z], [a.max.x - inx, a.min.z, a.max.x - inx, a.max.z]])
+          edges.push({ name: o.name + ' edge', ob: { a: v3(ax, 0, az), b: v3(bx, 0, bz), under: bot, over: top } });
+        continue;
+      }
       const long = Math.max(sx, sz), short = Math.min(sx, sz), alongX = sx >= sz;
       const ob = { a: v3(alongX ? a.min.x : cx, 0, alongX ? cz : a.min.z), b: v3(alongX ? a.max.x : cx, 0, alongX ? cz : a.max.z), under: bot, over: top };
       autos.push({ size: long * short, ob, round: short >= 0.6 && long <= 12 ? { c: v3(cx, 0, cz), r: long / 2, box: { hx: sx / 2, hz: sz / 2 }, under: bot, over: top } : null });
     }
     autos.sort((x, y) => y.size - x.size);
+    for (const E of edges.slice(0, 16)) { made.push({ id: nid++, name: E.name, kind: 'overunder', prims: [], vis: [], obstacle: E.ob, auto: true, edge: true, parent: o.id }); report.edges++; }
     for (const A of autos.slice(0, 6)) { const v = { id: nid++, name: o.name, kind: 'overunder', prims: [], vis: [], obstacle: A.ob, auto: true, parent: o.id }; if (A.round) v.round = A.round; made.push(v); report.found++; }
   }
-  world.objs.push(...made); world.survey = report; return world;
+  world.objs.push(...made);
+  report.overUnders = world.objs.filter(o => o.obstacle).length; report.gaps = world.objs.filter(o => o.gap).length;
+  report.poles = world.objs.reduce((n, o) => n + (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall' ? 0 : o.kind === 'pilot' ? 1 : o.prims.filter(q => q.type === 'capsule' && q.r <= 0.25 && q.r >= 0.012 && len(sub(q.b, q.a)) >= 1.2 && Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8).length), 0);
+  report.walls = world.objs.filter(o => o.kind === 'wall' || o.kind === 'building').length;
+  world.survey = report; return world;
 }
 
 // ================================================================= DRONE PHYSICS

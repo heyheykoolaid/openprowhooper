@@ -81,6 +81,18 @@ function updateBreakdown() {
   const rows = score.log.slice(-14).reverse().map(r => `<tr><td>${r.name}</td><td>${r.base ?? 0}</td><td class="${r.exec}">${r.exec}</td><td>${r.execM ?? 0}</td><td>${r.repeatM ?? '-'}</td><td>${r.b2bM ?? '-'}</td><td>${r.obsM ?? '-'}</td><td>${r.totwM ?? '-'}</td><td>${r.streakM ? r.streakM.toFixed(2) : '-'}</td><td><b>${r.net}</b></td></tr>`).join('');
   $('#breakdown tbody').innerHTML = rows || '<tr><td colspan=10>No tricks yet</td></tr>';
 }
+// "What counted": a small live list of what the game just saw you pass — over or under an object, through a gap, past
+// a pole — so a miss can be traced to the object that didn't register. Z toggles it (Options → Graphics too).
+const passUI = { on: store.get('passFeed', true), seen: new WeakSet(), items: [] };
+function passFeed() {
+  const el = $('#passFeed'); if (!el) return; if (!passUI.on || mode !== 'fly' || race.on) { if (el.textContent) el.textContent = ''; return; }
+  const now = performance.now();
+  for (const c of detector.crossLog) if (!passUI.seen.has(c)) { passUI.seen.add(c); passUI.items.push({ k: c.kind, txt: (c.kind === 'O' ? 'over ' : c.kind === 'U' ? 'under ' : 'through ') + c.name, until: now + 2600 }); }
+  for (const ps of detector.passes || []) if (!passUI.seen.has(ps)) { passUI.seen.add(ps); passUI.items.push({ k: 'P', txt: 'past ' + ps.name, until: now + 2600 }); }
+  const live = passUI.items.filter(x => x.until > now).slice(-5); if (live.length !== passUI.items.length || passUI.dirty !== live.length) { passUI.items = live; passUI.dirty = live.length;
+    el.innerHTML = live.map(x => `<div class="pf${x.k}">${x.k === 'O' ? '▲' : x.k === 'U' ? '▼' : x.k === 'G' ? '◆' : '●'} ${x.txt.replace(/[<&]/g, '')}</div>`).join(''); }
+}
+addEventListener('keydown', e => { if (e.code !== 'KeyZ' || mode !== 'fly' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; passUI.on = !passUI.on; store.set('passFeed', passUI.on); flash(`<b>WHAT COUNTED: ${passUI.on ? 'ON' : 'OFF'}</b><small>Z toggles the over / under / gap list</small>`, 'near'); });
 function hud() {
   const s = params.stats;
   $('#score').textContent = score.total.toLocaleString();
@@ -129,7 +141,7 @@ function frame(now) {
     if (drone.crashed) crashLock = true;
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
-    updateAudio(); hud(); stickHud(rc); if (race.on) raceHud();
+    updateAudio(); hud(); passFeed(); stickHud(rc); if (race.on) raceHud();
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
   if (mode === 'editor') { editorFrame(dt); return; }

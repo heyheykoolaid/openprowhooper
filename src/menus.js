@@ -5,7 +5,7 @@ function needPlayground(what) { if (MAP_ID === 'playground') return false; flash
 function menuMapLabels() { const m = $('#menuMap'); if (m) m.textContent = world.title; }
 function openMaps() {
   show('#mapScreen'); if (mode === 'fly') { mode = 'paused'; }
-  $('#mapList').innerHTML = Object.values(S.MAPS).map(m => `<div class="mapCard ${m.id === MAP_ID ? 'cur' : ''}"><div><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small></div>${m.id === MAP_ID ? '<span class="note">you are here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>`).join('');
+  $('#mapList').innerHTML = Object.values(S.MAPS).map(m => `<div class="mapCard ${m.id === MAP_ID ? 'cur' : ''}"><div><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${m.id === MAP_ID && world.survey ? `<small>The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>${m.id === MAP_ID ? '<span class="note">you are here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>`).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); telCapture('map'); $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); });

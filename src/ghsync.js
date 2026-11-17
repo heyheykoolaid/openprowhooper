@@ -62,6 +62,7 @@ function openOptions() {
     <h3>Graphics</h3>
     <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
     <p class="note">Turn it off if the game runs slowly on that map.</p>
+    <label class="chk big"><input type="checkbox" id="optPass" ${passUI.on ? 'checked' : ''}> Show what counted while flying (over / under / gap / pole) — Z</label>
     <h3>Sharing data with the project</h3>
     ${telOptionsHtml()}
     <div id="ghSection" class="${ghMenus() ? '' : 'hide'}">
@@ -96,6 +97,7 @@ function openOptions() {
 }
 document.addEventListener('change', e => {
   if (e.target.id === 'telOn') telSet(e.target.checked);
+  if (e.target.id === 'optPass') { passUI.on = e.target.checked; store.set('passFeed', passUI.on); }
   if (e.target.id === 'optBloom') { BLOOM.on = e.target.checked; store.set('bloom', BLOOM.on); }
   if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); renderGhStatus(); }
   if (e.target.id === 'optVol') { store.set('vol', +e.target.value); if (window._master) window._master.gain.value = +e.target.value; const v = $('#vol'); if (v) v.value = e.target.value; }

@@ -235,6 +235,7 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapBar .rcClip { position: absolute; top: 0; bottom: 0; background: #ffd34d2b; border-left: 2px solid #ffd34d; border-right: 2px solid #ffd34d; pointer-events: none; }
 body.rcWide #recapBar { right: 12px; }
 .rcExec { display: inline-flex; gap: 2px; margin-left: 2px; } .rcExec button { font: 10px var(--mono) !important; padding: 2px 5px !important; text-transform: lowercase; background: #22252e; color: #9aa; border: 1px solid #3a3f4d; transform: none; box-shadow: none; } .rcExec button.was { border-color: #ffd34d; color: #ffd34d; } .rcExec button.on { background: #ffd34d; color: #111; border-color: #ffd34d; }
+#passFeed { position: absolute; left: 16px; top: 132px; font: 12px/1.5 var(--mono); color: #fff; text-shadow: 1px 1px 0 #000, 0 0 4px #000; pointer-events: none; } #passFeed .pfO { color: #9be7ff; } #passFeed .pfU { color: #ffd34d; } #passFeed .pfG { color: #c9a6ff; } #passFeed .pfP { color: #b8f0c0; }
 #rcHead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4d2e; pointer-events: none; z-index: 3; }
 #recapBar .rcRow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 6px; } #recapBar .rcRow button, #recapBar .rcRow select { font-size: 12px; padding: 3px 8px; }
 #recapBar #rcTime { font: 12px var(--mono); margin: 0 8px; color: #cfc6b4; } #recapBar .add { margin-left: auto; } #recapBar #rcLoop.lp { outline: 2px solid #ffd34d; }
@@ -277,7 +278,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <canvas id="view"></canvas>
 <div class="fx" id="vignette"></div><div class="fx" id="scan"></div>
 
-<div id="hud" class="hide">
+<div id="hud" class="hide"><div id="passFeed"></div>
   <div id="scoreBox"><div id="score">0</div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
@@ -299,7 +300,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="mArt"></div>
   <div class="mInfo"><div id="mTitle">—</div><div id="mArtist"></div><div class="mProgT"><i id="mProg"></i></div></div>
   <div class="mBtns"><button data-m="prev" title="Previous">⏮</button><button data-m="play" id="mPlay" title="Play / pause (M)">▶</button><button data-m="next" title="Next (N)">⏭</button><button data-m="list" title="Playlist">☰</button></div>
-  <div class="mMore"><label>Music<input id="mVol" type="range" min="0" max="1" step="0.01"></label><ol id="mList"></ol><button data-m="add" class="ghost">+ Add your own tracks</button><p class="note">Added tracks last until you reload. M play/pause · N next</p></div>
+  <div class="mMore"><label>Music<input id="mVol" type="range" min="0" max="1" step="0.01"></label><ol id="mList"></ol><button data-m="radio" id="mRadio" class="ghost">📻 byTe_me Radio: off</button><p class="note" id="mRadioNote"></p><button data-m="add" class="ghost">+ Add your own tracks</button><p class="note">Added tracks last until you reload. M play/pause · N next</p></div>
   <span class="tap">tap anywhere for music</span>
   <input type="file" id="mFile" accept="audio/*" multiple hidden>
 </div>

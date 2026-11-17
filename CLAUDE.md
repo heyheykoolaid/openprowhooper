@@ -154,7 +154,17 @@ approach direction: (1) a tagged object that is really a slab (at least 0.6 m bo
 way; (2) untagged flat boxes and level capsules with at least 0.35 m of air beneath, no thicker than 1.6 m and no wider
 than 5 m, become over/unders of their own (virtual objects with `auto: true`, `parent`, no shapes). New maps need no
 `obstacle` tags for ordinary things; tag by hand only what the rules skip (sloped things, very thick or very wide ones).
-The base `buildPlayground()` used by the tests is not surveyed. `world.survey` reports the counts.
+(3) untagged slabs wider than that (roofs, big decks) get an over/under along each edge (`edge: true`, named "<object> edge").
+The base `buildPlayground()` used by the tests is not surveyed. `world.survey` reports the counts (shown on the Maps
+screen). While flying, the "what counted" list (`passFeed` in play.js, Z or Options) shows each over / under / gap /
+pole pass as the detector logs it: the first place to look when a pilot says an object did not count.
+
+## Music (src/shell.js)
+The built-in track plays by default. "byTe_me Radio" in the player streams the Infinity Loops community's free-to-use
+collection straight from archive.org (items `infinityloops-free-to-use-music-1..3`; the list comes from the metadata
+API at run time, names are parsed from `Artist__<id>__Title.mp3`, shuffled). Nothing from it is stored in the repo or
+the build. The pilot confirmed it is free to use; the player shows artist and title and says rights remain with the
+artists. Track names are remote text: always escaped.
 
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.

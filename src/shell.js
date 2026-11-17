@@ -16,6 +16,31 @@ const music = (() => {
   let idx = 0, started = false, wantPlay = store.get('musicOn', true);
   el.volume = store.get('musicVol', 0.55);
   const ui = $('#music');
+  // byTe_me Radio: the Infinity Loops community's free-to-use collection, streamed straight from archive.org (nothing is
+  // copied into the game). Track names come from the file names there: Artist__id__Title.mp3. Shuffled.
+  const RADIO = { ids: ['infinityloops-free-to-use-music-1', 'infinityloops-free-to-use-music-2', 'infinityloops-free-to-use-music-3'], on: store.get('radio', false), list: null, loading: false, hist: [], fails: 0 };
+  const hesc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const tidy = x => x.replace(/byTe_me/gi, 'byTe\u0001me').replace(/_+/g, ' ').replace(/\u0001/g, '_').replace(/\s+/g, ' ').trim();
+  function radioNote(t) { const n = $('#mRadioNote'); if (n) n.textContent = t; const b = $('#mRadio'); if (b) b.textContent = `📻 byTe_me Radio: ${RADIO.on ? 'on' : 'off'}`; }
+  async function radioList() {
+    if (RADIO.list) return RADIO.list; RADIO.loading = true; radioNote('Tuning in…');
+    const got = await Promise.allSettled(RADIO.ids.map(async id => { const r = await fetch(`https://archive.org/metadata/${id}`); const j = await r.json(); return (j.files || []).filter(f => /\.mp3$/i.test(f.name) && !/\//.test(f.name)).map(f => { const base = f.name.replace(/\.mp3$/i, ''), parts = base.split('__');
+      const k = parts.findIndex(x => /^\d{10,}$/.test(x)), art = k > 0 ? parts.slice(0, k).join(' ') : parts.length >= 2 ? parts[0] : '', ttl = k >= 0 ? parts.slice(k + 1).join(' ') : parts[parts.length - 1];   // Artist__<id>__Title
+      return { title: tidy(ttl) || tidy(base), artist: tidy(art).replace(/ +_/g, ' ').replace(/_ +/g, ' ') || 'Infinity Loops community', src: `https://archive.org/download/${id}/${encodeURIComponent(f.name)}`, radio: true }; }); }));
+    const list = got.flatMap(g => g.status === 'fulfilled' ? g.value : []); RADIO.loading = false; if (list.length) RADIO.list = list; return list;
+  }
+  async function radioNext(back) {
+    const list = await radioList(); if (!RADIO.on) return;
+    if (!list.length) { RADIO.on = false; store.set('radio', false); radioNote('Could not reach archive.org from this copy of the game (the hosted game can).'); return; }
+    let t; if (back && RADIO.hist.length > 1) { RADIO.hist.pop(); t = RADIO.hist[RADIO.hist.length - 1]; } else { t = list[Math.floor(Math.random() * list.length)]; RADIO.hist.push(t); if (RADIO.hist.length > 50) RADIO.hist.shift(); }
+    el.loop = false; el.src = t.src; $('#mTitle').textContent = t.title; $('#mArtist').textContent = t.artist; $('#mArt').style.backgroundImage = '';
+    $('#mList').innerHTML = `<li class="on">${hesc(t.title)}<span>${hesc(t.artist)}</span></li>`;
+    radioNote(`${list.length} tracks, shuffled. Streamed from the Infinity Loops free-to-use collection on archive.org; rights remain with the artists.`);
+    play(); nowPlaying({ title: hesc(t.title), artist: hesc(t.artist) });
+  }
+  function radioSet(on) { RADIO.on = on; store.set('radio', on); RADIO.fails = 0; if (on) radioNext(); else { radioNote(''); load(idx, wantPlay); } }
+  el.addEventListener('error', () => { if (!RADIO.on) return; if (++RADIO.fails > 4) { radioSet(false); radioNote('The stream stopped responding; back to the built-in track.'); } else radioNext(); });
+  el.addEventListener('playing', () => { RADIO.fails = 0; });
   function load(i, autoplay) {
     if (!tracks.length) return; idx = (i + tracks.length) % tracks.length; const t = tracks[idx];
     el.src = t.src; el.loop = tracks.length === 1;
@@ -31,16 +56,18 @@ const music = (() => {
   function nowPlaying(t) { const n = $('#nowPlaying'); n.innerHTML = `<small>NOW PLAYING</small><b>${t.title}</b><span>${t.artist || ''}</span>`; n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
   el.addEventListener('play', () => { ui.classList.remove('needsTap'); render(); });
   el.addEventListener('pause', render);
-  el.addEventListener('ended', () => load(idx + 1, true));
+  el.addEventListener('ended', () => { if (RADIO.on) radioNext(); else load(idx + 1, true); });
   el.addEventListener('timeupdate', () => { if (el.duration) $('#mProg').style.width = (el.currentTime / el.duration * 100) + '%'; });
   // browsers block sound until the first click / key press — start then
-  const kick = () => { if (!started) { started = true; if (wantPlay) play(); } };
+  const kick = () => { if (!started) { started = true; if (RADIO.on && wantPlay) radioNext(); else if (wantPlay) play(); } };
   addEventListener('pointerdown', kick, { capture: true }); addEventListener('keydown', kick, { capture: true });
   ui.addEventListener('click', e => {
     const b = e.target.closest('[data-m]'); const tr = e.target.closest('[data-track]');
-    if (tr) { load(+tr.dataset.track, true); return; }
+    if (tr) { if (RADIO.on) radioSet(false); load(+tr.dataset.track, true); return; }
     if (!b) return; e.stopPropagation(); const a = b.dataset.m;
     if (a === 'play') { started = true; el.paused ? play() : pause(); }
+    if (a === 'radio') { started = true; radioSet(!RADIO.on); return; }
+    if (RADIO.on && (a === 'next' || a === 'prev')) { if (a === 'prev' && el.currentTime > 3) el.currentTime = 0; else radioNext(a === 'prev'); return; }
     if (a === 'next') load(idx + 1, !el.paused || wantPlay);
     if (a === 'prev') { if (el.currentTime > 3) el.currentTime = 0; else load(idx - 1, !el.paused || wantPlay); }
     if (a === 'list') ui.classList.toggle('open');
@@ -54,8 +81,8 @@ const music = (() => {
     if (tracks.length > 1) el.loop = false;
     load(first, true); e.target.value = '';
   });
-  addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (e.code === 'KeyM') { el.paused ? play() : pause(); } if (e.code === 'KeyN') load(idx + 1, true); });
-  load(0, false); render();
+  addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (e.code === 'KeyM') { el.paused ? play() : pause(); } if (e.code === 'KeyN') { if (RADIO.on) radioNext(); else load(idx + 1, true); } });
+  load(0, false); render(); radioNote('');
   return { el, play, pause, load };
 })();
 
