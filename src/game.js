@@ -390,8 +390,34 @@ function onKey(e) {
   if (e.code === 'KeyT') flipOver();
   if (e.code === 'KeyC') camMode = camMode === 'fpv' ? 'chase' : 'fpv';
   if (e.code === 'Tab') { e.preventDefault(); $('#breakdown').classList.toggle('hide'); }
+  if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); }   // V: stick overlay
 }
 let lastRC = { thr: 0, roll: 0, pitch: 0, yaw: 0 };
+// ---- stick overlay (Mode 2: left = throttle/yaw, right = pitch/roll), with a short fading trail ("ghost" of the last
+// half second) so you can see how the sticks moved through a trick. Shared by the fly HUD, Video Review and Blackbox Replay.
+const stickUI = { on: store.get('ui.sticks', true), trail: [] };
+function drawSticks(cv, rc, trail, opts = {}) {
+  if (!cv) return; const g = cv.getContext('2d'), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+  const s = Math.min(H - 12, W / 2 - 18), pads = [[W / 4, H / 2], [W * 3 / 4, H / 2]];
+  const xy = (r, k) => k === 0 ? [r.yaw, (r.thr ?? 0) * 2 - 1] : [r.roll, r.pitch];
+  for (let k = 0; k < 2; k++) {
+    const [cx, cy] = pads[k];
+    g.fillStyle = 'rgba(8,10,14,0.55)'; g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5;
+    g.beginPath(); g.roundRect(cx - s / 2, cy - s / 2, s, s, 10); g.fill(); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.15)'; g.beginPath(); g.moveTo(cx - s / 2, cy); g.lineTo(cx + s / 2, cy); g.moveTo(cx, cy - s / 2); g.lineTo(cx, cy + s / 2); g.stroke();
+    const P = r => { const [x, y] = xy(r, k); return [cx + Math.max(-1, Math.min(1, x)) * (s / 2 - 6), cy - Math.max(-1, Math.min(1, y)) * (s / 2 - 6)]; };
+    if (trail && trail.length > 1) { for (let i = 1; i < trail.length; i++) { const a = P(trail[i - 1]), b = P(trail[i]); g.strokeStyle = `rgba(255,190,90,${(i / trail.length) * 0.75})`; g.lineWidth = 2.5; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); } }
+    if (opts.ghost) { const [gx, gy] = P(opts.ghost); g.strokeStyle = 'rgba(120,200,255,0.9)'; g.lineWidth = 2; g.beginPath(); g.arc(gx, gy, 6, 0, 7); g.stroke(); }
+    const [px, py] = P(rc); g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill(); g.strokeStyle = '#111'; g.lineWidth = 1.5; g.stroke();
+  }
+  g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '10px ui-monospace, monospace'; g.textAlign = 'center';
+  g.fillText(opts.label || `THR ${Math.round((rc.thr ?? 0) * 100)}%`, W / 4, H - 1); g.fillText(opts.label2 || 'P/R', W * 3 / 4, H - 1);
+}
+function stickHud(rc) {
+  const cv = $('#stickView'); cv.classList.toggle('off', !stickUI.on); if (!stickUI.on) return;
+  stickUI.trail.push({ thr: rc.thr, yaw: rc.yaw, pitch: rc.pitch, roll: rc.roll }); if (stickUI.trail.length > 30) stickUI.trail.shift();
+  drawSticks(cv, rc, stickUI.trail);
+}
 function setArmed(on) {
   if (on) {
     if (lastRC.thr > ARM_THR_MAX) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
@@ -508,7 +534,7 @@ function frame(now) {
     if (drone.crashed) crashLock = true;
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
-    updateAudio(); hud();
+    updateAudio(); hud(); stickHud(rc);
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
   if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);
@@ -684,7 +710,7 @@ function renderControls() {
       ${cur ? `<h3>${isR ? 'Channel monitor' : 'Raw axes'}</h3><div class="chmon">${cur.axes.map((_, i) => `<div><span>${isR ? 'CH' + (i + 1) : 'A' + i}</span><div class="bar"><i id="raw_${i}"></i></div></div>`).join('')}</div>` : ''}`;
   }
   $('#cBody').innerHTML = `<div class="tabs">${tabs}</div>${body}
-    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · C chase cam · Tab score breakdown · Esc pause</div>`;
+    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · C chase cam · V stick overlay · Tab score breakdown · G trick debug · Esc pause</div>`;
 }
 let calib = null, detecting = null;
 function liveControls() {

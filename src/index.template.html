@@ -23,6 +23,8 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #streakTrack { width: 200px; height: 8px; background: rgba(0,0,0,.5); border: 2px solid #111; margin-top: 3px; } #streakbar { height: 100%; width: 0; background: linear-gradient(90deg, var(--acid), var(--hot)); transition: width .2s; }
 #switch { font-family: var(--mono); font-size: 13px; color: #fff; text-shadow: 1px 1px 0 #000; margin-top: 4px; }
 #kwad { position: absolute; right: 22px; top: 16px; display: flex; gap: 6px; }
+#stickView { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; width: 190px; height: 88px; opacity: 0.9; pointer-events: none; }
+#stickView.off { display: none; }
 #kwad span { font-family: 'Bungee'; font-size: 30px; color: rgba(255,255,255,.18); -webkit-text-stroke: 1.5px rgba(0,0,0,.6); transform: skew(-8deg); }
 #kwad span.on { color: var(--hot); -webkit-text-stroke: 2px #111; text-shadow: 2px 2px 0 #111; }
 #sessionT { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) skew(-6deg); font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1.5px #111; text-shadow: 2px 2px 0 #111; }
@@ -121,7 +123,7 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .optExplain { background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid var(--cyan); padding: 8px 12px; font: 13px/1.5 var(--mono); color: #cfc6b4; } .optExplain p { margin: 6px 0; }
 .trMsg { color: var(--acid); margin-top: 6px; } .trFoot { margin-top: 6px; color: #a89f8e; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .trFoot button { font-size: 11px; padding: 3px 8px; }
 #trOut { height: 60px; font-size: 10px; width: 100%; margin-top: 6px; }
-#combo { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%) skew(-6deg); text-align: center; max-width: 80vw; }
+#combo { position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%) skew(-6deg); text-align: center; max-width: 80vw; }
 #combo .cList { font-family: 'Bungee'; font-size: 15px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; white-space: nowrap; overflow: hidden; }
 #combo .live { color: var(--acid); animation: livePulse .6s ease-in-out infinite alternate; } #combo .live b { color: #fff; } @keyframes livePulse { to { color: #fff; } }
 .logoSub { font-family: 'Bungee'; letter-spacing: 10px; color: #f3ead8; -webkit-text-stroke: 1px #111; text-shadow: 3px 3px 0 #e2312b; margin: 2px 0 18px 10px; transform: rotate(-4deg); font-size: 18px; }
@@ -184,6 +186,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
   <div id="popups"></div>
   <div id="combo" class="hide"></div><div id="comboBank"></div>
+  <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
   <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
     <span class="o" id="osdThr"></span><span class="o" id="osdSpd"></span><span class="o" id="osdAlt"></span><span class="o" id="osdTimer"></span><span class="o" id="osdState"></span><span class="o" id="washMeter">≋ PROPWASH ≋</span></div>
   <div id="breakdown" class="hide"><b>Score breakdown (TPW calculator rules)</b><table><thead><tr><th>Trick</th><th>Base</th><th>Exec</th><th>×Ex</th><th>×Rep</th><th>×B2B</th><th>×Obs</th><th>×TotW</th><th>×Streak</th><th>Net</th></tr></thead><tbody></tbody></table></div>
