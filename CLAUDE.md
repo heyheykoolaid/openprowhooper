@@ -349,7 +349,8 @@ A finished 2:00 Session can be posted from the results screen: the player's own 
 name, score, scoring sheet and the run's replay; `pro-whooper-score/1`). The relay files it as
 `leaderboard/<UTC day>/<score>-<map>-<name b64url>-<pilot>-<time>.json`; `GET /board` (today only: no history is served; older days stay in the private repo) lists that folder's file
 NAMES and returns each pilot's best per map; `GET /run?day=&id=` returns one posted run (id must be a leaderboard file
-name; cleaned again on the way out). Nothing outside `leaderboard/` can be read. Scores are client-reported (not
+name; cleaned again on the way out). Nothing outside `leaderboard/` can be read. The board screen is a carousel of maps
+(`LB.view`, ← →, thumbnails from `PW_MAPTHUMBS`), one table per map. Scores are client-reported (not
 verified): the posted replay is how a run can be checked. In the game: main menu "Daily leaderboard", click a run for
 its sheet, "Watch the run" plays it in the replay viewer as a guest (`recap.guest`: never saved, reviewed or shared;
 only on the map it was flown on). Board text is other people's: always `esc()`. The relay must be redeployed in

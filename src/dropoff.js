@@ -211,7 +211,7 @@ window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => 
 // pilot name, the score, the scoring sheet and the replay of that run through the relay (docs/DATA.md). The board is the
 // day's best run per pilot and map; days turn over at 00:00 UTC. Clicking a run shows its scoring sheet and plays it.
 // Everything that comes back from the board is other people's text: always escaped, never run.
-const LB = { last: null, runs: null, day: null, msg: '', mapOnly: true, open: null, posted: {} };
+const LB = { last: null, runs: null, day: null, msg: '', view: null, open: null, posted: {} };
 const lbBase = () => TEL.relay ? TEL.relay.replace(/\/+$/, '') : '';
 const lbToday = () => new Date().toISOString().slice(0, 10);
 const lbNameOk = n => /^[A-Za-z0-9_. -]{2,24}$/.test(n);
@@ -230,7 +230,7 @@ async function lbLoad(day) {
   try { const r = await fetch(`${lbBase()}/board?day=${day}`); if (!r.ok) throw 0; const j = await r.json(); LB.runs = Array.isArray(j.runs) ? j.runs.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score)).slice(0, 100) : []; LB.msg = ''; }
   catch { LB.runs = null; LB.msg = 'Could not reach the leaderboard just now.'; }
 }
-const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td><td>${esc(lbMapTitle(e.map))}</td></tr>`).join('');
+const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td></tr>`).join('');
 function lbResultsBox() {
   const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
   const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
@@ -252,14 +252,18 @@ async function lbPost() {
   } catch { msg = 'Could not reach the leaderboard just now.'; }
   LB.busy = false; lbResultsBox(); if (msg) { const n = document.querySelector('#lbBox p.note:last-child'); if (n) n.textContent = msg; }
 }
-function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; show('#lbScreen'); lbRender(); lbLoad(lbToday()).then(lbRender); }
+// one board per map, shown as a carousel like the Maps screen (← → while it is open)
+function lbView(dir) { const ids = Object.keys(S.MAPS), k = ids.indexOf(S.MAPS[LB.view] ? LB.view : MAP_ID); LB.view = ids[(k + dir + ids.length) % ids.length]; LB.open = null; lbRender(); }
+document.addEventListener('keydown', e => { if ($('#lbScreen').classList.contains('hide') || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; if (e.key === 'ArrowLeft') { lbView(-1); e.preventDefault(); } if (e.key === 'ArrowRight') { lbView(1); e.preventDefault(); } });
+function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; LB.view = MAP_ID; show('#lbScreen'); lbRender(); lbLoad(lbToday()).then(lbRender); }
 function lbRender() {
-  const el = $('#lbPanel'); if (!el) return; const day = LB.day || lbToday(), today = lbToday(), runs = (LB.runs || []).filter(e => !LB.mapOnly || e.map === MAP_ID), R = LB.open;
+  const el = $('#lbPanel'); if (!el) return; const ids = Object.keys(S.MAPS), V = S.MAPS[LB.view] ? LB.view : MAP_ID, runs = (LB.runs || []).filter(e => e.map === V), R = LB.open, th = (window.PW_MAPTHUMBS || {})[V];
+  const count = id => (LB.runs || []).filter(e => e.map === id).length;
   el.innerHTML = `<h2>DAILY LEADERBOARD</h2>
     <p class="note">Best 2:00 Session per pilot. Today's board only: a new one starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
-    <div class="row"><b>Today</b>
-      <label class="chk"><input type="checkbox" id="lbMapOnly" ${LB.mapOnly ? 'checked' : ''}> only ${esc(lbMapTitle(MAP_ID))}</label><button data-lb="refresh">↻</button></div>
-    <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th><th>Map</th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted yet. Fly a 2:00 Session and post it from the results screen.')}</p>`}</div>
+    <div class="lbCar"><button class="mapArrow" data-lb="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${LB.runs ? `${runs.length} pilot${runs.length === 1 ? '' : 's'} today` : LB.msg ? 'board not reachable' : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-lb="next" aria-label="next map">›</button></div>
+    <div class="mapDots">${ids.map(id => `<button data-lbmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${LB.runs ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}<button data-lb="refresh" class="lbRefresh" title="Refresh">↻</button></div>
+    <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || `No runs posted on ${lbMapTitle(V)} today. Fly a 2:00 Session there and post it from the results screen.`)}</p>`}</div>
     <div id="lbRun">${R ? lbRunHtml(R) : '<p class="note">Pick a run.</p>'}</div></div>
     <div class="row"><button data-lb="close" class="primary">Back</button></div>`;
 }
@@ -393,13 +397,13 @@ setTimeout(async () => { const f = store.get('deskPending', null); if (!f) retur
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-lb]'), row = e.target.closest('[data-lbrun]');
   if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(lbToday()).then(lbRender);
-    if (a === 'watch') lbWatch();
+    if (a === 'watch') lbWatch(); if (a === 'prev' || a === 'next') lbView(a === 'next' ? 1 : -1);
     if (a === 'close') { if (LB.from === 'results' && LB.last) show('#resultsScreen'); else { mode = 'menu'; show('#mainMenu'); } } return; }
+  { const m = e.target.closest('[data-lbmap]'); if (m && S.MAPS[m.dataset.lbmap]) { LB.view = m.dataset.lbmap; LB.open = null; lbRender(); return; } }
   if (row && row.dataset.lbrun) { if ($('#lbScreen').classList.contains('hide')) { lbOpen('results'); } lbPick(row.dataset.lbrun); }
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu'); if (act && act.dataset.act === 'judge') judgeOpen();
   const jg = e.target.closest('[data-jg]'), jr = e.target.closest('[data-judge]');
   if (jg) { if (jg.dataset.jg === 'close') { mode = 'menu'; show('#mainMenu'); } if (jg.dataset.jg === 'refresh') { JG.clips = null; judgeLoad(); } return; }
   if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
-document.addEventListener('change', e => { if (e.target.id === 'lbMapOnly') { LB.mapOnly = e.target.checked; lbRender(); } });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };
