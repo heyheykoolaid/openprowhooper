@@ -139,11 +139,11 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .preflight { font: 13px var(--mono); background: #0e0d0c; border: 1px solid #2c2925; padding: 8px 10px; margin: 10px 0; } .preflight .ok { color: #39d353; } .preflight .bad { color: var(--hot); }
 .chmon { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 14px; font: 12px var(--mono); } .chmon div { display: flex; gap: 6px; align-items: center; } .chmon .bar { width: 90px; }
 </style>
-<!--IMPORTMAP-->
+<!--THREE-->
 <script>
 // Startup watchdog: if the game hasn't started after a while, say why instead of sitting on the loading screen.
 window.__pwErr = [];
-addEventListener('error', e => { const m = e.message ? e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '') : (e.target && e.target.tagName === 'SCRIPT' ? 'A script failed to load' + (document.querySelector('script[type=importmap]')?.textContent.includes('cdn.jsdelivr') ? ': the 3D engine (three.js) from cdn.jsdelivr.net is probably blocked' : '') : 'load error'); if (!__pwErr.includes(m)) __pwErr.push(m); }, true);
+addEventListener('error', e => { const m = e.message ? e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '') : (e.target && e.target.tagName === 'SCRIPT' ? 'A script failed to load' + (e.target.src ? ': ' + e.target.src.split('/').slice(2, 3)[0] + ' (' + e.target.src.split('/').pop() + ')' : '') : 'load error'); if (!__pwErr.includes(m)) __pwErr.push(m); }, true);
 addEventListener('unhandledrejection', e => __pwErr.push(String(e.reason && e.reason.message || e.reason)));
 window.__pwBootFail = why => { const el = document.getElementById('loading'); if (!el || el.classList.contains('hide')) return;
   const gl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (_) { return false; } })();
@@ -233,6 +233,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*TRACKS*/</script>
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
+<script>if (!window.THREE) __pwErr.push('The 3D engine (three.js) did not load.');</script>
 <script type="module" onerror="__pwBootFail('The game code failed to load.')">/*GAME*/</script>
 </body>
 </html>

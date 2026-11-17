@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+const THREE = window.THREE;   // three.js r160 (UMD) is loaded by a plain <script> before this module
 const S = window.Sim;
 const $ = s => document.querySelector(s);
 const store = { get(k, d) { try { const v = localStorage.getItem('pw.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
