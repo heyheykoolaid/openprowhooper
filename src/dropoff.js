@@ -101,13 +101,13 @@ async function telPump(force) {
 function telOptionsHtml() {
   return `<label>Pilot name<input id="optPilotName" maxlength="24" value="${esc(pilotName())}" onkeydown="event.stopPropagation()"></label>
     <label class="chk big"><input type="checkbox" id="telOn" ${tel.on ? 'checked' : ''}> Share flight telemetry</label>
-    <div class="optExplain">
+    <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
       <p><b>What it does:</b> when a Free Fly or Session run ends, the game sends that run to the project: the flight path and attitude, your stick and throttle movements, every trick the game called (with how sure it was), your F / Q flags, and your craft, rates and camera tilt. About 30–80 KB a minute; runs under ${TEL.minSeconds} seconds and RaceGOW laps are skipped.</p>
       <p><b>Why:</b> real flying is what the trick rules are tuned against. Each flight can be re-flown through new versions of the detector to see which calls change, and the unsure calls show which rules need work.</p>
       <p><b>What's not sent:</b> no e-mail or device details. Your runs carry the pilot name you chose and a random id made in this browser (<code>${esc(tel.pilot || 'made when you turn this on')}</code>) so they can be grouped. Never any access token.</p>
+    </details>
       <p class="note" id="telStatus"></p>
-      <div class="row"><button id="telExport" class="ghost">Save waiting flights as a file</button><button id="telForget" class="ghost">Delete flights kept here</button><button id="telCollect" class="ghost hide">Download everything in the project database</button></div>
-    </div>`;
+      <div class="row"><button id="telExport" class="ghost">Save waiting flights as a file</button><button id="telForget" class="ghost">Delete flights kept here</button><button id="telCollect" class="ghost hide">Download everything in the project database</button></div>`;
 }
 async function telRenderStatus() {
   const el = $('#telStatus'); if (!el) return;

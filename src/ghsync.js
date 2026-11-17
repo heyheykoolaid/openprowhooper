@@ -59,21 +59,24 @@ function openOptions() {
     <h3>Sound</h3>
     <label>Motor sound<input id="optVol" type="range" min="0" max="1" step="0.01" value="${store.get('vol', 0.35)}"></label>
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
+    <h3>Graphics</h3>
+    <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
+    <p class="note">Turn it off if the game runs slowly on that map.</p>
     <h3>Sharing data with the project</h3>
     ${telOptionsHtml()}
     <div id="ghSection" class="${ghMenus() ? '' : 'hide'}">
     <label class="chk big"><input type="checkbox" id="ghEnabled" ${gh.enabled ? 'checked' : ''}> Upload calibration data to GitHub</label>
-    <div class="optExplain">
+    <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
       <p><b>What it does:</b> when you fly <i>Trick Calibration</i>, every rep you confirm is recorded — the flight path and rotations, your ✓/✗ labels, what the trick detector decided, and your craft and tune. With this on, those recordings are uploaded to the project repo <code>${gh.owner}/${gh.repo}</code> in the <code>calibration/</code> folder: one file each time a trick reaches 5 reps, and the whole session when a round is finished (or when you press ↑ Upload).</p>
       <p><b>Why:</b> so Claude can pull the data whenever you ask, replay your real flights through the detector, see where it disagrees with you, and tune the trick rules to how pilots actually fly.</p>
       <p><b>What's not sent:</b> no personal details, no radio or device info, and never your access token. Free flying is only shared if you turn on flight telemetry above. Off by default — with it off, data stays in this browser and you can still export a file by hand.</p>
-    </div>
+    </details>
     <label class="chk big"><input type="checkbox" id="bbEnabled" ${gh.bbEnabled ? 'checked' : ''}> Upload Blackbox logs to GitHub</label>
-    <div class="optExplain">
+    <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
       <p><b>What it does:</b> in <i>Blackbox Lab</i>, after you download the logs from your quad over USB (or pick log files from your computer), the ↑ Upload button sends them to <code>${gh.owner}/${gh.repo}</code> in the <code>blackbox/</code> folder — the raw log, your <code>diff all</code> settings, and the optional build sheet about your parts.</p>
       <p><b>Why:</b> Blackbox logs show exactly how your real quad responds to your sticks. Claude can replay them against the sim to fit the motor, prop, weight and drag numbers so the sim flies like your whoop.</p>
       <p><b>What's not sent:</b> nothing uploads until you press ↑ Upload; never your access token. The build sheet is optional.</p>
-    </div>
+    </details>
     <div id="ghFields" class="${gh.enabled || gh.bbEnabled ? '' : 'hide'}">
       <label>Repo owner<input id="ghOwner" value="${gh.owner}"></label>
       <label>Repo name<input id="ghRepo" value="${gh.repo}"></label>
@@ -93,6 +96,7 @@ function openOptions() {
 }
 document.addEventListener('change', e => {
   if (e.target.id === 'telOn') telSet(e.target.checked);
+  if (e.target.id === 'optBloom') { BLOOM.on = e.target.checked; store.set('bloom', BLOOM.on); }
   if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); renderGhStatus(); }
   if (e.target.id === 'optVol') { store.set('vol', +e.target.value); if (window._master) window._master.gain.value = +e.target.value; const v = $('#vol'); if (v) v.value = e.target.value; }
 });

@@ -210,7 +210,13 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #bbrNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
 #bbrSticks { position: absolute; left: 12px; bottom: 166px; width: 208px; height: 96px; pointer-events: none !important; }
 #bbrTimeline { position: absolute; left: 0; right: 330px; bottom: 0; width: calc(100% - 330px); height: 150px; background: #0e0d0c; cursor: crosshair; }
-#mainMenu .menuBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
+.toolBtns { max-width: none; } .toolBtns button small, #mapList small { display: block; font: 12px/1.4 var(--mono); text-transform: none; letter-spacing: 0; opacity: .75; margin-top: 2px; white-space: normal; -webkit-text-stroke: 0; }
+#mapList .mapCard { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; margin: 8px 0; background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid #2c2925; } #mapList .mapCard.cur { border-left-color: var(--cyan); } #mapList .mapCard b { font-size: 17px; }
+#mainMenu .panel, #toolsScreen .panel, #mapScreen .panel, #pause .panel { overflow-x: hidden; }
+details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExplain[open] > summary { margin-bottom: 6px; }
+#mainMenu .menuBtns > button { overflow: hidden; text-overflow: ellipsis; }
+#mainMenu .logo { font-size: clamp(44px, min(9vw, 13vh), 110px); }
+#mainMenu .menuBtns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
 .rpRow { margin: 4px 0; } .rpRow input { flex: 1; min-width: 0; }
 #telAsk { margin: 0 0 12px; padding: 10px 12px; background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid var(--cyan); font: 13px/1.5 var(--mono); color: #cfc6b4; } #telAsk p { margin: 0 0 8px; } #telAsk b { color: #fff; }
 #menuThanks { margin: 0 0 12px; padding: 6px 0; border-top: 1px solid #fff2; border-bottom: 1px solid #fff2; font: 12px/1.5 var(--mono); color: #cfc6b4; text-align: center; } #menuThanks b { color: #ffd34d; font-weight: 600; }
@@ -308,24 +314,19 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="race">RaceGOW Tracks</button>
-    <button data-act="map" class="mapBtn">Map</button>
+    <button data-act="map">Maps</button>
     <button data-act="garage">Garage &amp; Tune</button>
     <button data-act="controls">Controls / Radio</button>
-    <button data-act="options">Options</button>
     <button data-act="tricks">Tricktionary</button>
-    <button data-act="blackbox">Blackbox Lab</button>
-    <button data-act="bbreplay">Blackbox Replay</button>
-    <button data-act="warmup">Pilot Warm-up</button>
-    <button data-act="train" class="ghost">Trick Calibration (dev)</button>
-    <button data-act="judge" class="ghost">Judge the Bot (dev)</button>
-    <button data-act="review" class="ghost">Video Review (dev)</button>
+    <button data-act="options">Options</button>
+    <button data-act="tools">Tools &amp; labs ▸</button>
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
-  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><button data-act="map" class="mapBtn">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
+  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="fbToast"></div>
@@ -389,7 +390,23 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="checklist" class="screen hide"><div class="panel">
   <div class="topbar"><h2>Trick Checklist</h2><button data-act="clclose">Back to flying</button></div><div id="clBody"></div></div></div>
 
-<div id="optionsScreen" class="screen hide"><div class="panel" style="max-width:680px">
+<div id="toolsScreen" class="screen hide"><div class="panel" style="max-width:560px">
+  <div class="row" style="justify-content:space-between"><h2>Tools &amp; labs</h2><button data-act="back">Back</button></div>
+  <div class="menuBtns toolBtns">
+    <button data-act="warmup">Pilot Warm-up<small>teach the game your pace (about a minute)</small></button>
+    <button data-act="bbreplay">Blackbox Replay<small>watch a real flight from its Betaflight log</small></button>
+    <button data-act="blackbox">Blackbox Lab<small>download logs from your quad over USB</small></button>
+    <button data-act="review">Video Review<small>measure tricks in an FPV video</small></button>
+    <button data-act="train" class="ghost">Trick Calibration<small>fly each trick five times (playground)</small></button>
+    <button data-act="judge" class="ghost">Judge the Bot<small>say whether the bot's tricks look right (playground)</small></button>
+  </div>
+</div></div>
+<div id="mapScreen" class="screen hide"><div class="panel" style="max-width:640px">
+  <div class="row" style="justify-content:space-between"><h2>Maps</h2><button data-act="back">Back</button></div>
+  <div id="mapList"></div>
+  <p class="note">Choosing a map reloads the game into it. A run in progress ends (and is shared first, if sharing is on).</p>
+</div></div>
+<div id="optionsScreen" class="screen hide"><div class="panel" style="max-width:860px">
   <div class="topbar"><h2>Options</h2><button data-act="optclose">Back</button></div><div id="optBody"></div></div></div>
 
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>

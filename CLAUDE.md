@@ -141,7 +141,10 @@ and wall, bollard run, sign gantry, fire escapes, roof pieces): a layer on top, 
 the bot fly is byte-for-byte unchanged. Put new playground objects in that layer, not in `buildPlayground()`.
 Trick Calibration and Judge the Bot stay on the playground (they name its objects), and so do the Node tests and the
 bot's stress flights; `test/school.js` covers the school. Shared flights record their map and `tools/flights.js`
-re-flies each on the right one. The school is a first build from the pilot's design doc: no bloom (emissive only), the
+re-flies each on the right one. Neon glow is a small bloom pass (`bloomRender`: glow pieces are on layer 1, drawn over a black copy of the scene,
+blurred and added; Options can turn it off). Ground zones are drawn right after the ground with no depth test so they
+never flicker against it. Menus: Maps (a list) and Tools & labs are their own screens. The school is a first build
+from the pilot's design doc: the
 bowl is ringed by a raised deck because the ground plane cannot be dug into, and rubber feels the same as concrete.
 
 ## Architecture pointers (src/sim.js)

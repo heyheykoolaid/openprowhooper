@@ -2,7 +2,13 @@
 // Maps: the choice is remembered and the page reloads into it. Trick Calibration and Judge the Bot name specific
 // playground objects, so they stay on the playground.
 function needPlayground(what) { if (MAP_ID === 'playground') return false; flash(`<b>${what.toUpperCase()} RUNS ON THE PLAYGROUND</b><small>press Map on the main menu to switch</small>`, 'warn'); return true; }
-function menuMapLabels() { const m = $('#menuMap'), ids = Object.keys(S.MAPS), next = S.MAPS[ids[(ids.indexOf(MAP_ID) + 1) % ids.length]].title; if (m) m.textContent = world.title; for (const b of document.querySelectorAll('.mapBtn')) b.textContent = b.closest('#mainMenu') ? `Map: ${S.MAPS[MAP_ID].title} ▸ ${next}` : `Change map ▸ ${next}`; }
+function menuMapLabels() { const m = $('#menuMap'); if (m) m.textContent = world.title; }
+function openMaps() {
+  show('#mapScreen'); if (mode === 'fly') { mode = 'paused'; }
+  $('#mapList').innerHTML = Object.values(S.MAPS).map(m => `<div class="mapCard ${m.id === MAP_ID ? 'cur' : ''}"><div><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small></div>${m.id === MAP_ID ? '<span class="note">you are here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>`).join('');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
+  store.set('map', next); telCapture('map'); $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); });
 setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
 function startFly(withSession) {
@@ -38,7 +44,7 @@ document.addEventListener('click', e => {
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
-  if (a === 'map') { const ids = Object.keys(S.MAPS), next = ids[(ids.indexOf(MAP_ID) + 1) % ids.length]; store.set('map', next); telCapture('map'); $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }
+  if (a === 'map') openMaps(); if (a === 'tools') show('#toolsScreen');
   if (a === 'race') openRaceMenu();
 });
 

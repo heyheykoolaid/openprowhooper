@@ -164,8 +164,8 @@ function frame(now) {
     chasePos.lerp(target, 1 - Math.exp(-dt * 6)); chaseCam.position.copy(chasePos); chaseCam.lookAt(drone.pos.x, drone.pos.y + 0.02, drone.pos.z);
   }
   if (mode === 'review') { reviewTick(); return; }
-  if (world.theme === 'vapor' && TX.crt && !race.on) { TX.crt.offset.set(Math.random(), Math.random()); }   // CRT static crawls
   renderer.render(scene, cam);
+  if (BLOOM.on && world.theme === 'vapor' && !race.on) bloomRender(cam);
   if (mode === 'recap' && recap.rec) recapRecFrame();
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 }

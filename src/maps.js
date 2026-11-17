@@ -36,7 +36,7 @@
   //   Courtyard (centre): a bowl ringed by a raised deck with ramps and tunnels, a railed platform, chrome islands.
   //   Main hall (north, z -32..-16): pillar forest under a high roof, beams and broken catwalks, doorways at both ends.
   //   Rooftop (y 10.7): three roof sections with dive gaps between them, parapets, pillars, fallen columns.
-  //   Side wings (east: a low classroom shell; west: door-frame run and CRT wall).
+  //   Side wings (east: a low classroom shell; west: door-frame run and a window wall).
   function buildSchool() {
     const K = kit(), { O, box, pipe, ball, neon, disc } = K;
     let seed = 20261117; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -50,6 +50,15 @@
       o.obstacle = { a: v3(cx - (ax ? w / 2 : 0), 0, cz - (ax ? 0 : w / 2)), b: v3(cx + (ax ? w / 2 : 0), 0, cz + (ax ? 0 : w / 2)), under: hgt, over: hgt + 2 * t };
       O(name + ' opening', 'gap', { gap: { c: v3(cx, hgt / 2, cz), n: ax ? v3(0, 0, 1) : v3(1, 0, 0), hu: w / 2, hv: hgt / 2, u: ax ? v3(1, 0, 0) : v3(0, 0, 1) } });
       return o;
+    };
+    // a wall with real window openings (each one a gap to fly): the wall runs along `axis` at the fixed other coordinate
+    const windowWall = (o, axis, fixed, a0, a1, y0, y1, th, mat, wins, rows, gapName, glow = 'neonCyan') => {
+      const Z = axis === 'z', seg = (b0, b1, ya, yb) => { if (b1 - b0 < 0.01 || yb - ya < 0.01) return; const m = (b0 + b1) / 2, hl = (b1 - b0) / 2; box(o, v3(Z ? fixed : m, (ya + yb) / 2, Z ? m : fixed), v3(Z ? th : hl, (yb - ya) / 2, Z ? hl : th), mat); };
+      let y = y0; for (const [rb, rt] of rows) { seg(a0, a1, y, rb); let b = a0; for (const w of wins) { seg(b, w.c - w.hw, rb, rt); b = w.c + w.hw;
+          O(gapName, 'gap', { gap: { c: v3(Z ? fixed : w.c, (rb + rt) / 2, Z ? w.c : fixed), n: Z ? v3(1, 0, 0) : v3(0, 0, 1), hu: w.hw, hv: (rt - rb) / 2, u: Z ? v3(0, 0, 1) : v3(1, 0, 0) } });
+          for (const s of [-1, 1]) neon(o, v3(Z ? fixed + s * (th + 0.012) : w.c, rb + 0.015, Z ? w.c : fixed + s * (th + 0.012)), v3(Z ? 0.012 : w.hw, 0.015, Z ? w.hw : 0.012), glow); }
+        seg(b, a1, rb, rt); y = rt; }
+      seg(a0, a1, y, y1);
     };
     // a horizontal bar or slab to go over and under
     const bar = (name, a, b, r, mat, glow) => { const o = O(name, 'overunder', { obstacle: { a: v3(a.x, 0, a.z), b: v3(b.x, 0, b.z), under: Math.min(a.y, b.y) - r, over: Math.max(a.y, b.y) + r } }); pipe(o, a, b, r, mat); if (glow) pipe(o, v3(a.x, a.y - r - 0.012, a.z), v3(b.x, b.y - r - 0.012, b.z), 0.012, glow, { noCollide: true, glow: true }); return o; };
@@ -121,7 +130,7 @@
 
     // ---------------------------------------------------------------- 2. Main hall / pillar forest, and 4. the rooftop
     const HZ0 = -32, HZ1 = -16, HX = 18, HH = 10.4, hall = O('Main Hall', 'building', { wallNormal: v3(0, 0, 1), tall: HH });
-    box(hall, v3(0, HH / 2, HZ0 - 0.2), v3(HX + 0.4, HH / 2, 0.2), 'vLav');                                   // north wall
+    windowWall(hall, 'x', HZ0 - 0.2, -(HX + 0.4), HX + 0.4, 0, HH, 0.2, 'vLav', Array.from({ length: 8 }, (_, i) => ({ c: -15.75 + i * 4.5, hw: 1.3 })), [[5.4, 7.8]], 'Hall Window', 'neonPink');   // north wall, with a row of open windows
     // the south face: an open colonnade below, a band of wall above it carrying the pilot's pieces
     box(hall, v3(0, 4.4 + (HH - 4.4) / 2, HZ1 + 0.2), v3(HX + 0.4, (HH - 4.4) / 2, 0.2), 'vConcrete', 0, 0, 0, { graffiti: 'south', art: [{ name: 'clappy', x: 0.2, y: 3.0, h: 5.0, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 3.1, h: 4.2, rot: 0.02 }, { name: 'rwdc', x: 0.8, y: 2.9, h: 4.6, rot: 0.05 }] });
     neon(hall, v3(0, 4.4, HZ1 + 0.42), v3(HX, 0.03, 0.03), 'neonPink');
@@ -131,8 +140,6 @@
       neon(ew, v3(x - s * 0.22, 4.2, zc), v3(0.02, 0.03, 2.8), 'neonCyan');
       O('Hall Doorway', 'gap', { gap: { c: v3(x, 2.1, zc), n: v3(1, 0, 0), hu: 2.8, hv: 2.1, u: v3(0, 0, 1) } });
     }
-    // CRT windows glowing on the north wall
-    for (let i = 0; i < 8; i++) box(hall, v3(-15.75 + i * 4.5, 6.6, HZ0 + 0.03), v3(1.3, 1.0, 0.02), 'crt', 0, 0, 0, { noCollide: true, glow: true });
     // the pillar forest: round and square in turn, on a grid tight enough to weave
     const rp = O('Hall Pillar', 'pole'), sp = O('Square Pillar', 'deco');
     [-29.2, -25.6, -22, -18.4].forEach((z, r) => { for (let i = 0; i < 9; i++) { const x = -15 + i * 3.75;
@@ -159,8 +166,7 @@
     // ---------------------------------------------------------------- 5. Side wings
     // east: a low classroom shell (roof at 3 m: a second, lower roof line to gap to from the hall)
     const EX0 = 20, EX1 = 30, EZ0 = -12, EZ1 = 10, CH = 2.8, cls = O('Classroom Shell', 'building', { wallNormal: v3(-1, 0, 0) });
-    box(cls, v3(EX1 + 0.1, CH / 2, (EZ0 + EZ1) / 2), v3(0.1, CH / 2, (EZ1 - EZ0) / 2), 'vMint');                 // east wall
-    for (let i = 0; i < 5; i++) box(cls, v3(EX1 - 0.02, 1.6, EZ0 + 2.4 + i * 4.4), v3(0.02, 0.6, 1.1), 'crt', 0, 0, 0, { noCollide: true, glow: true });
+    windowWall(cls, 'z', EX1 + 0.1, EZ0, EZ1, 0, CH, 0.1, 'vMint', Array.from({ length: 5 }, (_, i) => ({ c: EZ0 + 2.4 + i * 4.4, hw: 1.1 })), [[1.0, 2.2]], 'Classroom Window', 'neonCyan');   // east wall: five open windows
     // west wall: segments leaving two doorways (z -6, z 4) and two windows (z -1, z 8)
     for (const [z0, z1] of [[EZ0, -6.8], [-5.2, -1.7], [-0.3, 3.2], [4.8, 7.4], [8.6, EZ1]]) box(cls, v3(EX0 - 0.1, CH / 2, (z0 + z1) / 2), v3(0.1, CH / 2, (z1 - z0) / 2), 'vPink');
     for (const zd of [-6, 4]) { box(cls, v3(EX0 - 0.1, 2.2 + (CH - 2.2) / 2, zd), v3(0.1, (CH - 2.2) / 2, 0.8), 'vPink'); neon(cls, v3(EX0 - 0.21, 2.2, zd), v3(0.012, 0.02, 0.8), 'neonCyan'); O('Classroom Door', 'gap', { gap: { c: v3(EX0 - 0.1, 1.1, zd), n: v3(1, 0, 0), hu: 0.8, hv: 1.1, u: v3(0, 0, 1) } }); }
@@ -175,9 +181,9 @@
       O('Hanging Frame opening', 'gap', { gap: { c: v3(25, 1.525, 6.6), n: v3(0, 0, 1), hu: 0.58, hv: 0.45, u: v3(1, 0, 0) } }); }
     // a cluster of thin poles for pole-jamming
     const tp = O('Thin Pole', 'pole'); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const x = 22.4 + i * 1.0, z = 2.6 + j * 1.0 + (i % 2) * 0.3; pipe(tp, v3(x, 0, z), v3(x, CH, z), 0.022, (i + j) % 2 ? 'neonPink' : 'neonCyan', { glow: true }); }
-    // west: an open run of door frames to thread, in front of a wall of dead CRT screens
+    // west: an open run of door frames to thread, in front of a wall of open windows
     for (let i = 0; i < 6; i++) frame('Door Frame', -25, -9 + i * 3.4, 1.3 - (i % 3) * 0.15, 2.1 - (i % 2) * 0.5, 'x', i % 2 ? 'vPink' : 'vMint', NE[i % 4]);
-    { const o = O('CRT Wall', 'wall', { wallNormal: v3(1, 0, 0) }); box(o, v3(-30.2, 2.2, -1), v3(0.2, 2.2, 11), 'vLav'); for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) box(o, v3(-29.98, 1.2 + j * 1.8, -10 + i * 3.6), v3(0.02, 0.7, 1.4), 'crt', 0, 0, 0, { noCollide: true, glow: true }); neon(o, v3(-29.98, 4.412, -1), v3(0.02, 0.012, 11), 'neonCyan'); }
+    { const o = O('Window Wall', 'wall', { wallNormal: v3(1, 0, 0) }); windowWall(o, 'z', -30.2, -12, 10, 0, 4.4, 0.2, 'vLav', Array.from({ length: 6 }, (_, i) => ({ c: -10 + i * 3.6, hw: 1.3 })), [[0.5, 1.9], [2.3, 3.7]], 'Wall Window', 'neonYellow'); neon(o, v3(-29.98, 4.412, -1), v3(0.02, 0.012, 11), 'neonCyan'); }
     for (const [x, z, h] of [[-21, -11, 3.8], [-22, 11.5, 2.4]]) { const o = O('Broken Column', 'pole'); box(o, v3(x, 0.12, z), v3(0.42, 0.12, 0.42), 'marble'); pipe(o, v3(x, 0.24, z), v3(x, h, z), 0.24, 'marble'); }
     { const o = O('Fallen Column', 'deco'); pipe(o, v3(-23.5, 0.34, 13.5), v3(-20.2, 0.34, 15), 0.34, 'marble'); }
 
@@ -251,13 +257,16 @@
     { const mast = O('Roof Antenna', 'pole'); pipe(mast, v3(10, 14.8, -27), v3(10, 19.6, -27), 0.035, 'galv'); box(mast, v3(10, 14.86, -27), v3(0.25, 0.06, 0.25), 'metalPlate'); for (const y of [17.2, 18.4]) pipe(mast, v3(9.5, y, -27), v3(10.5, y, -27), 0.012, 'galv', { noCollide: true });
       const tank = O('Water Tank', 'overunder', { obstacle: { a: v3(3.2, 0, -27.5), b: v3(4.8, 0, -27.5), under: 15.75, over: 17.3 } }); box(tank, v3(4, 16.5, -27.5), v3(0.8, 0.75, 0.8), 'rust'); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(tank, v3(4 + sx * 0.7, 15.3, -27.5 + sz * 0.7), v3(0.04, 0.48, 0.04), 'galv');
       const r = bar('Roof Pipe Run', v3(-14, 15.3, -24.6), v3(-8.5, 15.3, -24.6), 0.04, 'rust'); for (const x of [-13.8, -11.2, -8.7]) box(r, v3(x, 15.03, -24.6), v3(0.03, 0.23, 0.03), 'galv'); }
+    // the slide itself is something to go under and over, separate from its tower (pilot: going under the slide didn't
+    // count as its own object). It slopes, so it is tagged in two steps: the high end by the deck, and the middle.
+    for (const [x0, x1, un, ov] of [[-7.25, -6.55, 1.0, 1.62], [-6.55, -5.8, 0.62, 1.28]]) O('Slide', 'overunder', { obstacle: { a: v3(x0, 0, 2), b: v3(x1, 0, 2), under: un, over: ov } });
     w.zones.push({ shape: 'zone', mat: 'concrete', c: v3(10.6, 0.011, 15.2), h: v3(6.6, 0, 4.4) });
     const all = []; for (const o of w.objs) for (const p of o.prims) { p.owner = o.id; all.push(p); } w.prims = all; return w;
   }
 
   S.MAPS = {
-    school: { id: 'school', title: 'Vaporwave School', build: buildSchool },
-    playground: { id: 'playground', title: 'The Playground', build: () => Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' }) },
+    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing.', build: buildSchool },
+    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold and more.', build: () => Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' }) },
   };
   S.buildSchool = buildSchool;
 })(typeof window !== 'undefined' ? window : globalThis);

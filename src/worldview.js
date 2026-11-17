@@ -158,18 +158,48 @@ function vaporBackdrop() {
   const [uc, ug] = cnv(256, 256), ugr = ug.createLinearGradient(0, 0, 0, 256); ugr.addColorStop(0, '#fff47c'); ugr.addColorStop(0.55, '#ff8a5c'); ugr.addColorStop(1, '#ff2fa6'); ug.fillStyle = ugr; ug.beginPath(); ug.arc(128, 128, 126, 0, 7); ug.fill();
   ug.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 7; i++) { const y = 138 + i * 17; ug.fillRect(0, y, 256, 3 + i * 1.6); }
   const sunDir = new THREE.Vector3(-0.5, 0.115, -0.86).normalize(), sunM = new THREE.Mesh(new THREE.CircleGeometry(62, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(uc), transparent: true, fog: false, toneMapped: false, depthWrite: false }));
-  sunM.material.map.colorSpace = THREE.SRGBColorSpace; sunM.position.copy(sunDir).multiplyScalar(290); sunM.lookAt(0, 20, 0); playRoot.add(sunM);
+  sunM.material.map.colorSpace = THREE.SRGBColorSpace; sunM.position.copy(sunDir).multiplyScalar(290); sunM.lookAt(0, 20, 0); sunM.layers.enable(1); playRoot.add(sunM);
   // low, permanent sunset light with long shadows; a cool rim light from the other side keeps silhouettes readable
   playRoot.add(new THREE.HemisphereLight(0xffb0e0, 0x6a4fb8, 1.35));
   const sun = new THREE.DirectionalLight(0xffa6cf, 2.5); sun.position.copy(sunDir).multiplyScalar(70); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   const sh = sun.shadow.camera; sh.left = -46; sh.right = 46; sh.top = 46; sh.bottom = -46; sh.near = 1; sh.far = 190; sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; playRoot.add(sun); playRoot.add(sun.target);
   const rim = new THREE.DirectionalLight(0x66e6ff, 0.75); rim.position.set(30, 18, 40); playRoot.add(rim);
   // the grid floor, out to the fog
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), MAT.vGrid); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 350, guv.getY(i) * 350); playRoot.add(gnd);
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), MAT.vGrid); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 350, guv.getY(i) * 350); playRoot.add(gnd);
   // wireframe mountains on the horizon
   const fill = new THREE.MeshBasicMaterial({ color: 0x1a0b3f, fog: false }), edge = [new THREE.LineBasicMaterial({ color: 0xff4fd8, fog: false }), new THREE.LineBasicMaterial({ color: 0x66f0ff, fog: false })];
   for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + rnd() * 0.1, R = 205 + rnd() * 60, h = 10 + rnd() * 30, r = 20 + rnd() * 26, geo = new THREE.ConeGeometry(r, h, 4, 1), m = new THREE.Mesh(geo, fill);
-    m.position.set(Math.cos(a) * R, h / 2 - 0.5, Math.sin(a) * R); m.rotation.y = rnd() * 1.5; m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edge[i % 2])); playRoot.add(m); }
+    m.position.set(Math.cos(a) * R, h / 2 - 0.5, Math.sin(a) * R); m.rotation.y = rnd() * 1.5; const ln = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edge[i % 2]); ln.layers.enable(1); m.add(ln); playRoot.add(m); }
+}
+// ---- neon glow (bloom) for the vaporwave map. The normal picture is drawn as always; then everything is drawn again
+// small and black with only the glowing pieces lit (so glow never leaks through walls), blurred at two sizes, and added
+// on top. Options has a switch for slower machines.
+const BLOOM = { on: store.get('bloom', true), ready: false };
+function bloomInit() {
+  const rt = depth => new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: depth });
+  Object.assign(BLOOM, { src: rt(true), a: rt(false), b: rt(false), c: rt(false), d: rt(false), black: new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }),
+    cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), scene: new THREE.Scene(), w: 0, h: 0 });
+  const vs = 'varying vec2 v; void main(){ v = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  BLOOM.blur = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, d: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false,
+    fragmentShader: 'uniform sampler2D t; uniform vec2 d; varying vec2 v; void main(){ vec3 c = texture2D(t, v).rgb * 0.227; c += (texture2D(t, v + d * 1.385).rgb + texture2D(t, v - d * 1.385).rgb) * 0.316; c += (texture2D(t, v + d * 3.231).rgb + texture2D(t, v - d * 3.231).rgb) * 0.070; gl_FragColor = vec4(c, 1.0); }' });
+  BLOOM.add = new THREE.ShaderMaterial({ uniforms: { a: { value: null }, b: { value: null } }, vertexShader: vs, depthTest: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending,
+    fragmentShader: 'uniform sampler2D a; uniform sampler2D b; varying vec2 v; void main(){ gl_FragColor = vec4(texture2D(a, v).rgb * 0.55 + texture2D(b, v).rgb * 0.75, 1.0); }' });
+  BLOOM.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), BLOOM.blur); BLOOM.quad.frustumCulled = false; BLOOM.scene.add(BLOOM.quad); BLOOM.ready = true;
+}
+function bloomRender(cam) {
+  if (!BLOOM.ready) bloomInit(); const B = BLOOM, sz = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(8, sz.x >> 1), h = Math.max(8, sz.y >> 1);
+  if (w !== B.w || h !== B.h) { B.w = w; B.h = h; B.src.setSize(w, h); B.a.setSize(w >> 1, h >> 1); B.b.setSize(w >> 1, h >> 1); B.c.setSize(w >> 2, h >> 2); B.d.setSize(w >> 2, h >> 2); }
+  const auto = renderer.autoClear, shAuto = renderer.shadowMap.autoUpdate, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.shadowMap.autoUpdate = false;
+  // 1. everything black (to hide what is behind things), then the glowing pieces in their own colours
+  renderer.setRenderTarget(B.src); renderer.setClearColor(0x000000, 1); renderer.clear(); scene.overrideMaterial = B.black; renderer.render(scene, cam); scene.overrideMaterial = null;
+  renderer.autoClear = false; cam.layers.set(1); renderer.render(scene, cam); cam.layers.set(0);
+  // 2. blur, at half and at quarter size
+  const pass = (mat, to) => { B.quad.material = mat; renderer.setRenderTarget(to); renderer.render(B.scene, B.cam); };
+  B.blur.uniforms.t.value = B.src.texture; B.blur.uniforms.d.value.set(1 / (w >> 1), 0); pass(B.blur, B.a); B.blur.uniforms.t.value = B.a.texture; B.blur.uniforms.d.value.set(0, 1 / (h >> 1)); pass(B.blur, B.b);
+  B.blur.uniforms.t.value = B.b.texture; B.blur.uniforms.d.value.set(1 / (w >> 2), 0); pass(B.blur, B.c); B.blur.uniforms.t.value = B.c.texture; B.blur.uniforms.d.value.set(0, 1 / (h >> 2)); pass(B.blur, B.d);
+  // 3. add it to the picture already on screen
+  B.add.uniforms.a.value = B.b.texture; B.add.uniforms.b.value = B.d.texture; pass(B.add, null);
+  renderer.autoClear = auto; renderer.shadowMap.autoUpdate = shAuto; renderer.setClearColor(cc, ca);
 }
 function mats() {
   const std = (map, o = {}) => new THREE.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0.0, ...o });
@@ -223,7 +253,7 @@ function buildScene() {
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; sh.left = -32; sh.right = 32; sh.top = 32; sh.bottom = -32; sh.near = 1; sh.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true;
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 60, guv.getY(i) * 60);
   playRoot.add(gnd);
   }
@@ -231,8 +261,11 @@ function buildScene() {
     const g = new THREE.PlaneGeometry(z.h.x * 2, z.h.z * 2); const uv = g.attributes.uv; const d = z.mat === 'court' ? 1 : 0.5;
     if (z.mat !== 'court') for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * z.h.x * 2 * d, uv.getY(i) * z.h.z * 2 * d);
     // layered ground: each zone gets its own depth offset so overlapping zones never flicker (z-fighting) at a distance
-    const zm = MAT[z.mat].clone(); zm.polygonOffset = true; zm.polygonOffsetFactor = -1 - (z.mat === 'rubberMat' ? 0 : 2); zm.polygonOffsetUnits = -4 - (z.mat === 'rubberMat' ? 0 : 8);
-    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = z.mat === 'rubberMat' ? 1 : 2; playRoot.add(m);
+    // Ground zones are paint on the ground: drawn straight after it and before everything else, without a depth test, so
+    // they can never flicker against it at any distance (pilot: the grid showed through the plaza). Objects are drawn
+    // later and still hide them properly, because the ground itself wrote the depth.
+    const zm = MAT[z.mat].clone(); zm.depthTest = false; zm.depthWrite = false;
+    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
   }
   // objects
   for (const o of world.objs) for (const v of o.vis) {
@@ -245,7 +278,7 @@ function buildScene() {
     else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
     else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
     if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; playRoot.add(m);
+    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1); playRoot.add(m);
   }
   if (VAPOR) return;
   // lamp lights
