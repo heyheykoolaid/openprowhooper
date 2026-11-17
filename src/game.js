@@ -477,6 +477,8 @@ function frame(now) {
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
     updateAudio(); hud();
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
+  if (mode === 'judge') judgeStep(dt);
+  if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);
   // drone visual
   droneMesh.position.set(drone.pos.x, drone.pos.y, drone.pos.z);
   droneMesh.quaternion.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w);
@@ -485,7 +487,11 @@ function frame(now) {
   let cam;
   if (mode === 'menu') {
     const t = now / 1000 * 0.08; chaseCam.position.set(Math.sin(t) * 16, 5 + Math.sin(t * 1.7) * 1.5, Math.cos(t) * 16); chaseCam.lookAt(0, 1.5, -3); cam = chaseCam;
-  } else if (camMode === 'fpv') {
+  } else if (mode === 'judge' && judge.cam === 'spectator' && judge.camPos) {
+    cam = chaseCam; chaseCam.position.set(judge.camPos.x, judge.camPos.y, judge.camPos.z);
+    const tgt = new THREE.Vector3(drone.pos.x, drone.pos.y, drone.pos.z); judge.lookS = judge.lookS ? judge.lookS.lerp(tgt, 1 - Math.exp(-dt * 5)) : tgt.clone();
+    chaseCam.lookAt(judge.lookS);
+  } else if ((mode === 'judge' ? judge.cam : camMode) === 'fpv') {
     cam = fpvCam; const cp = S.add(drone.pos, S.qrot(drone.q, params.camPos));
     fpvCam.position.set(cp.x, cp.y, cp.z);
     tmpQ.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w); tiltQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), tune.camTilt * Math.PI / 180);
@@ -533,11 +539,13 @@ function endSession() {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
   if (a === 'free' || a === 'session') { train.on = false; renderTrain(); if (typeof ask !== 'undefined') { ask.pending = []; } }
+  if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
+  if (a === 'judge') startJudge();
 });
 
 // ---------------- garage
@@ -709,7 +717,135 @@ function openTricks() {
   const all = window.TPW_TRICKS.filter(t => t.pts > 0), nDet = all.filter(t => det.has(t.name.trim())).length, nDraft = all.filter(t => dr.has(t.name.trim())).length;
   $('#tBody').innerHTML = `<p class="note">${nDet} of ${all.length} tricks have detection rules. <b>●</b> tested rule · <b>◐</b> new draft rule written from the TPW description — fly it in Trick Training so it can be confirmed. Points and execution rules come from the TPW calculator. Trick of the Week: Split-S, Powerloop, Matty Flip (first landing ×2, then ×1.5, then ×1).</p>` +
     Object.entries(cats).map(([c, ts]) => `<h3>${c}</h3><table class="tt">${ts.map(t => { const n = t.name.trim(), has = det.has(n), d = dr.has(n);
-      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
+      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
+}
+
+
+// ============================================================ Judge the Bot (dev) + ghost preview
+// The bot flies scripted tricks from src/maneuvers.js — the same flights test/stress.js runs thousands of times. The
+// pilot judges each one before seeing what the detector said, so a verdict checks the flight AND the detector:
+// "clean/sloppy" + detector agreed = both fine; "not this trick" = the scripted flight is wrong; a disagreement on a
+// flight the pilot passed = a detector problem. Verdicts go to IndexedDB, Export, and (opt-in) GitHub calibration/judge/.
+const MV = window.Maneuvers;
+const judge = { m: null, name: null, seed: 0, t: 0, speed: 1, phase: 'watch', cam: 'spectator', want: 'random', events: [], session: [], camPos: null, look: null, lookS: null };
+let trailLine = null; const trailPts = [];
+function trailInit() {
+  if (trailLine) return; const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(400 * 3), 3));
+  trailLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 })); trailLine.frustumCulled = false; scene.add(trailLine);
+}
+function trailPush(p) {
+  trailInit(); trailPts.push(p.x, p.y, p.z); if (trailPts.length > 400 * 3) trailPts.splice(0, 3);
+  const a = trailLine.geometry.attributes.position; a.array.set(trailPts); a.needsUpdate = true; trailLine.geometry.setDrawRange(0, trailPts.length / 3); trailLine.visible = true;
+}
+function trailClear() { trailPts.length = 0; if (trailLine) { trailLine.geometry.setDrawRange(0, 0); trailLine.visible = false; } }
+const descOf = n => (window.TPW_TRICKS.find(t => t.name.trim() === n) || {}).desc || '';
+function clearance(p) { let best = 99; for (const o of world.objs) for (const pr of o.prims || []) { if (!pr.aabb) continue;
+  const dx = Math.max(pr.aabb.min.x - p.x, 0, p.x - pr.aabb.max.x), dz = Math.max(pr.aabb.min.z - p.z, 0, p.z - pr.aabb.max.z), dy = Math.max(pr.aabb.min.y - p.y, 0, p.y - pr.aabb.max.y);
+  best = Math.min(best, Math.hypot(dx, dy, dz)); } return best; }
+function startJudge(trick) {
+  if (trick) judge.want = trick;
+  train.on = false; renderTrain(); drone.armed = false; ghostOff();
+  mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#judgeBox').classList.remove('hide'); judgeNext();
+}
+function stopJudge() { judgeUpload(); $('#judgeBox').classList.add('hide'); trailClear(); droneMesh.scale.setScalar(1); }
+function judgeNext() {
+  judge.name = judge.want === 'random' ? MV.tricks[Math.floor(Math.random() * MV.tricks.length)] : judge.want;
+  judge.seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+  judge.m = MV.make(judge.name, world, judge.seed);
+  judge.events = MV.detect(judge.m, world, tune.camTilt);
+  judge.t = 0; judge.phase = 'watch'; trailClear();
+  // spectator spot: beside the flight path, looking across it, like a pilot watching line-of-sight
+  const pts = []; for (let t = 0; t < judge.m.T; t += 0.05) pts.push(judge.m.at(t).pos);
+  const C = S.mul(pts.reduce((a, p) => S.add(a, p), S.v3()), 1 / pts.length);
+  let sxx = 0, szz = 0, sxz = 0; for (const p of pts) { const dx = p.x - C.x, dz = p.z - C.z; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; }
+  const ang = 0.5 * Math.atan2(2 * sxz, sxx - szz), perp = S.v3(-Math.sin(ang), 0, Math.cos(ang));
+  const spread = Math.sqrt(Math.max(sxx, szz) / pts.length), dist = Math.max(3.2, spread * 1.7 + 2.4);
+  const ys = pts.map(p => p.y), ymid = Math.max(1.6, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.4);
+  judge.camPos = [1, -1].map(sg => S.v3(C.x + perp.x * dist * sg, ymid, C.z + perp.z * dist * sg)).sort((a, b) => clearance(b) - clearance(a))[0];
+  judge.look = C; judge.lookS = null; renderJudge();
+}
+function judgeStep(dt) {
+  const m = judge.m; if (!m) return;
+  judge.t = Math.min(m.T, judge.t + dt * judge.speed);
+  if (judge.t >= m.T && judge.phase === 'watch') { judge.phase = 'ask'; renderJudge(); }
+  const s = m.at(judge.t); drone.pos = s.pos; drone.q = s.q; for (let i = 0; i < 4; i++) drone.motorW[i] = 2600;
+  if (judge.t < m.T) trailPush(s.pos);
+  droneMesh.scale.setScalar(judge.cam === 'fpv' ? 1 : 2.5);   // a 65 mm whoop is a speck from the spectator spot
+}
+function judgeReplay() { judge.t = 0; trailClear(); }
+function judgeVerdict(v) {
+  if (judge.phase !== 'ask') return;
+  const det = judge.events.map(e => e.name), detOK = det.length === 1 && det[0] === judge.name, valid = v !== 'wrong';
+  const like = v === 'wrong' ? ($('#jLike') && $('#jLike').value) || null : null;
+  const rec = { id: `${Date.now()}-${judge.seed}`, at: new Date().toISOString(), trick: judge.name, seed: judge.seed, object: judge.m.object, params: judge.m.params,
+    verdict: v, lookedLike: like, detected: judge.events.map(e => ({ name: e.name, exec: e.exec, clean: e.clean })), detectorRight: detOK, agree: valid === detOK, build: '0.1' };
+  judge.session.push(rec); idb.put('judge', rec); judge.phase = 'reveal'; renderJudge();
+  if (judge.session.filter(x => !x.up).length >= 10) judgeUpload();
+}
+function judgeUpload() {
+  const list = judge.session.filter(x => !x.up); if (!list.length) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  if (ghEnqueue(`calibration/judge/${stamp}.json`, { format: 'pro-whooper-judge/1', build: '0.1', camTilt: tune.camTilt, verdicts: list }, `judge the bot: ${list.length} verdicts`)) list.forEach(x => x.up = true);
+}
+async function judgeExport() {
+  const all = await idb.all('judge'); const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  await saveFile(`judge-verdicts-${stamp}.json`, JSON.stringify({ format: 'pro-whooper-judge/1', build: '0.1', camTilt: tune.camTilt, verdicts: all.length ? all : judge.session }, null, 1));
+}
+const VERDICT = { clean: '✓ clean', sloppy: '≈ sloppy, but it is the trick', wrong: '✗ not this trick' };
+function renderJudge() {
+  const box = $('#judgeBox'); if (!box || !judge.m) return;
+  const n = judge.session.length, ag = judge.session.filter(x => x.agree).length, last = judge.session[n - 1];
+  const det = judge.events.length ? judge.events.map(e => `${e.name} <small>${e.exec}${e.clean != null ? ' ' + e.clean : ''}</small>`).join(' + ') : 'nothing';
+  const detOK = judge.events.length === 1 && judge.events[0].name === judge.name;
+  box.innerHTML = `<div class="trHead"><small>JUDGE THE BOT · DEV</small><span class="jStat">${n} judged · agree ${ag}/${n}</span></div>
+    <div class="trTarget">${judge.name}</div><div class="trObs">on <b>${judge.m.object === 'Pilot' ? 'the pilot' : judge.m.object}</b> · speed ×${judge.speed} · camera: ${judge.cam}</div>
+    <div class="trDesc">${descOf(judge.name)}</div>
+    ${judge.phase === 'watch' ? `<div class="trLast">Watch the bot fly it… <kbd>R</kbd> replay · <kbd>S</kbd> slow-mo · <kbd>C</kbd> camera</div>` : ''}
+    ${judge.phase === 'ask' ? `<div class="trLast">Did the bot fly a proper <b>${judge.name}</b>?</div>
+      <div class="trBtns"><button data-j="clean">✓ Clean <kbd>1</kbd></button><button data-j="sloppy">≈ Sloppy, still the trick <kbd>2</kbd></button><button data-j="wrong">✗ Not this trick <kbd>3</kbd></button><button data-j="replay">⟲ Again <kbd>R</kbd></button></div>
+      <div class="trRow"><select id="jLike"><option value="">If ✗: it looked more like…</option><option>can't tell / not a trick</option>${ALL_TRICKS().map(x => `<option>${nameOf(x)}</option>`).join('')}</select></div>` : ''}
+    ${judge.phase === 'reveal' ? `<div class="trLast">You: <b>${VERDICT[last.verdict]}</b>${last.lookedLike ? ` (looked like ${last.lookedLike})` : ''}<br>Detector: <b>${det}</b> ${detOK ? '✓' : '✗'}<br>${last.agree ? '<span class="jOk">You agree.</span>' : '<span class="nm">You disagree — this one is worth a look.</span>'}</div>
+      <div class="trBtns"><button data-j="next">Next <kbd>Enter</kbd></button><button data-j="replay">⟲ Replay <kbd>R</kbd></button></div>` : ''}
+    <div class="trRow"><select id="jWant"><option value="random">Trick: random</option>${MV.tricks.map(t => `<option ${t === judge.want ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="trFoot"><button data-j="export" class="ghost">Export verdicts</button><button data-j="upload" class="ghost">↑ Upload</button><button data-act="menu" class="ghost">Menu</button><span id="ghStatus" class="ghs"></span></div>`;
+  renderGhStatus();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-j]'); if (b) { e.stopPropagation(); const a = b.dataset.j;
+    if (a === 'clean' || a === 'sloppy' || a === 'wrong') judgeVerdict(a);
+    if (a === 'replay') judgeReplay(); if (a === 'next') judgeNext(); if (a === 'export') judgeExport(); if (a === 'upload') { judgeUpload(); renderGhStatus(); }
+    return; }
+  const w = e.target.closest('[data-watch]'); if (w) { e.preventDefault(); startJudge(w.dataset.watch); }
+});
+document.addEventListener('change', e => { if (e.target.id === 'jWant') { judge.want = e.target.value; judgeNext(); e.target.blur(); } });
+addEventListener('keydown', e => {
+  if (mode !== 'judge' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
+  if (e.code === 'Escape') { stopJudge(); mode = 'menu'; show('#mainMenu'); }
+  if (e.code === 'KeyR') judgeReplay();
+  if (e.code === 'KeyS') { judge.speed = judge.speed === 1 ? 0.5 : judge.speed === 0.5 ? 0.25 : 1; renderJudge(); }
+  if (e.code === 'KeyC') { judge.cam = judge.cam === 'spectator' ? 'fpv' : judge.cam === 'fpv' ? 'chase' : 'spectator'; renderJudge(); }
+  if (judge.phase === 'ask') { if (e.code === 'Digit1') judgeVerdict('clean'); if (e.code === 'Digit2') judgeVerdict('sloppy'); if (e.code === 'Digit3') judgeVerdict('wrong'); }
+  if (judge.phase === 'reveal' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); judgeNext(); }
+});
+// ---- ghost preview: a see-through bot flies the trick around the object while you fly (Trick Calibration "Show me")
+const ghost = { on: false, m: null, t: 0, loops: 0, mesh: null };
+function ghostMesh() {
+  if (ghost.mesh) return ghost.mesh;
+  const g = droneMesh.clone(true);
+  g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; o.material.depthWrite = false; if (o.material.emissive) o.material.emissive.setHex(0x66ff99); o.castShadow = false; } });
+  g.scale.setScalar(2.2); scene.add(g); ghost.mesh = g; return g;
+}
+function startGhost(name, objName) {
+  if (!MV.LIB[name]) { flash('<b>NO GHOST YET</b><small>no scripted flight for this trick</small>', 'warn'); return; }
+  const obj = { 'the pilot': 'Pilot' }[objName] || objName, ok = ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Tree', 'Pilot'].includes(obj);
+  ghost.m = MV.make(name, world, (Date.now() >>> 0), ok ? { object: obj, wobble: 0 } : { wobble: 0 }); ghost.t = 0; ghost.loops = 0; ghost.on = true; ghostMesh().visible = true; trailClear();
+  flash(`<b>👻 ${name}</b><small>watch the ghost on the ${ghost.m.object} — it flies it 3×</small>`);
+}
+function ghostOff() { ghost.on = false; if (ghost.mesh) ghost.mesh.visible = false; if (mode !== 'judge') trailClear(); }
+function ghostStep(dt) {
+  if (!ghost.on) return; ghost.t += dt;
+  if (ghost.t > ghost.m.T) { ghost.t = 0; ghost.loops++; trailClear(); if (ghost.loops >= 3) { ghostOff(); return; } }
+  const s = ghost.m.at(ghost.t), g = ghostMesh(); g.position.set(s.pos.x, s.pos.y, s.pos.z); g.quaternion.set(s.q.x, s.q.y, s.q.z, s.q.w); trailPush(s.pos);
 }
 
 // ============================================================ boot
@@ -721,7 +857,7 @@ function openTricks() {
   $('#loading').classList.add('hide'); show('#mainMenu');
   requestAnimationFrame(frame);
 })();
-window.__pw = { drone, detector, get score() { return score; }, startFly, S, rec: rc => recordTrace(rc) };
+window.__pw = { drone, detector, get score() { return score; }, startFly, S, rec: rc => recordTrace(rc), ghost: (n, o) => startGhost(n, o), judge: t => startJudge(t) };
 
 // ============================================================ music player (overlay on everything)
 const music = (() => {
@@ -815,8 +951,8 @@ function recordTrace(rc) {
 // ---- tiny IndexedDB wrapper (falls back to nothing if the browser blocks storage)
 const idb = (() => {
   let dbp = null;
-  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('prowhooper', 1);
-    r.onupgradeneeded = () => { const db = r.result; if (!db.objectStoreNames.contains('examples')) db.createObjectStore('examples', { keyPath: 'id' }); if (!db.objectStoreNames.contains('runs')) db.createObjectStore('runs', { keyPath: 'id' }); };
+  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('prowhooper', 2);
+    r.onupgradeneeded = () => { const db = r.result; for (const s of ['examples', 'runs', 'judge']) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' }); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }));
   const tx = async (store, mode, fn) => { try { const db = await open(); return await new Promise((res, rej) => { const t = db.transaction(store, mode), q = fn(t.objectStore(store)); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); } catch { return null; } };
   return { put: (s, v) => tx(s, 'readwrite', o => o.put(v)), all: async s => (await tx(s, 'readonly', o => o.getAll())) || [], clear: s => tx(s, 'readwrite', o => o.clear()), ok: async () => { try { await open(); return true; } catch { return false; } } };
@@ -909,7 +1045,7 @@ function renderTrain() {
     ${t ? `<div class="trTarget">${t.name}</div><div class="trObs">on <b>${train.obstacle}</b> · rep <b>${Math.min(n + 1, REPS)}</b> of ${REPS} <span class="dots">${dots(n)}</span> ${drf ? '<small class="draftTag">draft rule</small>' : ''}</div><div class="trDesc">${t.desc}</div>`
       : `<div class="trTarget">Round ${cal.round} complete</div>`}
     <div class="trLast">This rep → <b>${det.length ? det.join(', ') : 'nothing detected yet'}</b>${dbg ? `<br><code>${dbg.toks || '—'}</code> · <code>${dbg.cross || 'no obstacle passes'}</code>` : ''}${dbg && dbg.near ? `<br><span class="nm">${dbg.near}</span>` : ''}</div>
-    <div class="trBtns"><button data-tr="yes">✓ Got it <kbd>Y</kbd></button><button data-tr="no">✗ Redo <kbd>N</kbd></button><button data-tr="skip">Skip <kbd>K</kbd></button><button data-tr="undo">Undo <kbd>U</kbd></button><button data-tr="list">Checklist <kbd>L</kbd></button><button data-tr="pauseask" class="${ask.on ? 'on' : ''}">Pause &amp; ask: ${ask.on ? 'ON' : 'OFF'} <kbd>P</kbd></button></div>
+    <div class="trBtns"><button data-tr="yes">✓ Got it <kbd>Y</kbd></button><button data-tr="no">✗ Redo <kbd>N</kbd></button><button data-tr="skip">Skip <kbd>K</kbd></button><button data-tr="undo">Undo <kbd>U</kbd></button><button data-tr="list">Checklist <kbd>L</kbd></button>${t && window.Maneuvers && window.Maneuvers.LIB[nameOf(t)] ? '<button data-tr="ghost">👻 Show me</button>' : ''}<button data-tr="pauseask" class="${ask.on ? 'on' : ''}">Pause &amp; ask: ${ask.on ? 'ON' : 'OFF'} <kbd>P</kbd></button></div>
     <div class="trRow"><select id="trAs"><option value="">I did a different trick…</option>${ALL_TRICKS().map(x => `<option>${nameOf(x)}</option>`).join('')}</select></div>
     ${train.msg ? `<div class="trMsg">${train.msg}</div>` : ''}
     <div class="trFoot"><button data-tr="upload" class="ghost">↑ Upload</button><button data-act="sync" class="ghost">GitHub ⚙</button><span id="ghStatus" class="ghs"></span></div>
@@ -960,6 +1096,7 @@ async function exportData(kind) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-tr]');
   if (b) { e.stopPropagation(); const a = b.dataset.tr;
+    if (a === 'ghost' && train.target) { startGhost(nameOf(train.target), train.obstacle); return; }
     if (a === 'yes') label('yes'); if (a === 'no') label('no'); if (a === 'undo') undoLast(); if (a === 'list') openChecklist();
     if (a === 'skip') setTarget(nextUnfinished(train.target && nameOf(train.target)));
     if (a === 'export') exportData('session'); if (a === 'exportAll') exportData('all');

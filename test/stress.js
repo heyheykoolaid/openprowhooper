@@ -7,21 +7,7 @@ const S = globalThis.Sim, M = globalThis.Maneuvers; const world = S.buildPlaygro
 const args = process.argv.slice(2), opt = k => (args.find(a => a.startsWith('--' + k + '=')) || '').split('=')[1];
 const QUICK = args.includes('--quick'), N = +(args.find(a => /^\d+$/.test(a)) || (QUICK ? 5 : 16)), SEED = +(opt('seed') || 1), ONLY = opt('only');
 
-function fly(m) {
-  const det = new S.TrickDetector(world);
-  const d = Object.create(S.Drone.prototype); Object.assign(d, { pos: S.v3(), vel: S.v3(), q: { w: 1, x: 0, y: 0, z: 0 }, w: S.v3(), armed: true, crashed: false, contactThisStep: false });
-  const dt = 0.002; let prev = m.at(0); const got = [];
-  for (let t = dt; t < m.T; t += dt) {
-    const s = m.at(t); let q = s.q; if (q.w * prev.q.w + q.x * prev.q.x + q.y * prev.q.y + q.z * prev.q.z < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
-    const c = { w: prev.q.w, x: -prev.q.x, y: -prev.q.y, z: -prev.q.z }; let r = S.qmul(c, q); if (r.w < 0) r = { w: -r.w, x: -r.x, y: -r.y, z: -r.z };
-    const sn = Math.hypot(r.x, r.y, r.z), ang = 2 * Math.atan2(sn, r.w) / dt;
-    d.w = sn < 1e-9 ? S.v3() : S.v3(r.x / sn * ang, r.y / sn * ang, r.z / sn * ang);
-    d.vel = S.mul(S.sub(s.pos, prev.pos), 1 / dt); d.pos = s.pos; d.q = q; prev = { pos: s.pos, q };
-    det.update(d, dt, { thr: 0.5, roll: 0, pitch: 0, yaw: 0 });
-    for (const e of det.drain()) if (e.name !== 'near' && e.name !== 'Crash') got.push(e);
-  }
-  return got;
-}
+const fly = m => M.detect(m, world);
 const rows = [], confusion = {};
 let seed = SEED * 100000;
 for (const name of M.tricks) {

@@ -228,5 +228,21 @@
       const tr = w.objs.find(o => o.name === 'Tree'), c = tr.round.c, h = v3(1, 0, 0), face = faceQ(h), p0 = add(c, v3(-6, 3, 4)), rate = range(r, 700, 1000), T = 360 / rate;
       return { T: 4, object: 'beside a Tree', params: {}, at: t => ({ pos: add(p0, mul(h, 3 * t)), q: qmul(face, t > 0.8 && t < 0.8 + T ? pitchQ(2 * P * (t - 0.8) / T) : ID) }) }; } },
   };
-  root.Maneuvers = { LIB, CONFUSERS, rng, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => LIB[name](world, rng(seed), opts) };
+  // fly a scripted maneuver through a fresh detector (500 Hz, body rates from attitude differences) -> detected events
+  function detect(m, world, camTilt) {
+    const det = new S.TrickDetector(world); if (camTilt != null) det.camTilt = camTilt;
+    const d = Object.create(S.Drone.prototype); Object.assign(d, { pos: v3(), vel: v3(), q: ID, w: v3(), armed: true, crashed: false, contactThisStep: false });
+    const dt = 0.002; let prev = m.at(0); const got = [];
+    for (let t = dt; t < m.T; t += dt) {
+      const s = m.at(t); let q = s.q; if (q.w * prev.q.w + q.x * prev.q.x + q.y * prev.q.y + q.z * prev.q.z < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
+      let r = qmul({ w: prev.q.w, x: -prev.q.x, y: -prev.q.y, z: -prev.q.z }, q); if (r.w < 0) r = { w: -r.w, x: -r.x, y: -r.y, z: -r.z };
+      const sn = Math.hypot(r.x, r.y, r.z), ang = 2 * Math.atan2(sn, r.w) / dt;
+      d.w = sn < 1e-9 ? v3() : v3(r.x / sn * ang, r.y / sn * ang, r.z / sn * ang);
+      d.vel = mul(sub(s.pos, prev.pos), 1 / dt); d.pos = s.pos; d.q = q; prev = { pos: s.pos, q };
+      det.update(d, dt, { thr: 0.5, roll: 0, pitch: 0, yaw: 0 });
+      for (const e of det.drain()) if (e.name !== 'near' && e.name !== 'Crash') got.push({ name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, t });
+    }
+    return got;
+  }
+  root.Maneuvers = { LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => LIB[name](world, rng(seed), opts) };
 })(typeof window !== 'undefined' ? window : globalThis);

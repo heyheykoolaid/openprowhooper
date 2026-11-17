@@ -27,3 +27,9 @@ Labels: `verdict: "yes"` = the pilot confirmed this rep was `target`; `"no"` = i
 answers from Pause & Ask mode (`prompted` is what the detector claimed, or `(unrecognised)`).
 
 Analyse with `node test/replay.js <file>` and `node test/calibrate.js <file> [trick]`.
+
+`pro-whooper-judge/1` (calibration/judge/, from Judge the Bot): `{ camTilt, verdicts: [ { trick, seed, object, params,
+verdict: "clean"|"sloppy"|"wrong", lookedLike, detected[ {name, exec, clean} ], detectorRight, agree } ] }`. Each verdict
+is reproducible: `Maneuvers.make(trick, world, seed)` rebuilds the exact flight the pilot watched. "wrong" means the
+scripted flight doesn't look like the trick (fix `src/maneuvers.js`); a pass the detector missed is a detector problem.
+

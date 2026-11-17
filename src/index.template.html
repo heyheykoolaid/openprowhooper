@@ -139,6 +139,9 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .preflight { font: 13px var(--mono); background: #0e0d0c; border: 1px solid #2c2925; padding: 8px 10px; margin: 10px 0; } .preflight .ok { color: #39d353; } .preflight .bad { color: var(--hot); }
 .chmon { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 14px; font: 12px var(--mono); } .chmon div { display: flex; gap: 6px; align-items: center; } .chmon .bar { width: 90px; }
   .tt .spot { margin-top: 4px; font-size: 12px; opacity: .8; } .tt .spot b { color: #ffd23f; font-weight: 600; }
+  #judgeBox { position: fixed; right: 16px; top: 16px; width: min(380px, 46vw); z-index: 60; background: rgba(14,13,12,.88); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
+  #judgeBox .jStat { color: #cfc6b4; } #judgeBox .jOk { color: #7dff9a; } #judgeBox .trDesc { max-height: 4.8em; }
+  .tt a.watch { font: 11px var(--mono); color: #7dff9a; margin-left: 6px; text-decoration: none; }
 </style>
 <!--THREE-->
 <script>
@@ -177,6 +180,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
 <div id="train" class="hide"></div>
+<div id="judgeBox" class="hide"></div>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">
   <div id="mArt"></div>
@@ -201,6 +205,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="tricks">Tricktionary</button>
     <button data-act="blackbox">Blackbox Lab</button>
     <button data-act="train" class="ghost">Trick Calibration (dev)</button>
+    <button data-act="judge" class="ghost">Judge the Bot (dev)</button>
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
