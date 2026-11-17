@@ -73,3 +73,26 @@ timing comes from frame counting. GIFs give no obstacle positions or stick input
 - Still drafts: Power Switch, Power Split and Power Swap match the demos' rotation order, but the obstacle geometry in
   the tests is an interpretation of the GIFs. Confirm with real calibration reps before promoting.
 
+## Batch 4: loops & mavericks
+
+| Trick | What the clip shows | Notes |
+|---|---|---|
+| Powerloop (full-size GIF, statue in a fountain) | two loops round a tall statue: pull-up, ~1 s float up, over the top, a long nose-down hang looking straight down at the statue, level out through the ring | the hang pitches at roughly 1–4°/frame, well under 95°/s |
+| Inverted 360 Powerloop | half loop → inverted yaw 360 (~0.7 s) → rest of the loop → back under | |
+| Barani | half loop → inverted yaw 180 (~0.5 s) → Matty (pitch the other way) backward under the tree | |
+| Maverick Loop | under the tree, nose up, upright over the top, nose down, back under | |
+| Mavvy Roll | maverick with a slow 360 roll (~1.1 s) nose-down over the tree; back under ~1.6 s after the roll | |
+| Half Mavvy (draft) | indoor gate tower: maverick pull-up → roll 180 → pitch → back through the gate | consistent with the draft |
+| Mavik's Loop (draft) | indoor, heavily blurred | consistent with the draft as far as visible |
+| Loop to Matty | cube trick (not in the spreadsheet): through a cube, half powerloop, Matty back through the top and the back of the cube | needs a cube obstacle; on the roadmap |
+
+**Changes made from batch 4:**
+- Slow pitch inside loops: near an obstacle (crossing in the last 4 s), a pitch rotation stays one token through stretches
+  as slow as 30°/s for up to 2.5 s, and a slow tail through an obstacle pass still counts (`SLOW_TH`, `SLOW_MAX`).
+- The float-over merge no longer joins a loop's two halves across a big yaw/roll at the peak (claimed or not). This
+  had turned an Inverted 360 Powerloop into "Yaw Spin + Powerloop".
+- Open-air rotation done at the top of a loop (under, then over the same object) waits up to 3 s for the pass back
+  under, so a slow Mavvy Roll isn't locked in as a plain Roll.
+- Maverick family: the Mavvy Roll's roll is excluded from the stay-upright check, and the over-pass speed check is
+  relaxed for it (it nearly stops over the top to roll).
+

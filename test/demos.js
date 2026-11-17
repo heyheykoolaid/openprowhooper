@@ -78,4 +78,33 @@ const splitS = [
 ];
 const fwdOutPlusZ = straight(S.v3(0, 1.3, -6.96), S.v3(0, 0, 3), 1.2, S.qmul(S.qaxis(FWD_ROLL, Math.PI), pitchQ(Math.PI)));
 run('demo power split (hover 1.3 s)', chain([approach, arc(0, LO, 120, 300), levelOut, hoverAt(hoverP, level, 1.3), ...splitS, fwdOutPlusZ]), 10, ['Power Split']);
+
+// ---- batch 4 ----
+// arc with an arbitrary pitch-rate profile wfn(th) in deg/s
+function arcF(th0, th1, wfn, post = () => ({ w: 1, x: 0, y: 0, z: 0 })) {
+  const tab = [[0, th0]]; let th = th0, t = 0; const dt = 0.002;
+  while (th < th1) { th = Math.min(th1, th + wfn(th) * D * dt); t += dt; tab.push([t, th]); }
+  return { T: t, f: tt => { const th = tab[Math.min(tab.length - 1, Math.floor(tt / dt))][1]; return { pos: ell(th), q: S.qmul(pitchQ(th), post(th)) }; } };
+}
+// Powerloop round a tall statue (full-size Powerloop demo): fast pull-up, slow float up, quick over the top,
+// then a long nose-down hang at ~45°/s, level-out at ~110°/s. Mostly under the 95°/s token threshold.
+const P = Math.PI;
+const statue = th => th < P / 2 ? 220 : th < P ? 60 : th < 1.3 * P ? 200 : th < 1.85 * P ? 45 : 110;
+run('demo powerloop (statue, slow hang)', chain([approach, arcF(0, 2 * P, statue), exitFwd(), tail]), 10, ['Powerloop']);
+// Inverted 360 Powerloop demo: inverted yaw 360 at the peak (~0.7 s)
+const YAW = S.v3(0, -1, 0);
+run('demo inverted 360 powerloop', chain([approach, arc(0, P, 110, 260), atPeak(P, YAW, 360, 520), arc(P + 0.25, 2 * P, 110, 260, () => S.qaxis(YAW, 2 * P)), exitFwd(), tail]), 10, ['Inverted 360 Powerloop']);
+// Barani demo: half loop, inverted yaw 180 at the peak (~0.5 s), then a Matty (pitch forward) backward under the bar
+{ const yawTop = { T: 0.5, f: t => ({ pos: ell(P + 0.1 * t / 0.5), q: S.qmul(pitchQ(P + 0.1 * t / 0.5), S.qaxis(YAW, P * t / 0.5)) }) };
+  const s2 = sweep(P + 0.1, 2 * P, 110, 260);
+  const mattyDown = { T: s2.T, f: t => { const th = s2.at(t); const u = (th - P - 0.1) / (P - 0.1); return { pos: ell(th), q: S.qmul(S.qmul(pitchQ(P + 0.1), S.qaxis(YAW, P)), pitchQ(-P * u)) }; } };
+  const qEnd = S.qmul(S.qmul(pitchQ(P + 0.1), S.qaxis(YAW, P)), pitchQ(-P));
+  run('demo barani', chain([approach, arc(0, P, 110, 260), yawTop, mattyDown, straight(ell(2 * P), S.v3(0, 0, -3), 1.0, qEnd)]), 8, ['Barani']); }
+// Maverick-style loop: stays upright and forward-looking (nose up climbing, level over the top moving backward,
+// nose down descending); Mavvy Roll adds a slow 360 roll at the peak (demo: ~1.1 s)
+const mavAtt = th => pitchQ(-th + 1.4 * Math.sin(th));            // cancels the loop's pitch, leaving a ±80° nod
+const mavArc = (a, b) => { const sw = sweep(a, b, 160, 260); return { T: sw.T, f: t => { const th = sw.at(t); return { pos: ell(th), q: S.qmul(pitchQ(th), mavAtt(th)) }; } }; };
+const mavTop = (deg, rate) => { const T = deg / rate; return { T, f: t => { const th = P - 0.1 + 0.2 * t / T; return { pos: ell(th), q: S.qmul(S.qmul(pitchQ(th), mavAtt(th)), S.qaxis(FWD_ROLL, rate * D * t)) }; } }; };
+run('demo maverick loop', chain([approach, mavArc(0, 2 * P), exitFwd(), tail]), 9, ['Maverick Loop']);
+run('demo mavvy roll (slow 1.1 s roll)', chain([approach, mavArc(0, P - 0.1), mavTop(360, 330), mavArc(P + 0.1, 2 * P), exitFwd(), tail]), 10, ['Mavvy Roll']);
 console.log(`\n${pass}/${total} demo loops`);

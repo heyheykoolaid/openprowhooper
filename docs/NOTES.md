@@ -32,3 +32,8 @@
 4. Confirm draft rules with pilot data; trick bot + confusion matrix; measured execution grading.
 5. Blackbox fitting: replay logged sticks through the sim, fit motor/prop/drag/inertia per build.
 6. Multiplayer, more maps.
+
+## Cube / gate tricks (from the Tricktionary)
+- **Loop to Matty** (Advanced, cube: 550): through a cube, half powerloop pitching back to see the back gate, then a Matty
+  back through the top and out the back. Needs a cube obstacle with per-face gap crossings; pairs with the RaceGOW gate
+  work. Indoor variants (Indoor Rubik's Cube through a gate, etc.) belong here too.

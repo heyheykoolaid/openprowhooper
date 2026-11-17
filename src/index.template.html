@@ -139,7 +139,24 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .preflight { font: 13px var(--mono); background: #0e0d0c; border: 1px solid #2c2925; padding: 8px 10px; margin: 10px 0; } .preflight .ok { color: #39d353; } .preflight .bad { color: var(--hot); }
 .chmon { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 14px; font: 12px var(--mono); } .chmon div { display: flex; gap: 6px; align-items: center; } .chmon .bar { width: 90px; }
 </style>
-<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<!--IMPORTMAP-->
+<script>
+// Startup watchdog: if the game hasn't started after a while, say why instead of sitting on the loading screen.
+window.__pwErr = [];
+addEventListener('error', e => { const m = e.message ? e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '') : (e.target && e.target.tagName === 'SCRIPT' ? 'A script failed to load' + (document.querySelector('script[type=importmap]')?.textContent.includes('cdn.jsdelivr') ? ': the 3D engine (three.js) from cdn.jsdelivr.net is probably blocked' : '') : 'load error'); if (!__pwErr.includes(m)) __pwErr.push(m); }, true);
+addEventListener('unhandledrejection', e => __pwErr.push(String(e.reason && e.reason.message || e.reason)));
+window.__pwBootFail = why => { const el = document.getElementById('loading'); if (!el || el.classList.contains('hide')) return;
+  const gl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (_) { return false; } })();
+  el.innerHTML = '<div style="max-width:640px;font:15px/1.5 system-ui;text-align:left;padding:24px">'
+    + '<h2 style="margin:0 0 8px">The sim couldn\'t start</h2>'
+    + (why ? '<p><b>' + why + '</b></p>' : '')
+    + (__pwErr.length ? '<pre style="white-space:pre-wrap;background:#0006;padding:8px;font-size:12px">' + __pwErr.slice(0, 6).join('\n').replace(/</g, '&lt;') + '</pre>' : '')
+    + (!gl ? '<p>WebGL isn\'t available in this browser/window. Turn on hardware acceleration, or try Chrome or Edge.</p>' : '')
+    + '<p>Things to try: download the file and open it directly in Chrome or Edge (in-chat previews block parts of it); '
+    + 'use <code>open-pro-whooper-project.html</code> (the all-in-one build), not <code>dist/index.html</code> (that one loads the 3D engine from the internet); '
+    + 'pause ad/script blockers for the page.</p></div>'; };
+setTimeout(() => window.__pwBootFail(''), 12000);
+</script>
 </head>
 <body>
 <canvas id="view"></canvas>
@@ -216,6 +233,6 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 <script>/*TRACKS*/</script>
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
-<script type="module">/*GAME*/</script>
+<script type="module" onerror="__pwBootFail('The game code failed to load.')">/*GAME*/</script>
 </body>
 </html>

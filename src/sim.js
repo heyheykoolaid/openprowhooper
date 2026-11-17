@@ -978,8 +978,10 @@ class TrickDetector {
         const bigP = toks.filter(x => x.ax === 'P' && x.raw > 200);
         const rolls = toks.filter(x => x.ax === 'R');
         const part = seq.slice(kinds.lastIndexOf('UOU'), kinds.lastIndexOf('UOU') + 3);
-        const upright = this.minUpBetween ? this.minUpBetween(part[0].t, part[2].t) > 0.1 : true;   // maverick: forward-looking the whole way
-        if (!bigP.length && upright && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= 1.5 && (part[1].spd ?? 9) >= 0.8) {
+        const r1 = rolls.length === 1 ? rolls[0] : null;   // a Mavvy Roll's roll is the one time it may go inverted
+        const upright = !this.minUpBetween ? true : r1 ? this.minUpBetween(part[0].t, r1.t0 - 0.03) > 0.1 && this.minUpBetween(r1.t1 + 0.03, part[2].t) > 0.1
+          : this.minUpBetween(part[0].t, part[2].t) > 0.1;   // maverick: forward-looking the whole way
+        if (!bigP.length && upright && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= 1.5 && (part[1].spd ?? 9) >= (r1 ? 0.2 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll
           const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : (rolls.length === 0 ? 'Maverick Loop' : null);
           const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
           if (nm && better(cand, best)) best = cand;
@@ -1168,6 +1170,7 @@ class TrickDetector {
 // Tricktionary demo (Segmented Flips/Rolls GIF, real-time via OSD timer): pauses of ~0.23 s (flip) and ~0.27 s (roll)
 // between the two 180s. The written rule says 0.5 s; the demo is how it's actually flown.
 const SEG_GAP = 0.18;
+const SLOW_TH = 30, SLOW_MAX = 2.5;   // slow-pitch continuation inside loops near an obstacle
 const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
 function rawAt(tok, tt) { const tl = tok.tl; if (!tl || !tl.length) return tt <= tok.t0 ? 0 : tok.raw; if (tt <= tl[0][0]) return 0; if (tt >= tok.t1) return tok.raw;
   let i = 0; while (i < tl.length - 1 && tl[i + 1][0] < tt) i++; const p = tl[i], q = tl[i + 1] || [tok.t1, tok.raw]; return q[0] > p[0] ? p[1] + (q[1] - p[1]) * (tt - p[0]) / (q[0] - p[0]) : p[1]; }
@@ -1392,15 +1395,21 @@ class StreamDetector extends TrickDetector {
       this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks: [] }); return;
     }
     if (!d.crashed) this.crashSeen = false;
-    let finished = false;
+    let finished = false; const loopCtx = this.crossLog.some(c => t - c.t < 4);
     for (let k = 0; k < 3; k++) {
       const r = rates[k], ar = Math.abs(r), c = this.cur[k];
       if (c) {
         if (ar >= TOK_TH && Math.sign(r) === c.dir) {
+          if (c.slow) { c.raw += c.slow; c.slow = 0; c.slowT = 0; c.slowCross = false; }   // slow stretch rejoined: one rotation
           c.raw += ar * dt; c.t1 = t; c.low = 0; c.n++; if (up.y < -0.2) c.inv++;
           c.off += (Math.abs(rates[(k + 1) % 3]) + Math.abs(rates[(k + 2) % 3])) * dt; c.rateSum += ar; c.rateSq += ar * ar;
           if (t - c.tl[c.tl.length - 1][0] >= 0.01) c.tl.push([t, c.raw]);
         } else if (ar >= TOK_TH) { this.finishTok(k); finished = true; this.startTok(k, r, t, up, dt); }
+        else if (k === 1 && ar >= SLOW_TH && Math.sign(r) === c.dir && (c.slowT || 0) < SLOW_MAX && loopCtx) {
+          // big floaty loops (demo: powerloop round a tall statue) pitch well under TOK_TH for seconds at a time:
+          // keep the pitch token open while it keeps turning the same way near an obstacle
+          c.slow = (c.slow || 0) + ar * dt; c.slowT = (c.slowT || 0) + dt; c.low = 0; if (newCross) c.slowCross = true;
+        }
         else { c.low += dt; if (c.low > TOK_END) { this.finishTok(k); finished = true; } }
       } else if (ar >= TOK_TH && d.armed) this.startTok(k, r, t, up, dt);
     }
@@ -1412,12 +1421,15 @@ class StreamDetector extends TrickDetector {
       if (t < p.deadline) continue;
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
       if (t - p.tDone < HOLD_MAX && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
+      if (this.loopInProgress(p, t)) continue;
       this.commit(p, t);
     }
     this.toks = this.toks.filter(k => t - k.t1 < 6);
   }
   startTok(k, r, t, up, dt) { this.cur[k] = { k, ax: 'RPY'[k], dir: Math.sign(r), raw: Math.abs(r) * dt, t0: t, t1: t, low: 0, n: 1, inv: up.y < -0.2 ? 1 : 0, off: 0, rateSum: Math.abs(r), rateSq: r * r, tl: [[t, 0]], usedUntil: -1e9 }; }
-  finishTok(k) { const c = this.cur[k]; this.cur[k] = null; if (!c || c.raw < 45) return; this.toks.push(c); }
+  finishTok(k) { const c = this.cur[k]; this.cur[k] = null; if (!c) return;
+    if (c.slow && c.slowCross) { c.raw += c.slow; c.t1 = this.time; c.tl.push([this.time, c.raw]); }   // slow tail through a pass still counts
+    if (c.raw < 45) return; this.toks.push(c); }
   // unclaimed rotation as tidy tokens: trimmed to what's left, wobble removed, nested moves split out, pauses merged
   normalized(opts = {}) {
     const now = this.time; let L = [];
@@ -1447,7 +1459,8 @@ class StreamDetector extends TrickDetector {
     const out = [];
     for (const a of L) {
       const l = out[out.length - 1], gap = l ? a.t0 - l.t1 : 99;
-      const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25);   // throttle-cut float over the top of a loop
+      const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25)
+        && ![...this.toks, ...this.cur.filter(Boolean)].some(x => x.ax !== a.ax && x.raw >= 150 && x.t0 >= l.t1 - 0.05 && x.t1 <= a.t0 + 0.05);   // a yaw/roll at the peak (claimed or not) is its own token   // throttle-cut float over the top of a loop
       const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55;   // 180 · pause · 180 = Segmented, keep apart
       if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && !segPause && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
         const fl = floatOver && a.ax === 'P' ? this.sweptBetween(l.t1, a.t0) : 0;   // slow float over the top: still rotation
@@ -1538,6 +1551,12 @@ class StreamDetector extends TrickDetector {
         } }
     }
     return null;
+  }
+  loopInProgress(p, t) {   // open-air rotation done at the top of a loop (under, then over the same object): wait for the way back
+    if (p.part || !p.toks.length || t - p.tDone > 3.0) return false;
+    const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O'); const last = X[X.length - 1];
+    if (!last || last.kind !== 'O' || t - last.t > 3.0) return false;
+    return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
   }
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?
     if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
