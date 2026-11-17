@@ -2537,7 +2537,7 @@ const LEARN_STEPS = [
 const learnClone = p => { const c = JSON.parse(JSON.stringify(p || {})); c.learn = { tol: 0, rev: 0, crossBack: 0, ...(c.learn || {}) }; return c; };
 // runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
 function learnWindows(run) {
-  const T0 = run.span ? run.span[0] : run.rows[0][0], T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && l.verdict !== 'unlabelled' && (l.actual || l.verdict === 'no'))
+  const T0 = run.span ? run.span[0] : run.rows[0][0], T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && !l.undone && (l.verdict === 'yes' || l.verdict === 'no') && (l.actual || l.verdict === 'no'))   /* decided labels only: an undecided trick teaches nothing */
     .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' && !l.custom ? l.actual : null,   /* a trick the pilot named themselves has no rule to loosen */ not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
   const W = []; for (const l of L) { const w = W[W.length - 1], a = Math.max(T0, l.a - 4), b = Math.min(T1, l.b + 1.2); if (w && a <= w.b) { w.b = Math.max(w.b, b); w.labels.push(l); } else W.push({ a, b, labels: [l] }); }
   return W;

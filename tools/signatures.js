@@ -31,7 +31,7 @@ const tokStr = k => `${k.ax}${k.dir > 0 ? '+' : '-'}${Math.round(k.raw)}${k.inv 
     const evs = R.events.filter(e => e.name !== 'near' && e.name !== 'Crash'), abs = toks.map(k => ({ ...k, a: k.t0 + T0, b: k.t1 + T0 }));
     const sticks = (a, b) => { const o = { roll: 0, pitch: 0, yaw: 0, thrMin: 1, thrSum: 0, n: 0 }; for (const r of rows) { if (r[0] < a) continue; if (r[0] > b) break; o.roll = Math.max(o.roll, Math.abs(r[24] || 0)); o.pitch = Math.max(o.pitch, Math.abs(r[25] || 0)); o.yaw = Math.max(o.yaw, Math.abs(r[26] || 0)); o.thrMin = Math.min(o.thrMin, r[11]); o.thrSum += r[11]; o.n++; } return o; };
     const evidence = (a, b) => ({ toks: abs.filter(k => k.raw >= 60 && k.b > a - 0.15 && k.a < b + 0.15), pass: crosses.filter(c => c.t > a - 2.3 && c.t < b + 0.4), st: sticks(a, b) });
-    const L = labels.filter(l => l.flight === id).flatMap(l => l.labels).filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t));
+    const L = labels.filter(l => l.flight === id).flatMap(l => l.labels).filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && !l.undone && l.verdict !== 'unlabelled');   // decided labels only
     const spans = [];
     for (const e of evs) { const a = (e.toks && e.toks.length ? Math.min(...e.toks.map(k => k.t0)) + T0 : e.t - 1.5), b = e.t, ev = evidence(a, b), s = S0(e.name); spans.push([a - 0.3, b + 0.3]);
       const lab = L.find(l => l.target === e.name && l.via === 'review' && Math.abs((l.gameSpan ? l.gameSpan[1] : l.t) - e.t) < 1.2);

@@ -222,7 +222,9 @@ over/under passes are measured again — and sticks) with a slightly looser pilo
 when it finds more of the pilot's labelled tricks without losing a confirmed one or bringing back a "not a trick".
 Knobs, all loosen-only with hard caps (`LEARN_MAX`): `pilot.learn.tol` (angle tolerance, `TOL_X` in `matchTokens`),
 `learn.rev` (how short a full roll/flip may read), `learn.crossBack` (how long before the trick an over/under pass may
-be), plus slower `pilot.rate` and more `pilot.air`. Stored in `store 'pilot'` (travels with shared flights), reported
+be), plus slower `pilot.rate` and more `pilot.air`. Only DECIDED labels count (✓, a correction, or a named added trick): a call the pilot moved, graded, grouped or added
+to without a verdict is exported `undone` / "unlabelled" and ignored by the learner, the benchmark and tools/signatures.js.
+Stored in `store 'pilot'` (travels with shared flights), reported
 in Options with a Forget button (`learn.orig` restores the Warm-up pace). test/learn.js. It never runs while flying.
 The review list is in time order; a picked trick loops until the red line is moved off it (`recapSeek`), then plays on.
 A tile can hold several tricks (`extra` on the call / flag: "＋ trick in this tile…"); each becomes its own label over the

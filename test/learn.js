@@ -39,6 +39,9 @@ const names = (rows, pilot) => S.replayTrace(rows, { world, camTilt: 0, pilot, d
   // 3. nothing to learn: every label already agrees
   r = await S.learnFromLabels([{ rows: A.rows, world, camTilt: 0, labels: [runA.labels[0]] }], { rate: { R: 500, P: 500, Y: 600 }, air: 0.4 });
   check('labels that already agree change nothing', !r.changed && r.profile.rate.Y === 600 && r.report.before === 1);
+  // 3b. undecided tricks teach nothing: the same slow yaw spins, but the pilot never said yes or no to them
+  r = await S.learnFromLabels([{ rows: A.rows, world, camTilt: 0, labels: [runA.labels[0], { ...runA.labels[1], verdict: 'unlabelled', undone: true }, { ...runA.labels[2], verdict: 'unlabelled', undone: true, actual: null }] }], null);
+  check('tricks the pilot has not decided on are not learned from', !r.changed && r.report.labels === 1, JSON.stringify(r.report));
   // 4. bounds: a profile from storage cannot push the knobs past their caps
   const det = new S.TrickDetector(world); det.setPilot({ learn: { tol: 9999, rev: -5, crossBack: 'x' } });
   check('stored values are clamped', det.learned.tol === S.LEARN_MAX.tol && det.learned.rev === 0 && det.learned.crossBack === 0);
