@@ -190,4 +190,13 @@ run('open-air powerloop (r 1.5 m, 300/s)', openLoop(1, 1.5, 300), ['Powerloop'])
 run('open-air powerloop (r 2.2 m, 250/s)', openLoop(1, 2.2, 250), ['Powerloop']);
 run('open-air matty (r 1.4 m, 280/s)', openLoop(-1, 1.4, 280), ['Matty Flip']);
 run('flip in place is still a flip', at([hold(v3(-2, 5.5, 8), H.ID, 0.6), { T: 360 / 500, f: t => ({ pos: v3(-2, 5.5, 8), q: pitchQ(2 * P * t / (360 / 500)) }) }, hold(v3(-2, 5.5, 8), H.ID, 1.6)]), ['Flip']);
+// Pilot (2026-11-17): cradles were being detected as orbits. Flying past a pole and back down its other side, watching
+// it, sweeps the same way round it for most of a lap, but the path is a hairpin, not a circle: no Orbit.
+function uPass(P, off, far) { const vOut = 3, vBack = 2, y = Math.min(P.y1 - 0.5, 2.2), r = off, cx = P.x + 1.6, L1 = far + 1.6, T1 = L1 / vOut, T2 = Math.PI * r / vBack, T3 = L1 / vBack;
+  const pos = t => t < T1 ? v3(P.x - far + vOut * t, y, P.z + off) : t < T1 + T2 ? (() => { const a = Math.PI / 2 - Math.PI * (t - T1) / T2; return v3(cx + r * Math.cos(a), y, P.z + r * Math.sin(a)); })() : v3(cx - vBack * (t - T1 - T2), y, P.z - off);
+  return { T: T1 + T2 + T3 + 1, at: t => { const p = pos(Math.min(t, T1 + T2 + T3)); return { pos: p, q: faceQ(S.norm(v3(P.x - p.x, 0, P.z - p.z))) }; } }; }
+{ const poles = new S.TrickDetector(W).poles;
+  for (const nm of ['Flagpole', 'Lamp Post', 'the pilot']) { const Pl = poles.find(p => p.name === nm);
+    for (const [off, far] of [[0.8, 5], [1.2, 5], [1.0, 8]]) { const got = M.detect(uPass(Pl, off, far), W, 30).map(e => e.name), ok = !got.includes('Orbit x2'); total++; if (ok) pass++;
+      console.log(`${ok ? '✓' : '✗'} ${`past the ${nm} and back down the other side (${off} m, ${far} m)`.padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want no Orbit'}`); } } }
 console.log(`\n${pass}/${total} pilot-feedback flights`);

@@ -55,8 +55,8 @@ function renderRecap() {
       return `<div class="rvItem ${cls} ${on ? 'on' : ''}"><span class="t">${fmtT(e.t)}</span><b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
         <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}">✓ Yes</button><button data-rc="no" data-i="${it.i}">✗ No</button>${e.verdict === 'no' ? `<select data-rcfix="${it.i}">${opts(e.actual)}</select>` : ''}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button></div>
-    <div class="row"><button data-rc="export" class="ghost">Export</button><button data-rc="upload" class="ghost">↑ Upload</button><button data-rc="close" class="primary">Done</button></div>
-    <p class="note" id="recapMsg">${gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.'}</p>`;
+    <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
+    <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>`;
 }
 function recapPayload() {
   const labels = [];
@@ -157,8 +157,8 @@ function fbOpen() {
     <label>What happened, or what would make it better?<textarea id="fbText" rows="6" maxlength="4000" placeholder="e.g. my trippy round the flagpole didn't count when…"></textarea></label>
     <label>Your name or handle (optional)<input id="fbName" maxlength="60" value="${esc(store.get('fb.name', '') || pilotName())}"></label>
     <label class="chk"><input type="checkbox" id="fbCtx" checked> Include what I was doing (screen, craft, rates, camera tilt, last few trick calls)</label>
-    <div class="row"><button data-fb="send" class="primary">${gh.enabled && gh.token ? 'Send' : 'Save'}</button><button data-fb="file">Save as file</button><button data-fb="copy">Copy</button><button data-fb="issue" title="Opens GitHub in a new tab with your comment filled in">Open a GitHub issue</button><button data-fb="close" class="ghost">Cancel</button></div>
-    <p class="note" id="fbMsg">${gh.enabled && gh.token ? `Goes to ${esc(gh.owner)}/${esc(gh.repo)}/feedback/.` : 'Uploads are off in this browser, so "Save" keeps it here; use the file, Copy or the GitHub issue button to pass it on.'}</p></div>`;
+    <div class="row"><button data-fb="send" class="primary">Send</button><button data-fb="file">Save as file</button><button data-fb="copy">Copy</button>${ghMenus() && gh.token ? '<button data-fb="issue" title="Opens GitHub in a new tab with your comment filled in">Open a GitHub issue</button>' : ''}<button data-fb="close" class="ghost">Cancel</button></div>
+    <p class="note" id="fbMsg">${ghMenus() && gh.enabled && gh.token ? `Goes to ${esc(gh.owner)}/${esc(gh.repo)}/feedback/.` : 'Send passes it to the project when this copy can reach it; until then it is kept in this browser. Save as file or Copy also work.'}</p></div>`;
   setTimeout(() => $('#fbText') && $('#fbText').focus(), 30);
 }
 function fbPayload() {
@@ -175,7 +175,7 @@ document.addEventListener('click', async e => {
   if (a === 'close') { $('#fbModal').classList.add('hide'); return; }
   const p = fbPayload(); if (!p.text) { msg('Write a comment first.'); return; }
   const all = store.get('feedback', []); if (!all.some(x => x.at === p.at)) { all.push({ ...p, queued: true }); store.set('feedback', all.slice(-50)); }
-  if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); if (!sent) telQueue('feedback', `${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}`, p); $('#fbModal').classList.add('hide'); flashNote(sent ? 'Feedback sent — thank you!' : 'Feedback saved in this browser — thank you!'); }
+  if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); if (!sent) telQueue('feedback', `${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}`, p); $('#fbModal').classList.add('hide'); flashNote('Thank you! Your feedback is on its way (or kept here until this copy can send it).'); }
   if (a === 'file') { await saveFile(`feedback-${p.at.slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(p, null, 1)); msg('Saved. Send that file to the project.'); }
   if (a === 'copy') { try { await navigator.clipboard.writeText(fbText(p)); msg('Copied — paste it anywhere.'); } catch { msg('Could not copy here; use Save as file.'); } }
   if (a === 'issue') { const { browser, ...ctx } = p.context || {}; window.open(`https://github.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/issues/new?title=${encodeURIComponent(`[${p.category}] ${p.text.slice(0, 60)}`)}&body=${encodeURIComponent(fbText({ ...p, context: p.context ? ctx : null }).slice(0, 5000))}`, '_blank', 'noopener'); msg('Opened GitHub in a new tab (you need a GitHub account to post it).'); }

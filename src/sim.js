@@ -1349,7 +1349,7 @@ class StreamDetector extends TrickDetector {
       let ob = this.orb[P.id]; const ang = Math.atan2(dz, dx);
       const rMax = Math.max(5.5, Math.min(9, 2 + (P.y1 - P.y0) * 0.75));   // big spins: tall poles (flagpole, trees) get wider trippies
       if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
-      if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0 }; continue; }
+      if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; continue; }
       let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
       // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
       // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
@@ -1357,6 +1357,11 @@ class StreamDetector extends TrickDetector {
       ob.still = 0; const sg = Math.sign(da);
       if (!ob.dir) { ob.dir = sg; ob.t0 = t; }
       if (sg === ob.dir) {
+        // how round the path is: distance from the pole, weighted by the angle swept at that distance. A circle keeps its
+        // distance; flying straight past (a Cradle, a Whiplash, any fly-by) sweeps nearly 180° while the distance goes
+        // from far to close to far (pilot: cradles were being called orbits)
+        { const w = Math.abs(da) * R2D; ob.as += w * dist; ob.as2 += w * dist * dist; ob.aw += w; }
+        { const vr = (d.vel.x * dx + d.vel.z * dz) / Math.max(dist, 1e-3), vh2 = d.vel.x * d.vel.x + d.vel.z * d.vel.z; ob.pl += Math.sqrt(vh2) * dt; ob.pt += Math.sqrt(Math.max(0, vh2 - vr * vr)) * dt; }   // how much of the way was ROUND the pole rather than toward/away from it
         ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
         const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)); if (vi.ang < 55) ob.view++;
         { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
@@ -1372,7 +1377,7 @@ class StreamDetector extends TrickDetector {
         ob.roll += rates[0] * dt;
         const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
         if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin x2') { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; continue; }
-      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0 }; } }
+      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; } }
     }
     this.updateLive(t);
     this.taps = this.taps.filter(x => t - x.t < 8); this.stalls = this.stalls.filter(x => t - x.t < 8); this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
@@ -1388,7 +1393,9 @@ class StreamDetector extends TrickDetector {
     // roll (more so with a tilted camera) but never comes upright (pilot feedback: trippies were read as DRT)
     if (ob.acc >= 150 && rollPerLap >= 300 && (ob.flips || 0) / 2 / laps >= 0.75) return 'Double Rolling Trippy Spin';
     if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin x2';
-    if (ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc) return 'Orbit x2';
+    const mr = ob.aw ? ob.as / ob.aw : 0, round = mr > 0 ? Math.sqrt(Math.max(0, ob.as2 / ob.aw - mr * mr)) / mr : 1;   // 0 = a circle; a straight fly-by is 0.5+
+    const around = ob.pl > 0 ? ob.pt / ob.pl : 0;
+    if (ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8) return 'Orbit x2';
     return null;
   }
   orbLapDeg(ob, kind) { return kind === 'Trippy Spin x2' ? this.orbSpan(ob) : ob.acc; }

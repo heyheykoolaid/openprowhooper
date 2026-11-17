@@ -124,7 +124,7 @@ function pilotWarmAsk() {
     <p class="note">You can do it later from the main menu (Pilot Warm-up).</p>
     <div class="row"><button data-pilot="warm" class="primary">Do the warm-up now</button><button data-pilot="later">Later</button></div></div>`;
 }
-document.addEventListener('change', e => { if (e.target.id === 'optPilotName') { const n = cleanName(e.target.value); if (n.length >= 2) { store.set('pilotName', n); pilotShowName(); } e.target.value = pilotName(); } });
+document.addEventListener('change', e => { if (e.target.id === 'optPilotName') { const n = cleanName(e.target.value); if (n.length >= 2) { store.set('pilotName', n); pilotShowName(); } e.target.value = pilotName(); const g = $('#ghSection'); if (g) g.classList.toggle('hide', !ghMenus()); } });
 document.addEventListener('keydown', e => { if (e.target.id === 'pilotNameIn' && e.code === 'Enter') { const b = $('#pilotModal [data-pilot].primary'); if (b) b.click(); } }, true);
 document.addEventListener('click', async e => {
   const pb = e.target.closest('[data-pilot]'); if (pb) { const n = cleanName($('#pilotNameIn').value);

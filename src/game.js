@@ -1486,7 +1486,10 @@ function uploadRun(reason) {
       run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } },
     `calibration session: ${run.labels.length} labels (${reason})`);
 }
-function renderGhStatus() { const el = $('#ghStatus'); if (el) el.textContent = !gh.enabled ? 'upload off (Options)' : gh.token ? (ghState.queue.length ? `uploading… (${ghState.queue.length} left)` : ghState.last || `ready → ${gh.owner}/${gh.repo}`) : 'not set up'; }
+// The GitHub settings and upload buttons are the project owner's tools: shown only to the pilot named heyheykoolaid.
+// (This only tidies the menus for everyone else; it is not a lock. Nothing secret is behind it.)
+function ghMenus() { return pilotName().toLowerCase() === 'heyheykoolaid'; }
+function renderGhStatus() { const el = $('#ghStatus'); if (el) el.textContent = !ghMenus() ? '' : !gh.enabled ? 'upload off (Options)' : gh.token ? (ghState.queue.length ? `uploading… (${ghState.queue.length} left)` : ghState.last || `ready → ${gh.owner}/${gh.repo}`) : 'not set up'; }
 function openSync() { openOptions(); }
 function openOptions() {
   show('#optionsScreen'); if (mode === 'fly') { mode = 'paused'; train.pausedForList = true; }
@@ -1496,6 +1499,7 @@ function openOptions() {
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
     <h3>Sharing data with the project</h3>
     ${telOptionsHtml()}
+    <div id="ghSection" class="${ghMenus() ? '' : 'hide'}">
     <label class="chk big"><input type="checkbox" id="ghEnabled" ${gh.enabled ? 'checked' : ''}> Upload calibration data to GitHub</label>
     <div class="optExplain">
       <p><b>What it does:</b> when you fly <i>Trick Calibration</i>, every rep you confirm is recorded — the flight path and rotations, your ✓/✗ labels, what the trick detector decided, and your craft and tune. With this on, those recordings are uploaded to the project repo <code>${gh.owner}/${gh.repo}</code> in the <code>calibration/</code> folder: one file each time a trick reaches 5 reps, and the whole session when a round is finished (or when you press ↑ Upload).</p>
@@ -1521,6 +1525,7 @@ function openOptions() {
         <li>Permissions → Repository permissions → <b>Contents: Read and write</b>. Nothing else.</li>
         <li>Set an expiry, generate, paste it here. It's kept in this browser only — never in the game file, exports or uploads.</li></ol></details>
       <p class="note">Uploading works from the standalone game file or a hosted copy. The preview inside Claude blocks connections to other sites.</p>
+    </div>
     </div>`;
   telRenderStatus();
 }
@@ -1695,7 +1700,7 @@ function renderBB() {
     ${questionnaire()}
     <div class="row"><button id="bbReplayBtn" ${bb.log || bb.files.some(x => /\.(bbl|bfl|bbs)$/i.test(x.name)) ? '' : 'disabled'}>▶ Replay it in the sim</button><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button>
       <button id="bbUpload" ${bb.log || bb.diff || bb.files.length ? '' : 'disabled'}>↑ Upload to GitHub</button><span id="ghStatus" class="ghs"></span></div>
-    <p class="note">${gh.bbEnabled && gh.token ? `Uploads go to <code>${gh.owner}/${gh.repo}/blackbox/</code>.` : 'GitHub upload is off — turn on "Upload Blackbox logs" in Options.'} Downloading doesn't erase anything on the quad.</p>`;
+    <p class="note">${gh.bbEnabled && gh.token ? `Uploads go to <code>${gh.owner}/${gh.repo}/blackbox/</code>.` : (ghMenus() ? 'GitHub upload is off — turn on "Upload Blackbox logs" in Options.' : '')} Downloading doesn't erase anything on the quad.</p>`;
   renderGhStatus();
 }
 document.addEventListener('click', e => {
