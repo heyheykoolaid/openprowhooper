@@ -107,10 +107,12 @@
         bar('Twister Rail', v3(cx - 1.5, Y + h + 0.9, cz - 1.5), v3(cx + 1.5, Y + h + 0.9, cz - 1.5), 0.03, 'paintRed'); });
       const sl = O('Twister Slide', 'deco');
       for (const [h, dir, len] of [[1.4, 0, 2.6], [2.8, 1, 4.2], [4.2, 2, 5.8]]) { const ang = Math.atan2(h, len), L = Math.hypot(h, len) / 2, mid = h / 2;
-        if (dir === 0) box(sl, v3(cx + 1.5 + len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, -ang, 0.08);
-        if (dir === 1) box(sl, v3(cx, Y + mid, cz + 1.5 + len / 2), v3(0.45, 0.04, L), 'metalSlide', 0, ang, 0.08);
-        if (dir === 2) box(sl, v3(cx - 1.5 - len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, ang, -0.08); }
-      for (let i = 1; i <= 16; i++) pipe(t, v3(cx - 1.5, Y + i * 0.28, cz + 1.55), v3(cx - 0.9, Y + i * 0.28, cz + 1.55), 0.015, 'galv', { noCollide: true }); }
+        if (dir === 0) { box(sl, v3(cx + 1.5 + len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, -ang); for (const s of [-1, 1]) box(sl, v3(cx + 1.5 + len / 2, Y + mid + 0.12, cz + s * 0.47), v3(L, 0.12, 0.03), 'paintOrange', 0, 0, -ang); }
+        if (dir === 1) { box(sl, v3(cx, Y + mid, cz + 1.5 + len / 2), v3(0.45, 0.04, L), 'metalSlide', 0, ang, 0); for (const s of [-1, 1]) box(sl, v3(cx + s * 0.47, Y + mid + 0.12, cz + 1.5 + len / 2), v3(0.03, 0.12, L), 'paintBlue', 0, ang, 0); }
+        if (dir === 2) { box(sl, v3(cx - 1.5 - len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, ang); for (const s of [-1, 1]) box(sl, v3(cx - 1.5 - len / 2, Y + mid + 0.12, cz + s * 0.47), v3(L, 0.12, 0.03), 'paintGreen', 0, 0, ang); } }
+      for (let i = 1; i <= 16; i++) pipe(t, v3(cx - 1.5, Y + i * 0.28, cz + 1.55), v3(cx - 0.9, Y + i * 0.28, cz + 1.55), 0.015, 'galv', { noCollide: true });
+      for (const x of [cx - 1.5, cx - 0.9]) pipe(t, v3(x, Y, cz + 1.55), v3(x, Y + 5.0, cz + 1.55), 0.025, 'galv');   // the ladder's rails
+      for (const [h] of [[1.4], [2.8], [4.2]]) for (const [a, b] of [[-1.5, 1.5], [1.5, 1.5], [-1.5, -1.5]]) pipe(t, v3(cx + a, Y + h + 0.9, cz + b), v3(cx + (a < 0 && b > 0 ? -0.9 : a), Y + h + 0.9, cz + (b > 0 && a < 0 ? 1.5 : b)), 0.025, 'paintRed', { noCollide: true }); }
     // ---- Clappy Spinner: a free-standing round platform with a centre pole and hand poles (trippies round the middle)
     { const cx = 6, cz = -6, o = O('Clappy Spinner', 'deco'); disc(o, v3(cx, Y + 0.35, cz), 2.0, 0.06, 'paintOrange'); pipe(o, v3(cx, Y, cz), v3(cx, Y + 0.32, cz), 0.25, 'galv');
       const pole = O('Spinner Pole', 'pole'); pipe(pole, v3(cx, Y + 0.4, cz), v3(cx, Y + 1.8, cz), 0.08, 'paintBlue');
@@ -121,7 +123,8 @@
       for (let x = cx - 1.9; x <= cx + 1.95; x += 0.42) pipe(o, v3(x, Y + 2.05, cz - 0.4), v3(x, Y + 2.05, cz + 0.4), 0.025, 'galv'); }
     { const cx = -6, cz = 6, R = 1.8, o = O('Dome Climber', 'deco');
       for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI; let prev = null; for (let i = 0; i <= 6; i++) { const th = i / 6 * Math.PI, p = v3(cx + Math.cos(a) * Math.cos(th) * R, Y + Math.sin(th) * R, cz + Math.sin(a) * Math.cos(th) * R); if (prev) pipe(o, prev, p, 0.025, k % 2 ? 'paintBlue' : 'plasticYellow'); prev = p; } } }
-    bar('Balance Beam', v3(-2, Y + 0.45, 9.5), v3(2, Y + 0.45, 9.5), 0.06, 'wood'); bar('Balance Beam', v3(-1.5, Y + 0.7, -9.5), v3(2.5, Y + 0.7, -9.5), 0.06, 'wood');
+    for (const [x0, x1, y, z] of [[-2, 2, 0.45, 9.5], [-1.5, 2.5, 0.7, -9.5]]) { const b = bar('Balance Beam', v3(x0, Y + y, z), v3(x1, Y + y, z), 0.06, 'wood');
+      for (const x of [x0 + 0.2, (x0 + x1) / 2, x1 - 0.2]) { pipe(b, v3(x, Y, z), v3(x, Y + y - 0.05, z), 0.045, 'galv'); box(b, v3(x, Y + 0.02, z), v3(0.12, 0.02, 0.12), 'metalPlate'); } }
     // ---- sakura trees: four on the plaza corners, more along the outer sidewalks
     const sakura = (x, z, y0, s) => { const tr = O('Sakura Tree', 'pole');
       tr.round = { c: v3(x, 0, z), r: 1.8 * s, under: y0 + 2.2 * s, over: y0 + 5.0 * s }; tr.obstacle = { a: v3(x - 1.8 * s, 0, z), b: v3(x + 1.8 * s, 0, z), under: y0 + 2.2 * s, over: y0 + 5.0 * s };
@@ -141,7 +144,10 @@
     // the footbridge from the plaza's east edge over the street to the east rooftops (5 m up), on two pillars
     { const o = slabOU('Footbridge', v3(18, 5.0, -3), v3(6.2, 0.1, 1.2), 'concrete'); for (const x of [14.5, 21.5]) pipe(o, v3(x, 0, -3), v3(x, 4.9, -3), 0.22, 'concrete');
       for (const z of [-4.15, -1.85]) bar('Footbridge Rail', v3(12, 6.0, z), v3(24, 6.0, z), 0.03, 'galv');
-      const st = O('Footbridge Stairs', 'deco'); for (let i = 0; i < 10; i++) box(st, v3(12 - 0.35 * (i + 0.5) + 0, Y + (5 - Y) * (10 - i) / 10 / 2, -6), v3(0.175, Y / 2 + (5 - Y) * (10 - i) / 10 / 2, 1.1), 'concrete'); }
+      // stairs straight up from the plaza onto the bridge's west end (12 steps of 0.5 m, 0.37 m rise), with handrails
+      const st = O('Footbridge Stairs', 'deco'), N = 12, run = 0.5, rise = (5.1 - Y) / N, x1 = 11.8;
+      for (let i = 0; i < N; i++) { const top = Y + rise * (i + 1), x = x1 - (N - 1 - i) * run - run / 2; box(st, v3(x, top / 2, -3), v3(run / 2, top / 2, 0.9), 'concrete'); }
+      for (const z of [-3.85, -2.15]) { const a = v3(x1 - N * run, Y + rise + 0.9, z), b = v3(x1, 5.1 + 0.9, z); pipe(st, a, b, 0.03, 'galv'); for (let i = 0; i <= 4; i++) { const t = i / 4, x = a.x + (b.x - a.x) * t; pipe(st, v3(x, Y + rise * (1 + (N - 1) * t), z), v3(x, a.y + (b.y - a.y) * t, z), 0.02, 'galv'); } } }
     // ---- the outer ring: blocks of shops and flats (24-40 out), alleys 3 m wide between them, overhead walkways
     const blocks = [];
     const side = (name, along, out, n) => { const spans = [[-40, -22], [-19, -3], [0, 14], [17, 40]];
@@ -158,6 +164,23 @@
           if (k % 2 === 0) { const aw = O('Awning', 'deco'); box(aw, ax ? v3(m, 2.85, f - out * 0.6) : v3(f - out * 0.6, 2.85, m), ax ? v3(1.9, 0.05, 0.6) : v3(0.6, 0.05, 1.9), ['paintRed', 'paintBlue', 'paintGreen', 'paintOrange'][(k + i) % 4]); }
           if (h > 6 && k % 2 === 1) { const bc = O('Balcony', 'deco'); box(bc, ax ? v3(m, 4.2, f - out * 0.55) : v3(f - out * 0.55, 4.2, m), ax ? v3(1.5, 0.06, 0.55) : v3(0.55, 0.06, 1.5), 'concrete'); }
           if ((k + i) % 3 === 0) { const vm = O('Vending Machine', 'deco'); box(vm, ax ? v3(m + 2.0, 0.9, f - out * 0.4) : v3(f - out * 0.4, 0.9, m + 2.0), v3(0.45, 0.9, 0.38), ['paintBlue', 'paintRed'][(k + i) % 2]); } }
+        // the building itself: windows with sills and a band at each floor on the street face, windows down the alley sides,
+        // a parapet round the roof, and roof clutter (AC boxes, a water tank on the tall ones, a stair hut)
+        const fz = out * d0, P = (m, y, off) => ax ? v3(m, y, fz - out * off) : v3(fz - out * off, y, m), Sz = (a, y, d) => ax ? v3(a, y, d) : v3(d, y, a);
+        const win = O('Window', 'deco'), trim = O('Facade Trim', 'deco'), floors = Math.floor(h / 3);
+        for (let fl = 1; fl < floors; fl++) { const yb = fl * 3; box(trim, P(c, yb, 0.06), Sz(hl, 0.06, 0.06), 'concrete');
+          for (let m = a0 + 1.5; m < a1 - 1.0; m += 2.4) { box(win, P(m, yb + 1.55, 0.025), Sz(0.55, 0.72, 0.02), 'glass', 0, 0, 0, { noCollide: true }); box(win, P(m, yb + 0.78, 0.07), Sz(0.66, 0.04, 0.07), 'concrete'); } }
+        for (const e of [a0, a1]) { if (e === -40 || e === 40) continue; const sx = e === a0 ? -1 : 1;
+          for (let fl = 1; fl < floors; fl++) for (const dd of [26.5, 30.5, 34.5, 38]) { const y = fl * 3 + 1.55, pos = ax ? v3(e + sx * 0.025, y, out * dd) : v3(out * dd, y, e + sx * 0.025); box(win, pos, ax ? v3(0.02, 0.6, 0.45) : v3(0.45, 0.6, 0.02), 'glass', 0, 0, 0, { noCollide: true }); } }
+        { const pr = O('Parapet', 'deco'), ph = 0.45, pt = 0.1;
+          box(pr, ax ? v3(c, h + ph / 2, out * (d0 + pt)) : v3(out * (d0 + pt), h + ph / 2, c), Sz(hl, ph / 2, pt), 'concrete'); box(pr, ax ? v3(c, h + ph / 2, out * (d1 - pt)) : v3(out * (d1 - pt), h + ph / 2, c), Sz(hl, ph / 2, pt), 'concrete');
+          for (const e of [a0 + pt, a1 - pt]) box(pr, ax ? v3(e, h + ph / 2, out * dm) : v3(out * dm, h + ph / 2, e), ax ? v3(pt, ph / 2, 8) : v3(8, ph / 2, pt), 'concrete');
+          const rc = O('Rooftop Unit', 'deco'), ra = c + (i % 2 ? -1 : 1) * Math.min(4, hl / 3), rd = out * (dm + 2);
+          box(rc, ax ? v3(ra, h + 0.45, rd) : v3(rd, h + 0.45, ra), v3(0.7, 0.45, 0.55), 'metal'); box(rc, ax ? v3(ra + 1.8, h + 0.35, rd - out * 1.5) : v3(rd - out * 1.5, h + 0.35, ra + 1.8), v3(0.5, 0.35, 0.5), 'metal');
+          if (h > 6) { const tk = O('Water Tank', 'overunder'), tx = c - (i % 2 ? -1 : 1) * Math.min(5, hl / 2.5), tzz = out * (dm - 2), tp = ax ? v3(tx, 0, tzz) : v3(tzz, 0, tx);
+            for (const [u, w] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) pipe(tk, v3(tp.x + u, h, tp.z + w), v3(tp.x + u, h + 1.4, tp.z + w), 0.05, 'rust');
+            pipe(tk, v3(tp.x, h + 1.4, tp.z), v3(tp.x, h + 2.9, tp.z), 0.8, 'galv'); tk.obstacle = { a: v3(tp.x - 0.8, 0, tp.z), b: v3(tp.x + 0.8, 0, tp.z), under: h + 1.35, over: h + 2.9 }; }
+          if (h > 7) { const hut = O('Stair Hut', 'deco'), hp = ax ? v3(a1 - 2.2, h + 1.15, out * (d1 - 2.2)) : v3(out * (d1 - 2.2), h + 1.15, a1 - 2.2); box(hut, hp, v3(1.3, 1.15, 1.3), 'concrete'); box(hut, v3(hp.x, hp.y + 1.2, hp.z), v3(1.4, 0.06, 1.4), 'metal'); } }
         // AC units and a drain pipe on the alley side
         const ac = O('AC Unit', 'deco'), pp = O('Drain Pipe', 'deco');
         for (const e of [a0, a1]) { if (e === -40 || e === 40) continue; const sx = e === a0 ? -1 : 1;
@@ -206,8 +229,18 @@
         for (const zc of [-6.5, -1.5]) O('Skylight', 'gap', { gap: { c: v3(hx, H + 0.15, zc), n: v3(0, 1, 0), hu: SW, hv: SL / 2, u: v3(1, 0, 0) } }); void SL; } }
     // ---- steel columns (the roof's), lights on the roof trusses
     const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); neon(col, v3(x, 1.2, z), v3(0.21, 0.08, 0.21), 'plasticYellow'); }
-    for (const x of [-22, -8, 8, 22]) for (const z of [-12, 8]) { const l = O('Fluorescent Light', 'deco', { light: v3(x, H - 0.8, z), lightColor: 0xe8f4ff, lightPower: 14, lightRange: 24 });
-      box(l, v3(x, H - 0.6, z), v3(1.2, 0.05, 0.15), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); pipe(l, v3(x, H - 0.55, z), v3(x, H, z), 0.01, 'chain', { noCollide: true }); }
+    // lights: three rows of high-bay fittings under the trusses (strong: the pilot found the first version far too dark)
+    for (const x of [-25, -15, -5, 5, 15, 25]) for (const z of [-13, -1, 11]) { const l = O('High-bay Light', 'deco', (x + z) % 2 === 0 || z === -1 ? { light: v3(x, H - 1.0, z), lightColor: 0xeef5ff, lightPower: 60, lightRange: 30 } : {});
+      box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal', 0, 0, 0, { noCollide: true }); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H - 0.3, z), 0.01, 'chain', { noCollide: true }); }
+    // the roof structure: a truss every 6 m (top and bottom chords and diagonals), purlins along the hall
+    { const tr = O('Roof Truss', 'deco'); for (let x = -27; x <= 27; x += 6) { pipe(tr, v3(x, H - 0.3, -Z), v3(x, H - 0.3, Z), 0.07, 'galv'); pipe(tr, v3(x, H - 1.6, -Z + 1), v3(x, H - 1.6, Z - 1), 0.05, 'galv');
+        for (let z = -Z + 1; z < Z - 1; z += 3) pipe(tr, v3(x, H - 1.6, z), v3(x, H - 0.3, z + 1.5), 0.025, 'galv', { noCollide: true }); }
+      for (const z of [-15, -9, 3, 9, 15]) pipe(tr, v3(-X, H - 0.25, z), v3(X, H - 0.25, z), 0.04, 'galv', { noCollide: true }); }
+    // wall pilasters every 6 m, a strip of high windows along the long walls, a fire exit sign, a few pallets
+    { const pw = O('Wall Pilaster', 'deco'); for (let x = -27; x <= 27; x += 6) box(pw, v3(x, H / 2, -Z + 0.12), v3(0.18, H / 2, 0.12), 'paintBlue'); for (let z = -15; z <= 15; z += 6) for (const sx of [-1, 1]) box(pw, v3(sx * (X - 0.12), H / 2, z), v3(0.12, H / 2, 0.18), 'paintBlue');
+      const hw = O('High Windows', 'deco'); box(hw, v3(0, 9.6, -Z + 0.02), v3(X - 1, 0.7, 0.02), 'glass', 0, 0, 0, { noCollide: true }); for (const sx of [-1, 1]) box(hw, v3(sx * (X - 0.02), 9.6, 0), v3(0.02, 0.7, Z - 1), 'glass', 0, 0, 0, { noCollide: true });
+      const ex = O('Exit Sign', 'deco'); for (const x of [-16, 0, 16]) box(ex, v3(x, 5.4, Z - 0.05), v3(0.35, 0.12, 0.03), 'paintGreen', 0, 0, 0, { noCollide: true, glow: true });
+      const pl = O('Pallet', 'deco'); for (const [x, z] of [[-6, 10], [-3, 15], [3, 14.5], [-24, 10], [-18, 15], [26, 10], [-10, 16], [20, 16]]) { box(pl, v3(x, 0.07, z), v3(0.6, 0.07, 0.6), 'wood'); } }
     // ---- pallet racks: three rows in the west half, bays 2.7 m wide, beams at 1.6 / 3.2 / 4.8 / 6.4 m, crates on the shelves
     const up = O('Rack Upright', 'deco'), crate = O('Crate', 'deco');
     for (const rz of [-15, -8, -1]) { const x0 = -28, nb = 8, bw = 2.7, D = 0.55;
@@ -243,7 +276,7 @@
     { const o = slabOU('Crane Bridge', v3(-12, 10.2, 0), v3(0.35, 0.3, Z - 0.6), 'plasticYellow'); pipe(o, v3(-12, 9.9, 3), v3(-12, 6.5, 3), 0.02, 'chain', { noCollide: true }); box(o, v3(-12, 6.3, 3), v3(0.25, 0.2, 0.25), 'rust'); }
     { const o = slabOU('Conveyor', v3(10, 1.0, 12), v3(14, 0.1, 0.45), 'rubberBlack'); for (let x = -3.5; x <= 23.5; x += 3) for (const z of [11.6, 12.4]) pipe(o, v3(x, 0, z), v3(x, 0.9, z), 0.04, 'galv'); }
     // ---- crate stacks, barrels, a forklift, floor markings
-    for (const [x, z, n] of [[-6, 10, 3], [-3, 15, 2], [3, 14.5, 1], [-24, 10, 2], [-18, 15, 3], [26, 10, 2]]) { const o = O('Crate Stack', 'deco'); for (let k = 0; k < n; k++) box(o, v3(x + (k % 2) * 0.1, 0.6 + k * 1.2, z), v3(0.6, 0.6, 0.6), 'wood', k * 0.3); }
+    for (const [x, z, n] of [[-6, 10, 3], [-3, 15, 2], [3, 14.5, 1], [-24, 10, 2], [-18, 15, 3], [26, 10, 2]]) { const o = O('Crate Stack', 'deco'); for (let k = 0; k < n; k++) box(o, v3(x + (k % 2) * 0.1, 0.74 + k * 1.2, z), v3(0.58, 0.6, 0.58), 'wood', k * 0.3); }
     { const b = O('Barrels', 'deco'); for (const [x, z] of [[-26, 16], [-25.3, 16.6], [-26.6, 16.8], [27, 15], [26.3, 15.7]]) pipe(b, v3(x, 0, z), v3(x, 0.9, z), 0.3, ['paintBlue', 'paintRed', 'rust'][Math.floor(rnd() * 3)]); }
     { const f = O('Forklift', 'deco'), x = 9, z = 17; box(f, v3(x, 0.6, z), v3(0.6, 0.45, 1.0), 'plasticYellow'); for (const s of [-1, 1]) pipe(f, v3(x + s * 0.45, 0, z - 1.0), v3(x + s * 0.45, 2.6, z - 1.0), 0.04, 'metal'); box(f, v3(x, 0.15, z - 1.6), v3(0.5, 0.03, 0.6), 'metal'); box(f, v3(x, 1.9, z + 0.2), v3(0.6, 0.04, 0.7), 'metal'); }
     { const m = O('Floor Marking', 'deco'); for (const z of [-11.5, -4.5, 2.5]) box(m, v3(-15, 0.008, z), v3(13, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); for (const x of [-16, 0, 16]) box(m, v3(x, 0.008, Z - 2), v3(2.4, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); }
@@ -499,7 +532,7 @@
   S.MAPS = {
     school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => S.surveyObstacles(buildSchool()) },
     clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => S.surveyObstacles(buildClappy()) },
-    warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, dim logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => S.surveyObstacles(buildWarehouse()) },
+    warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, high-bay-lit logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => S.surveyObstacles(buildWarehouse()) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
   };
   S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse;

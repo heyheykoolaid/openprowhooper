@@ -141,7 +141,8 @@ function vaporMats() {
   MAT.vPlaza = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xb9a9e8, roughness: 0.7, metalness: 0.05 });
   MAT.vRubberFloor = new THREE.MeshStandardMaterial({ map: TX.vChecker, roughness: 1 });
   MAT.blossom = new THREE.MeshStandardMaterial({ color: 0xf6b3cf, roughness: 0.85, flatShading: true });   // Clappy Park's sakura
-  MAT.fluoro = new THREE.MeshBasicMaterial({ color: 0xf2f8ff, toneMapped: false });                         // More Warehouse's tube lights
+  MAT.fluoro = new THREE.MeshBasicMaterial({ color: 0xf2f8ff, toneMapped: false });
+  MAT.glass = new THREE.MeshStandardMaterial({ color: 0x2c3a4a, roughness: 0.12, metalness: 0.7, emissive: 0x0d1620 });   // windows                         // More Warehouse's tube lights
   MAT.vChromeFloor = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xcfc2ff, roughness: 0.12, metalness: 0.92, envMapIntensity: 1.1 });
   MAT.vGrid = new THREE.MeshStandardMaterial({ map: TX.vGrid, emissiveMap: TX.vGridE, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.25 });
 }
@@ -251,7 +252,7 @@ function buildScene() {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   playRoot.add(sky);
   // lights
-  playRoot.add(new THREE.HemisphereLight(IND ? 0xc8d2e0 : 0xa9c0e0, IND ? 0x3a3630 : 0x5a4532, IND ? 1.15 : 0.9));
+  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : 0xa9c0e0, IND ? 0x6a645a : 0x5a4532, IND ? 1.9 : 0.9));
   const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.set(-30, 22, 18); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);

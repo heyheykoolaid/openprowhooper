@@ -147,7 +147,8 @@ Trick Calibration and Judge the Bot stay on the playground (they name its object
 bot's stress flights; `test/school.js` covers the school. Shared flights record their map and `tools/flights.js`
 re-flies each on the right one. Neon glow is a small bloom pass (`bloomRender`: glow pieces are on layer 1, drawn over a black copy of the scene,
 blurred and added; Options can turn it off). Ground zones are drawn right after the ground with no depth test so they
-never flicker against it. Menus: Maps (a list) and Tools & labs are their own screens. The school is a first build
+never flicker against it. Menus: Maps (a carousel with a thumbnail of each map: `assets/maps/<id>.webp`, rendered by
+`tools/map_thumbs.py` with a fixed menu camera `window.__pwView`; add a view there for a new map, build, run it, build again) and Tools & labs are their own screens. The school is a first build
 from the pilot's design doc: the
 bowl is ringed by a raised deck because the ground plane cannot be dug into, and rubber feels the same as concrete.
 
@@ -169,8 +170,11 @@ over them, the pilot's Clappy and HeyHey pieces on North Shops 2), and the Trick
 a 60 x 40 x 12 m shell (walls kind 'wall', three Roll-up Door gaps south, four Skylight gaps in the roof), Steel
 Columns (poles), three rows of pallet racks (Rack Beams at 1.6/3.2/4.8/6.4 m, Rack Bay gaps), Containers (stacks of up
 to three) and a Container Tunnel, a Mezzanine with an Office under it, two Catwalks, a Crane Bridge, a Conveyor, crate
-stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 8 fluorescent lights are point lights
-(`o.light` with `lightColor`, `lightPower`, `lightRange`); the industrial theme dims the fog and brightens the hemisphere.
+stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 18 High-bay Lights (11 of them real point lights,
+`o.light` with `lightColor`, `lightPower` 60, `lightRange` 30) hang under roof trusses; the industrial theme dims the fog and
+brightens the hemisphere (1.9: the pilot found the first version far too dark). Detail pass (2026-11-17): Clappy's
+buildings have windows, floor bands, parapets, rooftop units, water tanks (over/unders) and stair huts (`MAT.glass`);
+the footbridge stairs climb from the plaza onto its west end; balance beams stand on posts; the ladder has rails.
 Destructible or moving props from the brief are not in (the physics world is static). Only the playground draws the
 skyline and power lines; the sun's shadow box is sized from each map's bounds. Static materials `blossom` and `fluoro`
 are new. test/maps.js checks every map (builds, Surveyor counts, clear spawn, bot Powerloops/Mattys on its own objects).

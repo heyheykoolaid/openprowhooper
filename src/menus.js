@@ -15,8 +15,28 @@ function needPlayground(what) { if (MAP_ID === 'playground') return false; flash
 function menuMapLabels() { const m = $('#menuMap'); if (m) m.textContent = world.title; }
 function openMaps() {
   show('#mapScreen'); if (mode === 'fly') { mode = 'paused'; }
-  $('#mapList').innerHTML = Object.values(S.MAPS).map(m => `<div class="mapCard ${m.id === MAP_ID ? 'cur' : ''}"><div><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${m.id === MAP_ID && world.survey ? `<small>The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>${m.id === MAP_ID ? '<span class="note">you are here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>`).join('');
+  const maps = Object.values(S.MAPS), thumbs = window.PW_MAPTHUMBS || {};
+  mapCar.i = Math.max(0, maps.findIndex(m => m.id === MAP_ID));
+  $('#mapList').innerHTML = `<div class="mapCar"><button class="mapArrow" data-mapnav="-1" aria-label="previous map">‹</button><div class="mapViewport"><div class="mapTrack">${maps.map((m, k) => `<div class="mapSlide ${m.id === MAP_ID ? 'cur' : ''}" data-mapk="${k}">
+      <div class="mapThumb ${thumbs[m.id] ? '' : 'none'}" ${thumbs[m.id] ? `style="background-image:url('${thumbs[m.id]}')"` : ''}>${thumbs[m.id] ? '' : `<span>${esc(m.title)}</span>`}${m.id === MAP_ID ? '<em>you are here</em>' : ''}</div>
+      <div class="mapInfo"><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${m.id === MAP_ID && world.survey ? `<small class="mapStats">The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>
+      <div class="mapGo">${m.id === MAP_ID ? '<span class="note">you are flying here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div></div>`).join('')}</div></div><button class="mapArrow" data-mapnav="1" aria-label="next map">›</button></div>
+    <div class="mapDots">${maps.map((m, k) => `<button data-mapdot="${k}" title="${esc(m.title)}" aria-label="${esc(m.title)}"></button>`).join('')}</div>`;
+  mapCarGo(mapCar.i);
 }
+// the carousel: one map in the middle; arrows, dots, a click on a faded neighbour, the arrow keys, a swipe
+const mapCar = { i: 0 };
+function mapCarGo(k) { const n = Object.keys(S.MAPS).length, tr = $('#mapList .mapTrack'); if (!tr) return; mapCar.i = (k + n) % n;
+  tr.style.transform = `translateX(${-mapCar.i * 100}%)`;
+  for (const el of document.querySelectorAll('#mapList .mapSlide')) el.classList.toggle('on', +el.dataset.mapk === mapCar.i);
+  for (const el of document.querySelectorAll('#mapList [data-mapdot]')) el.classList.toggle('on', +el.dataset.mapdot === mapCar.i); }
+document.addEventListener('click', e => { if (!e.target.closest('#mapList')) return; const a = e.target.closest('[data-mapnav]'), d = e.target.closest('[data-mapdot]');
+  if (a) mapCarGo(mapCar.i + +a.dataset.mapnav); else if (d) mapCarGo(+d.dataset.mapdot); });
+document.addEventListener('keydown', e => { if ($('#mapScreen').classList.contains('hide')) return;
+  if (e.key === 'ArrowLeft') { mapCarGo(mapCar.i - 1); e.preventDefault(); } if (e.key === 'ArrowRight') { mapCarGo(mapCar.i + 1); e.preventDefault(); }
+  if (e.key === 'Enter') { const b = $('#mapList .mapSlide.on [data-mapid]'); if (b) { b.click(); e.preventDefault(); } } });
+{ let x0 = null; document.addEventListener('pointerdown', e => { x0 = e.target.closest('#mapList .mapViewport') ? e.clientX : null; });
+  document.addEventListener('pointerup', e => { if (x0 === null) return; const dx = e.clientX - x0; x0 = null; if (Math.abs(dx) > 50) mapCarGo(mapCar.i + (dx < 0 ? 1 : -1)); }); }
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);

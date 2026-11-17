@@ -169,7 +169,8 @@ function frame(now) {
   // cameras
   let cam;
   if (mode === 'menu') {
-    const t = now / 1000 * 0.08; chaseCam.position.set(Math.sin(t) * 16, 5 + Math.sin(t * 1.7) * 1.5, Math.cos(t) * 16); chaseCam.lookAt(0, 1.5, -3); cam = chaseCam;
+    const t = now / 1000 * 0.08, V = window.__pwView;   // __pwView {p, l}: a fixed camera for tools/map_thumbs.py
+    if (V) { chaseCam.position.set(V.p[0], V.p[1], V.p[2]); chaseCam.lookAt(V.l[0], V.l[1], V.l[2]); } else { chaseCam.position.set(Math.sin(t) * 16, 5 + Math.sin(t * 1.7) * 1.5, Math.cos(t) * 16); chaseCam.lookAt(0, 1.5, -3); } cam = chaseCam;
   } else if (mode === 'judge' && judge.cam === 'spectator' && judge.camPos) {
     // drag to orbit round the flight, wheel to zoom (double-click resets)
     const o = judge.orb || (judge.orb = { yaw: 0, pitch: 0, zoom: 1 }), C = judge.look, v = S.sub(judge.camPos, C), r = Math.hypot(v.x, v.y, v.z) * o.zoom;

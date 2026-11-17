@@ -214,6 +214,13 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #bbrSticks { position: absolute; left: 12px; bottom: 166px; width: 208px; height: 96px; pointer-events: none !important; }
 #bbrTimeline { position: absolute; left: 0; right: 330px; bottom: 0; width: calc(100% - 330px); height: 150px; background: #0e0d0c; cursor: crosshair; }
 .toolBtns { max-width: none; } .toolBtns button small, #mapList small { display: block; font: 12px/1.4 var(--mono); text-transform: none; letter-spacing: 0; opacity: .75; margin-top: 2px; white-space: normal; -webkit-text-stroke: 0; }
+#mapList .mapCar { display: flex; align-items: center; gap: 6px; } #mapList .mapViewport { flex: 1; overflow: hidden; touch-action: pan-y; }
+#mapList .mapTrack { display: flex; transition: transform .35s cubic-bezier(.2,.8,.2,1); } #mapList .mapSlide { flex: 0 0 100%; box-sizing: border-box; padding: 4px 6px; opacity: .2; transition: opacity .35s; } #mapList .mapSlide.on { opacity: 1; }
+#mapList .mapThumb { position: relative; aspect-ratio: 16 / 9; background: #0e0d0c center / cover no-repeat; border: 1px solid #2c2925; border-bottom: 4px solid #2c2925; } #mapList .mapSlide.cur .mapThumb { border-bottom-color: var(--cyan); }
+#mapList .mapThumb.none { display: flex; align-items: center; justify-content: center; font-size: 22px; opacity: .6; } #mapList .mapThumb em { position: absolute; top: 10px; left: 10px; font: 12px var(--mono); font-style: normal; text-transform: uppercase; letter-spacing: .08em; background: var(--cyan); color: #0b0b0b; padding: 3px 8px; }
+#mapList .mapInfo { padding: 12px 2px 4px; min-height: 96px; } #mapList .mapInfo b { font-size: 20px; } #mapList .mapGo { display: flex; justify-content: flex-end; align-items: center; padding: 4px 2px 2px; min-height: 52px; }
+#mapList .mapArrow { flex: 0 0 auto; width: 44px; height: 88px; font-size: 34px; line-height: 1; padding: 0; } #mapList .mapDots { display: flex; justify-content: center; gap: 8px; margin: 10px 0 2px; }
+#mapList .mapDots button { width: 11px; height: 11px; min-width: 0; padding: 0; border-radius: 50%; background: #3a3631; border: 0; } #mapList .mapDots button.on { background: var(--cyan); }
 #mapList .mapCard { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; margin: 8px 0; background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid #2c2925; } #mapList .mapCard.cur { border-left-color: var(--cyan); } #mapList .mapCard b { font-size: 17px; }
 #mainMenu .panel, #toolsScreen .panel, #mapScreen .panel, #pause .panel { overflow-x: hidden; }
 details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExplain[open] > summary { margin-bottom: 6px; }
@@ -452,10 +459,10 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="judge" class="ghost">Judge the Bot<small>say whether the bot's tricks look right (playground)</small></button>
   </div>
 </div></div>
-<div id="mapScreen" class="screen hide"><div class="panel" style="max-width:640px">
+<div id="mapScreen" class="screen hide"><div class="panel" style="max-width:700px">
   <div class="row" style="justify-content:space-between"><h2>Maps</h2><button data-act="back">Back</button></div>
   <div id="mapList"></div>
-  <p class="note">Choosing a map reloads the game into it. A run in progress ends (and is shared first, if sharing is on).</p>
+  <p class="note">← → or swipe to look through the maps. Choosing a map reloads the game into it. A run in progress ends (and is shared first, if sharing is on).</p>
 </div></div>
 <div id="optionsScreen" class="screen hide"><div class="panel" style="max-width:860px">
   <div class="topbar"><h2>Options</h2><button data-act="optclose">Back</button></div><div id="optBody"></div></div></div>
@@ -478,11 +485,12 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   </div>
   <div class="rvSide" id="rvSide"></div>
 </div></div>
-<div id="bbScreen" class="screen hide"><div class="panel" style="max-width:760px">
+<div id="bbScreen" class="screen hide"><div class="panel" style="max-width:700px">
   <div class="topbar"><h2>Blackbox Lab</h2><button data-act="back">Back</button></div><div id="bbBody"></div></div></div>
 
 <script>/*TRACKS*/</script>
 <script>/*ART*/</script>
+<script>/*MAPTHUMBS*/</script>
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
 <script>/*MAPS*/</script>

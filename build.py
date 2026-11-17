@@ -38,6 +38,9 @@ t = t.replace('<script>/*DROPOFF_URL*/</script>', '<script>window.PW_DROPOFF=' +
 tracks = [{'title': 'Ghostrider', 'artist': 'awesometexture2251', 'src': 'music/ghostrider.mp3', 'art': 'music/ghostrider.jpg', 'theme': True}]
 # the pilot's graffiti pieces (assets/graffiti/*.webp), embedded as data URLs in both builds
 art = [{'name': f.stem, 'src': 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode()} for f in sorted((root / 'assets' / 'graffiti').glob('*.webp'))]
+# thumbnails for the Maps carousel (assets/maps/<id>.webp, rendered by tools/map_thumbs.py)
+thumbs = {f.stem: 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted((root / 'assets' / 'maps').glob('*.webp'))}
+t = t.replace('<script>/*MAPTHUMBS*/</script>', '<script>window.PW_MAPTHUMBS=' + json.dumps(thumbs) + ';</script>')
 t = t.replace('<script>/*ART*/</script>', '<script>window.PW_ART=' + json.dumps(art) + ';</script>')
 (out / 'index.html').write_text(t.replace('<!--THREE-->', CDN).replace('<script>/*TRACKS*/</script>', '<script>window.PW_TRACKS=' + json.dumps(tracks) + ';</script>'))
 # standalone single-file build with the music embedded
