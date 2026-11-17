@@ -793,6 +793,8 @@ function parsePattern(s) {
     return { ax: m[1], dir: m[2], loose: !!m[3], deg: +m[4], inv: !!m[5] };
   });
 }
+const LEARN_MAX = { tol: 30, rev: 30, crossBack: 1.2 }, LEARN_NONE = { tol: 0, rev: 0, crossBack: 0 };
+let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
 function matchTokens(pat, toks) {
   if (pat.length !== toks.length) return null;
   const vars = {};
@@ -801,7 +803,7 @@ function matchTokens(pat, toks) {
     const p = pat[i], t = toks[i];
     if (p.ax !== t.ax) return null;
     if (p.inv && !t.inv) return null;
-    const tol = p.loose ? 95 : 50;
+    const tol = (p.loose ? 95 : 50) + TOL_X;
     if (Math.abs(t.raw - p.deg) > tol) return null;
     err += Math.max(0, Math.abs(t.raw - p.deg) - (p.loose ? 55 : 0)) / p.deg;
     if (p.dir === '+' && t.dir !== 1) return null;
@@ -1710,7 +1712,7 @@ class StreamDetector extends TrickDetector {
   }
   update(d, dt, rc) {
     this.time += dt; this.lastD = d; this.lastRc = rc ? { thr: rc.thr ?? 0, roll: rc.roll ?? 0, pitch: rc.pitch ?? 0, yaw: rc.yaw ?? 0 } : null;
-    const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates);
+    const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates); TOL_X = this.learned.tol;
     this.trackCrossings(d, t);
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
     this.continuousDetectors(d, dt, t, rc);
@@ -1818,7 +1820,7 @@ class StreamDetector extends TrickDetector {
     // upright → upside-down → upright again with about one turn of total rotation, most of it on this axis, IS the
     // full roll or flip. Count it as one (the off-axis part still makes it sloppy), and fold in what rode along.
     let fused = out;
-    for (const t of out) { if (t.ax === 'Y' || t.raw < 195 || t.raw >= 312 || !this.attLog) continue;
+    for (const t of out) { if (t.ax === 'Y' || t.raw < 195 - this.learned.rev || t.raw >= 312 || !this.attLog) continue;
       const H = this.attLog; let u0 = -1, uMin = 1, u1 = -1, r0 = null, r1 = null;
       // …but not when another axis shares or carries on the turn (half roll then pull through = a Split-S; half flip blended into a half roll = a Juicy Flick)
       if ([...this.toks, ...this.cur.filter(Boolean)].some(o => o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < t.t1 + 0.1 && o.t1 > t.t0 - 0.3)) continue;
@@ -1832,7 +1834,7 @@ class StreamDetector extends TrickDetector {
     for (const t of out) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / Math.max(1, t.raw); }
     return out;
   }
-  crossWindow(t0) { return this.crossLog.filter(c => c.t >= t0 - 2.2 && !c.used); }
+  crossWindow(t0) { return this.crossLog.filter(c => c.t >= t0 - 2.2 - this.learned.crossBack && !c.used); }
   nearAny() { const d = this.lastD; return !!d && (this.nearObstacle(d, 3) || this.crossLog.some(c => this.time - c.t < 3)); }
   candidates(N, obstOnly) {
     const out = [];
@@ -1935,6 +1937,8 @@ class StreamDetector extends TrickDetector {
   // natural gap between segments. It only ever loosens: slower pilots' rotations still count as deliberate, and pilots who
   // leave more air get more (up to 1.8 s).
   setPilot(p) { this.pilot = p || null; this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null; }
+  // what was learned from this pilot's review labels (learnFromLabels): only ever looser, and only within these bounds
+  get learned() { if (this._learnOf !== this.pilot || !this._learned) { const L = this.pilot && this.pilot.learn, n = (v, max) => Number.isFinite(+v) ? clamp(+v, 0, max) : 0; this._learnOf = this.pilot; this._learned = L ? { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) } : LEARN_NONE; } return this._learned || LEARN_NONE; }
   get airOpen() { const a = this.pilot && this.pilot.air; return a ? clamp(Math.max(AIR_OPEN, a * 1.8 + 0.2), AIR_OPEN, 1.8) : AIR_OPEN; }
   minRate(ax, base) { const r = this.pilot && this.pilot.rate && this.pilot.rate[ax]; return r ? Math.min(base, Math.max(90, r * 0.5)) : base; }
   airAllowed(a, b) { const W = this.fbIn(a, b), A = this.airOpen; return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? A * 1.5 : A; }
@@ -2393,6 +2397,101 @@ function hoverInfo(p) {
   const s = motorSteady(p, 3.75 * hi); const amps = 4 * s.current * hi + 0.35;
   return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
 }
-root.Sim = { surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+// ---- Replay: recorded rows (TRACE_COLS) through a fresh detector at 1 kHz. Shared by the Node tools and the game.
+function replayTrace(rows, opts = {}) {
+  const det = new StreamDetector(opts.world); det.camTilt = opts.camTilt ?? 20; if (opts.pilot) det.setPilot(opts.pilot);
+  if (opts.hook) opts.hook(det);
+  const d = Object.create(Drone.prototype); d.armed = true; d.crashed = false; d.contactThisStep = false;
+  const dt = 0.001, out = [], dbg = [], hasV = rows[0].length >= 24;
+  let k = 0, prev = null, lastRow = -1;
+  const t0 = opts.from ?? rows[0][0], t1 = Math.min(opts.to ?? Infinity, rows[rows.length - 1][0]);
+  while (k < rows.length - 2 && rows[k + 1][0] <= t0) k++;
+  for (let t = t0; t < t1 + (opts.tail ?? 1.6); t += dt) {
+    while (k < rows.length - 2 && rows[k + 1][0] <= t) k++;
+    const a = rows[k], b = rows[Math.min(k + 1, rows.length - 1)];
+    const span = b[0] - a[0], f = span > 0 ? Math.min(1, Math.max(0, (t - a[0]) / span)) : 0;
+    const jump = Math.hypot(b[1] - a[1], b[2] - a[2], b[3] - a[3]) > 1.5;
+    const L = i => (jump ? (f < 0.5 ? a[i] : b[i]) : a[i] + (b[i] - a[i]) * f);
+    d.pos = v3(L(1), L(2), L(3)); d.q = qnorm({ w: L(4), x: L(5), y: L(6), z: L(7) });
+    const rr = [L(8), L(9), L(10)].map(v => v * D2R); d.w = v3(rr[1], -rr[2], -rr[0]);
+    if (jump && f >= 0.5 && !d._j) { det.prevSide = {}; d._j = true; prev = null; } if (!jump) d._j = false;
+    d.vel = hasV ? v3(L(21), L(22), L(23)) : (prev ? mul(sub(d.pos, prev), 1 / dt) : v3()); prev = d.pos;
+    const src = f < 0.5 ? a : b; d.armed = !!src[13]; d.crashed = !!src[14];
+    const ri = f < 0.5 ? k : k + 1; d.contactThisStep = false;   // contacts: once per recorded row that had one
+    if (src[12] && ri !== lastRow) { lastRow = ri; d.contactThisStep = true;
+      if (src.length >= 21) { d.contactNormal = v3(src[15], src[16], src[17]); d.contactOwner = src[18]; d.lastImpact = src[19]; d.contactGround = !!src[20]; }
+      else { d.contactNormal = v3(0, 1, 0); d.contactGround = true; d.lastImpact = 1; d.contactOwner = -1; } }
+    // sticks (format v2 traces carry them; older ones don't): give the detector the pilot's inputs too
+    const rc = src.length >= 27 ? { thr: src[11], roll: src[24], pitch: src[25], yaw: src[26] } : { thr: src[11] ?? 0, roll: 0, pitch: 0, yaw: 0 };
+    if (d._wasArmed !== undefined && d._wasArmed !== d.armed) det.onArmChange(d, d.armed);   // the game tells the detector about arming (Slide Disarm, Perch)
+    d._wasArmed = d.armed;
+    det.update(d, dt, rc); det.postStep(d);
+    for (const e of det.drain()) out.push({ ...e, t });
+    if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
+  }
+  return { events: out, debug: dbg, det };
+}
+
+// ---- Learning from the pilot's own review labels.
+// A review label says "this stretch of my flight was trick X" (or "that call was not a trick"), and the flight's trace
+// carries everything that happened in it: attitude, rotation, position (so every over/under pass and gap is measured
+// again on replay) and the sticks. The learner re-flies each labelled stretch through the detector with a slightly
+// looser pilot profile and keeps a loosening only if it turns labelled misses into hits WITHOUT turning a "not a
+// trick" into a call, losing a call the pilot confirmed, or adding calls in those stretches. Knobs (never tighter than
+// the defaults, each with a hard cap): angle tolerance, how short a full roll/flip may read, how long ago an over/under
+// pass may be and still belong to the trick, how slow a rotation may be, and how much air between segments.
+const LEARN_STEPS = [
+  { key: 'tol', what: 'angle tolerance', step: L => L.learn.tol < LEARN_MAX.tol && (L.learn.tol += 10) },
+  { key: 'rev', what: 'short-reading rolls and flips', step: L => L.learn.rev < LEARN_MAX.rev && (L.learn.rev += 15) },
+  { key: 'crossBack', what: 'time allowed between an over/under pass and the trick', step: L => L.learn.crossBack < LEARN_MAX.crossBack - 1e-6 && (L.learn.crossBack = +(L.learn.crossBack + 0.4).toFixed(2)) },
+  ...['R', 'P', 'Y'].map(ax => ({ key: 'rate' + ax, what: { R: 'slower rolls', P: 'slower flips and loops', Y: 'slower yaw spins' }[ax], step: L => { const r = (L.rate = L.rate || {}), cur = r[ax] || 360; if (cur <= 190) return false; r[ax] = Math.round(cur * 0.8); return true; } })),
+  { key: 'air', what: 'air between segments', step: L => { const a = L.air || 0.45; if (a >= 0.85) return false; L.air = +(a + 0.15).toFixed(2); return true; } },
+];
+const learnClone = p => { const c = JSON.parse(JSON.stringify(p || {})); c.learn = { tol: 0, rev: 0, crossBack: 0, ...(c.learn || {}) }; return c; };
+// runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
+function learnWindows(run) {
+  const T0 = run.rows[0][0], T1 = run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && l.verdict !== 'unlabelled' && (l.actual || l.verdict === 'no'))
+    .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' ? l.actual : null, not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
+  const W = []; for (const l of L) { const w = W[W.length - 1], a = Math.max(T0, l.a - 4), b = Math.min(T1, l.b + 1.2); if (w && a <= w.b) { w.b = Math.max(w.b, b); w.labels.push(l); } else W.push({ a, b, labels: [l] }); }
+  return W;
+}
+function learnScore(runs, profile) {
+  let hits = 0, want = 0, bad = 0, calls = 0; const missed = [], hitNames = [];
+  for (const run of runs) for (const w of (run._win || (run._win = learnWindows(run)))) {
+    const ev = replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false }).events.filter(e => e.name !== 'near' && e.name !== 'Crash');
+    calls += ev.length;
+    for (const l of w.labels) {
+      const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t <= l.b + 2.2);
+      if (l.want) { want++; if (inSpan.some(e => e.name === l.want)) { hits++; hitNames.push(l.want); } else missed.push(l.want); }
+      if (l.not && l.not !== l.want && inSpan.some(e => e.name === l.not)) bad++;
+    } }
+  return { hits, want, bad, calls, missed, hitNames, value: hits - bad * 1.5 - calls * 0.2 };
+}
+// Greedy and careful: one small step at a time, kept only when it clearly helps. `tick` lets the game breathe between replays.
+async function learnFromLabels(runs, profile, opts = {}) {
+  runs = runs.filter(r => r && r.rows && r.rows.length > 50 && r.world && Array.isArray(r.labels)); let cur = learnClone(profile);
+  const base = learnScore(runs, cur), report = { labels: base.want, before: base.hits, after: base.hits, changes: [], fixed: [], still: base.missed.slice(), wrongBefore: base.bad, wrongAfter: base.bad };
+  if (!base.want || base.hits === base.want) return { profile: cur, report, changed: false };
+  let best = base;
+  for (let round = 0; round < (opts.rounds ?? 5); round++) {
+    let pick = null;
+    for (const st of LEARN_STEPS) { const cand = learnClone(cur);
+      for (let k = 0; k < 3; k++) {   // a knob may need more than one notch before anything changes: take the smallest that helps
+        if (!st.step(cand)) break; if (opts.tick) await opts.tick();
+        const sc = learnScore(runs, cand); if (sc.bad > best.bad) break;   // brought back a call the pilot rejected: further is worse
+        // must find more of the pilot's tricks and must not lose any they confirmed
+        const kept = sc.hitNames.slice(), keepsAll = best.hitNames.every(nm => { const x = kept.indexOf(nm); if (x < 0) return false; kept.splice(x, 1); return true; });
+        if (sc.hits > best.hits && keepsAll) { if (!pick || sc.value > pick.sc.value) pick = { st, cand: learnClone(cand), sc }; break; } } }
+    if (!pick) break;
+    cur = pick.cand; best = pick.sc; report.changes.push(pick.st.what);
+    if (best.hits === best.want) break;
+  }
+  report.after = best.hits; report.still = best.missed.slice(); report.wrongAfter = best.bad;
+  { const m = base.missed.slice(); for (const n of best.missed) { const i = m.indexOf(n); if (i >= 0) m.splice(i, 1); } report.fixed = m; }
+  cur.learn.labels = base.want;
+  return { profile: cur, report, changed: report.changes.length > 0 };
+}
+
+root.Sim = { replayTrace, learnFromLabels, learnScore, LEARN_MAX, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

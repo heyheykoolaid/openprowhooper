@@ -195,6 +195,17 @@ trick plays on past it unless Loop is on. After a crash, throttle to zero rights
 `crashLock`); the game's drone has `crashImpact = 9.5` (tests keep 7.5). A reset switch never fires together with the
 arm switch (input.js): arming must not send the pilot back to the start. Only R (or a separate reset switch) resets.
 
+## Learning from reviews (src/sim.js `learnFromLabels`, src/recap.js `learnRun`)
+When a review is saved, the game re-flies the labelled stretches of that run and of the last five reviewed runs on the
+same map (`Sim.replayTrace`, now in sim.js and shared with the Node tools; the trace carries attitude, position — so
+over/under passes are measured again — and sticks) with a slightly looser pilot profile, and keeps a loosening only
+when it finds more of the pilot's labelled tricks without losing a confirmed one or bringing back a "not a trick".
+Knobs, all loosen-only with hard caps (`LEARN_MAX`): `pilot.learn.tol` (angle tolerance, `TOL_X` in `matchTokens`),
+`learn.rev` (how short a full roll/flip may read), `learn.crossBack` (how long before the trick an over/under pass may
+be), plus slower `pilot.rate` and more `pilot.air`. Stored in `store 'pilot'` (travels with shared flights), reported
+in Options with a Forget button (`learn.orig` restores the Warm-up pace). test/learn.js. It never runs while flying.
+The review list is in time order; a picked trick loops until the red line is moved off it (`recapSeek`), then plays on.
+
 ## Daily leaderboard (src/dropoff.js `LB`, tools/dropoff-worker.mjs)
 A finished 2:00 Session can be posted from the results screen: the player's own click every time (it publishes pilot
 name, score, scoring sheet and the run's replay; `pro-whooper-score/1`). The relay files it as

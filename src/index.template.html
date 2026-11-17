@@ -231,7 +231,11 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
 .lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
 #lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
-#recapBar .rcTrack { position: relative; height: 80px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
+#recapBar .rcRuler { position: absolute; left: 0; right: 0; top: 0; height: 15px; background: #181a22; border-bottom: 1px solid #2c2f3a; cursor: ew-resize; }
+#recapBar .rcRuler i { position: absolute; top: 0; height: 15px; border-left: 1px solid #ffffff38; padding-left: 3px; font: normal 9px/15px var(--mono); color: #ffffff80; pointer-events: none; }
+#recapBar .rcLoopBand { position: absolute; top: 15px; bottom: 0; background: #ff4d2e1f; border-left: 1px dashed #ff4d2e; border-right: 1px dashed #ff4d2e; pointer-events: none; }
+#rcHead b { position: absolute; top: 0; left: -7px; width: 16px; height: 15px; background: #ff4d2e; border-radius: 3px 3px 8px 8px; box-shadow: 0 0 0 1px #111; }
+#recapBar .rcTrack { position: relative; height: 96px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
 #recapBar .rcSpan { position: absolute; bottom: 0; height: 4px; background: #ffffff40; pointer-events: none; }
 #recapBar .rcM { position: absolute; min-width: 14px; box-sizing: border-box; cursor: grab; overflow: visible; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
 #recapBar .rcM.ok { background: #1f7a44; } #recapBar .rcM.bad { background: #a8521c; } #recapBar .rcM.unsure { background: #8a6d10; } #recapBar .rcM.add { background: #1d5fa8; } #recapBar .rcM.gone { background: #4a2020; text-decoration: line-through; color: #c99; }

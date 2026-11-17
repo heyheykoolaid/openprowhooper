@@ -71,10 +71,12 @@ function recapZoom(dir) { const [T0, T1] = recapSpan(), W = T1 - T0, cur = recap
   if (dir > 0) z = steps.slice().reverse().find(x => x < cur - 0.01) ?? steps[0] ?? 0; else z = steps.find(x => x > cur + 0.01) ?? 0;
   recap.zoom = z || 0; recapViewFollow(true); renderRecapBar(); }
 const recapSpan = () => { const T = recap.trace; return T.length ? [T[0][0], T[T.length - 1][0]] : [0, 1]; };
-function recapPlay(it) { if (!it || !recap.trace.length) return; const [T0, T1] = recapSpan(), old = recap.play || { speed: 1, looping: false };
+function recapPlay(it) { if (!it || !recap.trace.length) return; const [T0, T1] = recapSpan(), old = recap.play || { speed: 1, looping: true };
   const sp = recapSpanOf(it), a = sp[0] - 1.2, b = sp[1] + 0.9;
   recap.play = { t: Math.max(T0, a), playing: true, speed: old.speed, looping: old.looping, loop: { a: Math.max(T0, a), b: Math.min(T1, b) }, key: it.kind + it.i }; }
-function recapSeek(t, keepLoop) { const p = recap.play; if (!p) return; const [T0, T1] = recapSpan(); p.t = Math.max(T0, Math.min(T1, t)); if (!keepLoop) p.loop = null; }
+// Moving the red line inside the trick being reviewed keeps the loop; moving it off the trick lets go, and playback
+// carries on from there (sticky on the trick, never stuck on it).
+function recapSeek(t, keepLoop) { const p = recap.play; if (!p) return; const [T0, T1] = recapSpan(); p.t = Math.max(T0, Math.min(T1, t)); if (!keepLoop && p.loop && (p.t < p.loop.a - 0.05 || p.t > p.loop.b + 0.05)) { p.loop = null; p.left = true; } }
 function recapRowAt(t) { const T = recap.trace; let lo = 0, hi = T.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m][0] <= t) lo = m; else hi = m; } return T[lo]; }
 function recapStep(dt) {
   const p = recap.play; if (!p || !recap.trace.length) return; const [T0, T1] = recapSpan();
@@ -100,7 +102,7 @@ function renderRecapBar() {
   const el = $('#recapBar'), p = recap.play; if (!el || !p) return; const [T0, T1] = recapSpan(), [V0, V1] = recapView(), W = Math.max(0.01, V1 - V0), pc = t => ((t - V0) / W * 100).toFixed(2), wd = (a, b) => Math.max(0.5, (b - a) / W * 100).toFixed(2);
   const chrono = recapItems().slice().sort((a, b) => a.t - b.t), sel = recapSel(), names = recapNames();
   const marks = chrono.map((it, k) => { const on = p.key === it.kind + it.i;
-    const sp = recapSpanOf(it), H = '<i class="rcH l"></i><i class="rcH r"></i>', pos = `left:${pc(sp[0])}%;width:${wd(sp[0], sp[1])}%;top:${3 + (k % 3) * 18}px`; if (sp[1] < V0 || sp[0] > V1) return '';
+    const sp = recapSpanOf(it), H = '<i class="rcH l"></i><i class="rcH r"></i>', pos = `left:${pc(sp[0])}%;width:${wd(sp[0], sp[1])}%;top:${19 + (k % 3) * 18}px`; if (sp[1] < V0 || sp[0] > V1) return '';
     if (it.kind === 'miss') return `<div class="rcM add ${it.f.actual ? 'ok' : ''} ${on ? 'on' : ''}" style="${pos}" data-rcm="miss" data-i="${it.i}" title="${esc(it.f.actual || 'trick you added — say what it was')} · drag to move, drag an end to stretch">${H}<span class="rcT">${esc(it.f.actual || '＋ ?')}</span></div>`;
     const e = it.e, gone = e.verdict === 'no' && e.actual === 'not a trick', cls = e.verdict === 'yes' ? 'ok' : gone ? 'gone' : e.verdict === 'no' ? 'bad' : (e.flag || (e.conf != null && e.conf < 0.7)) ? 'unsure' : '';
     return `${e.span ? `<div class="rcSpan" style="left:${pc(e.t0)}%;width:${wd(e.t0, e.t)}%" title="where the game put it"></div>` : ''}<div class="rcM ${cls} ${on ? 'on' : ''}" style="${pos}" data-rcm="call" data-i="${it.i}" title="${esc(e.name)}${e.actual ? ' → ' + esc(e.actual) : ''} · drag to move, drag an end to stretch">${H}<span class="rcT">${esc(e.verdict === 'no' && e.actual && !gone ? e.actual : e.name)}</span></div>`; }).join('');
@@ -111,7 +113,9 @@ function renderRecapBar() {
   const C = recap.clip, clipBand = (C ? `<div class="rcClip" style="left:${pc(C.a)}%;width:${wd(C.a, C.b)}%"></div>` : '')
     + `<div class="rcClips">${recap.clips.map((c, i) => c.b < V0 || c.a > V1 ? '' : `<div class="rcCl ${i === recap.clipSel ? 'on' : ''}" data-rcclip="${i}" style="left:${pc(c.a)}%;width:${wd(c.a, c.b)}%" title="Clip ${i + 1} · ${(c.b - c.a).toFixed(1)} s · click to select, then drag its ends to trim">${i === recap.clipSel ? '<i class="rcH l"></i><i class="rcH r"></i>' : ''}<span class="rcT">clip ${i + 1}</span></div>`).join('')}</div>`;
   document.body.classList.toggle('rcWide', !recap.review);
-  el.innerHTML = `<div class="rcTrack" id="rcTrack">${clipBand}<div class="rcMarks">${marks}</div><div id="rcHead"></div></div>
+  const stepS = [1, 2, 5, 10, 15, 30, 60, 120].find(x => W / x <= 14) || 300, ticks = []; for (let t = Math.ceil((V0 - T0) / stepS) * stepS + T0; t <= V1; t += stepS) ticks.push(`<i style="left:${pc(t)}%">${fmtT(t - T0 + 0.05)}</i>`);
+  const loopBand = p.loop && p.looping ? `<div class="rcLoopBand" style="left:${pc(p.loop.a)}%;width:${wd(p.loop.a, p.loop.b)}%" title="Looping this trick: drag the red line off it to play on"></div>` : '';
+  el.innerHTML = `<div class="rcTrack" id="rcTrack">${clipBand}${loopBand}<div class="rcRuler" title="Drag here to move through the run">${ticks.join('')}</div><div class="rcMarks">${marks}</div><div id="rcHead"><b></b></div></div>
     <div class="rcRow"><button data-rc="prev" title="Previous trick ([)">⏮</button><button data-rc="back" title="Back 1 s (←)">−1s</button><button data-rc="fb" title="Back one frame (,)">◂</button><button data-rc="toggle" id="rcPlay" class="primary" title="Play / pause (Space)">⏸</button><button data-rc="ff" title="Forward one frame (.)">▸</button><button data-rc="fwd" title="Forward 1 s (→)">+1s</button><button data-rc="next" title="Next trick (])">⏭</button>
       <select id="rcSpeed" title="Playback speed">${[0.1, 0.25, 0.5, 1, 2].map(v => `<option value="${v}" ${p.speed === v ? 'selected' : ''}>${v}×</option>`).join('')}</select>
       <button data-rc="loop" id="rcLoop" title="Repeat the selected trick instead of playing on (L)">⟲ loop</button><button data-rc="zin" title="Zoom the timeline in (+ or mouse wheel)">🔍＋</button><button data-rc="zout" title="Zoom out (−)">🔍−</button><button data-rc="cam" title="Camera (C)">📷</button><span id="rcTime"></span>
@@ -131,17 +135,18 @@ function renderRecap() {
   el.classList.toggle('hide', !recap.review); if (!recap.review) { renderRecapBar(); return; }
   const done = recap.events.filter(e => e.verdict === 'yes' || (e.verdict === 'no' && e.actual)).length + recap.flags.filter(f => f.actual).length;
   el.innerHTML = `<h3>REVIEW YOUR RUN</h3>
-    <p class="note">${recap.events.length} calls${recap.flags.length ? `, ${recap.flags.length} added / missed` : ''} · ${done} labelled. Flagged and unsure calls are first. Pick what each one really was; every label makes the detector better.</p>
-    ${items.map(it => { const on = recap.play && recap.play.key === it.kind + it.i; if (it.kind === 'miss') { const f = it.f;
-        return `<div class="rvItem pilot ${on ? 'on' : ''}"><span class="t">${fmtT(f.t - T0)}</span><b>${f.added ? 'You added a trick' : 'You flagged a missed trick'}</b><div class="row"><button data-rc="go" data-k="miss" data-i="${it.i}">▶</button><select data-rcmiss="${it.i}"><option value="">what was it?</option>${names.map(n => `<option ${f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="delmiss" data-i="${it.i}">✕</button></div></div>`; }
+    <p class="note">${recap.events.length} calls${recap.flags.length ? `, ${recap.flags.length} added / missed` : ''} · ${done} labelled. In the order they happened; flagged and unsure calls are marked. Pick what each one really was; every label makes the detector better.</p>
+    ${items.slice().sort((a, b) => recapSpanOf(a)[0] - recapSpanOf(b)[0]).map(it => { const on = recap.play && recap.play.key === it.kind + it.i; if (it.kind === 'miss') { const f = it.f;
+        return `<div class="rvItem pilot ${on ? 'on' : ''}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span><b>${f.added ? 'You added a trick' : 'You flagged a missed trick'}</b><div class="row"><button data-rc="go" data-k="miss" data-i="${it.i}">▶</button><select data-rcmiss="${it.i}"><option value="">what was it?</option>${names.map(n => `<option ${f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="delmiss" data-i="${it.i}">✕</button></div></div>`; }
       const e = it.e, cls = e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : '', unsure = e.conf != null && e.conf < 0.7;
-      return `<div class="rvItem ${cls} ${on ? 'on' : ''}"><span class="t">${fmtT(e.t - T0)}</span><b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
+      return `<div class="rvItem ${cls} ${on ? 'on' : ''}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span><b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
         <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button></div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
     <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
     <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add at the red line · <kbd>T</kbd> then… (combo) · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera · <kbd>S</kbd> split into clips · <kbd>I</kbd><kbd>O</kbd> trim clip</p>`;
   renderRecapBar();
+  { const on = el.querySelector('.rvItem.on'), k = recap.play && recap.play.key; if (on && recap.listKey !== k) { recap.listKey = k; on.scrollIntoView({ block: 'nearest' }); } }   // the picked trick stays in sight
 }
 function recapPayload() {
   let labels = [];
@@ -160,11 +165,45 @@ function recapPayload() {
 function recapSave(force) {
   if (recap.guest) return;   // someone else's leaderboard run: nothing of it is kept or sent
   if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false;
-  try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
+  try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
+  learnQueue({ id: recap.id, started: recap.started, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, trace: recap.trace });
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
   // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
   if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels }); }
 }
+// ---- Learning from reviews (Sim.learnFromLabels). When a review is saved, the game re-flies the labelled stretches of
+// this run and of the last few reviewed runs on this map (trace = attitude, position for the over/under passes, sticks)
+// with slightly looser settings, and keeps a loosening only when it finds more of the pilot's own tricks without
+// bringing back a call they rejected. It only ever loosens, within hard caps, and Options can forget it. Runs in the
+// background a moment after the review closes; nothing leaves the browser for it.
+const learn = { busy: false, pending: null, last: store.get('learnReport', null) };
+function learnQueue(run) { learn.pending = run; clearTimeout(learn.timer); learn.timer = setTimeout(learnRun, 900); }
+async function learnRun() {
+  if (learn.busy || !learn.pending) return; if (mode === 'fly' || mode === 'recap') { learn.timer = setTimeout(learnRun, 4000); return; }   // never while flying
+  const cur = learn.pending; learn.pending = null; learn.busy = true;
+  try {
+    const stored = (await idb.all('runs')).filter(r => r && r.review && r.map === MAP_ID && Array.isArray(r.labels) && Array.isArray(r.trace) && r.trace.length > 100 && r.id !== 'review-' + cur.id)
+      .sort((a, b) => String(b.started).localeCompare(String(a.started))).slice(0, 5);
+    const runs = [cur, ...stored].map(r => ({ rows: r.trace, world, camTilt: r.camTilt ?? tune.camTilt, labels: r.labels }));
+    const res = await S.learnFromLabels(runs, store.get('pilot', null), { tick: () => new Promise(r => setTimeout(r, 0)) });
+    const rep = { ...res.report, at: new Date().toISOString(), runs: runs.length }; learn.last = rep; store.set('learnReport', rep);
+    if (res.changed) { const old = store.get('pilot', null) || {}; res.profile.learn.at = rep.at; res.profile.learn.orig = (old.learn && old.learn.orig) || { rate: old.rate || null, air: old.air ?? null };   // so Forget can put the pace back
+      store.set('pilot', res.profile); applyPilot();
+      flashNote(`Learned from your review: ${rep.after - rep.before} more of your tricks are now recognised (${[...new Set(rep.changes)].join(', ')}).`); }
+  } catch (err) { learn.err = String(err && err.stack || err).slice(0, 300); /* learning is a bonus: never in the way */ }
+  learn.busy = false; if (learn.pending) learnQueue(learn.pending);
+}
+function learnHtml() {
+  const p = store.get('pilot', null), L = p && p.learn, r = learn.last, any = L && (L.tol || L.rev || L.crossBack || L.at);
+  const bits = !L ? [] : [L.tol ? `angles ±${L.tol}° looser` : '', L.rev ? 'short-reading rolls and flips count sooner' : '', L.crossBack ? `over/under passes count up to ${L.crossBack} s longer` : ''].filter(Boolean);
+  return `<h3>What the game learned from your reviews</h3>
+    <p class="note">${any ? `Tuned to you${bits.length ? ': ' + bits.join(' · ') : ''}${p.rate ? ` · rotation pace roll ${p.rate.R || '—'}, flip ${p.rate.P || '—'}, yaw ${p.rate.Y || '—'} °/s` : ''}.` : 'Nothing yet. Review a run and correct or add tricks: the game re-flies those moments and loosens itself to match how you fly (never tighter, and never against one of your labels).'}
+    ${r ? ` Last review: ${r.before} of ${r.labels} labelled tricks recognised before, ${r.after} after${r.still && r.still.length ? ` (still missing: ${esc([...new Set(r.still)].slice(0, 6).join(', '))})` : ''}.` : ''}</p>
+    ${any ? '<div class="row"><button data-learn="forget" class="ghost">Forget what was learned</button></div>' : ''}`;
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-learn]'); if (!b) return; const p = store.get('pilot', null); if (p) { const o = p.learn && p.learn.orig; if (o) { if (o.rate) p.rate = o.rate; else delete p.rate; if (o.air != null) p.air = o.air; else delete p.air; } delete p.learn; store.set('pilot', Object.keys(p).length ? p : null); applyPilot(); } store.set('learnReport', null); learn.last = null; const box = $('#learnBox'); if (box) box.innerHTML = learnHtml(); flashNote('Forgotten: detection is back to the standard settings (your Warm-up pace is kept).'); });
+window.__pw.learn = { get state() { return learn; }, run: () => learnRun(), queue: r => learnQueue(r), pilot: () => store.get('pilot', null), html: () => learnHtml() };
+
 // ---- clip export: play the clip once and record what the game draws (with the trick call-outs, the sticks and a
 // small credit) through the browser's own video recorder. Recorded at the chosen speed, so slow motion stays slow.
 function recapRecStart() {
@@ -213,10 +252,10 @@ document.addEventListener('click', e => {
     if (a === 'close') { closeRecap(); return; }
     if (p) {
       if (a === 'toggle') { if (!p.playing && p.t >= recapSpan()[1] - 0.02) p.t = recapSpan()[0]; p.playing = !p.playing; recapBarState(); return; }
-      if (a === 'back' || a === 'fwd') { recapSeek(p.t + (a === 'fwd' ? 1 : -1)); return; }
-      if (a === 'fb' || a === 'ff') { p.playing = false; recapSeek(p.t + (a === 'ff' ? 1 : -1) / TRACE_HZ * 2); recapBarState(); return; }
+      if (a === 'back' || a === 'fwd') { recapSeek(p.t + (a === 'fwd' ? 1 : -1)); if (p.left) { p.left = false; p.playing = true; recapBarState(); renderRecapBar(); } return; }
+      if (a === 'fb' || a === 'ff') { p.playing = false; p.left = false; recapSeek(p.t + (a === 'ff' ? 1 : -1) / TRACE_HZ * 2); recapBarState(); return; }
       if (a === 'prev' || a === 'next') recapJump(a === 'next' ? 1 : -1);
-      if (a === 'loop') { p.looping = !p.looping; recapBarState(); return; }
+      if (a === 'loop') { p.looping = !p.looping; recapBarState(); renderRecapBar(); return; }
       if (a === 'cam') { recap.cam = recap.cam === 'fpv' ? 'chase' : 'fpv'; return; }
       if (recap.rec && a !== 'exportclip') return;                       // hands off while a clip is recording
       if (a === 'split') { if (!recapClipSplit(p.t)) { renderRecap(); const m = $('#rcRecMsg'); if (m) m.textContent = 'Move the red line into a clip, a little away from its ends.'; return; } }
@@ -252,9 +291,9 @@ addEventListener('pointermove', e => { const D = recap.drag; if (!D) return; con
   if (recap.play) { recap.play.playing = false; recap.play.loop = null; recap.play.t = D.part === 'r' ? sp[1] : sp[0]; } });   // the picture follows the edge being moved: line the trick up by eye
 addEventListener('pointerup', () => { const D = recap.drag; if (!D) return; recap.drag = null; if (D.clip != null) { renderRecap(); return; } if (D.moved) { recap.dragged = true; setTimeout(() => { recap.dragged = false; }, 50); if (recap.play) recap.play.key = D.it.kind + D.it.i; renderRecap(); } });
 addEventListener('wheel', e => { if (mode !== 'recap' || !e.target.closest('#rcTrack')) return; e.preventDefault(); recapZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
-addEventListener('pointerdown', e => { if (mode !== 'recap' || !e.target.closest('#rcTrack') || e.target.closest('[data-rcm]') || e.target.closest('[data-rcclip]')) return; recapDrag = true; recapScrub(e); e.preventDefault(); });
+addEventListener('pointerdown', e => { if (mode !== 'recap' || !e.target.closest('#rcTrack') || e.target.closest('[data-rcm]') || e.target.closest('[data-rcclip]')) return; recapDrag = true; if (recap.play) recap.play.left = false; recapScrub(e); e.preventDefault(); });
 addEventListener('pointermove', e => { if (recapDrag) recapScrub(e); });
-addEventListener('pointerup', () => { recapDrag = false; });
+addEventListener('pointerup', () => { if (recapDrag && recap.play && recap.play.left) { recap.play.left = false; recap.play.playing = true; recapBarState(); renderRecapBar(); } recapDrag = false; });
 document.addEventListener('change', e => {
   if (mode !== 'recap') return;
   if (e.target.id === 'rcReview') { recap.review = e.target.checked; store.set('recapReview', recap.review); renderRecap(); return; }
@@ -298,6 +337,7 @@ function warmTick() {
 function warmFinish() {
   const med = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
   const p = { at: new Date().toISOString(), rate: { P: Math.round(med(warm.reps[0].map(r => r.rate))), R: Math.round(med(warm.reps[1].map(r => r.rate))), Y: Math.round(med(warm.reps[2].map(r => r.rate))) }, air: +med(warm.reps[3].map(r => r.gap)).toFixed(2), camTilt: tune.camTilt };
+  { const old = store.get('pilot', null); if (old && old.learn) p.learn = old.learn; }   // what the reviews taught stays
   store.set('pilot', p); applyPilot(); warm.done = p; renderWarm(); flash('<b>WARM-UP DONE</b><small>the game is tuned to how you fly</small>');
 }
 function renderWarm() {

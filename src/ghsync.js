@@ -65,6 +65,7 @@ function openOptions() {
     <label class="chk big"><input type="checkbox" id="optPass" ${passUI.on ? 'checked' : ''}> Show what counted while flying (over / under / gap / pole) — Z</label>
     <h3>Sharing data with the project</h3>
     ${telOptionsHtml()}
+    <div id="learnBox">${learnHtml()}</div>
     <div id="ghSection" class="${ghMenus() ? '' : 'hide'}">
     <label class="chk big"><input type="checkbox" id="ghEnabled" ${gh.enabled ? 'checked' : ''}> Upload calibration data to GitHub</label>
     <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
