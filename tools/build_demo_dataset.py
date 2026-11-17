@@ -37,6 +37,11 @@ C = [  # dir, trick (spreadsheet name), source file as received, real ms per fra
  ('64-wall-tap','Wall Tap','1000036169.gif',32,'garage wall'), ('65-roll-tap','Roll Tap','1000040867.webp',32,'fence'),
  ('66-loop-tap','Loop Tap','1000040865.webp',32,'fence'), ('67-ceiling-tap','Ceiling Tap','1000036165-1.gif',32,'hallway ceiling'),
  ('68-reverse-wall-ride','Reverse Wall Ride','1000040854.webp',32,'house wall'),
+ ('69-downtown-tap','Downtown Tap','1000040866.webp',32,'house wall'), ('70-maverick-tap-rewind','Maverick Tap Rewind','1000037666-1.gif',33,'indoor beam'),
+ ('71-power-switch-tap','Power Switch Tap','1000036172.gif',33,'indoor beam'), ('72-reverse-knife-edge','Reverse Knife Edge','1000039644.gif',33,'indoor gate'),
+ ('73-ninja-star','Ninja Star','1000036209.gif',33,'gap between two tree trunks'), ('74-eject-roll','Eject Roll','1000040888.webp',32,'indoor cube (~1 m)'),
+ ('75-blind-loop','Blindflip','1000036082-3.webp',32,'tree (site name: Blind Loop)'), ('76-true-barani','True Barani','1000036084.webp',32,'tree'),
+ ('77-stall-rewind','Stall Rewind','1000043091.webp',None,'house wall (frame timing unknown)'), ('78-beginner-switch','Beginner Switch','1000043083.webp',None,'gazebo (frame timing unknown)'),
 ]
 def tilt(fr):   # camera uptilt from roll-dominant frames: body yaw ~ 0 during a roll
     num = den = 0.0

@@ -601,5 +601,95 @@
   "msPerFrame": 32,
   "cameraTiltDeg": null,
   "object": "house wall"
+ },
+ {
+  "trick": "Downtown Tap",
+  "file": "downtown-tap.json",
+  "frames": 78,
+  "tracked": 48,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "house wall"
+ },
+ {
+  "trick": "Maverick Tap Rewind",
+  "file": "maverick-tap-rewind.json",
+  "frames": 111,
+  "tracked": 79,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "indoor beam"
+ },
+ {
+  "trick": "Power Switch Tap",
+  "file": "power-switch-tap.json",
+  "frames": 85,
+  "tracked": 57,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "indoor beam"
+ },
+ {
+  "trick": "Reverse Knife Edge",
+  "file": "reverse-knife-edge.json",
+  "frames": 93,
+  "tracked": 85,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "indoor gate"
+ },
+ {
+  "trick": "Ninja Star",
+  "file": "ninja-star.json",
+  "frames": 70,
+  "tracked": 50,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "gap between two tree trunks"
+ },
+ {
+  "trick": "Eject Roll",
+  "file": "eject-roll.json",
+  "frames": 60,
+  "tracked": 45,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "indoor cube (~1 m)"
+ },
+ {
+  "trick": "Blindflip",
+  "file": "blind-loop.json",
+  "frames": 121,
+  "tracked": 112,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "tree (site name: Blind Loop)"
+ },
+ {
+  "trick": "True Barani",
+  "file": "true-barani.json",
+  "frames": 110,
+  "tracked": 92,
+  "msPerFrame": 32,
+  "cameraTiltDeg": 32.1,
+  "object": "tree"
+ },
+ {
+  "trick": "Stall Rewind",
+  "file": "stall-rewind.json",
+  "frames": 152,
+  "tracked": 120,
+  "msPerFrame": null,
+  "cameraTiltDeg": null,
+  "object": "house wall (frame timing unknown)"
+ },
+ {
+  "trick": "Beginner Switch",
+  "file": "beginner-switch.json",
+  "frames": 99,
+  "tracked": 94,
+  "msPerFrame": null,
+  "cameraTiltDeg": null,
+  "object": "gazebo (frame timing unknown)"
  }
 ]
