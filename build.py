@@ -8,11 +8,13 @@ for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), 
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it
 # works offline and in sandboxed viewers that block the CDN.
-CDN = '<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>'
+# dist/index.html loads three.js from a copy next to it (same site: no CDN to be blocked, and errors are readable)
+CDN = '<script src="three-r160.min.js"></script>'
 # plain inline <script> (not a data:/blob: module): works offline and inside sandboxed viewers that block data: modules
 EMB = '<script>' + (root / 'vendor' / 'three-r160.min.js').read_text().replace('</script', r'<\/script') + '</script>'
 out.mkdir(exist_ok=True)
 import shutil
+shutil.copy(root / 'vendor' / 'three-r160.min.js', out / 'three-r160.min.js')
 (out / 'music').mkdir(exist_ok=True)
 for f in (root / 'assets' / 'music').iterdir():
     shutil.copy(f, out / 'music' / f.name)

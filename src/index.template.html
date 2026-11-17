@@ -247,7 +247,7 @@ window.__pwBootFail = why => { const el = document.getElementById('loading'); if
     + (__pwErr.length ? '<pre style="white-space:pre-wrap;background:#0006;padding:8px;font-size:12px">' + __pwErr.slice(0, 6).join('\n').replace(/</g, '&lt;') + '</pre>' : '')
     + (!gl ? '<p>WebGL isn\'t available in this browser/window. Turn on hardware acceleration, or try Chrome or Edge.</p>' : '')
     + '<p>Things to try: download the file and open it directly in Chrome or Edge (in-chat previews block parts of it); '
-    + 'use <code>open-pro-whooper-project.html</code> (the all-in-one build), not <code>dist/index.html</code> (that one loads the 3D engine from the internet); '
+    + 'use <code>open-pro-whooper-project.html</code> (the all-in-one build), not <code>dist/index.html</code> (that one needs the files next to it); '
     + 'pause ad/script blockers for the page.</p></div>'; };
 setTimeout(() => window.__pwBootFail(''), 12000);
 </script>
