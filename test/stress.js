@@ -7,14 +7,19 @@ const S = globalThis.Sim, M = globalThis.Maneuvers; const world = S.buildPlaygro
 const args = process.argv.slice(2), opt = k => (args.find(a => a.startsWith('--' + k + '=')) || '').split('=')[1];
 const QUICK = args.includes('--quick'), N = +(args.find(a => /^\d+$/.test(a)) || (QUICK ? 5 : 16)), SEED = +(opt('seed') || 1), ONLY = opt('only');
 
-const fly = m => M.detect(m, world);
+// --tilt=30: the pilot's camera is tilted up 30°, so they fly with the body pitched to keep the camera on the line (the
+// bot's attitude becomes the camera's); the detector knows the tilt. --slow=1.6: stretch time (the pilot's real rotation
+// rates from Blackbox were 300-500°/s; the library spans ~300-1100).
+const TILT = +(opt('tilt') || 0), SLOW = +(opt('slow') || 1), TQ = S.qaxis(S.v3(1, 0, 0), -TILT * Math.PI / 180);
+const shape = m => SLOW !== 1 ? { ...m, T: m.T * SLOW, at: t => m.at(t / SLOW) } : m; void TQ;
+const fly = m => M.detect(shape(m), world, TILT || 20);
 const rows = [], confusion = {};
 let seed = SEED * 100000;
 for (const name of M.tricks) {
   if (ONLY && !name.includes(ONLY)) continue;
   const r = { trick: name, runs: 0, exact: 0, missed: 0, other: {}, objects: {}, fails: [] };
   for (let i = 0; i < N; i++) {
-    const sd = ++seed, m = M.make(name, world, sd), ev = fly(m), names = ev.map(e => e.name);
+    const sd = ++seed, m = M.make(name, world, sd, { tilt: TILT }), ev = fly(m), names = ev.map(e => e.name);
     r.runs++; r.objects[m.object] = (r.objects[m.object] || 0) + 1;
     const ok = names.length === 1 && names[0] === name;
     if (ok) r.exact++; else {
@@ -29,12 +34,12 @@ const conf = [];
 for (const [label, c] of Object.entries(M.CONFUSERS)) {
   if (ONLY && !label.includes(ONLY)) continue;
   let bad = 0, runs = 0; const seen = {};
-  for (let i = 0; i < N; i++) { const m = c.make(world, M.rng(++seed)); const names = fly(m).map(e => e.name); runs++; const k = names.join(' + ') || 'nothing'; seen[k] = (seen[k] || 0) + 1; if (names.some(n => !c.ok.includes(n))) bad++; }
+  for (let i = 0; i < N; i++) { const m = M.withTilt(TILT, () => c.make(world, M.rng(++seed))); const names = fly(m).map(e => e.name); runs++; const k = names.join(' + ') || 'nothing'; seen[k] = (seen[k] || 0) + 1; if (names.some(n => !c.ok.includes(n))) bad++; }
   conf.push({ label, runs, fooled: bad, seen });
 }
 rows.sort((a, b) => a.exact / a.runs - b.exact / b.runs);
 const pct = (a, b) => (100 * a / b).toFixed(0).padStart(3) + '%';
-console.log(`Stress test: ${N} randomised flights per trick (seed ${SEED})\n`);
+console.log(`Stress test: ${N} randomised flights per trick (seed ${SEED}${TILT ? ', camera tilt ' + TILT + '°' : ''}${SLOW !== 1 ? ', slowed ×' + SLOW : ''})\n`);
 for (const r of rows) {
   const objs = Object.entries(r.objects).map(([k, v]) => `${k}×${v}`).join(', ');
   console.log(`${r.exact === r.runs ? '✓' : '✗'} ${r.trick.padEnd(24)} ${pct(r.exact, r.runs)}  ${r.exact}/${r.runs}   ${objs}`);

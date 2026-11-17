@@ -12,6 +12,8 @@ const checks = [
   ['demo GIF motion replay', () => { const o = run('demo-replay.js'); const m = o.match(/(\d+)\/(\d+) demo replays/); return m && m[1] === m[2] ? null : o; }],
   ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['video review tracker (synthetic fisheye footage)', () => { const o = run('vision.js'); const m = o.match(/(\d+)\/(\d+) vision checks/); return m && m[1] === m[2] ? null : o; }],
+  ['pilot feedback flights (wall ride, inverted yaw spin @30°, trippy vs DRT, matty, split-S vs jump rope)', () => { const o = run('feedback.js'); const m = o.match(/(\d+)\/(\d+) pilot-feedback/); return m && m[1] === m[2] ? null : o; }],
+  ['stress at 30° camera tilt', () => { const o = run('stress.js', ['--quick', '--seed=6', '--tilt=30']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],
   ...['session-flips-rolls.json', 'upload-roll-x5.json', 'training-v1-flip.json'].map(f => [`replay fixture ${f}`, () => { const o = run('replay.js', [path.join(__dirname, 'fixtures', f)]); const m = o.match(/(\d+)\/(\d+) labels agree/); return m && m[1] === m[2] ? null : o; }]),
 ];

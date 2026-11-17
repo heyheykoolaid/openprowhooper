@@ -9,7 +9,10 @@
   const X = v3(1, 0, 0), UP = v3(0, 1, 0), ROLL = v3(0, 0, -1), YAW = v3(0, -1, 0);
   const ID = { w: 1, x: 0, y: 0, z: 0 };
   const pitchQ = a => qaxis(X, a), rollQ = a => qaxis(ROLL, a), yawQ = a => qaxis(YAW, a);
-  const faceQ = h => qaxis(UP, Math.atan2(-h.x, -h.z));
+  // camera-tilt pilots hold the body pitched (nose down by the tilt) relative to the line they fly; trick rotations stay
+  // about the body axes (that's what the sticks command), so the tilt goes in the base attitude, not on top
+  let TILT_Q = { w: 1, x: 0, y: 0, z: 0 };
+  const faceQ = h => qmul(qaxis(UP, Math.atan2(-h.x, -h.z)), TILT_Q);
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const norm = a => mul(a, 1 / (Math.hypot(a.x, a.y, a.z) || 1));
 
@@ -67,7 +70,7 @@
   function openAir(steps) {   // steps: [axis, degrees, rate] or ['pause', seconds]
     return (world, r, o = {}) => {
       const scale = range(r, 0.85, 1.2), wob = wobble(r, o.wobble ?? range(r, 0, 35)), drift = mul(norm(v3(range(r, -1, 1), 0, range(r, -1, 1))), range(r, 0, 2.5));
-      const parts = []; let q = ID; const lead = 0.6;
+      const parts = []; let q = TILT_Q; const base = TILT_Q; const lead = 0.6;
       for (const s of steps) {
         if (s[0] === 'pause') { const T = s[1] * range(r, 0.85, 1.2); parts.push({ T, q0: q, ax: null }); continue; }
         const [ax, deg, rate] = s, T = Math.abs(deg) / (rate * scale), axis = ax === 'P' ? X : ax === 'R' ? ROLL : YAW;
@@ -75,7 +78,7 @@
       }
       const Tm = parts.reduce((s, p) => s + p.T, 0), T = lead + Tm + 1.6;
       return { T, object: 'open air', params: { scale: +scale.toFixed(2) }, at: t => {
-        let u = t - lead, qq = ID;
+        let u = t - lead, qq = base;
         if (u > 0) { qq = q; for (const p of parts) { if (u < p.T) { qq = p.ax ? qmul(p.q0, qaxis(p.ax, p.deg * D * u / p.T)) : p.q0; break; } u -= p.T; } }
         return { pos: add(OPEN, mul(drift, t)), q: qmul(qq, wob(t)) };
       } };
@@ -244,5 +247,5 @@
     }
     return got;
   }
-  root.Maneuvers = { LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => LIB[name](world, rng(seed), opts) };
+  root.Maneuvers = { _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { return LIB[name](world, rng(seed), opts); } finally { TILT_Q = ID; } }, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
 })(typeof window !== 'undefined' ? window : globalThis);

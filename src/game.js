@@ -203,7 +203,9 @@ function buildScene() {
   for (const z of world.zones) {
     const g = new THREE.PlaneGeometry(z.h.x * 2, z.h.z * 2); const uv = g.attributes.uv; const d = z.mat === 'court' ? 1 : 0.5;
     if (z.mat !== 'court') for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * z.h.x * 2 * d, uv.getY(i) * z.h.z * 2 * d);
-    const m = new THREE.Mesh(g, MAT[z.mat]); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; scene.add(m);
+    // layered ground: each zone gets its own depth offset so overlapping zones never flicker (z-fighting) at a distance
+    const zm = MAT[z.mat].clone(); zm.polygonOffset = true; zm.polygonOffsetFactor = -1 - (z.mat === 'rubberMat' ? 0 : 2); zm.polygonOffsetUnits = -4 - (z.mat === 'rubberMat' ? 0 : 8);
+    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = z.mat === 'rubberMat' ? 1 : 2; scene.add(m);
   }
   // objects
   for (const o of world.objs) for (const v of o.vis) {
