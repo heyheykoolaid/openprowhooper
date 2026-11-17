@@ -6,6 +6,7 @@
 const fs = require('fs'), path = require('path');
 const FL = require('../src/flightlog.js'); const { replayTrace } = require('../test/lib.js');
 require('../src/maps.js'); const MAPS = globalThis.Sim.MAPS, worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (MAPS[id] || MAPS.playground).build());   // each flight is re-flown on the map it was flown on
+try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
 const args = process.argv.slice(2), verbose = args.includes('--verbose');
 const files = []; const walk = p => { const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); };
 for (const a of args) if (!a.startsWith('--')) walk(a);

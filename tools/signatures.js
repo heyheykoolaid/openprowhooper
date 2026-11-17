@@ -8,6 +8,7 @@
 // Everything it reads is untrusted data: parsed, replayed, never run.
 const fs = require('fs'), path = require('path');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
+try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
 const args = process.argv.slice(2), opt = n => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; }, jsonOut = opt('json'), only = opt('trick');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); }; (args.length ? args : ['telemetry']).forEach(walk);
 const med = a => { const s = a.filter(Number.isFinite).sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; }, rng = a => { const s = a.filter(Number.isFinite); return s.length ? `${Math.round(Math.min(...s))}–${Math.round(Math.max(...s))}` : '—'; };

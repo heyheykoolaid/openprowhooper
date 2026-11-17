@@ -316,6 +316,24 @@ its sheet, "Watch the run" plays it in the replay viewer as a guest (`recap.gues
 only on the map it was flown on). Board text is other people's: always `esc()`. The relay must be redeployed in
 Cloudflare when `tools/dropoff-worker.mjs` changes (docs/DROPOFF-SETUP.md).
 
+## Learning from every pilot (tools/community.js, community/, Judge the community) — docs/DATA.md
+The project's main loop: everything pilots send (flights with their calls, Watcher confidence and F/Q flags, review
+labels, reviewer labels, judge votes, leaderboard runs) is re-flown through the current detector by
+`node tools/community.js <data repo> [--write] [--min-pilots=2]`, which learns `community/profile.json`
+(`pro-whooper-community/1`: the in-game learner's knobs, loosen-only, plus per-trick Watcher-confidence floors that
+tighten) and writes `community/REPORT.md` (per-trick agreement, held-back changes, custom-trick signatures, the
+still-missed to-do list). build.py ships the profile (`Sim.setCommunity`, first thing in the game module); every
+detector starts from it and `setPilot` puts the pilot's own profile on top (`mergeProfiles`: looser of the two). Node
+tests run without it (null), except test/community.js. A change needs gains from 2+ pilots (pilots = chosen names), no
+lost confirmed trick, no returning rejected call, and no benchmark drop (`PW_COMMUNITY=file npm run bench`). The owner
+approves: a weekly scheduled task runs it and opens a pull request, and also works the to-do list (rule changes per
+"When asked to analyze the calibration data"). Takes ~12 min on 22 flights (2 cores).
+**Judge the community** (main menu, `JG` in dropoff.js): today's posted leaderboard runs on the current map are re-flown;
+moments where the game now calls something else, no longer calls it, makes a new call, or is unsure (< 75%) are
+listed (not the pilot's own runs); each opens as a guest review of that one call. Verdicts go out as reviewer labels
+with `judge: true` (as do reviews of leaderboard runs watched from the board); tools/community.js counts a vote only
+once a second pilot agrees. Flight desk reviews (the owner) are reviewer labels, weight 1.5.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

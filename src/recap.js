@@ -35,8 +35,9 @@ function openRecap(from) {
 }
 function closeRecap() {
   recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
-  if (recap.guest) { const src = (recap.guestOf || {}).source; if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
+  if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
     recap.guest = false; recap.guestOf = null; if (LB.keep) { Object.assign(recap, LB.keep); LB.keep = null; } else { recapReset(); recap.telDone = recap.id; }
+    if (src === 'judge') { const k = (of0 || {}).clip; if (k && ev0.some(e => e.verdict)) { JG.done[k] = 1; store.set('judgeDone', JG.done); } mode = 'menu'; show('#judgeScreen'); judgeRender(); return; }
     if (src === 'desk') { mode = 'menu'; show('#deskScreen'); deskRender(); } else { mode = LB.from === 'results' ? 'paused' : 'menu'; show('#lbScreen'); lbRender(); } return; }
   if (recap.back === 'results') { mode = 'paused'; show('#resultsScreen'); } else if (recap.back === 'menu') { mode = 'menu'; show('#mainMenu'); } else { mode = 'paused'; show('#pause'); }
 }
@@ -252,7 +253,18 @@ function learnHtml() {
   return `<h3>What the game learned from your reviews</h3>
     <p class="note">${any ? `Tuned to you${bits.length ? ': ' + bits.join(' · ') : ''}${p.rate ? ` · rotation pace roll ${p.rate.R || '—'}, flip ${p.rate.P || '—'}, yaw ${p.rate.Y || '—'} °/s` : ''}.` : 'Nothing yet. Review a run and correct or add tricks: the game re-flies those moments and loosens itself to match how you fly (never tighter, and never against one of your labels).'}
     ${r ? ` Last review: ${r.before} of ${r.labels} labelled tricks recognised before, ${r.after} after${r.still && r.still.length ? ` (still missing: ${esc([...new Set(r.still)].slice(0, 6).join(', '))})` : ''}.` : ''}</p>
-    ${any ? '<div class="row"><button data-learn="forget" class="ghost">Forget what was learned</button></div>' : ''}`;
+    ${any ? '<div class="row"><button data-learn="forget" class="ghost">Forget what was learned</button></div>' : ''}`
+    + communityHtml();
+}
+// the community layer every game starts from (tools/community.js, from all pilots' flights and labels)
+function communityHtml() {
+  const c = Sim.community; if (!c) return '';
+  const st = c.stats || {}, L = c.learn || {}, fl = Object.entries(c.floor || {});
+  const bits = [L.tol ? `angles ±${L.tol}° looser` : '', L.rev ? 'short-reading rolls and flips count sooner' : '', L.crossBack ? `over/under passes count up to ${L.crossBack} s longer` : '', c.rate ? 'slower rotations count' : '', c.air ? 'more air between segments' : '', ...fl.map(([k, v]) => `${esc(k)} needs ${Math.round(v * 100)}% confidence`)].filter(Boolean);
+  const f = Array.isArray(st.found) ? st.found : null;
+  return `<h3>What every pilot's flying taught the game</h3><p class="note">${bits.length ? bits.join(' · ') + '.' : 'No changes yet: rules change once several pilots agree.'}
+    ${st.flights ? ` From ${st.flights} shared flights by ${st.pilots} pilot${st.pilots === 1 ? '' : 's'} (${st.labellers || 0} labelling)${f ? `; labelled tricks found ${Math.round(f[0] * 100)}% → ${Math.round(f[1] * 100)}%` : ''}${c.updated ? `, updated ${esc(c.updated)}` : ''}.` : ''}
+    Your own tuning above sits on top of this. Share your flights and review them to add to it.</p>`;
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-learn]'); if (!b) return; const p = store.get('pilot', null); if (p) { const o = p.learn && p.learn.orig; if (o) { if (o.rate) p.rate = o.rate; else delete p.rate; if (o.air != null) p.air = o.air; else delete p.air; } delete p.learn; store.set('pilot', Object.keys(p).length ? p : null); applyPilot(); } store.set('learnReport', null); learn.last = null; const box = $('#learnBox'); if (box) box.innerHTML = learnHtml(); flashNote('Forgotten: detection is back to the standard settings (your Warm-up pace is kept).'); });
 window.__pw.learn = { get state() { return learn; }, run: () => learnRun(), queue: r => learnQueue(r), pilot: () => store.get('pilot', null), html: () => learnHtml() };
@@ -417,7 +429,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-warm
   if (a === 'close') stopWarmup(); if (a === 'again') startWarmup(); if (a === 'clear') { store.set('pilot', null); applyPilot(); stopWarmup(); flash('<b>PROFILE CLEARED</b><small>standard tolerances</small>', 'near'); } });
 applyPilot();
 window.__pw.onTrick = ev => onTrick(ev);
-window.__pw.recap = { get state() { return recap; }, open: f => openRecap(f), flag: k => recapFlag(k), payload: () => recapPayload() };
+window.__pw.recap = { get state() { return recap; }, open: f => openRecap(f), flag: k => recapFlag(k), payload: () => recapPayload(), close: () => closeRecap() };
 window.__pw.warm = { start: () => startWarmup(), get state() { return warm; }, tick: () => warmTick(), pilot: () => store.get('pilot', null) };
 
 // ============================================================ Feedback button (on every screen)

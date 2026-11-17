@@ -55,6 +55,33 @@ so the Watcher's own accuracy can be checked against the pilot's labels later.
 4. Change the rule (or the Watcher's checks), re-run `npm run bench` and `npm test`, copy a representative file into
    `test/fixtures/` so it stays fixed.
 
+## Learning from everyone: the community profile (`tools/community.js`, `community/`)
+
+All the data is feedback, not just what pilots review. Every week (a scheduled task, or by hand)
+`node tools/community.js <data repo> --write` reads everything that came in, re-flies every flight through the current
+detector, and writes `community/profile.json` (`pro-whooper-community/1`) and `community/REPORT.md`. The build ships the
+profile in the game (`Sim.setCommunity`), so every pilot's detector starts from it; each pilot's own learned profile sits
+on top (the looser of the two per knob). The owner approves each change: the weekly job opens a pull request.
+
+| evidence | where it comes from | weight |
+|---|---|---|
+| reviewer label | the owner's Flight desk review of someone else's flight | 1.5 |
+| own review label | a pilot's decided ✓ / ✗ / correction / named added trick on their own flight | 1.0 |
+| judge pair | two pilots agreeing on a Judge-the-community moment, or on a leaderboard run they watched | 1.0 |
+| F flag | "that call was wrong", pressed while flying, never reviewed | 0.5 |
+| Q flag | "a trick was missed here", pressed while flying, never named | 0.3 |
+| unreviewed call | every call nobody flagged or reviewed ("probably fine": losing one costs a little) | 0.1 |
+
+A pilot is their chosen name (one person may fly from several browsers); no pilot carries more than 6 labels' worth
+on one trick. The learner tries the in-game learner's knobs (angle tolerance, short-reading rolls/flips, how early an
+over/under may be, slower rotations, more air) one notch at a time and keeps a notch only if the weighted score rises,
+no confirmed trick is lost, no rejected call comes back, the gain comes from at least 2 different pilots
+(`--min-pilots`), and the synthetic benchmark does not drop. It also tightens: `floor[trick]` is the Watcher confidence
+a call needs, raised where pilots (2 or more) rejected calls under it and no confirmed call sits under it. The report
+lists what changed, what was held back for want of pilots, per-trick agreement before → after, custom tricks pilots
+named (with what was measured: the start of a draft rule), and the still-missed list (the to-do list for rule work).
+`tools/signatures.js` and `tools/flights.js` re-fly with the community profile, as the game does.
+
 ## Raw Blackbox logs
 
 `src/bbl.js` decodes Betaflight `.bbl/.bfl` in the browser and in Node; `test/bbl.js` checks it value-for-value against

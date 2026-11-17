@@ -855,6 +855,30 @@ function parsePattern(s) {
   });
 }
 const LEARN_MAX = { tol: 30, rev: 30, crossBack: 1.2 }, LEARN_NONE = { tol: 0, rev: 0, crossBack: 0 };
+// ---- The community profile (pro-whooper-community/1, community/profile.json, made by tools/community.js from every
+// pilot's decided labels and approved by the owner): what all pilots' flying taught the detector. Every detector starts
+// from it and the pilot's own profile sits on top (mergeProfiles: the looser of the two for each knob). It can also
+// TIGHTEN, which a pilot's own profile never does: `floor[trick]` is the Watcher confidence a call of that trick needs,
+// set only where pilots rejected low-confidence calls of it. Null (the Node tests) = no community layer.
+let COMMUNITY = null;
+const FLOOR_MAX = 0.8;
+function cleanCommunity(c) {
+  if (!c || typeof c !== 'object' || c.format !== 'pro-whooper-community/1') return null;
+  const n = (v, max) => Number.isFinite(+v) ? clamp(+v, 0, max) : 0, L = c.learn || {}, out = { format: c.format, updated: String(c.updated || '').slice(0, 40), learn: { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) }, floor: {}, stats: c.stats && typeof c.stats === 'object' ? c.stats : {} };
+  if (c.rate && typeof c.rate === 'object') { out.rate = {}; for (const ax of 'RPY') if (Number.isFinite(+c.rate[ax])) out.rate[ax] = clamp(+c.rate[ax], 150, 900); }
+  if (Number.isFinite(+c.air) && +c.air > 0) out.air = clamp(+c.air, 0.2, 0.85);
+  if (c.floor && typeof c.floor === 'object') for (const [k, v] of Object.entries(c.floor)) if (typeof k === 'string' && k.length > 0 && k.length < 60 && Number.isFinite(+v) && +v > 0) out.floor[k] = clamp(+v, 0, FLOOR_MAX);
+  return out;
+}
+function setCommunity(c) { COMMUNITY = cleanCommunity(c); return COMMUNITY; }
+// the pilot's own profile over the community's: each loosening knob takes the looser value; the rest is the pilot's
+function mergeProfiles(c, p) {
+  if (!c) return p || null; const o = p ? JSON.parse(JSON.stringify(p)) : {}, L = o.learn || {};
+  o.learn = { ...L, tol: Math.max(+L.tol || 0, c.learn.tol), rev: Math.max(+L.rev || 0, c.learn.rev), crossBack: Math.max(+L.crossBack || 0, c.learn.crossBack) };
+  if (c.rate) { o.rate = { ...(o.rate || {}) }; for (const ax of 'RPY') if (c.rate[ax]) o.rate[ax] = o.rate[ax] ? Math.min(o.rate[ax], c.rate[ax]) : c.rate[ax]; }
+  if (c.air) o.air = Math.max(o.air || 0, c.air);
+  return o;
+}
 let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
 function matchTokens(pat, toks) {
   if (pat.length !== toks.length) return null;
@@ -967,7 +991,7 @@ for (const t of [...OBSTACLE_TRICKS, ...OPEN_TRICKS, ...CONTEXT_TRICKS]) t.parse
 const TAP_TRICKS = new Set([...OBSTACLE_TRICKS, ...CONTEXT_TRICKS].filter(t => t.tap || (t.req && t.req.tap)).map(t => t.name).concat(['Wall Tap', 'Facepunch']));
 
 class TrickDetector {
-  constructor(world) { this.world = world; this.reset(); }
+  constructor(world) { this.world = world; this.reset(); if (COMMUNITY && this.setPilot) this.setPilot(null); }
   reset() {
     this.pending = null; this.debug = [];
     this.active = false; this.samples = []; this.restT = 0; this.events = []; this.crossLog = [];
@@ -2037,7 +2061,7 @@ class StreamDetector extends TrickDetector {
   // Pilot profile (from the warm-up, see the game's Pilot Warm-up): typical rotation speed per axis (deg/s) and the pilot's
   // natural gap between segments. It only ever loosens: slower pilots' rotations still count as deliberate, and pilots who
   // leave more air get more (up to 1.8 s).
-  setPilot(p) { this.pilot = p || null; this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null; }
+  setPilot(p) { this.pilotOwn = p || null; this.community = COMMUNITY; p = mergeProfiles(COMMUNITY, p || null); this.pilot = p || null; this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null; }
   // what was learned from this pilot's review labels (learnFromLabels): only ever looser, and only within these bounds
   get learned() { if (this._learnOf !== this.pilot || !this._learned) { const L = this.pilot && this.pilot.learn, n = (v, max) => Number.isFinite(+v) ? clamp(+v, 0, max) : 0; this._learnOf = this.pilot; this._learned = L ? { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) } : LEARN_NONE; } return this._learned || LEARN_NONE; }
   get airOpen() { const a = this.pilot && this.pilot.air; return a ? clamp(Math.max(AIR_OPEN, a * 1.8 + 0.2), AIR_OPEN, 1.8) : AIR_OPEN; }
@@ -2078,7 +2102,8 @@ class StreamDetector extends TrickDetector {
   vetoedFor(name, t0) { return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35); }
   commit(p, t) {
     this.pend = this.pend.filter(x => x !== p);
-    const rv = this.watcher.review(p);
+    const rv = this.watcher.review(p), floor = this.watcher.on && this.community && this.community.floor[p.name];
+    if (!rv.veto && floor && rv.conf < floor) { rv.veto = true; rv.why = `under the community's ${Math.round(floor * 100)}% for ${p.name}`; }
     if (rv.veto) {   // the Watcher says no: remember it, tell the game why, and let the detector find the next-best reading
       this.vetoes.push({ name: p.name, t0: p.t0, t }); this.vetoes = this.vetoes.filter(v => t - v.t < 8);
       this.pushReview(rv); this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['watcher: not ' + p.name + ' (' + rv.why + ')'], near: null });
@@ -2592,6 +2617,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { replayTrace, learnFromLabels, learnScore, LEARN_MAX, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

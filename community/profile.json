@@ -1,0 +1,21 @@
+{
+ "format": "pro-whooper-community/1",
+ "updated": "2026-11-17",
+ "learn": {
+  "tol": 0,
+  "rev": 0,
+  "crossBack": 0
+ },
+ "floor": {},
+ "stats": {
+  "flights": 22,
+  "pilots": 3,
+  "labellers": 1,
+  "evidence": 68,
+  "found": [
+   0.643,
+   0.643
+  ],
+  "changes": []
+ }
+}

@@ -290,12 +290,54 @@ function guestOpen(rows, events, of, review) {
 }
 async function reviewerSave() {
   const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); recap.dirty = false; if (!L.length || !of.flight) return;
-  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null }));
+  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'judge' || of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a public run is a vote (tools/community.js counts it once a second pilot agrees)
   procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
   const stamp = `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}`;
   const r = await procWait(telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued'), 9000);
   procShow(procThanks(), (r === 'sent' ? 'Your reviewer labels were sent to the project.' : 'Your reviewer labels are saved and will be sent as soon as the drop-off can be reached.') + ' A second pair of eyes on a flight is worth a lot.', 1);
   await new Promise(res => setTimeout(res, 1700)); procHide();
+}
+// ============================================================ Judge the community
+// Moments from today's posted leaderboard runs (public: each was posted by its pilot's own click, with its replay) where
+// the game is unsure or now calls something different from what it called then. Anyone can judge them; the verdicts go
+// out as votes (reviewer labels with judge: true) and tools/community.js counts a vote once a second pilot agrees.
+// The pilot's own runs are left out. Re-flying a run takes a few seconds, so it happens here in the menu, never in flight.
+const JG = { clips: null, msg: '', done: store.get('judgeDone', {}) };
+const jgKey = c => `${c.id}@${c.t.toFixed(1)}`;
+function judgeOpen() { show('#judgeScreen'); judgeRender(); if (!JG.clips) judgeLoad(); }
+async function judgeLoad() {
+  if (!lbBase()) { JG.msg = 'Judging needs the online version of the game.'; judgeRender(); return; }
+  JG.msg = 'Finding moments to judge…'; judgeRender(); await lbLoad(lbToday());
+  const me = telPilot(), myName = pilotName().toLowerCase(), runs = (LB.runs || []).filter(e => e.map === MAP_ID && e.id && String(e.name).toLowerCase() !== myName).slice(0, 8), clips = [];
+  if (runs.length) procShow('Finding moments to judge…', "Re-flying today's posted runs through the current trick detector", 0.03);
+  for (let i = 0; i < runs.length; i++) { const e = runs[i];
+    try { const r = await fetch(`${lbBase()}/run?day=${LB.day || lbToday()}&id=${encodeURIComponent(e.id)}`); if (!r.ok) continue; const run = await r.json();
+      if (!run || typeof run.name !== 'string' || !run.trace || run.map !== MAP_ID || run.pilot === me) continue;
+      const rows = await FlightLog.unpack(run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(x => Array.isArray(x) && x.length >= 27 && x.every(Number.isFinite))) continue;
+      await new Promise(res => setTimeout(res, 40));
+      const now = S.replayTrace(rows, { world: activeWorld, camTilt: Number.isFinite(+run.camTilt) ? +run.camTilt : 20, debug: false }).events.filter(x => x.name !== 'near' && x.name !== 'Crash');
+      const then = (Array.isArray(run.events) ? run.events : []).filter(y => y && Number.isFinite(y.t) && typeof y.name === 'string').slice(0, 400), of = { of: String(run.name).slice(0, 24), id: e.id, flight: String(run.flight || e.id).slice(0, 40), rows };
+      for (const x of now) { const was = then.find(y => Math.abs(y.t - x.t) < 1), conf = x.watch ? x.watch.conf : 1;
+        const why = was && was.name !== x.name ? [3, `called ${was.name.slice(0, 40)} then`] : !was ? [2, 'new call: the game did not call it then'] : conf < 0.75 ? [1, `the game is unsure (${Math.round(conf * 100)}%)`] : null;
+        if (why) clips.push({ ...of, name: x.name.slice(0, 60), t: x.t, rank: why[0], why: why[1] }); }
+      for (const y of then) if (!now.some(x => Math.abs(x.t - y.t) < 1)) clips.push({ ...of, name: y.name.slice(0, 60), t: y.t, rank: 2, why: 'the game no longer calls it' });
+    } catch { /* a run that will not load is skipped */ }
+    procShow('Finding moments to judge…', `${i + 1} of ${runs.length} runs re-flown`, (i + 1) / runs.length); }
+  procHide();
+  JG.clips = clips.sort((a, b) => b.rank - a.rank || a.t - b.t).slice(0, 30);
+  JG.msg = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(MAP_ID)} today yet.`; judgeRender();
+}
+function judgeRender() {
+  const el = $('#judgePanel'); if (!el) return; const C = JG.clips || [];
+  el.innerHTML = `<h2>JUDGE THE COMMUNITY</h2>
+    <p class="note">Moments from today's posted runs on ${esc(lbMapTitle(MAP_ID))} where the game is unsure, or now calls something different from what it called during the run. Open one, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdict counts once another pilot agrees with it, and agreed verdicts are what the game learns from every week. Your own runs are not in the list.</p>
+    ${C.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${C.map((c, i) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>` : `<p class="note">${esc(JG.msg || "Nothing to judge right now: every call in today's runs looks settled.")}</p>`}
+    <div class="row"><button data-jg="refresh">↻ Look again</button><button data-jg="close" class="primary">Back</button></div>`;
+}
+function judgeClip(i) {
+  const c = (JG.clips || [])[i]; if (!c) return;
+  try { guestOpen(c.rows, [{ t: c.t, t0: c.t - 1.5, name: c.name, exec: '' }], { name: c.of, flight: c.flight, source: 'judge', ref: c.id, clip: jgKey(c) }, true); const it = recapItems()[0]; if (it) recapPlay(it); renderRecap(); }
+  catch { JG.msg = 'That run could not be opened.'; judgeRender(); }
 }
 async function lbWatch() {
   const R = LB.open; if (!R || !R.run || !R.run.trace || R.run.map !== MAP_ID) return;
@@ -354,7 +396,10 @@ document.addEventListener('click', e => {
     if (a === 'watch') lbWatch();
     if (a === 'close') { if (LB.from === 'results' && LB.last) show('#resultsScreen'); else { mode = 'menu'; show('#mainMenu'); } } return; }
   if (row && row.dataset.lbrun) { if ($('#lbScreen').classList.contains('hide')) { lbOpen('results'); } lbPick(row.dataset.lbrun); }
-  const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu');
+  const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu'); if (act && act.dataset.act === 'judge') judgeOpen();
+  const jg = e.target.closest('[data-jg]'), jr = e.target.closest('[data-judge]');
+  if (jg) { if (jg.dataset.jg === 'close') { mode = 'menu'; show('#mainMenu'); } if (jg.dataset.jg === 'refresh') { JG.clips = null; judgeLoad(); } return; }
+  if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
 document.addEventListener('change', e => { if (e.target.id === 'lbMapOnly') { LB.mapOnly = e.target.checked; lbRender(); } });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };
