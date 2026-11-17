@@ -50,13 +50,17 @@ def tilt(fr):   # camera uptilt from roll-dominant frames: body yaw ~ 0 during a
     return round(math.degrees(math.atan2(num, den)), 1) if den > 2000 else None
 index = []
 for d, trick, src, ms, obj in C:
-    rot = json.load(open(f'{G}/{d}-rot.json'))
-    fr = [None if r is None else [round(r['roll'], 1), round(r['pitch'], 1), round(r['yaw'], 1)] for r in rot]
+    v2 = f'{G}/{d}-rot2.json'
+    if os.path.exists(v2):   # advanced pass (tools/gif_rotation2.py): blur bridging, lens choice, loop closure
+        R2 = json.load(open(v2)); fr = R2['frames']; method = {'tool': 'gif_rotation2', 'hfov': R2['hfov'], 'closures': R2['closures']}
+    else:
+        rot = json.load(open(f'{G}/{d}-rot.json')); method = {'tool': 'gif_rotation', 'hfov': 140}
+        fr = [None if r is None else [round(r['roll'], 1), round(r['pitch'], 1), round(r['yaw'], 1)] for r in rot]
     slug = d.split('-', 1)[1]
     rec = {'format': 'pro-whooper-demo/1', 'trick': trick, 'source': 'prowhooper.com Tricktionary demo GIF (Tyrantt / contributing pilots)', 'file': src,
            'object': obj, 'msPerFrame': ms, 'msPerFrameNote': 'real time per frame from the goggle OSD clock where visible; None = unknown',
            'axes': 'per-frame camera rotation in degrees [roll about the lens axis, pitch about camera right, yaw about camera up]; null = frame too blurred to match',
-           'cameraTiltDeg': tilt(fr), 'frames': fr}
+           'cameraTiltDeg': tilt(fr), 'measured': method, 'frames': fr}
     json.dump(rec, open(f'{OUT}/{slug}.json', 'w'), separators=(',', ':'))
     index.append({'trick': trick, 'file': f'{slug}.json', 'frames': len(fr), 'tracked': sum(1 for f in fr if f), 'msPerFrame': ms, 'cameraTiltDeg': rec['cameraTiltDeg'], 'object': obj})
 json.dump(index, open(f'{OUT}/index.json', 'w'), indent=1)

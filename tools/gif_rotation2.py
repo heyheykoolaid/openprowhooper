@@ -58,18 +58,34 @@ def to_rpy(rv):  # camera frame (x right, y down, z fwd) -> [roll, pitch, yaw] d
     v = rv * 180 / math.pi; return np.array([v[2], -v[0], -v[1]])
 
 def calibrate(P, n):
-    pairs = [i for i in range(n - 1) if P.matches(i, i + 1) is not None and len(P.matches(i, i + 1)[0]) > 60][:40]
-    if len(pairs) < 5: return 140.0
+    # the field of view under which the most matched points obey one pure rotation (inlier threshold in pixels), on
+    # the pairs with the most image motion: small motions fit any lens and don't discriminate
+    cand = []
+    for i in range(n - 1):
+        m = P.matches(i, i + 1)
+        if m is not None and len(m[0]) > 40: cand.append((float(np.median(np.linalg.norm(m[1] - m[0], axis=1))), i))
+    cand = [i for flow, i in sorted(cand, reverse=True) if flow > 3][:24]
+    if len(cand) < 4: return 130.0
     def score(h):
-        f = (P.W / 2) / math.radians(h / 2); rs = [r[2] for r in (P.rot(i, i + 1, f, thr=0.03) for i in pairs) if r]
-        return (np.median(rs) if rs else 9) / max(1, len(rs)) ** 0.25
-    hs = list(range(100, 181, 10)); best = min(hs, key=score)
-    fine = [best - 5, best - 2.5, best, best + 2.5, best + 5]
-    return float(min([h for h in fine if 90 <= h <= 190], key=score))
+        f = (P.W / 2) / math.radians(h / 2); tot = 0.0
+        for i in cand:
+            m = P.matches(i, i + 1); A, B = P.bearings(m[0], f), P.bearings(m[1], f)
+            r = P.rot(i, i + 1, f, thr=2.0 / f)
+            if not r: continue
+            R = cv2.Rodrigues(-r[0])[0]                                  # back to the bearing map b ~ R a
+            tot += float(np.mean(np.linalg.norm(A @ R.T - B, axis=1) * f < 2.0))
+        return tot
+    hs = list(range(80, 191, 10)); best = max(hs, key=score)
+    fine = [best - 5, best, best + 5]
+    return float(max([h for h in fine if 75 <= h <= 195], key=score))
 
-def measure(d):
+def measure(d, lenses=(140,)):   # fixed lens: choosing by 'most tracked' favoured narrow lenses, which shrink pitch/yaw
     ims, feats, W, H = load(d); n = len(ims); P = Pairs(feats, W, H)
-    hfov = calibrate(P, n); f = (W / 2) / math.radians(hfov / 2)
+    runs = [track(P, n, W, h) for h in lenses]                 # keep the lens width that tracks the most
+    return max(runs, key=lambda r: (r['tracked'], len(r['closures'])))
+
+def track(P, n, W, hfov):
+    f = (W / 2) / math.radians(hfov / 2)
     per = [None] * (n - 1); src = [None] * (n - 1); last_rate = np.zeros(3); i = 0
     while i < n - 1:
         got = None
@@ -125,6 +141,6 @@ def measure(d):
 
 if __name__ == '__main__':
     out = measure(sys.argv[1])
-    path = sys.argv[2] if len(sys.argv) > 2 else sys.argv[1] + '-rot2.json'
+    path = sys.argv[2] if len(sys.argv) > 2 else sys.argv[1] + '-rot3.json'
     json.dump(out, open(path, 'w'))
     print(f"{sys.argv[1]}: hfov {out['hfov']}, tracked {out['tracked']}/{out['total']}, closures {len(out['closures'])}: {out['closures'][:3]}")

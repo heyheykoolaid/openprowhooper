@@ -50,6 +50,14 @@ rates, approach angle and wobble. The same flights drive the game's Judge the Bo
 validate them. `node test/stress.js 40 --seed=N` flies each trick N times plus near-miss flights and prints detection
 rate and confusions (worst first); `npm test` runs a quick version. When a rule changes, run a few seeds.
 
+## Video Review (src/vision.js) and labelled clips (calibration/video/)
+The game measures camera rotation from a pilot's FPV video in the browser (pyramidal Lucas-Kanade on a fisheye bearing
+model, RANSAC/Horn rotation fit, coarse photometric search for blurred/fast frames, constant-rate coasting, loop closure
+across blur, repeated-frame skipping), runs the detector with the pilot's U/O obstacle marks, and the pilot confirms,
+corrects or adds tricks. `test/vision.js` checks the tracker on synthetic fisheye footage; `tools/vision_gifcheck.js`
+checks it on local demo GIF frames. Uploaded reviews are labelled real-world data: replay them, compare detections with
+the pilot's labels, and tune like calibration data. Expect the camera tilt and lens settings to matter.
+
 ## When asked to look at Blackbox logs
 `blackbox/<date>-<craft>/` holds the raw `.bbl` (Betaflight onboard flash dump), `diff-all.txt`, and `build.json`
 (FC info, the game's craft/tune at upload, and the optional pilot build sheet: parts, all-up weight, prop condition,

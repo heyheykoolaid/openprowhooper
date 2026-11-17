@@ -142,6 +142,18 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
   #judgeBox { position: fixed; right: 16px; top: 16px; width: min(380px, 46vw); z-index: 60; background: rgba(14,13,12,.88); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
   #judgeBox .jStat { color: #cfc6b4; } #judgeBox .jOk { color: #7dff9a; } #judgeBox .trDesc { max-height: 4.8em; }
   .tt a.watch { font: 11px var(--mono); color: #7dff9a; margin-left: 6px; text-decoration: none; }
+  #reviewScreen { padding: 12px; align-items: stretch; } .rvWrap { display: flex; gap: 12px; width: 100%; max-width: 1500px; margin: auto; height: 100%; }
+  .rvMain { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; } .rvVidBox { position: relative; flex: 1; background: #000; border: 2px solid #0b0a09; min-height: 200px; }
+  #rvVideo { width: 100%; height: 100%; object-fit: contain; display: block; } #rvDrop { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; color: #cfc6b4; font: 14px var(--mono); text-align: center; padding: 20px; }
+  #rvDrop small { opacity: .7; max-width: 420px; } #rvDrop.drag { background: rgba(255,210,63,.12); outline: 2px dashed var(--acid); } .rvPick { color: var(--acid); text-decoration: underline; cursor: pointer; }
+  #rvNow { position: absolute; left: 16px; top: 12px; font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; pointer-events: none; }
+  #rvNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
+  #rvTimeline { width: 100%; background: #0e0d0c; border: 2px solid #0b0a09; cursor: crosshair; } .rvKeys { font: 11px var(--mono); color: #a89f8e; } .rvKeys kbd { font: 10px var(--mono); background: #222; padding: 0 4px; border-radius: 3px; color: #eee; }
+  .rvSide { width: 360px; flex: none; overflow: auto; padding-bottom: 100px !important; background: rgba(14,13,12,.9); border: 2px solid #0b0a09; padding: 10px 12px; font: 12px var(--mono); }
+  .rvSide h3 { margin: 4px 0 6px; font-family: 'Bungee'; font-size: 15px; } .rvSide .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; } .rvSide label { color: #cfc6b4; }
+  .rvSide input[type=number] { width: 60px; } .rvBar { height: 6px; background: #222; margin: 6px 0; } .rvBar i { display: block; height: 100%; background: var(--acid); }
+  .rvItem { border: 1px solid #2c2925; padding: 6px 8px; margin: 6px 0; background: #0e0d0c; } .rvItem.ok { border-color: #3c8a4a; } .rvItem.bad { border-color: #8a3c3c; } .rvItem.pilot { border-color: #3c6a8a; }
+  .rvItem b { color: #fff; } .rvItem .t { color: #a89f8e; float: right; } .rvItem button { font-size: 11px; padding: 3px 6px; } .rvItem select { max-width: 100%; font-size: 11px; }
 </style>
 <!--THREE-->
 <script>
@@ -206,6 +218,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="blackbox">Blackbox Lab</button>
     <button data-act="train" class="ghost">Trick Calibration (dev)</button>
     <button data-act="judge" class="ghost">Judge the Bot (dev)</button>
+    <button data-act="review" class="ghost">Video Review (dev)</button>
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
@@ -233,6 +246,14 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>
 
+<div id="reviewScreen" class="screen hide"><div class="rvWrap">
+  <div class="rvMain">
+    <div class="rvVidBox"><video id="rvVideo" playsinline muted></video><div id="rvDrop">Drop an FPV video here, or <label class="rvPick">choose a file<input id="rvFile" type="file" accept="video/*" hidden></label><small>The video stays on your computer: only the measured motion and your labels are ever saved or uploaded.</small></div><div id="rvNow"></div></div>
+    <canvas id="rvTimeline" height="150"></canvas>
+    <div class="rvKeys"><kbd>Space</kbd> play/pause · <kbd>,</kbd> <kbd>.</kbd> frame · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>U</kbd> passed under · <kbd>O</kbd> passed over (hold <kbd>Shift</kbd> = flying backward, <kbd>L</kbd> = sideways) · <kbd>X</kbd> delete nearest mark · <kbd>A</kbd> add trick here · click the timeline to jump</div>
+  </div>
+  <div class="rvSide" id="rvSide"></div>
+</div></div>
 <div id="bbScreen" class="screen hide"><div class="panel" style="max-width:760px">
   <div class="topbar"><h2>Blackbox Lab</h2><button data-act="back">Back</button></div><div id="bbBody"></div></div></div>
 
@@ -241,6 +262,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
 <script>/*MANEUVERS*/</script>
+<script>/*VISION*/</script>
 <script>if (!window.THREE) __pwErr.push('The 3D engine (three.js) did not load.');</script>
 <script type="module" onerror="__pwBootFail('The game code failed to load.')">/*GAME*/</script>
 </body>

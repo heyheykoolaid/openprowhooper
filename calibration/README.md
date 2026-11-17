@@ -33,3 +33,9 @@ verdict: "clean"|"sloppy"|"wrong", lookedLike, detected[ {name, exec, clean} ], 
 is reproducible: `Maneuvers.make(trick, world, seed)` rebuilds the exact flight the pilot watched. "wrong" means the
 scripted flight doesn't look like the trick (fix `src/maneuvers.js`); a pass the detector missed is a detector problem.
 
+`pro-whooper-video/1` (calibration/video/, from Video Review): `{ file, duration, video: {w, h}, analysis: { hfov, camTilt,
+rate, axisCleanup }, frames: [[t, roll, pitch, yaw], ...] (camera rotation in degrees per sample, measured in the
+browser by src/vision.js), marks: [{ t, kind: "U"|"O", back, side }], detected: [{ name, exec, t0, t }],
+labels: [{ verdict: "yes"|"no"|"added", det, actual, t0, t1 }] }`. The video itself is never stored or uploaded.
+Replay: `Vision.detectClip(Sim, frames→{t, rpy}, marks, { camTilt, axisCleanup })`.
+
