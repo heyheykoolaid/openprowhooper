@@ -160,11 +160,15 @@ screen). While flying, the "what counted" list (`passFeed` in play.js, Z or Opti
 pole pass as the detector logs it: the first place to look when a pilot says an object did not count.
 
 ## Music (src/shell.js)
-The built-in track plays by default. "byTe_me Radio" in the player streams the Infinity Loops community's free-to-use
+"byTe_me Radio" is the default music (the built-in track is the fallback when archive.org cannot be reached, and a
+choice in the player's list). It streams the Infinity Loops community's free-to-use
 collection straight from archive.org (items `infinityloops-free-to-use-music-1..3`; the list comes from the metadata
 API at run time, names are parsed from `Artist__<id>__Title.mp3`, shuffled). Nothing from it is stored in the repo or
 the build. The pilot confirmed it is free to use; the player shows artist and title and says rights remain with the
 artists. Track names are remote text: always escaped.
+Credits: the main menu and README thank 8BiT_ and Infinity Loops for the music. `assets/graffiti/` holds the wall art:
+the pilot's own pieces plus the MoPenguinz FPV and ByTe_Me logos (their makers' marks, added at the pilot's request,
+for this game only).
 
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.

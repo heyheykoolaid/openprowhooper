@@ -305,9 +305,10 @@ function addGraffiti(v) {
   if (hh > 10) opts = { heaven: true, stencil: 'NO WHOOPS', ppm: 64 };
   if (w < 3) opts.big = (opts.big || 1) * 0.5;
   // the pilot's pieces: a big wall of all three on the building, one per graffiti-wall section, small ones on props
-  const turn = () => ['heyhey', 'clappy', 'rwdc'][artTurn++ % 3];
+  const turn = () => ['heyhey', 'mopenguinz', 'clappy', 'byteme', 'rwdc'][artTurn++ % 5];   // the pilot's pieces, and friends of the project (MoPenguinz FPV, ByTe_Me)
   if (v.art) opts.art = v.art;   // a map can say exactly which pieces go where
   else if (hh > 10) opts.art = [{ name: 'clappy', x: 0.17, y: 6.2, h: 6.4, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 6.6, h: 4.6, rot: 0.02 }, { name: 'rwdc', x: 0.83, y: 6.0, h: 5.2, rot: 0.05 }];
+  else if (v.graffiti === 'east' && w > 12) opts.art = [{ name: turn(), x: 0.2 + rnd() * 0.12, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }, { name: turn(), x: 0.66 + rnd() * 0.12, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];   // long sections carry two
   else if (v.graffiti === 'east' && w > 4) opts.art = [{ name: turn(), x: 0.25 + rnd() * 0.5, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];
   else if (v.graffiti === 'south' && w > 2.5 && hh < 2) opts.art = [{ name: 'clappy', x: 0.5, y: hh * 0.5, h: hh * 0.86, rot: 0.06 }];
   else if (v.graffiti === 'south' && w < 2.5 && hh < 1.5) opts.art = [{ name: 'rwdc', x: 0.5, y: hh * 0.52, h: hh * 0.85 }];

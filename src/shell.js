@@ -16,9 +16,9 @@ const music = (() => {
   let idx = 0, started = false, wantPlay = store.get('musicOn', true);
   el.volume = store.get('musicVol', 0.55);
   const ui = $('#music');
-  // byTe_me Radio: the Infinity Loops community's free-to-use collection, streamed straight from archive.org (nothing is
-  // copied into the game). Track names come from the file names there: Artist__id__Title.mp3. Shuffled.
-  const RADIO = { ids: ['infinityloops-free-to-use-music-1', 'infinityloops-free-to-use-music-2', 'infinityloops-free-to-use-music-3'], on: store.get('radio', false), list: null, loading: false, hist: [], fails: 0 };
+  // byTe_me Radio, the game's default music: the Infinity Loops community's free-to-use collection, streamed straight from
+  // archive.org (nothing is copied into the game). If it can't be reached the built-in track plays instead. Track names come from the file names there: Artist__id__Title.mp3. Shuffled.
+  const RADIO = { ids: ['infinityloops-free-to-use-music-1', 'infinityloops-free-to-use-music-2', 'infinityloops-free-to-use-music-3'], on: store.get('radio', true), list: null, loading: false, hist: [], fails: 0 };
   const hesc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const tidy = x => x.replace(/byTe_me/gi, 'byTe\u0001me').replace(/_+/g, ' ').replace(/\u0001/g, '_').replace(/\s+/g, ' ').trim();
   function radioNote(t) { const n = $('#mRadioNote'); if (n) n.textContent = t; const b = $('#mRadio'); if (b) b.textContent = `📻 byTe_me Radio: ${RADIO.on ? 'on' : 'off'}`; }
@@ -31,7 +31,7 @@ const music = (() => {
   }
   async function radioNext(back) {
     const list = await radioList(); if (!RADIO.on) return;
-    if (!list.length) { RADIO.on = false; store.set('radio', false); radioNote('Could not reach archive.org from this copy of the game (the hosted game can).'); return; }
+    if (!list.length) { RADIO.on = false; radioNote('Could not reach archive.org from here, so this is the built-in track. The radio will try again next time.'); load(idx, wantPlay); return; }   // for this visit only: the choice stays on
     let t; if (back && RADIO.hist.length > 1) { RADIO.hist.pop(); t = RADIO.hist[RADIO.hist.length - 1]; } else { t = list[Math.floor(Math.random() * list.length)]; RADIO.hist.push(t); if (RADIO.hist.length > 50) RADIO.hist.shift(); }
     el.loop = false; el.src = t.src; $('#mTitle').textContent = t.title; $('#mArtist').textContent = t.artist; $('#mArt').style.backgroundImage = '';
     $('#mList').innerHTML = `<li class="on">${hesc(t.title)}<span>${hesc(t.artist)}</span></li>`;
@@ -39,7 +39,7 @@ const music = (() => {
     play(); nowPlaying({ title: hesc(t.title), artist: hesc(t.artist) });
   }
   function radioSet(on) { RADIO.on = on; store.set('radio', on); RADIO.fails = 0; if (on) radioNext(); else { radioNote(''); load(idx, wantPlay); } }
-  el.addEventListener('error', () => { if (!RADIO.on) return; if (++RADIO.fails > 4) { radioSet(false); radioNote('The stream stopped responding; back to the built-in track.'); } else radioNext(); });
+  el.addEventListener('error', () => { if (!RADIO.on) return; if (++RADIO.fails > 4) { RADIO.on = false; RADIO.fails = 0; load(idx, wantPlay); radioNote('The stream stopped responding; back to the built-in track for now.'); } else radioNext(); });
   el.addEventListener('playing', () => { RADIO.fails = 0; });
   function load(i, autoplay) {
     if (!tracks.length) return; idx = (i + tracks.length) % tracks.length; const t = tracks[idx];

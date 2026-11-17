@@ -132,7 +132,7 @@
     const HZ0 = -32, HZ1 = -16, HX = 18, HH = 10.4, hall = O('Main Hall', 'building', { wallNormal: v3(0, 0, 1), tall: HH });
     windowWall(hall, 'x', HZ0 - 0.2, -(HX + 0.4), HX + 0.4, 0, HH, 0.2, 'vLav', Array.from({ length: 8 }, (_, i) => ({ c: -15.75 + i * 4.5, hw: 1.3 })), [[5.4, 7.8]], 'Hall Window', 'neonPink');   // north wall, with a row of open windows
     // the south face: an open colonnade below, a band of wall above it carrying the pilot's pieces
-    box(hall, v3(0, 4.4 + (HH - 4.4) / 2, HZ1 + 0.2), v3(HX + 0.4, (HH - 4.4) / 2, 0.2), 'vConcrete', 0, 0, 0, { graffiti: 'south', art: [{ name: 'clappy', x: 0.2, y: 3.0, h: 5.0, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 3.1, h: 4.2, rot: 0.02 }, { name: 'rwdc', x: 0.8, y: 2.9, h: 4.6, rot: 0.05 }] });
+    box(hall, v3(0, 4.4 + (HH - 4.4) / 2, HZ1 + 0.2), v3(HX + 0.4, (HH - 4.4) / 2, 0.2), 'vConcrete', 0, 0, 0, { graffiti: 'south', art: [{ name: 'clappy', x: 0.1, y: 3.0, h: 5.0, rot: -0.04 }, { name: 'mopenguinz', x: 0.3, y: 3.0, h: 4.6, rot: 0.03 }, { name: 'heyhey', x: 0.5, y: 3.1, h: 4.2, rot: 0.02 }, { name: 'byteme', x: 0.7, y: 3.0, h: 4.8, rot: -0.03 }, { name: 'rwdc', x: 0.9, y: 2.9, h: 4.6, rot: 0.05 }] });
     neon(hall, v3(0, 4.4, HZ1 + 0.42), v3(HX, 0.03, 0.03), 'neonPink');
     for (const s of [-1, 1]) {                                                                               // end walls with a tall doorway each
       const ew = O('Hall End Wall', 'wall', { wallNormal: v3(-s, 0, 0) }), x = s * (HX + 0.2), zc = (HZ0 + HZ1) / 2;

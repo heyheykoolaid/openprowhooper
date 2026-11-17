@@ -77,6 +77,9 @@ Thanks and credit to Tyrantt, Pro Whooper, IGOW, RaceGOW, Skittles, and the Whoo
 
 Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.com) calculator.
 
+- **Music:** 8BiT_ and the Infinity Loops community. The in-game byTe_me Radio streams their free-to-use collection from archive.org; rights remain with the artists.
+- **Graffiti:** the MoPenguinz FPV and ByTe_Me logos appear on the walls alongside the pilot's own pieces. They belong to their makers and are used in this game only.
+
 ## Art
 Graffiti pieces in `assets/graffiti/` — HeyHey KoolAid, Clappy and RWDC — are original drawings by the pilot (heyheykoolaid)
 and are used with permission in this game only.
