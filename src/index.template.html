@@ -277,6 +277,9 @@ body.rcWide #recapBar { right: 12px; }
 
 #fbTab { position: fixed; left: 0; top: 46%; z-index: 3000; transform: rotate(-90deg); transform-origin: top left; margin-top: 60px; padding: 4px 12px; font: 600 12px/1.2 system-ui, sans-serif; letter-spacing: .5px; background: #ffd34d; color: #111; border: 2px solid #111; border-top: 0; border-radius: 0 0 8px 8px; cursor: pointer; opacity: .78; box-shadow: none; }
 #fbTab:hover { opacity: 1; }
+#procModal { position: fixed; inset: 0; z-index: 3200; background: #000c; display: flex; align-items: center; justify-content: center; }
+#procModal .procPanel { width: min(480px, 90vw); background: #15130f; border: 3px solid #0b0a09; padding: 18px 20px; color: #eee; font: 14px/1.4 system-ui, sans-serif; text-align: center; } #procModal h3 { margin: 0 0 12px; font-size: 20px; }
+.procBar { height: 14px; background: #0b0a09; border: 1px solid #3a352c; } .procBar i { display: block; height: 100%; background: linear-gradient(90deg, #ff4d2e, #ffd34d); transition: width .12s linear; }
 #fbModal, #pilotModal { position: fixed; inset: 0; z-index: 3100; background: #000a; display: flex; align-items: center; justify-content: center; }
 #pilotModal .fbPanel h3 { margin: 0 0 6px; font-size: 20px; } #pilotModal input[type=text] { width: 100%; box-sizing: border-box; font: 18px var(--mono); padding: 8px 10px; margin: 6px 0 10px; background: #0b0a09; color: #fff; border: 2px solid #444; } #pilotModal p { margin: 6px 0; color: #cfc6b4; } #pilotModal .row { margin-top: 12px; flex-wrap: wrap; }
 #fbModal .fbPanel, #pilotModal .fbPanel { width: min(520px, 92vw); background: #15130f; border: 3px solid #0b0a09; padding: 16px 18px; color: #eee; font: 14px/1.4 system-ui, sans-serif; }
@@ -361,7 +364,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
-<div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="fbToast"></div>
+<div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="procModal" class="hide"></div><div id="fbToast"></div>
 <div id="recapUI" class="hide"><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas><div id="recapBar"></div></div>
 <div id="warmBox" class="hide"></div>
 

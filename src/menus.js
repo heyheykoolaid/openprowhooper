@@ -8,11 +8,12 @@ function openMaps() {
   $('#mapList').innerHTML = Object.values(S.MAPS).map(m => `<div class="mapCard ${m.id === MAP_ID ? 'cur' : ''}"><div><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${m.id === MAP_ID && world.survey ? `<small>The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>${m.id === MAP_ID ? '<span class="note">you are here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>`).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
-  store.set('map', next); telCapture('map'); $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); });
+  store.set('map', next); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
-function startFly(withSession) {
-  telCapture('restart');
+// a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
+function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
+function startFlyGo(withSession) {
   combo.names = []; combo.pts = 0; combo.active = false;
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
   if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
@@ -32,7 +33,7 @@ function endSession() {
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
     <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary">Replay &amp; review</button><button data-act="menu">Menu</button></div><div id="lbBox"></div>`;
-  show('#resultsScreen'); telCapture('session-over'); lbSessionOver(r);
+  show('#resultsScreen'); lbSessionOver(r); procFlight(telCapture('session-over'));
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
@@ -40,7 +41,7 @@ document.addEventListener('click', e => {
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { telCapture('menu'); if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { procFlight(telCapture('menu')); if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }

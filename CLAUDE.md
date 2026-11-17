@@ -223,6 +223,13 @@ A tile can hold several tricks (`extra` on the call / flag: "＋ trick in this t
 tile's span with `tile`, `order`, `of`. Handle colours on the timeline show review state (grey not reviewed, green
 approved, orange corrected, red not a trick, blue added).
 
+## Processing pause (src/dropoff.js `procFlight`, `procShow`)
+Heavy work never runs under the pilot's hands: when a shared flight ends (menu, session over, run it back, map change)
+`telCapture` returns a promise and `procFlight` shows a modal with a progress bar until it is packed and has had its
+first try at a drop-off, then thanks the pilot (and says honestly whether it was sent or is queued) before carrying on;
+"run it back" starts the next flight only afterwards. Saving a review does the same around the label upload and
+`learnRun`, and reports what was learned.
+
 ## Daily leaderboard (src/dropoff.js `LB`, tools/dropoff-worker.mjs)
 A finished 2:00 Session can be posted from the results screen: the player's own click every time (it publishes pilot
 name, score, scoring sheet and the run's replay; `pro-whooper-score/1`). The relay files it as

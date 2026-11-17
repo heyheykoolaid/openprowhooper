@@ -178,10 +178,11 @@ function recapSave(force) {
   if (recap.guest) return;   // someone else's leaderboard run: nothing of it is kept or sent
   if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false;
   try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
-  learnQueue({ id: recap.id, started: recap.started, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, trace: recap.trace });
+  const jobs = [];
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
   // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
-  if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels }); }
+  if (tel.on) { jobs.push(telCapture('review')); jobs.push(telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels })); }
+  learnQueue({ id: recap.id, started: recap.started, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, trace: recap.trace, jobs: jobs.filter(Boolean), shared: tel.on });
 }
 // ---- Learning from reviews (Sim.learnFromLabels). When a review is saved, the game re-flies the labelled stretches of
 // this run and of the last few reviewed runs on this map (trace = attitude, position for the over/under passes, sticks)
@@ -189,20 +190,26 @@ function recapSave(force) {
 // bringing back a call they rejected. It only ever loosens, within hard caps, and Options can forget it. Runs in the
 // background a moment after the review closes; nothing leaves the browser for it.
 const learn = { busy: false, pending: null, last: store.get('learnReport', null) };
-function learnQueue(run) { learn.pending = run; clearTimeout(learn.timer); learn.timer = setTimeout(learnRun, 900); }
+function learnQueue(run) { learn.pending = run; clearTimeout(learn.timer); learn.timer = setTimeout(learnRun, 120); }
 async function learnRun() {
   if (learn.busy || !learn.pending) return; if (mode === 'fly' || mode === 'recap') { learn.timer = setTimeout(learnRun, 4000); return; }   // never while flying
-  const cur = learn.pending; learn.pending = null; learn.busy = true;
+  const cur = learn.pending; learn.pending = null; learn.busy = true; let said = '';
+  procShow(cur.shared ? 'Saving your review for the project…' : 'Learning from your review…', cur.shared ? 'Sending your labels' : 'Re-flying the tricks you labelled', 0.05);
   try {
+    if (cur.jobs && cur.jobs.length) { procCreep(0.3, 2500); await procWait(Promise.all(cur.jobs), 8000); }
+    procShow('Learning from your review…', 'Re-flying the tricks you labelled', 0.32); let ticks = 0;
     const stored = (await idb.all('runs')).filter(r => r && r.review && r.map === MAP_ID && Array.isArray(r.labels) && Array.isArray(r.trace) && r.trace.length > 100 && r.id !== 'review-' + cur.id)
       .sort((a, b) => String(b.started).localeCompare(String(a.started))).slice(0, 5);
     const runs = [cur, ...stored].map(r => ({ rows: r.trace, world, camTilt: r.camTilt ?? tune.camTilt, labels: r.labels }));
-    const res = await S.learnFromLabels(runs, store.get('pilot', null), { tick: () => new Promise(r => setTimeout(r, 0)) });
+    const res = await S.learnFromLabels(runs, store.get('pilot', null), { tick: () => { ticks++; const f = 0.32 + 0.63 * (1 - Math.exp(-ticks / 9)); proc.frac = f; const b = document.querySelector('#procModal .procBar i'); if (b) b.style.width = Math.round(f * 100) + '%'; return new Promise(r => setTimeout(r, 15)); } });
     const rep = { ...res.report, at: new Date().toISOString(), runs: runs.length }; learn.last = rep; store.set('learnReport', rep);
     if (res.changed) { const old = store.get('pilot', null) || {}; res.profile.learn.at = rep.at; res.profile.learn.orig = (old.learn && old.learn.orig) || { rate: old.rate || null, air: old.air ?? null };   // so Forget can put the pace back
       store.set('pilot', res.profile); applyPilot();
-      flashNote(`Learned from your review: ${rep.after - rep.before} more of your tricks are now recognised (${[...new Set(rep.changes)].join(', ')}).`); }
+      said = `The game learned from your review: ${rep.after - rep.before} more of your tricks are now recognised (${[...new Set(rep.changes)].join(', ')}).`; }
+    else if (rep.labels) said = rep.before === rep.labels ? 'The game already recognises every trick you labelled.' : `Recognised ${rep.after} of the ${rep.labels} tricks you labelled. The rest are kept for the next round of detection work.`;
   } catch (err) { learn.err = String(err && err.stack || err).slice(0, 300); /* learning is a bonus: never in the way */ }
+  procShow(cur.shared ? procThanks() : 'Review saved', (said ? said + ' ' : '') + (cur.shared ? 'Your labels go to the Open Pro Whooper Project with the flight: they are the most valuable data there is.' : ''), 1);
+  await new Promise(r => setTimeout(r, said ? 2600 : 1500)); procHide();
   learn.busy = false; if (learn.pending) learnQueue(learn.pending);
 }
 function learnHtml() {

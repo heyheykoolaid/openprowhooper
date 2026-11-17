@@ -20,11 +20,11 @@ function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { 
 
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
-  if (!tel.on || !recap.id || recap.telDone === recap.id || race.on) return;
-  const rows = recap.trace; if (rows.length < TEL.minSeconds * TRACE_HZ) return;
-  let armed = 0; for (const r of rows) armed += r[13]; if (armed < TEL.minArmed * TRACE_HZ) return;
+  if (!tel.on || !recap.id || recap.telDone === recap.id || race.on || recap.guest) return null;
+  const rows = recap.trace; if (rows.length < TEL.minSeconds * TRACE_HZ) return null;
+  let armed = 0; for (const r of rows) armed += r[13]; if (armed < TEL.minArmed * TRACE_HZ) return null;
   const day = new Date().toISOString().slice(0, 10), cnt = store.get('telDay', { day, n: 0 }); if (cnt.day !== day) { cnt.day = day; cnt.n = 0; }
-  if (cnt.n >= TEL.perDay) return; cnt.n++; store.set('telDay', cnt);
+  if (cnt.n >= TEL.perDay) return null; cnt.n++; store.set('telDay', cnt);
   recap.telDone = recap.id;
   const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), name: pilotName() || null, map: MAP_ID,
     mode: recap.mode || 'free', camTilt: tune.camTilt, camFov: tune.camFov,
@@ -35,7 +35,28 @@ function telCapture(reason) {
     events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined })),
     missed: recap.flags.map(f => ({ t: f.t })) };
   const stamp = telStamp(recap);
-  (async () => { try { head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); } })();
+  // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+}
+
+// ---- "Processing…": the heavy moments (packing and sending a flight, learning from a review) happen behind a short
+// pause with a progress bar instead of stuttering under the pilot's hands, and end with a thank-you when the flight was shared.
+const proc = { on: false, frac: 0, timer: null };
+function procShow(title, sub, frac) {
+  const el = $('#procModal'); proc.on = true; if (frac != null) proc.frac = Math.max(0, Math.min(1, frac));
+  el.classList.remove('hide'); el.innerHTML = `<div class="fbPanel procPanel"><h3>${esc(title)}</h3><div class="procBar"><i style="width:${Math.round(proc.frac * 100)}%"></i></div><p class="note">${esc(sub || '')}</p></div>`;
+}
+function procCreep(to, ms) { clearInterval(proc.timer); const f0 = proc.frac, t0 = performance.now(); proc.timer = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ms); proc.frac = f0 + (to - f0) * (1 - Math.pow(1 - k, 2)); const b = document.querySelector('#procModal .procBar i'); if (b) b.style.width = Math.round(proc.frac * 100) + '%'; if (k >= 1) clearInterval(proc.timer); }, 60); }
+function procHide() { clearInterval(proc.timer); proc.on = false; proc.frac = 0; $('#procModal').classList.add('hide'); }
+const procThanks = () => `Thank you${pilotName() ? ', ' + pilotName() : ''}!`;
+const procWait = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('slow'), ms))]);
+// a finished flight on its way to the project: pause, show progress, thank the pilot, then carry on with `after`
+async function procFlight(job, after) {
+  if (!job) { if (after) after(); return; }
+  procShow('Saving your flight for the project…', 'Packing the flight data', 0.05); procCreep(0.85, 3500);
+  const r = await procWait(job, 9000);
+  procShow(procThanks(), (r === 'sent' ? 'Your flight was shared with the Open Pro Whooper Project.' : r === 'slow' ? 'Your flight is still sending in the background.' : r === 'queued' ? 'Your flight is saved and will be sent as soon as the drop-off can be reached.' : 'This flight could not be packed, but thank you for sharing.') + ' Every flight makes trick detection better for every pilot.', 1);
+  await new Promise(res => setTimeout(res, 1500)); procHide(); if (after) after();
 }
 
 // ---- the waiting list (IndexedDB, falling back to memory)
