@@ -235,8 +235,17 @@ them, tools/signatures.js lists what was measured in each: write the rule from t
 Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in build order first); removing a
 "never used" variable still needs a grep for assignments.
 
+## Review list: picking, combos, deleting
+List rows are clickable (`recapPick`: click, Ctrl-click, Shift-click range in time order; `recap.multi`). "Combo" gives
+the picked tricks one group number (`grp` on the call / flag; yellow frame and tag; labels carry `group`, `groupLen`);
+"＋ then" in a row or on the timeline adds the next trick and groups the two. Delete hides a trick from timeline and
+list (`hidden`; a hidden game call is still exported as "not a trick", a hidden added trick is not exported);
+"Bring back deleted" restores all. Clicking empty space lets go of the picked trick, clip and multi-selection
+(`recapDeselect`). Added tricks have clean / sloppy / bump in the list as well as on the timeline row.
+
 ## The whoop's look and saved builds (src/worldview.js `makeWhoopMesh`, `WHOOP_LOOK`; src/menus.js)
-The model is built from the parts: Air frames are thin see-through rings on three legs, Meteor / 2S frames full
+The model is built from the parts: Air frames follow the published figures (34.9 mm duct, 3.8 mm ring, motor hung below on 4 braces — 3 on the Champion —, board
+holes 26 mm square corner-forward, 11.6 x 6 mm battery slot): Meteor / 2S frames full
 ducts; motor size from its name (0702 → 7 x 2 mm), bell colour per motor; prop diameter, blade count and (3D)
 pitch; battery size by capacity and cells; the canopy that comes with the electronics (the Air one is a bridge with
 the camera out front); `spec.look` = the pilot's frame / canopy / prop colours. The Garage shows it in a small second

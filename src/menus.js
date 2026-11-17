@@ -135,6 +135,7 @@ function garagePreviewRefresh() {
 addEventListener('pointerdown', e => { if (e.target.id === 'gPreview') { gPrev.drag = { x: e.clientX, y: e.clientY, yaw: gPrev.yaw, pitch: gPrev.pitch }; e.preventDefault(); } });
 addEventListener('pointermove', e => { const d = gPrev.drag; if (!d) return; gPrev.yaw = d.yaw - (e.clientX - d.x) * 0.01; gPrev.pitch = Math.max(-1.3, Math.min(1.4, d.pitch + (e.clientY - d.y) * 0.01)); });
 addEventListener('pointerup', () => { gPrev.drag = null; });
+window.__pwGarage = gPrev;
 const rateProfiles = () => { const a = store.get('rateProfiles', []); return Array.isArray(a) ? a.filter(p => p && p.name && p.rates) : []; };
 function rateEdited() { if (tune.rateProfile) { const p = rateProfiles().find(x => x.name === tune.rateProfile); if (!p || p.ratesType !== tune.ratesType || JSON.stringify(p.rates) !== JSON.stringify(tune.rates)) { tune.rateProfile = ''; const m = $('#gRPMsg'); if (m) m.textContent = 'Changed since it was saved — press Save to keep these.'; const sel = $('#gRP'); if (sel) sel.value = ''; } } }
 document.addEventListener('click', e => {
