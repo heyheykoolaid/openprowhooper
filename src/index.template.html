@@ -223,6 +223,14 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #warmBox .jTop { display: flex; justify-content: space-between; color: #ff7a5a; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; } #warmBox h3 { margin: 4px 0; }
 #warmBox .wStep { padding: 4px 6px; margin: 3px 0; border: 1px solid #2c2925; opacity: .6; } #warmBox .wStep.cur { opacity: 1; border-color: #ffd34d; } #warmBox .wStep.ok { opacity: .85; border-color: #3c8a4a; }
 #warmBox .wStep div { font-size: 12px; color: #cfc6b4; } #warmBox .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #warmBox button { padding: 4px 8px; font-size: 12px; }
+
+#fbTab { position: fixed; left: 0; top: 46%; z-index: 3000; transform: rotate(-90deg); transform-origin: top left; margin-top: 60px; padding: 4px 12px; font: 600 12px/1.2 system-ui, sans-serif; letter-spacing: .5px; background: #ffd34d; color: #111; border: 2px solid #111; border-top: 0; border-radius: 0 0 8px 8px; cursor: pointer; opacity: .78; box-shadow: none; }
+#fbTab:hover { opacity: 1; }
+#fbModal { position: fixed; inset: 0; z-index: 3100; background: #000a; display: flex; align-items: center; justify-content: center; }
+#fbModal .fbPanel { width: min(520px, 92vw); background: #15130f; border: 3px solid #0b0a09; padding: 16px 18px; color: #eee; font: 14px/1.4 system-ui, sans-serif; }
+#fbModal h3 { margin: 0 0 8px; } #fbModal label { display: block; margin: 8px 0; font-size: 13px; } #fbModal select, #fbModal textarea, #fbModal input:not([type=checkbox]) { width: 100%; box-sizing: border-box; margin-top: 3px; font: 14px system-ui, sans-serif; padding: 5px; }
+#fbModal .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #fbModal button { padding: 5px 10px; font-size: 13px; } #fbModal .chk input { width: auto; }
+#fbToast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 3200; background: #15130f; color: #ffd34d; border: 2px solid #ffd34d; padding: 8px 16px; font: 14px system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .3s; } #fbToast.show { opacity: 1; }
 </style>
 <!--THREE-->
 <script>
@@ -302,6 +310,8 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
   <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Review my tricks</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
+<button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
+<div id="fbModal" class="hide"></div><div id="fbToast"></div>
 <div id="recapUI" class="hide"><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas></div>
 <div id="warmBox" class="hide"></div>
 

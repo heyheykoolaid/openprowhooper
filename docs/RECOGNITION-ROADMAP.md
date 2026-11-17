@@ -39,3 +39,6 @@ Status: ✅ built · 🔨 in progress · ⬜ not started.
 ## Community
 13. ⬜ **Shared trick clips**: testers upload labelled clips; the best become each trick's reference (and Tricktionary demos).
 14. ⬜ **Pilot voting on disputed calls**: a "was this a Matty?" queue to settle borderline definitions.
+
+## Also built
+- **Feedback button** on every screen (category + comment + optional context), saved in the browser and uploaded to `feedback/` when uploads are on.

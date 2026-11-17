@@ -112,9 +112,9 @@ function brRender() {
   const rates = SS && SS.rates ? Object.entries(SS.rates.rates).map(([a, r]) => r.center != null ? `${a} ${r.center}/${r.max}/${r.expo}` : `${a} rc ${r.rcRate} sr ${r.superRate}`).join(' · ') : '';
   el.innerHTML = `<h3>BLACKBOX REPLAY</h3>
     <div class="row"><label class="rvPick">${br.file ? 'load another log' : 'load a .bbl / .bfl log'}<input id="bbrFile" type="file" accept=".bbl,.bfl,.bbs,.txt" hidden></label></div>
-    ${br.msg ? `<p class="note">${br.msg}</p>` : ''}
+    ${br.msg ? `<p class="note">${esc(br.msg)}</p>` : ''}
     ${logs ? `<div class="row"><select id="bbrLog">${logs}</select></div>` : ''}
-    ${SS ? `<p class="note">${br.hdr && br.hdr['Firmware revision'] ? br.hdr['Firmware revision'] + ' · ' : ''}${SS.hasRpm ? 'path from eRPM thrust' : 'path from motor output'} · rates: ${rates}</p>
+    ${SS ? `<p class="note">${br.hdr && br.hdr['Firmware revision'] ? esc(br.hdr['Firmware revision']) + ' · ' : ''}${SS.hasRpm ? 'path from eRPM thrust' : 'path from motor output'} · rates: ${rates}</p>
     <div class="row"><button data-br="play">${br.playing ? '❚❚ Pause' : '▶ Play'}</button><select id="bbrSpeed">${[0.1, 0.25, 0.5, 1, 2].map(s => `<option ${s === br.speed ? 'selected' : ''}>${s}</option>`).join('')}</select>× <span id="bbrTime"></span></div>
     <p class="note">Tricks the detector found: <b>${br.dets.length}</b> · ✓${br.labels.filter(l => l.verdict === 'yes').length} ✗${br.labels.filter(l => l.verdict === 'no').length} +${br.labels.filter(l => l.verdict === 'added').length} · marks ${br.marks.length}. Mark passes with <kbd>U</kbd>/<kbd>O</kbd> (Shift = backward, hold L = sideways) to unlock obstacle tricks.</p>
     ${items}${added}

@@ -32,7 +32,7 @@
   function sweep(th0, th1, wmin, wmax) {
     const tab = [[0, th0]], dt = 0.002, s = Math.sign(th1 - th0); let th = th0, t = 0;
     while (s * (th1 - th) > 1e-9) { th += s * (wmin + (wmax - wmin) * (1 + Math.cos(th)) / 2) * D * dt; t += dt; tab.push([t, s > 0 ? Math.min(th, th1) : Math.max(th, th1)]); }
-    return { T: t, at: u => tab[Math.min(tab.length - 1, Math.floor(u / dt))][1] };
+    return { T: t, at: u => tab[Math.min(tab.length - 1, Math.floor(u / dt))][1] };   // NOTE (audit): stepped every 2 ms; interpolating it exposes slow-loop misses, see docs/AUDIT.md
   }
   // small body wobble (pilot noise): sum of slow sines on all axes, a few degrees, tens of °/s at most
   function wobble(r, amp) {

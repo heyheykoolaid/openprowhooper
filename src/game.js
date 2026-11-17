@@ -1015,7 +1015,7 @@ function renderReview() {
   const added = rv.labels.map((l, k) => l.verdict === 'added' ? `<div class="rvItem pilot"><span class="t">${fmtT(l.t0)}–${fmtT(l.t1)}</span><b>${l.actual}</b> <small>added by you</small> <button data-rv="del" data-k="${k}">✕</button></div>` : '').join('');
   const nYes = rv.labels.filter(l => l.verdict === 'yes').length, nNo = rv.labels.filter(l => l.verdict === 'no').length, nAdd = rv.labels.filter(l => l.verdict === 'added').length;
   el.innerHTML = `<h3>VIDEO REVIEW <small class="draftTag">DEV</small></h3>
-    <div class="row">${rv.file ? `<b>${rv.file.name}</b>` : 'No video loaded'} <label class="rvPick" style="margin-left:auto">${rv.file ? 'change' : 'load video'}<input id="rvFile2" type="file" accept="video/*" hidden></label></div>
+    <div class="row">${rv.file ? `<b>${esc(rv.file.name)}</b>` : 'No video loaded'} <label class="rvPick" style="margin-left:auto">${rv.file ? 'change' : 'load video'}<input id="rvFile2" type="file" accept="video/*" hidden></label></div>
     <div class="row"><label>Lens FOV° <input type="number" id="rvFov" value="${rv.hfov}" min="80" max="200"></label><label>Camera tilt° <input type="number" id="rvTilt" value="${rv.tilt}" min="-10" max="60"></label></div>
     <div class="row"><label>Samples/s <select id="rvRate">${[30, 60].map(r => `<option ${r === rv.rate ? 'selected' : ''}>${r}</option>`).join('')}</select></label><label><input type="checkbox" id="rvClean" ${rv.cleanup ? 'checked' : ''}> one axis at a time</label></div>
     <div class="row">${!rv.busy && rv.resumeT != null && rv.frames.length ? `<button data-rv="resume" ${!has ? 'disabled' : ''}>Resume measuring</button>` : ''}<button data-rv="analyze" ${!has || rv.busy ? 'disabled' : ''}>${rv.frames.length ? 'Re-measure from the start' : 'Measure motion'}</button>${rv.busy ? '<button data-rv="cancel">Stop (keeps the data)</button>' : ''}<span>${rv.busy ? Math.round(rv.prog * 100) + '%' : rv.frames.length ? `${rv.frames.length} samples` : ''}</span></div>
@@ -1648,12 +1648,12 @@ function renderBB() {
     <div class="row"><button id="bbConnect" ${c ? 'disabled' : ''}>${c ? 'Connected' : '1 · Connect over USB'}</button>
       <button id="bbDownload" ${c && f && f.used && !bb.busy ? '' : 'disabled'}>2 · Download logs</button>
       <button id="bbDiff" ${c && !bb.busy ? '' : 'disabled'}>3 · Read diff all</button></div>
-    ${bb.info ? `<div class="dev"><b>${bb.info.craftName || 'Flight controller'}</b><span>${bb.info.firmware} ${bb.info.version} · board ${bb.info.board || '?'} · MSP ${bb.info.api}${f ? ` · log flash ${(f.used / 1048576).toFixed(2)} / ${(f.total / 1048576).toFixed(1)} MB used` : ''}</span></div>` : ''}
+    ${bb.info ? `<div class="dev"><b>${esc(bb.info.craftName || 'Flight controller')}</b><span>${esc(bb.info.firmware)} ${esc(bb.info.version)} · board ${esc(bb.info.board || '?')} · MSP ${bb.info.api}${f ? ` · log flash ${(f.used / 1048576).toFixed(2)} / ${(f.total / 1048576).toFixed(1)} MB used` : ''}</span></div>` : ''}
     ${bb.busy || bb.progress ? `<div class="trProg"><i style="width:${(bb.progress * 100).toFixed(1)}%"></i></div>` : ''}
     ${bb.msg ? `<p class="trMsg">${bb.msg}</p>` : ''}
     <h3>Already have log files?</h3>
     <p class="note">Pick .bbl / .bfl / .bbs files (from Betaflight Configurator, an SD card, or the flash in mass-storage mode) and a diff as .txt.</p>
-    <input type="file" id="bbFiles" multiple accept=".bbl,.bfl,.bbs,.txt,.csv">${bb.files.length ? ` <span class="note">${bb.files.map(x => x.name).join(', ')}</span>` : ''}
+    <input type="file" id="bbFiles" multiple accept=".bbl,.bfl,.bbs,.txt,.csv">${bb.files.length ? ` <span class="note">${bb.files.map(x => esc(x.name)).join(', ')}</span>` : ''}
     ${questionnaire()}
     <div class="row"><button id="bbReplayBtn" ${bb.log || bb.files.some(x => /\.(bbl|bfl|bbs)$/i.test(x.name)) ? '' : 'disabled'}>▶ Replay it in the sim</button><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button>
       <button id="bbUpload" ${bb.log || bb.diff || bb.files.length ? '' : 'disabled'}>↑ Upload to GitHub</button><span id="ghStatus" class="ghs"></span></div>

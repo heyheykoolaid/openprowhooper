@@ -216,7 +216,7 @@ function raceEvent(e) {
 }
 function raceResults(e, prev) {
   drone.armed = false;
-  $('#raceResBody').innerHTML = `<h2>${race.laps}-lap race · ${race.track.name}</h2><div class="big">${fmtLap(e.total)}</div>
+  $('#raceResBody').innerHTML = `<h2>${race.laps}-lap race · ${esc(race.track.name)}</h2><div class="big">${fmtLap(e.total)}</div>
     <p>${e.laps.map((l, i) => `Lap ${i + 1}: <b>${fmtLap(l.time)}</b>`).join(' · ')}</p>
     <p>${prev ? (e.total < prev.total ? `New personal best (was ${fmtLap(prev.total)})` : `Personal best ${fmtLap(prev.total)}`) : 'First finish on this track — that\'s your time to beat.'}</p>
     <div class="row"><button class="primary" data-act="raceRestart">Race again</button>${race.fromEditor ? '<button data-act="raceEditor">Back to editor</button>' : ''}<button data-act="raceExit">Tracks</button></div>`;

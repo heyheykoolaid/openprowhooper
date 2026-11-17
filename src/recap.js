@@ -140,3 +140,42 @@ applyPilot();
 window.__pw.onTrick = ev => onTrick(ev);
 window.__pw.recap = { get state() { return recap; }, open: f => openRecap(f), flag: k => recapFlag(k), payload: () => recapPayload() };
 window.__pw.warm = { start: () => startWarmup(), get state() { return warm; }, tick: () => warmTick(), pilot: () => store.get('pilot', null) };
+
+// ============================================================ Feedback button (on every screen)
+// A small tab that is always there. Pick a category, write a comment; the game adds where you were and your setup (never
+// the GitHub token). It uploads to feedback/ in the repo when uploads are on; otherwise save it as a file, copy it, or
+// open a GitHub issue with it filled in.
+const FB_CATS = ['Flight feel / physics', 'Trick detection', 'Scoring / combos', 'RaceGOW track builder', 'Racing', 'Video Review', 'Blackbox (Lab / Replay)', 'Controls / radio', 'Map / graphics', 'Menus / UI', 'Bug', 'Idea', 'Other'];
+const fbGuess = () => mode === 'editor' ? 'RaceGOW track builder' : race.on ? 'Racing' : mode === 'review' ? 'Video Review' : mode === 'bbreplay' ? 'Blackbox (Lab / Replay)' : mode === 'recap' || mode === 'judge' ? 'Trick detection' : mode === 'fly' || mode === 'paused' ? 'Flight feel / physics' : 'Other';
+function fbOpen() {
+  if (mode === 'fly') pause();
+  const el = $('#fbModal'); el.classList.remove('hide'); const g = fbGuess();
+  el.innerHTML = `<div class="fbPanel"><h3>Send feedback</h3>
+    <label>About <select id="fbCat">${FB_CATS.map(c => `<option ${c === g ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    <label>What happened, or what would make it better?<textarea id="fbText" rows="6" maxlength="4000" placeholder="e.g. my trippy round the flagpole didn't count when…"></textarea></label>
+    <label>Your name or handle (optional)<input id="fbName" maxlength="60" value="${esc(store.get('fb.name', ''))}"></label>
+    <label class="chk"><input type="checkbox" id="fbCtx" checked> Include what I was doing (screen, craft, rates, camera tilt, last few trick calls)</label>
+    <div class="row"><button data-fb="send" class="primary">${gh.enabled && gh.token ? 'Send' : 'Save'}</button><button data-fb="file">Save as file</button><button data-fb="copy">Copy</button><button data-fb="issue" title="Opens GitHub in a new tab with your comment filled in">Open a GitHub issue</button><button data-fb="close" class="ghost">Cancel</button></div>
+    <p class="note" id="fbMsg">${gh.enabled && gh.token ? `Goes to ${esc(gh.owner)}/${esc(gh.repo)}/feedback/.` : 'Uploads are off in this browser, so "Save" keeps it here; use the file, Copy or the GitHub issue button to pass it on.'}</p></div>`;
+  setTimeout(() => $('#fbText') && $('#fbText').focus(), 30);
+}
+function fbPayload() {
+  const name = $('#fbName').value.trim(); store.set('fb.name', name);
+  const p = { format: 'pro-whooper-feedback/1', at: new Date().toISOString(), build: '0.1', category: $('#fbCat').value, text: $('#fbText').value.trim(), name: name || null };
+  if ($('#fbCtx').checked) p.context = { screen: mode, racing: !!race.on, track: race.on && race.track ? race.track.name : mode === 'editor' && ed.track ? ed.track.name : null, craft: { ...spec }, camTilt: tune.camTilt, ratesType: tune.ratesType, rates: tune.rates,
+    pilot: store.get('pilot', null), input: inputCfg.mode, lastCalls: recap.events.slice(-6).map(e => ({ name: e.name, exec: e.exec, obstacle: e.obstacle, conf: e.conf, flagged: !!e.flag })), browser: navigator.userAgent };
+  return p;
+}
+const fbText = p => `[${p.category}] ${p.text}\n\n— ${p.name || 'anonymous'}, ${p.at}` + (p.context ? `\n\ncontext: ${JSON.stringify(p.context)}` : '');
+document.addEventListener('click', async e => {
+  if (e.target.closest('#fbTab')) { fbOpen(); return; }
+  const b = e.target.closest('[data-fb]'); if (!b) return; const a = b.dataset.fb, msg = t => { $('#fbMsg').textContent = t; };
+  if (a === 'close') { $('#fbModal').classList.add('hide'); return; }
+  const p = fbPayload(); if (!p.text) { msg('Write a comment first.'); return; }
+  const all = store.get('feedback', []); if (!all.some(x => x.at === p.at)) { all.push(p); store.set('feedback', all.slice(-50)); }
+  if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); $('#fbModal').classList.add('hide'); flashNote(sent ? 'Feedback sent — thank you!' : 'Feedback saved in this browser — thank you!'); }
+  if (a === 'file') { await saveFile(`feedback-${p.at.slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(p, null, 1)); msg('Saved. Send that file to the project.'); }
+  if (a === 'copy') { try { await navigator.clipboard.writeText(fbText(p)); msg('Copied — paste it anywhere.'); } catch { msg('Could not copy here; use Save as file.'); } }
+  if (a === 'issue') { const { browser, ...ctx } = p.context || {}; window.open(`https://github.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/issues/new?title=${encodeURIComponent(`[${p.category}] ${p.text.slice(0, 60)}`)}&body=${encodeURIComponent(fbText({ ...p, context: p.context ? ctx : null }).slice(0, 5000))}`, '_blank', 'noopener'); msg('Opened GitHub in a new tab (you need a GitHub account to post it).'); }
+});
+function flashNote(t) { const el = $('#fbToast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2600); }
