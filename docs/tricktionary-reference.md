@@ -112,3 +112,22 @@ timing comes from frame counting. GIFs give no obstacle positions or stick input
 **Changes made from batch 5:** Matty Twister also accepts a lead-in pitch before the roll (`P-~90 Ra360 P-~270`), and a
 demo-shaped flight was added to `test/demos.js`.
 
+## Batch 6: Forani, Split-S family, pole dancing
+
+GIF ↔ trick mapping confirmed from each trick page on prowhooper.com.
+
+| Trick | What the clip shows | Verdict |
+|---|---|---|
+| Forani (screen recording of a YouTube clip) | pitch forward to inverted → inverted yaw → second half of a Matty, ending nose-up flying backward (camera pointing at the canopy; the late "roll" is yaw seen through an up-pointing camera) | matches |
+| Split-S | roll 180 (slow, ~0.8 s) → dive → under the tree | matches; demo-timed case added |
+| 540 Split S | ~3–4× slow-motion GIF (OSD clock); real roll ≈ 540° in ~0.7 s → dive → under a branch | matches; demo-timed case added |
+| Splitback | roll 180 over the gazebo → ~540° of pitch (backflip + Split-S half loop) → out under the gazebo | matches (`Ra180 P+~540`) |
+| Split Yaw | roll 180 over the gazebo → look down → yaw 180 while dropping → backward under the gazebo | matches |
+| Split Stall Matty Rewind (draft) | roll 180 → small pitch back to look down at the yard → stall → Matty rewind backward under the gazebo | matches the draft's `Ra180 P+~90 P-~270` |
+| Orbits | ≈ 2.3 orbits round a tree trunk at ~150°/s (≈ 2.4 s per lap), then exits | consistent with the orbit tracker |
+| Cradle | two cradles past the pilot in the garage: pitch back to keep him in view, level out, backward away | matches (P+ then P-, flying backward, in view) |
+| Side-Lock Rewind | roll ~90° toward the pilot + pitch back → stall → rewind → roll away | matches |
+| Whiplash | pass under/next to the tree → pitch back → roll toward it keeping it in view → pitch forward to level | matches |
+
+No detector changes from batch 6.
+

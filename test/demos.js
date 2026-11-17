@@ -119,4 +119,20 @@ run('demo mavvy roll (slow 1.1 s roll)', chain([approach, mavArc(0, P - 0.1), ma
     return { pos, q }; } };
   const qEnd = S.qmul(S.qmul(pitchQ(-70 * D), S.qaxis(FWD_ROLL, 2 * P)), pitchQ(-290 * D));
   run('demo matty twister (lead-in pitch)', chain([inSeg, tw, straight(mattyPos(2 * P), S.v3(0, 0, 3), 1.0, qEnd)]), 6, ['Matty Twister']); }
+
+// ---- batch 6 ----
+// Split-S family as flown in the demos: over the bar moving -z, roll (Split-S demo: 180° over ~0.8 s; 540 Split S demo:
+// 540° over ~0.7 s), then the pitch-back half loop down the far side and forward under the bar (+z).
+function splitDemo(rollDeg, rollT) {
+  const p0 = S.v3(0, 3.3, -3.5), v = S.v3(0, 0, -2.2);
+  const inSeg = straight(p0, S.v3(0, 0, -4), 0.6, level);                         // crosses over the bar at y 3.3
+  const pr = S.add(p0, S.v3(0, 0, -2.4));
+  const roll = { T: rollT, f: t => ({ pos: S.add(pr, S.mul(v, t)), q: S.qaxis(FWD_ROLL, rollDeg * D * t / rollT) }) };
+  const pz = pr.z + v.z * rollT, c = S.v3(0, 2.3, pz), R1 = S.qaxis(FWD_ROLL, rollDeg * D);
+  const half = { T: 0.9, f: t => { const ps = P * t / 0.9; return { pos: S.v3(0, c.y + Math.cos(ps), c.z - Math.sin(ps)), q: S.qmul(R1, pitchQ(ps)) }; } };
+  const out = straight(S.v3(0, 1.3, c.z), S.v3(0, 0, 3), 1.6, S.qmul(R1, pitchQ(P)));
+  return chain([inSeg, roll, half, out]);
+}
+run('demo split-s (slow 0.8 s roll)', splitDemo(180, 0.8), 6, ['Split-S']);
+run('demo 540 split s (0.7 s roll)', splitDemo(540, 0.7), 6, ['540 Split S']);
 console.log(`\n${pass}/${total} demo loops`);
