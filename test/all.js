@@ -10,6 +10,7 @@ const checks = [
   ['phase-2 tricks + live counters', () => { const o = run('phase2.js'); const m = o.match(/(\d+)\/(\d+) phase-2/); return m && m[1] === m[2] ? null : o; }],
   ['tricktionary demo loops', () => { const o = run('demos.js'); const m = o.match(/(\d+)\/(\d+) demo loops/); return m && m[1] === m[2] ? null : o; }],
   ['demo GIF motion replay', () => { const o = run('demo-replay.js'); const m = o.match(/(\d+)\/(\d+) demo replays/); return m && m[1] === m[2] ? null : o; }],
+  ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],
   ...['session-flips-rolls.json', 'upload-roll-x5.json', 'training-v1-flip.json'].map(f => [`replay fixture ${f}`, () => { const o = run('replay.js', [path.join(__dirname, 'fixtures', f)]); const m = o.match(/(\d+)\/(\d+) labels agree/); return m && m[1] === m[2] ? null : o; }]),
 ];

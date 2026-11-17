@@ -841,8 +841,10 @@ class TrickDetector {
       if (o.round) {   // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
         const R = o.round, st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
         const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
+        const recent = this.crossLog.some(c => c.obj === o.id && t - c.t < 5);   // never re-aim mid-trick (big Split-Back: ~3 s over→under)
+        const closing = vh > 1.0 && dh > 0.8 && ((R.c.x - d.pos.x) * d.vel.x + (R.c.z - d.pos.z) * d.vel.z) / (dh * vh) > 0.6;
         if (dh < R.r + 3) st.tNear = t;
-        else if (vh > 0.5 && t - (st.tNear ?? -9) > 2.5) {
+        if (vh > 0.5 && !recent && (t - (st.tNear ?? -9) > 2.5 || closing)) {   // far away, or heading in at it: aim across the approach
           const ax = d.vel.x / vh, az = d.vel.z / vh;
           if (!st.ax || ax * st.ax + az * st.az < 0.97) {
             st.ax = ax; st.az = az; delete this.prevSide[o.id];
@@ -1002,7 +1004,7 @@ class TrickDetector {
         const r1 = rolls.length === 1 ? rolls[0] : null;   // a Mavvy Roll's roll is the one time it may go inverted
         const upright = !this.minUpBetween ? true : r1 ? this.minUpBetween(part[0].t, r1.t0 - 0.03) > 0.1 && this.minUpBetween(r1.t1 + 0.03, part[2].t) > 0.1
           : this.minUpBetween(part[0].t, part[2].t) > 0.1;   // maverick: forward-looking the whole way
-        if (!bigP.length && upright && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= 1.5 && (part[1].spd ?? 9) >= (r1 ? 0.2 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll
+        if (!bigP.length && upright && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
           const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : (rolls.length === 0 ? 'Maverick Loop' : null);
           const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
           if (nm && better(cand, best)) best = cand;
@@ -1361,7 +1363,10 @@ class StreamDetector extends TrickDetector {
     if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return null;
     if (req.nearTall) { const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0]; const nm = s0 && this.nearTall({ pos: s0.p }, req.nearTall === true ? 3 : req.nearTall); if (!nm) return null; out.obstacle = out.obstacle || nm;
       // a stall rewind rises beside the object and comes back down: it never passes over/under one (loops, jump ropes do)
-      if (req.nearTall !== true && this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)) return null; }
+      if (req.nearTall !== true && this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)) return null;
+      if (req.stallIn && req.nearTall !== true) {   // flip/roll at the stall: nearly in place, unlike a loop beside the object
+        const W = this.fbIn(t0, t1); if (W.length > 2) { const ext = k => Math.max(...W.map(x => x.p[k])) - Math.min(...W.map(x => x.p[k]));
+          if (Math.hypot(ext('x'), ext('z')) > 1.6 || ext('y') > 1.6) return null; } } }
     if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
     if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
     if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
@@ -1402,7 +1407,8 @@ class StreamDetector extends TrickDetector {
       if (rw && !this.claimUsed.has(rw.id)) { const P = this.poles.find(p => Math.hypot(rw.p.x - p.x, rw.p.z - p.z) < 3);
         if (P) { const W = this.fbIn(rw.t0 - 1.2, rw.t1), vf = W.length ? W.filter(x => this.viewOf(x.p, x.up, x.f, P.point(x.p.y)).ang < 60).length / W.length : 0;
           const toks = this.toksIn(rw.t0 - 1.5, rw.t1 + 0.2);
-          if (vf >= 0.6 && toks.some(x => x.ax === 'R' && x.raw >= 60)) mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] }); } } }
+          const passed = this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > rw.t0 - 1.5 && c.t < rw.t1 + 0.1);   // Split-S etc. turn back too
+          if (!passed && vf >= 0.6 && toks.some(x => x.ax === 'R' && x.raw >= 60)) mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] }); } } }
     return out;
   }
   update(d, dt, rc) {
@@ -1489,7 +1495,8 @@ class StreamDetector extends TrickDetector {
       const l = out[out.length - 1], gap = l ? a.t0 - l.t1 : 99;
       const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25)
         && ![...this.toks, ...this.cur.filter(Boolean)].some(x => x.ax !== a.ax && x.raw >= 150 && x.t0 >= l.t1 - 0.05 && x.t1 <= a.t0 + 0.05);   // a yaw/roll at the peak (claimed or not) is its own token   // throttle-cut float over the top of a loop
-      const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55;   // 180 · pause · 180 = Segmented, keep apart
+      const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55
+        && this.sweptBetween(l.t1, a.t0) / gap < 55;   // a real segment pause is nearly still (demo 13–35°/s); a floaty loop top keeps turning   // 180 · pause · 180 = Segmented, keep apart
       if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && !segPause && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
         const fl = floatOver && a.ax === 'P' ? this.sweptBetween(l.t1, a.t0) : 0;   // slow float over the top: still rotation
         out[out.length - 1] = { ...l, raw: l.raw + a.raw + fl, t1: a.t1, n: l.n + a.n, inv: l.inv + a.inv, off: l.off + a.off, rateSum: l.rateSum + a.rateSum, rateSq: l.rateSq + a.rateSq,
@@ -1509,10 +1516,10 @@ class StreamDetector extends TrickDetector {
       const suf = N.slice(-k);
       if (!obstOnly) {
         if (k === 2 && suf[0].ax === suf[1].ax && suf[0].dir === suf[1].dir && suf[0].ax !== 'Y' && Math.abs(suf[0].raw - 180) < 55 && Math.abs(suf[1].raw - 180) < 55) {
-          const gap = suf[1].t0 - suf[0].t1; if (gap >= SEG_GAP && gap < 1.6) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
+          const gap = suf[1].t0 - suf[0].t1; if (gap >= SEG_GAP && gap < 1.6 && this.sweptBetween(suf[0].t1, suf[1].t0) / gap < 55) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
         }
         // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
-        const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? 250 : 180));
+        const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? 220 : 180));   // demo yaws (Vanny) measured down to ~266°/s
         const orbit = this.orbiting();
         if (fast && !orbit) for (const tr of OPEN_TRICKS) for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } }
         if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
@@ -1585,6 +1592,7 @@ class StreamDetector extends TrickDetector {
     const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O'); const last = X[X.length - 1];
     if (!last || last.kind !== 'O' || t - last.t > 3.0) return false;
     if (last.latDot > 0.6 && last.t > p.t0 - 0.6) return true;   // jump-rope peak (sideways over): wait for the way back down (Double Dutch)
+    if (p.t0 > last.t - 0.4 && t - last.t < 2.6) return true;     // Matty family: rotation after going over, the pass back under follows
     return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
   }
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?

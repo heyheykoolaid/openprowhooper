@@ -795,7 +795,9 @@ document.addEventListener('click', async e => {
 // Records the whole run at 100 Hz while training, logs every detector verdict and every label, keeps a
 // 5-reps-per-trick checklist across rounds, and saves it all in the browser (IndexedDB) for export.
 const TRACE_HZ = 100, TRACE_LEN = 1000, REPS = 5;
-const TRACE_COLS = ['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz', 'rollRate', 'pitchRate', 'yawRate', 'thr', 'contact', 'armed', 'crashed', 'cnx', 'cny', 'cnz', 'cObj', 'cImpact', 'cGround', 'vx', 'vy', 'vz'];
+// sticks (rollStick/pitchStick/yawStick, -1..1 as the pilot moved them) were added at the end in format v2; older
+// traces simply have 24 columns
+const TRACE_COLS = ['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz', 'rollRate', 'pitchRate', 'yawRate', 'thr', 'contact', 'armed', 'crashed', 'cnx', 'cny', 'cnz', 'cObj', 'cImpact', 'cGround', 'vx', 'vy', 'vz', 'rollStick', 'pitchStick', 'yawStick'];
 let contactLatch = null; // a contact can happen between two 100 Hz samples: keep it until the next row
 const trace = []; let traceCtr = 0;
 function recordTrace(rc) {
@@ -806,7 +808,7 @@ function recordTrace(rc) {
   const row = [+d.time.toFixed(3), +d.pos.x.toFixed(4), +d.pos.y.toFixed(4), +d.pos.z.toFixed(4), +d.q.w.toFixed(5), +d.q.x.toFixed(5), +d.q.y.toFixed(5), +d.q.z.toFixed(5),
     Math.round(r[0]), Math.round(r[1]), Math.round(r[2]), +rc.thr.toFixed(3), c ? 1 : 0, d.armed ? 1 : 0, d.crashed ? 1 : 0,
     c ? +c.n.x.toFixed(3) : 0, c ? +c.n.y.toFixed(3) : 0, c ? +c.n.z.toFixed(3) : 0, c ? c.obj : -1, c ? +c.imp.toFixed(2) : 0, c ? c.g : 0,
-    +d.vel.x.toFixed(3), +d.vel.y.toFixed(3), +d.vel.z.toFixed(3)];
+    +d.vel.x.toFixed(3), +d.vel.y.toFixed(3), +d.vel.z.toFixed(3), +(rc.roll || 0).toFixed(3), +(rc.pitch || 0).toFixed(3), +(rc.yaw || 0).toFixed(3)];
   trace.push(row); if (trace.length > TRACE_LEN) trace.shift();
   if (train.on && run.id) run.trace.push(row);
 }
@@ -940,10 +942,10 @@ async function exportData(kind) {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   let payload, filename;
   if (kind === 'session') {
-    payload = { format: 'pro-whooper-session/1', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, cal, run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } };
+    payload = { format: 'pro-whooper-session/2', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, cal, run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } };
     filename = `pro-whooper-session-r${cal.round}-${stamp}.json`;
   } else {
-    const ex = await idb.all('examples'); payload = { format: 'pro-whooper-training/2', build: '0.1', map: 'playground', camTilt: tune.camTilt, tune, cal, examples: ex };
+    const ex = await idb.all('examples'); payload = { format: 'pro-whooper-training/3', build: '0.1', map: 'playground', camTilt: tune.camTilt, tune, cal, examples: ex };
     filename = `pro-whooper-all-reps-${stamp}.json`;
   }
   const data = JSON.stringify(payload);
@@ -1028,7 +1030,7 @@ function uploadTrick(name) {
   const reps = labs.map(l => ({ ...l, trace: run.trace.filter(r => r[0] >= l.repStart - 2 && r[0] <= l.t + 1) }));
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   ghEnqueue(`calibration/round-${cal.round}/${slug(name)}/${stamp}-${run.id}.json`,
-    { format: 'pro-whooper-training/2', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, trick: name, round: cal.round,
+    { format: 'pro-whooper-training/3', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, trick: name, round: cal.round,
       agreed: labs.filter(l => l.verdict === 'yes' && l.detected.includes(name)).length, examples: reps.map(r => ({ ...r, hz: TRACE_HZ, cols: TRACE_COLS })) },
     `calibration: ${name} ×${labs.filter(l => l.verdict === 'yes').length} (round ${cal.round})`);
 }
@@ -1036,7 +1038,7 @@ function uploadRun(reason) {
   if (!run.id || !run.labels.length) return;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   ghEnqueue(`calibration/round-${cal.round}/sessions/${stamp}-${run.id}.json`,
-    { format: 'pro-whooper-session/1', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, calib: cal,
+    { format: 'pro-whooper-session/2', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, calib: cal,
       run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } },
     `calibration session: ${run.labels.length} labels (${reason})`);
 }

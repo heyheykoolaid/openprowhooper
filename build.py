@@ -1,7 +1,7 @@
 import pathlib
 root = pathlib.Path(__file__).parent
 t = (root / 'src/index.template.html').read_text()
-for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('GAME', 'game.js')]:
+for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('MANEUVERS', 'maneuvers.js'), ('GAME', 'game.js')]:
     t = t.replace('/*%s*/' % key, (root / 'src' / f).read_text().replace('</script', '<\\/script'))
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it

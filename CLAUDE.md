@@ -43,6 +43,13 @@ ms/frame (from the goggle OSD clock), estimated camera uptilt and the object the
 When new demo GIFs arrive: extract frames, read the OSD clock for real timing, measure, compare against the rule, and
 add a regression case (replay if open-air and well tracked, otherwise a demo-shaped flight).
 
+## Stress testing (test/stress.js) and the bot (src/maneuvers.js)
+`src/maneuvers.js` scripts trick flights (open-air, powerloop family, mavericks, Mattys, Split-S family, Blindflip) on
+any over/under object — bars, trees from any angle, the pilot — with seeded random speed, loop size, floaty tops,
+rates, approach angle and wobble. The same flights drive the game's Judge the Bot mode, so pilot verdicts there
+validate them. `node test/stress.js 40 --seed=N` flies each trick N times plus near-miss flights and prints detection
+rate and confusions (worst first); `npm test` runs a quick version. When a rule changes, run a few seeds.
+
 ## When asked to look at Blackbox logs
 `blackbox/<date>-<craft>/` holds the raw `.bbl` (Betaflight onboard flash dump), `diff-all.txt`, and `build.json`
 (FC info, the game's craft/tune at upload, and the optional pilot build sheet: parts, all-up weight, prop condition,

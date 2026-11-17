@@ -26,7 +26,9 @@ function replayTrace(rows, opts = {}) {
     if (src[12] && ri !== lastRow) { lastRow = ri; d.contactThisStep = true;
       if (src.length >= 21) { d.contactNormal = S.v3(src[15], src[16], src[17]); d.contactOwner = src[18]; d.lastImpact = src[19]; d.contactGround = !!src[20]; }
       else { d.contactNormal = S.v3(0, 1, 0); d.contactGround = true; d.lastImpact = 1; d.contactOwner = -1; } }
-    det.update(d, dt); det.postStep(d);
+    // sticks (format v2 traces carry them; older ones don't): give the detector the pilot's inputs too
+    const rc = src.length >= 27 ? { thr: src[11], roll: src[24], pitch: src[25], yaw: src[26] } : { thr: src[11] ?? 0, roll: 0, pitch: 0, yaw: 0 };
+    det.update(d, dt, rc); det.postStep(d);
     for (const e of det.drain()) out.push({ ...e, t });
     if (det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
   }
