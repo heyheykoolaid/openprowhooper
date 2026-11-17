@@ -28,6 +28,8 @@ function replayTrace(rows, opts = {}) {
       else { d.contactNormal = S.v3(0, 1, 0); d.contactGround = true; d.lastImpact = 1; d.contactOwner = -1; } }
     // sticks (format v2 traces carry them; older ones don't): give the detector the pilot's inputs too
     const rc = src.length >= 27 ? { thr: src[11], roll: src[24], pitch: src[25], yaw: src[26] } : { thr: src[11] ?? 0, roll: 0, pitch: 0, yaw: 0 };
+    if (d._wasArmed !== undefined && d._wasArmed !== d.armed) det.onArmChange(d, d.armed);   // the game tells the detector about arming (Slide Disarm, Perch)
+    d._wasArmed = d.armed;
     det.update(d, dt, rc); det.postStep(d);
     for (const e of det.drain()) out.push({ ...e, t });
     if (det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
