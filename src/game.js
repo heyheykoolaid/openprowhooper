@@ -675,7 +675,11 @@ function renderGarage() {
   const rateRow = ax => isA ? `<tr><td>${ax}</td><td><input type=number data-r="${ax}.center" value="${R[ax].center}"></td><td><input type=number data-r="${ax}.max" value="${R[ax].max}"></td><td><input type=number step=0.01 data-r="${ax}.expo" value="${R[ax].expo}"></td></tr>`
     : `<tr><td>${ax}</td><td><input type=number step=0.01 data-r="${ax}.rcRate" value="${R[ax].rcRate}"></td><td><input type=number step=0.01 data-r="${ax}.superRate" value="${R[ax].superRate}"></td><td><input type=number step=0.01 data-r="${ax}.rcExpo" value="${R[ax].rcExpo}"></td></tr>`;
   const pidRow = ax => `<tr><td>${ax}</td>${['p', 'i', 'd', 'f'].map(k => `<td><input type=number data-pid="${ax}.${k}" value="${tune.pid[ax][k]}"></td>`).join('')}</tr>`;
+  const profs = rateProfiles(), cur = tune.rateProfile || '';
   $('#gTune').innerHTML = `
+    <label>Rate profile<select id="gRP"><option value="">${cur ? '— pick —' : '— unsaved rates —'}</option>${profs.map(p => `<option value="${esc(p.name)}" ${p.name === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__default__">Game default (150 / 680 / 0.5)</option></select></label>
+    <div class="row rpRow"><input id="gRPName" maxlength="24" placeholder="name these rates" value="${esc(cur)}" onkeydown="event.stopPropagation()"><button id="gRPSave">Save</button><button id="gRPDel" class="ghost" ${cur ? '' : 'disabled'}>Delete</button></div>
+    <p class="note" id="gRPMsg">${cur ? `Flying "${esc(cur)}".` : 'Name your rates to keep them and switch between sets.'}</p>
     <label>Rates type<select id="gRT"><option ${isA ? 'selected' : ''}>ACTUAL</option><option ${!isA ? 'selected' : ''}>BETAFLIGHT</option></select></label>
     <table class="tt"><tr><th></th>${isA ? '<th>Center</th><th>Max</th><th>Expo</th>' : '<th>RC rate</th><th>Super</th><th>Expo</th>'}</tr>${['roll', 'pitch', 'yaw'].map(rateRow).join('')}</table>
     <canvas id="rateCurve" width=300 height=120></canvas>
@@ -700,13 +704,23 @@ function drawRateCurve() {
   for (const ax of ['roll', 'pitch', 'yaw']) { g.strokeStyle = cols[ax]; g.beginPath(); for (let i = 0; i <= 100; i++) { const x = i / 100, r = S.applyRate(x, tune.rates[ax], tune.ratesType); const px = x * c.width, py = c.height - r / max * c.height; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); g.fillStyle = cols[ax]; g.fillText(`${ax} ${Math.round(S.applyRate(1, tune.rates[ax], tune.ratesType))}°/s`, 6, 14 + ['roll', 'pitch', 'yaw'].indexOf(ax) * 13); }
 }
 function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(activeWorld.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
+// Named rate profiles (Garage & Tune): saved sets of rates type + roll/pitch/yaw rates, kept in this browser.
+const rateProfiles = () => { const a = store.get('rateProfiles', []); return Array.isArray(a) ? a.filter(p => p && p.name && p.rates) : []; };
+function rateEdited() { if (tune.rateProfile) { const p = rateProfiles().find(x => x.name === tune.rateProfile); if (!p || p.ratesType !== tune.ratesType || JSON.stringify(p.rates) !== JSON.stringify(tune.rates)) { tune.rateProfile = ''; const m = $('#gRPMsg'); if (m) m.textContent = 'Changed since it was saved — press Save to keep these.'; const sel = $('#gRP'); if (sel) sel.value = ''; } } }
+document.addEventListener('click', e => {
+  if (e.target.id === 'gRPSave') { const name = $('#gRPName').value.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); if (!name) { $('#gRPMsg').textContent = 'Give the profile a name first.'; $('#gRPName').focus(); return; }
+    const all = rateProfiles().filter(p => p.name !== name); all.push({ name, ratesType: tune.ratesType, rates: JSON.parse(JSON.stringify(tune.rates)) }); all.sort((a, b) => a.name.localeCompare(b.name)); store.set('rateProfiles', all.slice(0, 30)); tune.rateProfile = name; saveTune(); renderGarage(); }
+  if (e.target.id === 'gRPDel' && tune.rateProfile) { store.set('rateProfiles', rateProfiles().filter(p => p.name !== tune.rateProfile)); tune.rateProfile = ''; saveTune(); renderGarage(); }
+});
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value] }; applyParts(); }
   if (t.dataset.part) { spec[t.dataset.part] = t.value; applyParts(); }
-  if (t.id === 'gRT') { tune.ratesType = t.value; saveTune(); renderGarage(); }
-  if (t.dataset.r) { const [ax, k] = t.dataset.r.split('.'); tune.rates[ax][k] = +t.value; saveTune(); drawRateCurve(); }
+  if (t.id === 'gRT') { tune.ratesType = t.value; rateEdited(); saveTune(); renderGarage(); }
+  if (t.dataset.r) { const [ax, k] = t.dataset.r.split('.'); tune.rates[ax][k] = +t.value; rateEdited(); saveTune(); drawRateCurve(); }
+  if (t.id === 'gRP' && t.value) { const d = t.value === '__default__' ? { name: '', ratesType: S.defaultTune().ratesType, rates: S.defaultTune().rates } : rateProfiles().find(p => p.name === t.value);
+    if (d) { tune.ratesType = d.ratesType; tune.rates = JSON.parse(JSON.stringify(d.rates)); tune.rateProfile = d.name; saveTune(); renderGarage(); } }
   if (t.dataset.pid) { const [ax, k] = t.dataset.pid.split('.'); tune.pid[ax][k] = +t.value; saveTune(); }
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
