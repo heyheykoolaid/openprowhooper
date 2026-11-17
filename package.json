@@ -1,0 +1,12 @@
+{
+  "name": "open-pro-whooper-project",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tony Hawk-style tiny whoop FPV freestyle sim in the browser, built on Tyrantt's Pro Whooper trick library.",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "node test/all.js",
+    "replay": "node test/replay.js",
+    "calibrate": "node test/calibrate.js"
+  }
+}
