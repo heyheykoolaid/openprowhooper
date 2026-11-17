@@ -862,7 +862,7 @@ function judgeVerdict(v) {
   if (judge.phase !== 'ask') return;
   const det = judge.events.map(e => e.name), detOK = det.length === 1 && det[0] === judge.name, valid = v !== 'wrong';
   const like = v === 'wrong' ? ($('#jLike') && $('#jLike').value) || null : null;
-  const rec = { id: `${Date.now()}-${judge.seed}`, at: new Date().toISOString(), trick: judge.name, seed: judge.seed, object: judge.m.object, params: judge.m.params,
+  const rec = { id: `${Date.now()}-${judge.seed}`, at: new Date().toISOString(), trick: judge.name, seed: judge.seed, human: true, object: judge.m.object, params: judge.m.params,
     verdict: v, lookedLike: like, detected: judge.events.map(e => ({ name: e.name, exec: e.exec, clean: e.clean })), detectorRight: detOK, agree: valid === detOK, build: '0.1' };
   judge.session.push(rec); idb.put('judge', rec); judge.phase = 'reveal'; renderJudge();
   if (judge.session.filter(x => !x.up).length >= 10) judgeUpload();

@@ -66,6 +66,26 @@ parsers) to CSV, then compare logged gyro/motor/vbat response to the sim driven 
 `PARTS` numbers (motor Rm/KV, prop Ct/Cq, drag, inertia) in `src/sim.js`. Use the build sheet's weight and parts
 first; they are the cheapest calibration.
 
+## The Watcher (src/sim.js `Watcher`, `WATCH`)
+A second, live judge behind the detector: every call is cross-checked against independent witnesses (path, camera view,
+sticks/throttle, demo timing scaled to the pilot's learned speed) and the TPW description. Hard checks veto (the
+detector takes its next-best reading); soft checks vote into `ev.watch.conf`. Add checks per trick in `WATCH`; keep hard
+checks to things the trick cannot do without. It's off in Video Review (`det.watcherOn = false`).
+
+## Air between segments
+Tricks are built from segments; pilots leave air between them. `AIR_OPEN` (1.0 s, 1.5 s hanging inverted) is the
+allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad holds steady. `stress.js --air=0.6`.
+
+## RaceGOW racing (src/race.js, src/editor.js)
+Pure rules/geometry in race.js (tested by test/race.js); the editor and race HUD in editor.js (same module as game.js,
+concatenated by build.py). Tracks: `pro-whooper-track/1`; race results/ghosts: `pro-whooper-race/1` (`races/…`).
+
+## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
+bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log
+(gyro attitude, eRPM-thrust path, real sticks) with the detector + Watcher, and exports pilot labels as
+`pro-whooper-labelled/1`. `npm run bench` scores the current detector on every labelled source at once — see
+docs/DATA.md (formats, trust weights, workflow). Run it before and after any rule change.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

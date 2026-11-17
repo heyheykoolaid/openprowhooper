@@ -1,0 +1,95 @@
+{
+ "note": "demo clips (and the frame windows) where the trick itself is tracked well enough to replay: used by test/demo-replay.js and test/benchmark.js",
+ "cases": [
+  {
+   "file": "roll.json",
+   "frames": [
+    8,
+    30
+   ],
+   "want": [
+    "Roll"
+   ]
+  },
+  {
+   "file": "vanny-roll.json",
+   "frames": [
+    4,
+    80
+   ],
+   "want": [
+    "Vanny Roll"
+   ]
+  },
+  {
+   "file": "segmented.json",
+   "frames": [
+    26,
+    60
+   ],
+   "want": [
+    "Segmented Flips/Rolls"
+   ]
+  },
+  {
+   "file": "segmented.json",
+   "frames": [
+    72,
+    104
+   ],
+   "want": [
+    "Segmented Flips/Rolls"
+   ]
+  },
+  {
+   "file": "inverted-yaw-spin.json",
+   "frames": [
+    12,
+    48
+   ],
+   "want": [
+    "Inverted Yaw Spin"
+   ]
+  },
+  {
+   "file": "rubiks-cube.json",
+   "frames": [
+    18,
+    64
+   ],
+   "want": [
+    "Rubik's Cube"
+   ]
+  },
+  {
+   "file": "cubiks-rube.json",
+   "frames": [
+    20,
+    68
+   ],
+   "want": [
+    "Cubik's Rube"
+   ]
+  },
+  {
+   "file": "yaw-spin.json",
+   "frames": [
+    4,
+    30
+   ],
+   "want": [
+    "Yaw Spin"
+   ]
+  },
+  {
+   "file": "inverted-rewind.json",
+   "frames": [
+    52,
+    86
+   ],
+   "want": [
+    "Invert Rewind"
+   ]
+  }
+ ]
+}
