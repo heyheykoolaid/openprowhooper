@@ -1325,9 +1325,9 @@ class StreamDetector extends TrickDetector {
       else { if (dist < pt.dmin) { pt.dmin = dist; pt.tc = t; }
         if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = 99; pt.lock = true; pt.far = dist; this.newEv.push('pass'); ev = true; } }
       let ob = this.orb[P.id]; const ang = Math.atan2(dz, dx);
-      const rMax = Math.max(4.5, Math.min(7, 2 + (P.y1 - P.y0) * 0.5));   // tall poles (flagpole, trees) get wider trippies
+      const rMax = Math.max(5.5, Math.min(9, 2 + (P.y1 - P.y0) * 0.75));   // big spins: tall poles (flagpole, trees) get wider trippies
       if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
-      if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0 }; continue; }
+      if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0 }; continue; }
       let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
       // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
       // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
@@ -1338,10 +1338,19 @@ class StreamDetector extends TrickDetector {
         ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
         const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)); if (vi.ang < 55) ob.view++;
         { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
-          if (ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < 75; })) ob.top++; }   // pole held in the top half of the screen
+          const topVis = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < 75; }); if (topVis) ob.top++;   // pole held in the top half of the screen
+          // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
+          // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
+          // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
+          const dA = Math.abs(da) * R2D, pose = topVis && up.y < 0.35;
+          if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
+            ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; }
+          else if (ob.poseT0 == null) ob.run = 0;
+          if (up.y > 0.35 && vi.ang < 55) ob.oAcc += dA; }
         ob.roll += rates[0] * dt;
         const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
-      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0 }; } }
+        if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin x2') { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; continue; }
+      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0 }; } }
     }
     this.updateLive(t);
     this.taps = this.taps.filter(x => t - x.t < 8); this.stalls = this.stalls.filter(x => t - x.t < 8); this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
@@ -1349,23 +1358,25 @@ class StreamDetector extends TrickDetector {
     return ev;
   }
   // ---- live orbit tricks (Trippy Spin, Orbit, Double Rolling Trippy): count every half lap, bank on exit, lose on crash
+  orbSpan(ob) { return ob.poseT0 != null ? ob.acc - ob.accStart : 0; }   // degrees swept since the trippy view was first held
   orbitKind(ob) {
-    if (!ob || !ob.n || ob.acc < 150) return null;
-    const laps = Math.max(0.25, ob.acc / 360), inv = ob.inv / ob.n, top = ob.top / ob.n, view = ob.view / ob.n, rollPerLap = Math.abs(ob.roll) / laps;
+    if (!ob || !ob.n) return null;
+    const span = this.orbSpan(ob), laps = Math.max(0.25, ob.acc / 360), inv = ob.inv / ob.n, view = ob.view / ob.n, rollPerLap = Math.abs(ob.roll) / laps;
     // a Double Rolling Trippy barrel-rolls THROUGH UPRIGHT every lap; a trippy leaning hard into the pole also piles up body
     // roll (more so with a tilted camera) but never comes upright (pilot feedback: trippies were read as DRT)
-    if (rollPerLap >= 300 && (ob.flips || 0) / 2 / laps >= 0.75) return 'Double Rolling Trippy Spin';
-    if (inv >= 0.55 && top >= 0.3) return 'Trippy Spin x2';
-    if (inv < 0.35 && view >= 0.6) return 'Orbit x2';
+    if (ob.acc >= 150 && rollPerLap >= 300 && (ob.flips || 0) / 2 / laps >= 0.75) return 'Double Rolling Trippy Spin';
+    if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin x2';
+    if (ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc) return 'Orbit x2';
     return null;
   }
+  orbLapDeg(ob, kind) { return kind === 'Trippy Spin x2' ? this.orbSpan(ob) : ob.acc; }
   updateLive(t) {
     // the post with the most sweep owns the live trick (circling the slide tower sweeps all 4 posts at once)
     let best = null, bestP = null;
     for (const P of this.poles) { const ob = this.orb[P.id]; if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) { best = ob; bestP = P; } }
     const L = this.live;
-    if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((L.ob.acc + 30) / 180) / 2; L.t1 = t; }
-    else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: best.t0, t1: t, laps: Math.floor((best.acc + 30) / 180) / 2 };
+    if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2; L.t1 = t; if (L.name === 'Trippy Spin x2') L.t0 = L.ob.poseT0; }
+    else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: this.orbitKind(best) === 'Trippy Spin x2' ? best.poseT0 : best.t0, t1: t, laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2 };
     const N = this.live;
     if (N && this.lastTrippy && !N.switched && N.name !== 'Orbit x2' && N.objId === this.lastTrippy.objId && N.dir !== this.lastTrippy.dir && N.t0 - this.lastTrippy.t < 1.6 && N.laps >= 0.5) {
       N.switched = true; this.emit({ name: 'Trippy Switch', exec: 'CLEAN', clean: 95, obstacle: N.pole, toks: [], live: true }); this.lastTrippy = null;
@@ -1378,7 +1389,12 @@ class StreamDetector extends TrickDetector {
     const base = trickPoints(L.name) * L.laps / 2;                           // TPW values are for two laps
     for (const k of this.toks) if (k.t1 > L.t0 && k.t0 < L.t1) k.usedUntil = Math.max(k.usedUntil, k.t1);
     for (const sg of this.orbSegs) if (sg.t1 > L.t0 - 0.3 && sg.t0 < L.t1 + 0.3) this.claimUsed.add(sg.id);
-    this.emit({ name: L.name, exec: 'CLEAN', clean: 92, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, toks: [], live: true, draft: true });
+    // how tidy: an even circle at an even pace, holding the view, is clean; egg shapes, surging and losing the view are sloppy
+    let clean = 92, notes = []; const ob = L.ob;
+    if (L.name === 'Trippy Spin x2' && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
+      clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60));
+      if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); }
+    this.emit({ name: L.name, exec: clean < 70 ? 'SLOPPY' : 'CLEAN', clean, notes, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, toks: [], live: true, draft: true });
     if (reason === 'reverse' && L.name !== 'Orbit x2') this.lastTrippy = { objId: L.objId, dir: L.dir, t: this.time };
   }
   liveState() {
@@ -1388,7 +1404,8 @@ class StreamDetector extends TrickDetector {
     return out;
   }
   endOrbit(P, ob, reason) {
-    if (ob && ob.acc > 270) { for (const k of this.toks) if (k.t0 >= ob.t0 - 0.3 && k.t0 <= ob.t1) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c && c.t0 >= ob.t0 - 0.3) c.usedUntil = this.time; }   // rotation during an orbit is the orbit's, not a separate roll
+    const c0 = ob && ob.poseT0 != null ? ob.poseT0 - 0.1 : ob ? ob.t0 - 0.3 : 0;
+    if (ob && ob.acc > 270) { for (const k of this.toks) if (k.t0 >= c0 && k.t0 <= ob.t1) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c && c.t0 >= c0 + 0.3 - 0.3) c.usedUntil = this.time; }   // rotation during an orbit is the orbit's, not a separate roll
     if (this.live && this.live.ob === ob) this.finishLive(reason);
     if (ob.acc < 250 || !ob.n) return;
     this.orbSegs.push({ obj: P.id, name: P.name, dir: ob.dir, acc: ob.acc, t0: ob.t0, t1: ob.t1, inv: ob.inv / ob.n, view: ob.view / ob.n, top: ob.top / ob.n, roll: ob.roll, id: 'orb' + P.id + '@' + ob.t0.toFixed(2) });
@@ -1447,7 +1464,7 @@ class StreamDetector extends TrickDetector {
     const h0 = hd(W[0]), h1 = hd(W[W.length - 1]); let d = Math.abs(h1 - h0) * R2D; if (d > 180) d = 360 - d; return d; }
   maxTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => Math.acos(clamp(x.up.y, -1, 1)) * R2D)) : 0; }
   maxSideTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => { const r = cross(x.f, x.up); return Math.asin(clamp(Math.abs(r.y), 0, 1)) * R2D; })) : 0; }
-  orbiting() { return Object.values(this.orb).some(o => o && o.acc > 150); }
+  orbiting() { return Object.values(this.orb).some(o => o && o.acc > 150 && (this.orbSpan(o) > 60 || o.oAcc > 150 || (o.flips || 0) >= 2)); }
   tapIn(spec, obj, a, b) {
     return this.taps.find(x => !this.claimUsed.has(x.id) && x.t >= a && x.t <= b && (obj == null || x.obj === obj) &&
       (!spec.face || spec.face === 'any' || x.face === spec.face) && (!spec.surface || spec.surface === 'any' || x.surface === spec.surface)) || null;

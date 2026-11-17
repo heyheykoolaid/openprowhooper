@@ -123,6 +123,24 @@ run('flagpole trippy, real: r 4.5 m, 35/s, uneven speed', flagReal(4.5, 4, 0.05,
 run('flagpole trippy, real: r 2 m low, 70/s, watching the top', flagReal(2, 1.5, 0, 70, 95, 0.3), ['Trippy Spin x2']);
 run('flagpole trippy, real: r 6 m, 30/s', flagReal(6, 5, 0.1, 30, 110, 0.4), ['Trippy Spin x2']);
 run('banked lap round the flagpole (upright, not a trippy)', flagReal(3, 3, 0, 90, 50, 0), []);
+// 6d. trippy entries, exits, size and shape (pilot): an upright lap in before rolling into it, flying well away upright
+// afterwards while still near the pole, big and egg-shaped/uneven orbits (those score SLOPPY), and a flip straight into one
+function trip(o) { const { R = 3, y = 4, rate = 60, laps = 2.1, pre = 0, post = 0, ecc = 0, wig = 0, flip = 0, c = FP } = o, w = rate * D;
+  const Tf = flip ? 360 / flip : 0, Tpre = pre * 2 * P / w, Ttr = laps * 2 * P / w, Tpost = post * 2 * P / w, T = Tf + Tpre + Ttr + Tpost;
+  const sgn = (f, toP) => { const sg = S.qrot(qmul(f, rollQ(90 * D)), v3(0, 1, 0)); return sg.x * toP.x + sg.z * toP.z > 0 ? 1 : -1; };
+  return { T: T + 1.5, at: t => { const tt = Math.min(t, T), u = Math.max(0, tt - Tf), a = w * (u + wig * Math.sin(u * 1.7) / 1.7), r = R * (1 + ecc * Math.cos(2 * a)) ;
+    const pos = v3(c.x + r * Math.cos(a), y, c.z + r * Math.sin(a)), toP = v3(-Math.cos(a), 0, -Math.sin(a)), tang = v3(-Math.sin(a), 0, Math.cos(a)), f = faceQ(tang), sg = sgn(f, toP);
+    if (tt < Tf) return { pos, q: qmul(f, pitchQ(2 * P * tt / Tf)) };                                   // a flip on the way in
+    const inPose = u >= Tpre && u <= Tpre + Ttr, k = inPose ? Math.min(1, (u - Tpre) / 0.3, (Tpre + Ttr - u) / 0.3 + 0.001) : 0;   // roll in / out over 0.3 s
+    return { pos, q: qmul(f, rollQ(sg * (25 + 80 * k) * D)) }; } }; }
+const names = ev => ev.map(e => e.name + (e.exec === 'SLOPPY' ? ' (sloppy)' : ''));
+function runX(name, path, want) { const ev = M.detect(path, W, 30), got = names(ev), ok = JSON.stringify(got) === JSON.stringify(want); total++; if (ok) pass++;
+  console.log(`${ok ? '✓' : '✗'} ${name.padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want ' + want.join(' | ')}`); }
+runX('trippy: upright 3/4 lap in, 2 laps, upright 3/4 lap out', trip({ pre: 0.75, post: 0.75 }), ['Trippy Spin x2']);
+runX('trippy: big 6.3 m orbit of the flagpole, drifting out to 6.9', trip({ R: 6.3, rate: 35, y: 5, ecc: 0.09 }), ['Trippy Spin x2']);
+runX('trippy: egg-shaped orbit, uneven speed (sloppy)', trip({ R: 3.5, ecc: 0.4, wig: 0.6 }), ['Trippy Spin x2 (sloppy)']);
+runX('flip straight into a trippy (combo)', trip({ flip: 520, R: 2.5, rate: 80, y: 5 }), ['Flip', 'Trippy Spin x2']);
+runX('one upright lap, half a lap rolled over (no trippy)', trip({ pre: 1.0, laps: 0.5, post: 0.6 }), []);
 // 6c. jump ropes only on real over/under bars (pilot: they triggered on other objects): sideways over a bench and back,
 // and sideways over the swing bar twice (no pass under), are not jump ropes
 { const side = (x0, z0, y, dz, T) => at([{ T, f: t => ({ pos: v3(x0, y, z0 + dz * Math.cos(2 * Math.PI * t / T)), q: faceQ(v3(1, 0, 0)) }) }, hold(v3(x0, y, z0 + dz), faceQ(v3(1, 0, 0)), 1.5)]);
