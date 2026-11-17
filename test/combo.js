@@ -17,8 +17,8 @@ const F=(dir=1)=>['P',800*dir,0.45], Rl=(dir=1)=>['R',900*dir,0.4], Yw=['Y',700,
 run('flip, roll (0.3s gap)', seq([F(),gap(0.3),Rl()]),3,['Flip','Roll']);
 run('flip, roll (0.05s gap)', seq([F(),gap(0.05),Rl()]),3,['Flip','Roll']);
 run('roll, flip, roll, yaw (0.15s gaps)', seq([Rl(),gap(0.15),F(-1),gap(0.15),Rl(-1),gap(0.15),Yw]),4,['Roll','Flip','Roll','Yaw Spin']);
-run("rubik's then flip (0.1s)", seq([['R',900,0.2],F(),['R',900,0.2],gap(0.1),F()]),4,["Rubik's Cube",'Flip']);
-run("flip then rubik's (0.1s)", seq([F(),gap(0.1),['R',900,0.2],F(),['R',900,0.2]]),4,['Flip',"Rubik's Cube"]);
+run("cubik's then flip (0.1s)", seq([['R',900,0.2],F(),['R',900,0.2],gap(0.1),F()]),4,["Cubik's Rube",'Flip']);
+run("flip then cubik's (0.1s)", seq([F(),gap(0.1),['R',900,0.2],F(),['R',900,0.2]]),4,['Flip',"Cubik's Rube"]);
 run('juicy flick, invert rewind', seq([['P',-800,0.225],['R',900,0.2],gap(0.15),['R',900,0.2],['R',-900,0.2]]),4,['Juicy Flick','Invert Rewind']);
 run('double flip vs flip+flip(0.3s)', seq([F(),gap(0.3),F()]),3,['Flip','Flip']);
 run('double flip (no pause)', seq([['P',800,0.9]]),3,['Double Flip']);

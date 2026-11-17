@@ -2,7 +2,7 @@
 const { execFileSync } = require('child_process'); const path = require('path');
 const run = (f, args = []) => { try { return execFileSync('node', [path.join(__dirname, f), ...args], { encoding: 'utf8' }); } catch (e) { return (e.stdout || '') + (e.stderr || ''); } };
 const checks = [
-  ['single tricks', () => { const o = run('t3.js'); const want = ['Flip', 'Flip', 'Roll', 'Double Roll', "Rubik's Cube", 'Yaw Spin', 'Invert Rewind', 'Inverted Yaw Spin', 'Segmented Flips/Rolls', 'Juicy Flick', 'Flip', 'Powerloop', 'Power Roll', 'Split-S', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Flip', 'Flip', 'Roll', 'Double Flip', 'Double Roll', 'Yaw Spin'];
+  ['single tricks', () => { const o = run('t3.js'); const want = ['Flip', 'Flip', 'Roll', 'Double Roll', "Cubik's Rube", 'Yaw Spin', 'Invert Rewind', 'Inverted Yaw Spin', 'Segmented Flips/Rolls', 'Juicy Flick', 'Flip', 'Powerloop', 'Power Roll', 'Split-S', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Flip', 'Flip', 'Roll', 'Double Flip', 'Double Roll', 'Yaw Spin', 'Invert Rewind', 'Invert Rewind', 'Vanny Roll', "Rubik's Cube", "Cubik's Rube", 'Juicy Flick', 'Inverted Yaw Spin'];
       const got = o.trim().split('\n').map(l => (l.split('-> ')[1] || '').split(' [')[0]); return want.every((w, i) => got[i] === w) ? null : 'got: ' + got.join(', '); }],
   ['obstacle timing', () => { const o = run('t4.js'); return /fake matty[^\n]*Flip \[/.test(o) && (o.match(/Powerloop \[CLEAN/g) || []).length === 3 && /matty flip \(forward[^\n]*Matty Flip/.test(o) ? null : o; }],
   ['fast combos', () => { const o = run('combo.js'); return /12\/12 combos correct/.test(o) ? null : o; }],

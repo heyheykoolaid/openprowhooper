@@ -766,8 +766,9 @@ const OBSTACLE_TRICKS = [
   { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' },
 ];
 const OPEN_TRICKS = [
-  { name: "Rubik's Cube", pats: ['Ra180 P*360 Ra180'] },
-  { name: "Cubik's Rube", pats: ['Pa180 R*360 Pa180'] },
+  // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
+  { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180'] },
+  { name: "Cubik's Rube", pats: ['Ra180 P*360 Ra180'] },
   { name: 'Inverted Yaw Spin', pats: ['Pa180 Y*360i Pa180', 'Ra180 Y*360i Ra180', 'Pa180 Y*360i R*180', 'Ra180 Y*360i P*180'] },
   { name: 'Vanny Roll', pats: ['Ya180 R*360 Ya180'] },
   { name: 'Double Flip', pats: ['P*720'] },
@@ -1536,7 +1537,7 @@ class StreamDetector extends TrickDetector {
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?
     if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
     const pLast = p.toks[p.toks.length - 1]; if (!pLast) return false;
-    const live = this.cur.filter(c => c && c.raw >= 45 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < 0.45);
+    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < 0.45);
     if (!live.length) return false;
     const near = this.crossWindow(p.t0).some(c => c.kind !== 'G');   // obstacle tricks only once a pass has happened
     const N0 = this.normalized(), pool = near ? [...OPEN_TRICKS, ...OBSTACLE_TRICKS.filter(x => !x.tap)] : OPEN_TRICKS;
