@@ -459,7 +459,14 @@ function flash(text, cls = '') { const el = document.createElement('div'); el.cl
 // A combo runs while you keep doing tricks; it banks after COMBO_IDLE s with no trick or rotation; a crash bails it.
 const COMBO_IDLE = 2.0;
 const combo = { names: [], pts: 0, lastT: 0, active: false };
-function comboAdd(r) { combo.names.push((r.laps ? `${r.name.replace(' x2', '')} ×${r.laps}` : r.name) + (r.exec !== 'CLEAN' ? ` (${r.exec.toLowerCase()})` : '')); combo.pts += r.net; combo.lastT = performance.now() / 1000; combo.active = true; renderCombo(); }
+// loops chain like combo trippies: the same loop on the same object again and again shows as one entry, ×N (each one still
+// scores by the TPW calculator, repeats included)
+const CHAIN = new Set(['Powerloop', 'Maverick Loop', 'Matty Flip', 'Beginner Matty', 'Split-S', 'Jump Rope', 'Anti Matty', 'Power Flip', 'Immelmann Turn']);
+function comboAdd(r) {
+  const last = combo.chain, now = performance.now() / 1000;
+  if (CHAIN.has(r.name) && last && last.name === r.name && last.obstacle === (r.obstacle || null) && now - last.t < 3.5) { last.n++; last.t = now; combo.names[combo.names.length - 1] = `${r.name} ×${last.n}`; }
+  else { combo.names.push((r.laps ? `${r.name.replace(' x2', '')} ×${r.laps}` : r.name) + (r.exec !== 'CLEAN' ? ` (${r.exec.toLowerCase()})` : '')); combo.chain = CHAIN.has(r.name) ? { name: r.name, obstacle: r.obstacle || null, n: 1, t: now } : null; }
+  combo.pts += r.net; combo.lastT = performance.now() / 1000; combo.active = true; renderCombo(); }
 function comboEnd(bailed) {
   if (!combo.active) return;
   const el = $('#comboBank'); const n = combo.names.length;
@@ -554,7 +561,10 @@ function frame(now) {
   if (mode === 'menu') {
     const t = now / 1000 * 0.08; chaseCam.position.set(Math.sin(t) * 16, 5 + Math.sin(t * 1.7) * 1.5, Math.cos(t) * 16); chaseCam.lookAt(0, 1.5, -3); cam = chaseCam;
   } else if (mode === 'judge' && judge.cam === 'spectator' && judge.camPos) {
-    cam = chaseCam; chaseCam.position.set(judge.camPos.x, judge.camPos.y, judge.camPos.z);
+    // drag to orbit round the flight, wheel to zoom (double-click resets)
+    const o = judge.orb || (judge.orb = { yaw: 0, pitch: 0, zoom: 1 }), C = judge.look, v = S.sub(judge.camPos, C), r = Math.hypot(v.x, v.y, v.z) * o.zoom;
+    const yaw0 = Math.atan2(v.x, v.z) + o.yaw, pit = Math.max(-0.2, Math.min(1.45, Math.asin(Math.max(-1, Math.min(1, v.y / (Math.hypot(v.x, v.y, v.z) || 1)))) + o.pitch));
+    cam = chaseCam; chaseCam.position.set(C.x + Math.sin(yaw0) * Math.cos(pit) * r, Math.max(0.15, C.y + Math.sin(pit) * r), C.z + Math.cos(yaw0) * Math.cos(pit) * r);
     const tgt = new THREE.Vector3(drone.pos.x, drone.pos.y, drone.pos.z); judge.lookS = judge.lookS ? judge.lookS.lerp(tgt, 1 - Math.exp(-dt * 5)) : tgt.clone();
     chaseCam.lookAt(judge.lookS);
   } else if ((mode === 'judge' ? judge.cam : camMode) === 'fpv') {
@@ -819,7 +829,7 @@ function stopJudge() { judgeUpload(); $('#judgeBox').classList.add('hide'); trai
 function judgeNext() {
   judge.name = judge.want === 'random' ? MV.tricks[Math.floor(Math.random() * MV.tricks.length)] : judge.want;
   judge.seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
-  judge.m = MV.make(judge.name, world, judge.seed);
+  judge.m = MV.make(judge.name, world, judge.seed, { human: true });   // real whoops wander: drift, bob, uneven speed
   judge.events = MV.detect(judge.m, world, tune.camTilt);
   judge.t = 0; judge.phase = 'watch'; trailClear();
   // spectator spot: beside the flight path, looking across it, like a pilot watching line-of-sight
@@ -830,7 +840,7 @@ function judgeNext() {
   const spread = Math.sqrt(Math.max(sxx, szz) / pts.length), dist = Math.max(3.2, spread * 1.7 + 2.4);
   const ys = pts.map(p => p.y), ymid = Math.max(1.6, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.4);
   judge.camPos = [1, -1].map(sg => S.v3(C.x + perp.x * dist * sg, ymid, C.z + perp.z * dist * sg)).sort((a, b) => clearance(b) - clearance(a))[0];
-  judge.look = C; judge.lookS = null; renderJudge();
+  judge.look = C; judge.lookS = null; judge.orb = judge.keepOrb ? judge.orb : null; renderJudge();
 }
 function judgeStep(dt) {
   const m = judge.m; if (!m) return;
@@ -841,6 +851,12 @@ function judgeStep(dt) {
   droneMesh.scale.setScalar(judge.cam === 'fpv' ? 1 : 2.5);   // a 65 mm whoop is a speck from the spectator spot
 }
 function judgeReplay() { judge.t = 0; trailClear(); }
+canvas.addEventListener('mousedown', e => { if (mode !== 'judge' || judge.cam !== 'spectator') return; judge.drag = { x: e.clientX, y: e.clientY }; });
+addEventListener('mousemove', e => { if (mode !== 'judge' || !judge.drag) return; const o = judge.orb || (judge.orb = { yaw: 0, pitch: 0, zoom: 1 });
+  o.yaw -= (e.clientX - judge.drag.x) * 0.008; o.pitch += (e.clientY - judge.drag.y) * 0.006; judge.drag = { x: e.clientX, y: e.clientY }; judge.keepOrb = true; });
+addEventListener('mouseup', () => { judge.drag = null; });
+canvas.addEventListener('wheel', e => { if (mode !== 'judge') return; e.preventDefault(); const o = judge.orb || (judge.orb = { yaw: 0, pitch: 0, zoom: 1 }); o.zoom = Math.max(0.25, Math.min(4, o.zoom * Math.exp(e.deltaY * 0.0012))); judge.keepOrb = true; }, { passive: false });
+canvas.addEventListener('dblclick', () => { if (mode === 'judge') { judge.orb = null; judge.keepOrb = false; } });
 function judgeVerdict(v) {
   if (judge.phase !== 'ask') return;
   const det = judge.events.map(e => e.name), detOK = det.length === 1 && det[0] === judge.name, valid = v !== 'wrong';

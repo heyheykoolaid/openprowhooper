@@ -879,7 +879,12 @@ class TrickDetector {
             const fwdDot = (fh > 0.2 && vh > 0.8) ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;
             const rr = d.right(), rh = Math.hypot(rr.x, rr.z);
             const latDot = (rh > 0.2 && vh > 0.8) ? Math.abs(rr.x * d.vel.x + rr.z * d.vel.z) / (rh * vh) : 0; // 1 = flying sideways
-            this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
+            // dithering back and forth across the line (floaty loop tops, a wobbly hover over a bar) isn't a pass: the
+            // same kind of crossing straight back within 0.25 s cancels the one before
+            let li = -1; for (let i = this.crossLog.length - 1; i >= 0; i--) if (this.crossLog[i].obj === o.id) { li = i; break; }
+            const L = li >= 0 ? this.crossLog[li] : null;
+            if (L && L.kind === kind && t - L.t < 0.25 && !L.used) { this.crossLog.splice(li, 1); this.nCross = Math.min(this.nCross ?? 0, this.crossLog.length); }
+            else this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
           }
         }
       }
@@ -1686,9 +1691,9 @@ class StreamDetector extends TrickDetector {
   loopInProgress(p, t) {   // open-air rotation done at the top of a loop (under, then over the same object): wait for the way back
     if (p.part || !p.toks.length || t - p.tDone > 3.0) return false;
     const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O'); const last = X[X.length - 1];
-    if (!last || last.kind !== 'O' || t - last.t > 3.0) return false;
+    if (!last || last.kind !== 'O' || t - last.t > 3.6) return false;
     if (last.latDot > 0.6 && last.t > p.t0 - 0.6) return true;   // jump-rope peak (sideways over): wait for the way back down (Double Dutch)
-    if (p.t0 > last.t - 0.4 && t - last.t < 2.6) return true;     // Matty family: rotation after going over, the pass back under follows
+    if (p.t0 > last.t - 0.4 && t - last.t < 3.2) return true;     // Matty family: rotation after going over, the pass back under follows (slow, floaty ones take ~3 s)
     return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
   }
   // in the air between two segments: nothing rotating yet, but the rotations so far are the start of a longer open-air

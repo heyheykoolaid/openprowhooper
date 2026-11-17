@@ -288,6 +288,19 @@
       return { pos: t < Ta ? sub(pass, mul(h, v * (Ta - t))) : pos, q: qmul(face, qmul(pitchQ(P * ease(u / Tp)), rollQ(rs * P * ease((u - Tp) / Tr)))) };
     } };
   } };
+  // a real whoop doesn't hold a rigid line: slow drift sideways, a little altitude bob, speed that surges and sags, and
+  // extra attitude wobble. Applied on top of any maneuver (Judge the Bot uses it; stress --human tests it).
+  function humanize(m, r, amt = 1) {
+    if (!m) return m;
+    const ph = () => range(r, 0, 2 * P), f1 = range(r, 0.25, 0.6), f2 = range(r, 0.15, 0.4), fb = range(r, 0.7, 1.6), fw = range(r, 0.3, 0.8);
+    const p1 = ph(), p2 = ph(), pb = ph(), pw = ph(), ax = range(r, 0.08, 0.22) * amt, az = range(r, 0.08, 0.22) * amt, ab = range(r, 0.03, 0.07) * amt, aw = range(r, 0.06, 0.14) * amt;
+    const wob = wobble(r, 12 * amt), wf = 2 * P * fw;
+    const warp = t => t + aw / wf * (Math.sin(wf * t + pw) - Math.sin(pw));     // speed varies ±aw
+    const fade = t => Math.min(1, t / 0.6, Math.max(0, (m.T - t) / 0.6));   // starts and ends where the trick says
+    return { ...m, human: true, at: t => { const s = m.at(Math.max(0, Math.min(m.T, warp(t)))), k = fade(t);
+      const d = v3(ax * Math.sin(2 * P * f1 * t + p1) * k, ab * Math.sin(2 * P * fb * t + pb) * k, az * Math.sin(2 * P * f2 * t + p2) * k);
+      return { pos: add(s.pos, d), q: qmul(s.q, wob(t)) }; } };
+  }
   // fly a scripted maneuver through a fresh detector (500 Hz, body rates from attitude differences) -> detected events
   function detect(m, world, camTilt) {
     const det = new S.TrickDetector(world); if (camTilt != null) det.camTilt = camTilt;
@@ -313,5 +326,5 @@
     Object.defineProperty(got, 'det', { value: det });   // for inspecting the Watcher's reviews
     return got;
   }
-  root.Maneuvers = { _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { return LIB[name](world, rng(seed), opts); } finally { TILT_Q = ID; } }, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
+  root.Maneuvers = { _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = LIB[name](world, rng(seed), opts); return opts.human ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; } finally { TILT_Q = ID; } }, humanize, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
 })(typeof window !== 'undefined' ? window : globalThis);
