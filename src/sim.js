@@ -1326,13 +1326,16 @@ class StreamDetector extends TrickDetector {
       if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
       if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0 }; continue; }
       let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
-      if (Math.abs(da) / dt < 25 * D2R) { ob.still += dt; if (ob.still > 0.6 && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
+      // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
+      // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
+      if (Math.abs(da) / dt < Math.min(25 * D2R, 0.8 / Math.max(dist, 0.5))) { ob.still += dt; if (ob.still > 1.0 && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
       ob.still = 0; const sg = Math.sign(da);
       if (!ob.dir) { ob.dir = sg; ob.t0 = t; }
       if (sg === ob.dir) {
-        ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < -0.15) ob.inv++;   // trippies lean hard into the pole: upside down is enough
+        ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
         const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)); if (vi.ang < 55) ob.view++;
-        if ([-3, -2, -1, 1, 2, 3].some(dy => { const vt = this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)); return vt.top && vt.ang < 70; })) ob.top++;   // pole held in the top half of the screen
+        { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
+          if (ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < 75; })) ob.top++; }   // pole held in the top half of the screen
         ob.roll += rates[0] * dt;
         const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
       } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0 }; } }

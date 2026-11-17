@@ -110,6 +110,19 @@ run('flagpole trippy (r 2.0 m, 3 m up, 150/s)', flagTrippy(2.0, 3, 45, 150), ['T
 run('flagpole trippy (r 3.5 m, 5 m up, 110/s)', flagTrippy(3.5, 5, 50, 110), ['Trippy Spin x2']);
 run('flagpole trippy (r 5.0 m, 6 m up, 80/s)', flagTrippy(5.0, 6, 55, 80), ['Trippy Spin x2']);
 run('flagpole trippy (r 1.5 m, 8 m up, 200/s)', flagTrippy(1.5, 8, 30, 200), ['Trippy Spin x2']);
+// 6b. flagpole trippies as they're really flown (pilot: still not detected): slow wide laps (30-60 deg/s, uneven, with
+// near-stops), rolled just past knife-edge with the belly away from the pole rather than fully inverted, flying along the
+// circle, sinking down the pole or watching its top from low down
+function flagReal(R, y0, sink, rate, rollDeg, uneven, laps = 2.1) { const w = rate * D, ang = t => w * (t + uneven * Math.sin(t * 1.3) / 1.3), T = laps * 2 * P / w;
+  return { T: T + 1.5, at: t => { const tt = Math.min(t, T), a = ang(tt), pos = v3(FP.x + R * Math.cos(a), Math.max(0.6, y0 - sink * tt), FP.z + R * Math.sin(a));
+    const toP = v3(-Math.cos(a), 0, -Math.sin(a)), tang = v3(-Math.sin(a), 0, Math.cos(a)), f = faceQ(tang);
+    const sg = S.qrot(qmul(f, rollQ(90 * D)), v3(0, 1, 0)), sgn = sg.x * toP.x + sg.z * toP.z > 0 ? 1 : -1;
+    return { pos, q: qmul(f, rollQ(sgn * rollDeg * D)) }; } }; }
+run('flagpole trippy, real: r 3 m, 45/s, knife-edge+10, sinking', flagReal(3, 7, 0.25, 45, 100, 0), ['Trippy Spin x2']);
+run('flagpole trippy, real: r 4.5 m, 35/s, uneven speed', flagReal(4.5, 4, 0.05, 35, 105, 0.7), ['Trippy Spin x2']);
+run('flagpole trippy, real: r 2 m low, 70/s, watching the top', flagReal(2, 1.5, 0, 70, 95, 0.3), ['Trippy Spin x2']);
+run('flagpole trippy, real: r 6 m, 30/s', flagReal(6, 5, 0.1, 30, 110, 0.4), ['Trippy Spin x2']);
+run('banked lap round the flagpole (upright, not a trippy)', flagReal(3, 3, 0, 90, 50, 0), []);
 // 7. half matty at the pilot's rates: toward the swing bar, roll ~160-180 (optionally a short stall), then the second half
 // of a Matty (pitch ~150-200, the end floaty), passing under the bar flying backward
 function halfMatty(rollDeg, stall, pitchDeg, slowTail) {
