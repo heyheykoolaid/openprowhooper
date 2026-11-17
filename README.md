@@ -10,8 +10,23 @@ A browser-based tiny-whoop FPV freestyle sim where tricks are scored like Tony H
 - **Live trick recognition** — all 90 tricks in the TPW library have rules (49 tested, 41 draft); combos lock in ~140 ms.
 - **TPW scoring** — execution (Clean/Sloppy/Bump/Crash), repeats, back-to-back, obstacle repeats, Trick of the Week,
   streak, obstacle-switch bonus, K.W.A.D. letters.
-- **Dev tools** — Trick Calibration checklist (5 reps per trick, rounds), Pause & Ask mode, flight recorder,
-  Blackbox Lab (USB log download over Web Serial), opt-in uploads of calibration data and Blackbox logs to this repo.
+- **The Watcher** — a second live judge: every call is cross-checked against the path, what the camera saw (with your
+  camera tilt), your sticks and throttle, and demo timing scaled to your speed; calls that break a trick's TPW
+  description are vetoed. Air between trick segments is allowed (up to 1 s, 1.5 s hanging inverted).
+- **RaceGOW tracks** — build tracks from white 24-inch PVC gates (gates, arches, ladders, hurdles, flag gates, cubes,
+  pylons, invisible gates) in a living room, garage, warehouse or the playground with Velocidrone-style tools (move /
+  rotate / scale, snaps, numeric input, multi-select, clone, undo, gate order, reset points, checks, paint-a-path,
+  ortho view, fly test). Race them: **Infinite** (best 3 consecutive clean laps, live ghosts), hot lap, or a fixed-lap
+  race from a countdown; export, import and upload tracks, times and ghosts.
+- **Blackbox Replay** — load a Betaflight `.bbl` and watch the flight: attitude from the gyro, a plausible path from
+  eRPM thrust, the real sticks on screen, trick detection on it, and your labels for training. The decoder (`src/bbl.js`)
+  matches orangebox value for value.
+- **Video Review** — measure an FPV clip's motion in the browser, confirm/correct the detector's calls; full player
+  controls, stop/resume measuring, estimated stick overlay and a ghost quad.
+- **Dev tools** — Trick Calibration checklist (5 reps per trick, rounds), Pause & Ask mode, flight recorder, Judge the
+  Bot (orbit/zoom camera, humanized bot flights), Blackbox Lab (USB log download over Web Serial), opt-in uploads of
+  calibration data and Blackbox logs to this repo, and one benchmark over every labelled source (`npm run bench`,
+  docs/DATA.md).
 
 ## Play
 
@@ -29,6 +44,8 @@ embedded previews.
 npm test                    # node test/all.js — trick recognition, combos, false-positive sweeps, replay fixtures
 node test/replay.js <file>  # replay a calibration session / rep file through the current detector
 node test/calibrate.js <file> [trick]   # per-rep measurements and disagreements
+npm run bench               # detector benchmark over every labelled source (calibration, demos, judge, video, blackbox, bot)
+node test/stress.js 40 --tilt=30 --human=1 --air=0.6 --slow=1.3   # randomised bot flights, pilot-like conditions
 ```
 
 ## Layout
@@ -36,7 +53,12 @@ node test/calibrate.js <file> [trick]   # per-rep measurements and disagreements
 | Path | What |
 |---|---|
 | `src/sim.js` | Simulation core (no rendering): parts, physics, flight controller, map, trick detector, scoring |
-| `src/game.js` | Renderer, HUD, menus, input, music, training/calibration, Blackbox Lab, GitHub sync |
+| `src/game.js` | Renderer, HUD, menus, input, music, training/calibration, Blackbox Lab, Video Review, Judge the Bot, GitHub sync |
+| `src/race.js` | RaceGOW gates, rooms, tracks, race rules, ghosts (pure, tested by `test/race.js`) |
+| `src/editor.js` | Track editor and race HUD (same module as game.js) |
+| `src/bbl.js`, `src/bbreplay.js` | Betaflight blackbox decoder; Blackbox Replay mode |
+| `src/maneuvers.js`, `src/vision.js` | The bot's scripted trick flights; FPV video motion tracker |
+| `tools/unify.js` | Every labelled source as one kind of episode, for the benchmark |
 | `src/tricks.js` | Trick list and points from the TPW calculator |
 | `src/index.template.html` | Page shell + styles |
 | `assets/music/` | Soundtrack (main theme: "Ghostrider" by awesometexture2251) |
