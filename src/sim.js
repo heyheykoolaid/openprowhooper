@@ -1161,6 +1161,9 @@ class TrickDetector {
 // immediately; it locks in after a short hold unless a longer/better trick extends it (Flip → Rubik's,
 // Flip → Powerloop), or the closing obstacle pass is still on its way. Tricks claim *time slices* of
 // rotations, so one continuous rotation can feed several tricks (chained powerloops).
+// Tricktionary demo (Segmented Flips/Rolls GIF, real-time via OSD timer): pauses of ~0.23 s (flip) and ~0.27 s (roll)
+// between the two 180s. The written rule says 0.5 s; the demo is how it's actually flown.
+const SEG_GAP = 0.18;
 const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
 function rawAt(tok, tt) { const tl = tok.tl; if (!tl || !tl.length) return tt <= tok.t0 ? 0 : tok.raw; if (tt <= tl[0][0]) return 0; if (tt >= tok.t1) return tok.raw;
   let i = 0; while (i < tl.length - 1 && tl[i + 1][0] < tt) i++; const p = tl[i], q = tl[i + 1] || [tok.t1, tok.raw]; return q[0] > p[0] ? p[1] + (q[1] - p[1]) * (tt - p[0]) / (q[0] - p[0]) : p[1]; }
@@ -1440,7 +1443,8 @@ class StreamDetector extends TrickDetector {
     for (const a of L) {
       const l = out[out.length - 1], gap = l ? a.t0 - l.t1 : 99;
       const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25);   // throttle-cut float over the top of a loop
-      if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
+      const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55;   // 180 · pause · 180 = Segmented, keep apart
+      if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && !segPause && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
         out[out.length - 1] = { ...l, raw: l.raw + a.raw, t1: a.t1, n: l.n + a.n, inv: l.inv + a.inv, off: l.off + a.off, rateSum: l.rateSum + a.rateSum, rateSq: l.rateSq + a.rateSq,
           maxGap: Math.max(l.maxGap || 0, gap), segments: (l.segments || 1) + 1, spans: [...l.spans, ...a.spans], base: null };
       } else out.push({ ...a, maxGap: a.maxGap || 0, segments: 1 });
@@ -1458,7 +1462,7 @@ class StreamDetector extends TrickDetector {
       const suf = N.slice(-k);
       if (!obstOnly) {
         if (k === 2 && suf[0].ax === suf[1].ax && suf[0].dir === suf[1].dir && suf[0].ax !== 'Y' && Math.abs(suf[0].raw - 180) < 55 && Math.abs(suf[1].raw - 180) < 55) {
-          const gap = suf[1].t0 - suf[0].t1; if (gap >= 0.42 && gap < 1.6) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
+          const gap = suf[1].t0 - suf[0].t1; if (gap >= SEG_GAP && gap < 1.6) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
         }
         // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
         const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? 250 : 180));

@@ -45,3 +45,13 @@ run('split-S (swing)', t=>{ const v=5;
   const s=(t-1.4)-Math.PI*1.0/v; return {pos:S.v3(1,1.2,-8+s*v), q:S.qmul(base,S.qaxis(X,Math.PI)), w:S.v3()}; }, 4);
 run('segmented flip', seq([['P',800,0.225],['P',0,0.55],['P',800,0.225]]),5);
 run('short stall flip', seq([['P',800,0.2],['P',0,0.25],['P',800,0.25]]),5);
+// Tricktionary demo timings (Segmented Flips/Rolls GIF, real time from the OSD clock)
+run('demo segmented roll', seq([['R',900,0.2],['R',0,0.27],['R',900,0.2]]),5);
+run('demo segmented flip', seq([['P',850,0.21],['P',0,0.23],['P',850,0.21]]),5);
+run('hesitant flip 0.1s', seq([['P',800,0.2],['P',0,0.1],['P',800,0.25]]),5);
+// Tricktionary demo rates: flip ~0.4 s, roll ~0.36 s, double flip ~0.85 s, yaw spin ~1 s
+run('demo flip', seq([['P',-900,0.4]]),5);
+run('demo roll', seq([['R',1000,0.36]]),5);
+run('demo double flip', seq([['P',850,0.85]]),5);
+run('demo double roll', seq([['R',760,0.95]]),5);
+run('demo yaw spin', seq([['Y',360,1.0]]),5);
