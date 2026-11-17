@@ -1425,7 +1425,10 @@ class StreamDetector extends TrickDetector {
   }
   finishLive(reason) {
     const L = this.live; this.live = null; if (!L) return;
-    const d = this.lastD; if (!d || d.crashed || !d.armed) return;            // bailed: nothing banks
+    // Pilot: completed laps were flown clean, so they score even if the run ends in a crash; only the lap in progress
+    // is lost (the same as finished loops and tricks before a crash, which always counted).
+    const d = this.lastD; if (!d) return; const bailed = d.crashed || !d.armed;
+    if (bailed) L.laps = Math.floor(L.laps);
     if (L.laps < 1) return;                                                  // under one lap doesn't count
     const base = trickPoints(L.name) * L.laps / 2;                           // TPW values are for two laps
     for (const k of this.toks) if (k.t1 > L.t0 && k.t0 < L.t1) k.usedUntil = Math.max(k.usedUntil, k.t1);
@@ -1435,6 +1438,7 @@ class StreamDetector extends TrickDetector {
     if (L.name === 'Trippy Spin x2' && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
       clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60));
       if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); }
+    if (bailed) notes.push('completed laps kept');
     this.emit({ name: L.name, exec: clean < 70 ? 'SLOPPY' : 'CLEAN', clean, notes, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, toks: [], live: true, draft: true });
     if (reason === 'reverse' && L.name !== 'Orbit x2') this.lastTrippy = { objId: L.objId, dir: L.dir, t: this.time };
   }

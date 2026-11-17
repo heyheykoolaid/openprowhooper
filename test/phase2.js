@@ -76,13 +76,13 @@ run('eject roll', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(
 run('reverse knife edge (wall slot)', t=>{ const x=-17.5-t*1.5; let q=basisQ(v3(-1,0,0),Y); q=qmul(q,qaxis(X,Math.PI*Math.min(1,t/0.4)));  q=qmul(q,qaxis(v3(0,0,-1),Math.PI/2*Math.min(1,Math.max(0,(t-0.45)/0.25))));
   return {pos:v3(x,1.1,4),q}; }, 2.2, ['Reverse Knife Edge']);
 run('facepunch', t=>({pos:v3(2.6,1.66,13.4+ Math.max(0,1-t)*2),q:basisQ(v3(0,0,1),Y),contact:(t>1&&t<1.002)?{n:v3(0,0,-1),owner:id('Pilot'),impact:2}:null}), 2, ['Facepunch']);
-// live counting: points grow every half lap while orbiting, and a crash mid-orbit loses them
+// live counting: points grow every half lap while orbiting; a crash mid-orbit keeps the completed laps, loses the rest
 if(!ONLY || 'live'.includes(ONLY)){ const det=new S.TrickDetector(W); const d=Object.create(S.Drone.prototype); d.armed=true; d.crashed=false; const g=orbit(3,true); let pq=null,pp=null; const seen=[]; const got=[];
   for(let t=0;t<4.5;t+=0.001){ const s=g(t); let q=s.q; if(pq&&(q.w*pq.w+q.x*pq.x+q.y*pq.y+q.z*pq.z)<0) q={w:-q.w,x:-q.x,y:-q.y,z:-q.z}; let w=v3(); if(pq){const dq={w:(q.w-pq.w)/0.001,x:(q.x-pq.x)/0.001,y:(q.y-pq.y)/0.001,z:(q.z-pq.z)/0.001}; const r=qmul({w:q.w,x:-q.x,y:-q.y,z:-q.z},dq); w=v3(2*r.x,2*r.y,2*r.z);}
     d.vel=pp?mul(sub(s.pos,pp),1000):v3(); pp=s.pos; pq=q; d.pos=s.pos; d.q=q; d.w=w; d.contactThisStep=false; if(t>4.2) { d.crashed=true; d.armed=false; }
-    det.update(d,0.001); const ls=det.liveState()[0]; if(ls && (!seen.length || seen[seen.length-1]!==ls.laps)) seen.push(ls.laps); for(const e of det.drain()) got.push(e.name); }
-  const ok = seen.length>=4 && !got.some(n=>n.startsWith('Trippy Spin')) && got.includes('Crash'); total++; if(ok) pass++;
-  console.log(`${ok?'PASS':'FAIL'} live trippy counter, crash at the end   -> laps seen live ${seen.join(' → ')} · banked: ${got.filter(n=>n!=='Crash').join(', ')||'nothing (bailed)'}`); }
+    det.update(d,0.001); const ls=det.liveState()[0]; if(ls && (!seen.length || seen[seen.length-1]!==ls.laps)) seen.push(ls.laps); for(const e of det.drain()) got.push(e.name + (e.laps ? ' ×' + e.laps : '')); }
+  const tr = got.find(n=>n.startsWith('Trippy Spin')), ok = seen.length>=4 && !!tr && /×[12]$/.test(tr) && got.indexOf(tr) < got.indexOf('Crash') && got.includes('Crash'); total++; if(ok) pass++;
+  console.log(`${ok?'PASS':'FAIL'} live trippy counter, crash at the end   -> laps seen live ${seen.join(' → ')} · banked before the crash: ${got.filter(n=>n!=='Crash').join(', ')||'nothing'}`); }
 console.log(`\n${pass}/${total} phase-2 flights correct`);
 // orbit the whole slide tower (4 posts) and a single swing-set leg
 const ST=v3(-8,0,2);

@@ -134,6 +134,8 @@ feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRip
 ## Confirmed by the pilot
 - Matty Flip: over the object → ~360° forward flip → finish upright, facing the object, flying backward under it.
 - Powerloops go inverted over the top; Maverick loops stay upright and forward-looking the whole way.
+- Trippy Spin / Orbit laps: whole laps completed before a crash or disarm still score (`finishLive`); only the lap in
+  progress is lost.
 - Slide Disarm (TPW, 200): disarm on the move, slide across the ground or any object's surface (at least 0.75 m),
   re-arm before it stops (0.6 s grace) and fly away. The slide keeps a combo alive (`busy()`); test/slide.js flies it
   with the real physics. A whoop stops quickly: about 3 m of slide from 8 m/s.
