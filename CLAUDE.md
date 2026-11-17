@@ -149,6 +149,14 @@ never flicker against it. Menus: Maps (a list) and Tools & labs are their own sc
 from the pilot's design doc: the
 bowl is ringed by a raised deck because the ground plane cannot be dug into, and rubber feels the same as concrete.
 
+**The Trick Park** (`trickPark` in maps.js; west of both maps: playground from x = -21, school from x = -34, each about
+32 x 42 m): a test ground with one clean example of each kind of object and room round it, every name giving its size
+(the "what counted" list reads like a lab sheet): an over/under lane of Test Bars at 1.0 / 1.6 / 2.2 / 3.0 m, Gap Gates
+0.7 / 1.1 / 1.6 m, an Open Air Box with nothing above it, lone Test Poles (thick 0.18 m, medium 0.07, thin 0.035) and a
+Figure-8 Pole pair, a Ceiling Slab 2.3 m, a Test Wall 3 m (16 m long) and a Dive Tower 14 m. The playground's park is in
+`addPlaygroundExtras` (the Node tests' base map is unchanged); its skyline skips that area and the sun's shadow box
+reaches it. The bot flies Powerloops, Mattys and Split-S on the test bars correctly on both maps (27/27 each).
+
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of
 approach direction: (1) a tagged object that is really a slab (at least 0.6 m both ways within its over/under band) gets

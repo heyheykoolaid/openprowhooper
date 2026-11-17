@@ -30,6 +30,43 @@
     pipe(pl, v3(PX, 1.74, PZ + 0.02), v3(PX, 1.8, PZ + 0.02), 0.115, 'hoodie', { noCollide: true });
   }
 
+  // =============================================================== The Trick Park (on both maps)
+  // A test ground for the tricks and their detection, one clean example of each kind of object with room round it, so a
+  // pilot (or the data) can tell exactly what was flown: an over/under lane of four bars at known heights, a big empty
+  // box for open-air tricks, lone poles of three thicknesses and a pair for figure-8s, gap gates of three widths, a
+  // ceiling slab to tap, a long smooth wall to ride and a tall tower to dive. Every name says its size, so the
+  // "what counted" list (Z) reads like a lab sheet. It is built outward from the map's edge at x = X0, away from the map
+  // (dir -1 = towards -x). M = the map's materials.
+  function trickPark(K, X0, Z0, dir, M) {
+    const { O, box, pipe } = K, X = lx => X0 + dir * lx, Zw = lz => Z0 + lz, n = v3(-dir, 0, 0);
+    const mark = (o, c, h) => box(o, c, h, M.accent, 0, 0, 0, { noCollide: true, glow: M.glow });
+    // the over/under lane: bars 2.6 m wide, across the lane, at 1.0 / 1.6 / 2.2 / 3.0 m
+    [[4, 1.0], [10, 1.6], [16, 2.2], [22, 3.0]].forEach(([lx, h]) => { const x = X(lx), za = Zw(-13.3), zb = Zw(-10.7), r = 0.04;
+      const o = O(`Test Bar ${h.toFixed(1)} m`, 'overunder', { obstacle: { a: v3(x, 0, za), b: v3(x, 0, zb), under: h - r, over: h + r } });
+      for (const z of [za, zb]) pipe(o, v3(x, 0, z), v3(x, h, z), 0.035, M.post); pipe(o, v3(x, h, za), v3(x, h, zb), r, M.bar);
+      mark(o, v3(x, 0.006, Zw(-12)), v3(0.03, 0.004, 1.3)); });
+    // gap gates of three widths along the lane's far side
+    [[6, 0.7, 1.0], [12, 1.1, 1.4], [18, 1.6, 1.9]].forEach(([lx, w, hh]) => { const x = X(lx), z = Zw(-19), o = O(`Gap Gate ${w.toFixed(1)} m`, 'overunder'), t = 0.05;
+      for (const s of [-1, 1]) box(o, v3(x, hh / 2, z + s * (w / 2 + t)), v3(t, hh / 2, t), M.post); box(o, v3(x, hh + t, z), v3(t, t, w / 2 + 2 * t), M.bar);
+      o.obstacle = { a: v3(x, 0, z - w / 2), b: v3(x, 0, z + w / 2), under: hh, over: hh + 2 * t };
+      O(`Gap Gate ${w.toFixed(1)} m opening`, 'gap', { gap: { c: v3(x, hh / 2, z), n: v3(1, 0, 0), hu: w / 2, hv: hh / 2, u: v3(0, 0, 1) } }); });
+    // the open-air box: nothing above it, low corner markers only
+    { const o = O('Open Air Box', 'deco'); for (const [a, b] of [[2, -4], [20, -4], [2, 8], [20, 8]]) { box(o, v3(X(a), 0.15, Zw(b)), v3(0.12, 0.15, 0.12), M.accent); }
+      mark(o, v3(X(11), 0.006, Zw(-4)), v3(9, 0.004, 0.03)); mark(o, v3(X(11), 0.006, Zw(8)), v3(9, 0.004, 0.03)); }
+    // lone poles: a trunk, a lamp-post size, a flagpole size, and a pair 2.4 m apart for figure-8s
+    [[5, 0.18, 4.0, 'Test Pole thick'], [11, 0.07, 3.6, 'Test Pole medium'], [17, 0.035, 5.0, 'Test Pole thin']].forEach(([lx, r, h, name]) => { const o = O(name, 'pole'); pipe(o, v3(X(lx), 0, Zw(14)), v3(X(lx), h, Zw(14)), r, M.pole); mark(o, v3(X(lx), 0.006, Zw(14)), v3(r + 0.25, 0.004, r + 0.25)); });
+    for (const lz of [12.8, 15.2]) { const o = O('Figure-8 Pole', 'pole'); pipe(o, v3(X(23), 0, Zw(lz)), v3(X(23), 3.2, Zw(lz)), 0.06, M.pole); }
+    // a ceiling to tap: a 3 x 3 m slab 2.3 m up on four posts
+    { const o = O('Ceiling Slab 2.3 m', 'overunder', { obstacle: { a: v3(X(23.5), 0, Zw(0)), b: v3(X(26.5), 0, Zw(0)), under: 2.25, over: 2.35 } }), cx = X(25), cz = Zw(2);
+      box(o, v3(cx, 2.3, cz), v3(1.5, 0.05, 1.5), M.slab); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pipe(o, v3(cx + a * 1.45, 0, cz + b * 1.45), v3(cx + a * 1.45, 2.25, cz + b * 1.45), 0.04, M.post);
+      mark(o, v3(cx, 2.244, cz), v3(1.2, 0.004, 1.2)); }
+    // the far end: a long smooth wall to ride (3 m tall, 16 m long) and a 14 m tower to dive beside
+    { const o = O('Test Wall 3 m', 'wall', { wallNormal: n }); box(o, v3(X(30), 1.5, Zw(-10)), v3(0.2, 1.5, 8), M.wall); mark(o, v3(X(30) + n.x * 0.21, 2.99, Zw(-10)), v3(0.006, 0.02, 8)); }
+    { const o = O('Dive Tower 14 m', 'building', { wallNormal: n, tall: 14 }); box(o, v3(X(31), 7, Zw(6)), v3(2, 7, 2.5), M.tower);
+      for (let y = 2; y < 14; y += 2) mark(o, v3(X(31) + n.x * 2.01, y, Zw(6)), v3(0.006, 0.02, 2.5)); }
+    return { zone: { shape: 'zone', mat: M.zone, c: v3(X(16), 0.007, Zw(0)), h: v3(16, 0, 21) } };
+  }
+
   // =============================================================== Abandoned Vaporwave School
   // A school complex round a courtyard, a little oversized for a whoop, under a permanent pink sunset. x east, z south.
   //   Entrance plaza (south, z 12..31): chrome pillar grid, planters and gap frames, floating acrylic, stairs.
@@ -187,14 +224,16 @@
     for (const [x, z, h] of [[-21, -11, 3.8], [-22, 11.5, 2.4]]) { const o = O('Broken Column', 'pole'); box(o, v3(x, 0.12, z), v3(0.42, 0.12, 0.42), 'marble'); pipe(o, v3(x, 0.24, z), v3(x, h, z), 0.24, 'marble'); }
     { const o = O('Fallen Column', 'deco'); pipe(o, v3(-23.5, 0.34, 13.5), v3(-20.2, 0.34, 15), 0.34, 'marble'); }
 
+    const park = trickPark(K, -34, -1, -1, { post: 'chrome', bar: 'chrome', pole: 'marble', slab: 'vLav', wall: 'vMint', tower: 'vLav', accent: 'neonYellow', glow: true, zone: 'vChromeFloor' });
     const zones = [
+      park.zone,
       { shape: 'zone', mat: 'vPlaza', c: v3(0, 0.006, 21.6), h: v3(16.4, 0, 9.5) },
       { shape: 'zone', mat: 'vRubberFloor', c: v3(0, 0.008, 0), h: v3(9, 0, 9) },
       { shape: 'zone', mat: 'vChromeFloor', c: v3(0, 0.006, -24), h: v3(18, 0, 8) },
       { shape: 'zone', mat: 'vChromeFloor', c: v3(25, 0.006, -1), h: v3(5, 0, 11) },
       { shape: 'zone', mat: 'vPlaza', c: v3(-25, 0.006, -1), h: v3(4.6, 0, 11) },
     ];
-    return K.done({ id: 'school', title: 'the vaporwave school', theme: 'vapor', zones, spawn: { pos: v3(0, 0.03, 29.4), yaw: 0 }, bounds: { x: [-34, 34], z: [-36, 34] } });
+    return K.done({ id: 'school', title: 'the vaporwave school', theme: 'vapor', zones, spawn: { pos: v3(0, 0.03, 29.4), yaw: 0 }, bounds: { x: [-68, 34], z: [-36, 34] } });
   }
 
   // =============================================================== The Playground, filled out
@@ -261,12 +300,15 @@
     // count as its own object). It slopes, so it is tagged in two steps: the high end by the deck, and the middle.
     for (const [x0, x1, un, ov] of [[-7.25, -6.55, 1.0, 1.62], [-6.55, -5.8, 0.62, 1.28]]) O('Slide', 'overunder', { obstacle: { a: v3(x0, 0, 2), b: v3(x1, 0, 2), under: un, over: ov } });
     w.zones.push({ shape: 'zone', mat: 'concrete', c: v3(10.6, 0.011, 15.2), h: v3(6.6, 0, 4.4) });
+    // the Trick Park, west of the playground (open ground there: no fence)
+    w.zones.push(trickPark(K, -21, 0, -1, { post: 'galv', bar: 'paintRed', pole: 'galv', slab: 'metalPlate', wall: 'concrete', tower: 'brick', accent: 'plasticYellow', glow: false, zone: 'concrete' }).zone);
+    w.bounds = { x: [-55, 18], z: [-22, 20] };
     const all = []; for (const o of w.objs) for (const p of o.prims) { p.owner = o.id; all.push(p); } w.prims = all; return w;
   }
 
   S.MAPS = {
-    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing.', build: () => S.surveyObstacles(buildSchool()) },
-    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold and more.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
+    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => S.surveyObstacles(buildSchool()) },
+    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
   };
   S.buildSchool = buildSchool;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -250,7 +250,7 @@ function buildScene() {
   // lights
   playRoot.add(new THREE.HemisphereLight(0xa9c0e0, 0x5a4532, 0.9));
   const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.set(-30, 22, 18); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; sh.left = -32; sh.right = 32; sh.top = 32; sh.bottom = -32; sh.near = 1; sh.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+  sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; sh.left = -56; sh.right = 32; sh.top = 32; sh.bottom = -32; sh.near = 1; sh.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
@@ -288,6 +288,7 @@ function buildScene() {
   for (let i = 0; i < 26; i++) {
     const ang = rnd() * Math.PI * 2, R = 55 + rnd() * 35, w = 6 + rnd() * 14, h = 8 + rnd() * 30;
     const x = Math.cos(ang) * R, z = Math.sin(ang) * R; if (z < -20 && Math.abs(x) < 18) continue;
+    if (x - w / 2 < -12 && x + w / 2 > -62 && Math.abs(z) < 28 + w / 2) continue;   // keep the Trick Park (west) clear
     const m = new THREE.Mesh(boxGeo(new THREE.Vector3(w / 2, h / 2, w / 2), 0.08), sk); m.position.set(x, h / 2, z); playRoot.add(m);
   }
   // power lines
