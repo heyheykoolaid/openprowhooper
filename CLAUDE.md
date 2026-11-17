@@ -139,7 +139,7 @@ switches and reloads. A map is `{ objs, prims, zones, spawn, id, title, theme }`
 map built with the kit in maps.js gets trick detection. `theme: 'vapor'` selects the sunset sky, grid floor, chrome
 reflections and neon in worldview.js (`vaporMats`, `vaporBackdrop`); neon strips are `glow` pieces with no collision.
 In the game the playground is `buildPlayground()` plus `addPlaygroundExtras` (skate corner, scaffold tower, plywood tunnel
-and wall, bollard run, sign gantry, fire escapes, roof pieces): a layer on top, so the original map the Node tests and
+and wall, bollard run, sign gantry without its old hanging planks, fire escapes, roof pieces): a layer on top, so the original map the Node tests and
 the bot fly is byte-for-byte unchanged. Put new playground objects in that layer, not in `buildPlayground()`.
 Trick Calibration and Judge the Bot stay on the playground (they name its objects), and so do the Node tests and the
 bot's stress flights; `test/school.js` covers the school. Shared flights record their map and `tools/flights.js`

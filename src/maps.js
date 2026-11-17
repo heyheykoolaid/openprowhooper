@@ -282,13 +282,13 @@
     // ---- bollard run (east): painted steel posts of different heights to weave and figure-8
     { const o = O('Bollard', 'pole'), cols = ['paintRed', 'paintBlue', 'paintGreen', 'paintOrange', 'plasticYellow'];
       [[14.6, -6.4, 1.6], [13.5, -4.4, 2.4], [15.4, -2.6, 1.3], [14.0, 0.6, 2.8], [15.6, 2.4, 1.9], [13.8, 4.2, 1.5]].forEach(([x, z, h], i) => { pipe(o, v3(x, 0, z), v3(x, h, z), 0.07, cols[i % 5]); pipe(o, v3(x, h, z), v3(x, h + 0.02, z), 0.09, 'plasticYellow', { noCollide: true }); }); }
-    // ---- sign gantry (south of the cones): two posts and a truss, with two planks hanging at different heights
+    // ---- sign gantry (south of the cones): two posts and a truss, (its hanging planks were removed at the pilot's request)
     { const o = O('Sign Gantry', 'overunder', { obstacle: { a: v3(-7.2, 0, 7.2), b: v3(-3.2, 0, 7.2), under: 3.05, over: 3.45 } }), z = 7.2;
       for (const x of [-7.2, -3.2]) { pipe(o, v3(x, 0, z), v3(x, 3.4, z), 0.05, 'galv'); box(o, v3(x, 0.03, z), v3(0.18, 0.03, 0.18), 'metalPlate'); }
       pipe(o, v3(-7.2, 3.4, z), v3(-3.2, 3.4, z), 0.04, 'galv'); pipe(o, v3(-7.2, 3.1, z), v3(-3.2, 3.1, z), 0.03, 'galv');
       for (let i = 0; i < 8; i++) pipe(o, v3(-7.2 + i * 0.5, 3.1 + (i % 2) * 0.3, z), v3(-6.7 + i * 0.5, 3.4 - (i % 2) * 0.3, z), 0.012, 'galv', { noCollide: true });
       box(o, v3(-5.2, 2.72, z), v3(1.1, 0.3, 0.015), 'paintOrange', 0, 0, 0, { noCollide: true });
-      for (const [x, y] of [[-6.3, 1.25], [-4.2, 1.95]]) { const h = O('Hanging Plank', 'overunder', { obstacle: { a: v3(x - 0.45, 0, z), b: v3(x + 0.45, 0, z), under: y - 0.025, over: y + 0.025 } }); box(h, v3(x, y, z), v3(0.45, 0.02, 0.12), 'wood'); for (const s of [-1, 1]) pipe(h, v3(x + s * 0.4, y, z), v3(x + s * 0.4, 3.07, z), 0.006, 'chain'); } }
+    }   // (the two hanging planks that were here were taken out at the pilot's request)
     // ---- up high: fire-escape landings on the building's east end, and things to play with on the roof
     for (const [y, x0, x1] of [[4.6, 13.7, 15.8], [9.4, 13.7, 15.8]]) { const z = -21.45, o = O('Fire Escape', 'overunder', { obstacle: { a: v3(x0, 0, z), b: v3(x1, 0, z), under: y - 0.03, over: y + 0.03 } });
       box(o, v3((x0 + x1) / 2, y, z), v3((x1 - x0) / 2, 0.025, 0.55), 'metalPlate'); stripe(o, v3((x0 + x1) / 2, y + 0.027, z + 0.53), v3((x1 - x0) / 2, 0.003, 0.02));
