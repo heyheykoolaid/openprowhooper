@@ -50,4 +50,14 @@ for (const preset of ['Air65 3D', '75mm 2S 3D']) {
 }
 { const a = S.buildDrone(S.PRESETS['Air65 Racing']), b = S.buildDrone(S.PRESETS['Air65 3D']); check('ordinary props push about half as hard backward; 3D props about the same', a.revEff < 0.65 && b.revEff > 0.9); }
 { const { d } = make('Air65 Racing', 'acro'); run(d, { thr: 0, roll: 0, pitch: 0, yaw: 0 }, 0.4); check('outside 3D mode the motors never turn backward', d.motorW.every(w => w >= 0)); }
+// ---- Advanced: radio link delay and Betaflight-style stick smoothing (off by default)
+{ const resp = extra => { const { d, P, tune } = make('Air65 Racing', 'acro'); Object.assign(tune, extra); const hov = P.stats.hoverThrottle; run(d, { thr: hov, roll: 0, pitch: 0, yaw: 0 }, 0.3);
+    const want = S.applyRate(0.5, tune.rates.roll, tune.ratesType); let first = null, t63 = null, peak = 0, late = 0;
+    run(d, t => ({ thr: hov, roll: Math.min(1, t / 0.06) * 0.5, pitch: 0, yaw: 0 }), 0.5, t => { const r = d.pilotRates()[0]; peak = Math.max(peak, r); if (first == null && r > 3) first = t; if (t63 == null && r >= 0.63 * want) t63 = t; if (t > 0.3) late = Math.max(late, Math.abs(r - want)); });
+    return { first: first * 1000, t63: t63 * 1000, over: (peak / want - 1) * 100, late }; };
+  const ideal = resp({}), real = resp({ rcLinkHz: 250, rcDelayMs: 12, rcSmooth: 'auto', rcSmoothFactor: 30 }), slow = resp({ rcLinkHz: 50, rcDelayMs: 25, rcSmooth: 'auto' }), raw = resp({ rcLinkHz: 150, rcDelayMs: 10, rcSmooth: 'off' });
+  check('link delay: nothing happens until the first packet has arrived', real.first >= 12 && real.first > ideal.first + 8, `ideal ${ideal.first.toFixed(0)} ms, 250 Hz link ${real.first.toFixed(0)} ms`);
+  check('a real link makes the response later and rounder, and it still settles on the commanded rate', real.t63 > ideal.t63 + 10 && real.late < 12 && real.over <= ideal.over + 3, `63% at ${ideal.t63.toFixed(0)} -> ${real.t63.toFixed(0)} ms, overshoot ${ideal.over.toFixed(0)} -> ${real.over.toFixed(0)}%`);
+  check('a slow link with its heavier auto smoothing is later still', slow.t63 > real.t63 + 15 && slow.late < 12, `${slow.t63.toFixed(0)} ms`);
+  check('smoothing off flies too (steps from the packets, no blow-up)', raw.late < 15 && raw.over < 40, `overshoot ${raw.over.toFixed(0)}%`); }
 console.log(`\n${ok}/${n} mode and 2S checks`); if (ok !== n) process.exitCode = 1;

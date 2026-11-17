@@ -209,6 +209,12 @@ not a crash, and arming is allowed with the throttle low or centred (`thrArmOk`)
 2 angle, 3 3D; the OSD shows the mode. test/modes.js flies all of it with the real physics. The default 1S physics is
 unchanged (same hash).
 
+## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
+Off by default (the sticks reach the FC instantly: crisper than a real quad; a pilot found identical Betaflight rates
+"harsh"). `tune.rcLinkHz` sends the sticks in packets, `tune.rcDelayMs` delays them, `tune.rcSmooth` is `sim` (40 Hz
+PT1, the default), `off`, or `auto` (Betaflight's rule: PT3 at link rate × 1.5 / (1 + `rcSmoothFactor`/10)). "Real
+radio feel" sets 250 Hz, 12 ms, auto 30. Defaults leave the physics hash unchanged; test/modes.js covers the options.
+
 ## Learning from reviews (src/sim.js `learnFromLabels`, src/recap.js `learnRun`)
 When a review is saved, the game re-flies the labelled stretches of that run and of the last five reviewed runs on the
 same map (`Sim.replayTrace`, now in sim.js and shared with the Node tools; the trace carries attitude, position — so

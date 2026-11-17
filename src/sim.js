@@ -249,6 +249,7 @@ class FlightController {
     this.i = [0, 0, 0]; this.gf = [0, 0, 0]; this.dPrev = [0, 0, 0]; this.dF = [0, 0, 0];
     this.spPrev = [0, 0, 0]; this.spF = [0, 0, 0]; this.spLp = [0, 0, 0]; this.ffF = [0, 0, 0];
     this.out = [0, 0, 0, 0]; this.sp = [0, 0, 0]; this.pidSum = [0, 0, 0];
+    this.link = null; this.sp3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];   // radio link model and Betaflight-style smoothing state
     this.dir3d = 1; this.wait3d = true;   // 3D mode: no reverse until the throttle stick has been to the middle
   }
   // rc: {thr 0..1, roll,pitch,yaw -1..1}; gyro: pilot-axis rates deg/s
@@ -260,7 +261,22 @@ class FlightController {
   update(rc, gyro, dt, armed, att) {
     const t = this.tune, axes = ['roll', 'pitch', 'yaw'], fm = t.flightMode || 'acro';
     this.reversible = fm === '3d';
+    // Advanced (off by default): the radio link. A real link sends the sticks in packets (rcLinkHz a second) and they
+    // arrive a little late (rcDelayMs: radio + receiver + the flight controller's own delay); between packets the
+    // flight controller only has the last one. With both at 0 the sticks reach the controller instantly, every step.
+    const LHz = +t.rcLinkHz || 0, LD = (+t.rcDelayMs || 0) / 1000;
+    if (LHz > 0 || LD > 0) {
+      const L = this.link || (this.link = { t: 0, acc: 1e9, q: [], out: [rc.thr, rc.roll, rc.pitch, rc.yaw] });
+      L.t += dt; L.acc += dt;
+      if (LHz <= 0 || L.acc >= 1 / LHz) { L.acc = LHz > 0 ? (L.acc >= 2 / LHz ? 0 : L.acc - 1 / LHz) : 0; L.q.push([L.t, rc.thr, rc.roll, rc.pitch, rc.yaw]); if (L.q.length > 400) L.q.shift(); }   // a packet leaves the radio
+      while (L.q.length && L.q[0][0] <= L.t - LD) { const k = L.q.shift(); L.out = [k[1], k[2], k[3], k[4]]; }                                                 // …and arrives
+      rc = { thr: L.out[0], roll: L.out[1], pitch: L.out[2], yaw: L.out[3] };
+    } else if (this.link) this.link = null;
     const stick = [rc.roll, rc.pitch, rc.yaw];
+    // Stick smoothing: 'sim' (the default: one gentle 40 Hz filter), 'off' (the packets' steps go straight in), or 'auto':
+    // Betaflight's own rule, a third-order filter whose cutoff follows the link rate (cutoff = rate x 1.5 / (1 + factor/10),
+    // factor 30 as stock: 56 Hz on a 150 Hz link, 19 Hz on a 50 Hz one), which is what makes a real quad feel rounder.
+    const smooth = t.rcSmooth || 'sim', autoCut = smooth === 'auto' ? Math.max(5, (LHz > 0 ? LHz : 150) * 1.5 / (1 + (t.rcSmoothFactor ?? 30) / 10)) : 0;
     const lpa = (fc) => 1 - Math.exp(-2 * Math.PI * fc * dt);
     for (let k = 0; k < 3; k++) {
       const name = axes[k];
@@ -268,7 +284,9 @@ class FlightController {
       let sp = applyRate(stick[k], t.rates[name], t.ratesType);
       if (k === 1) sp = -sp;
       if (fm === 'angle' && att && k < 2) { const lim = t.angleLimit ?? 55, want = (k === 1 ? -stick[k] : stick[k]) * lim; sp = clamp((want - att[k]) * (t.angleStrength ?? 6), -600, 600); }
-      this.spF[k] += (sp - this.spF[k]) * lpa(40);            // RC smoothing
+      if (smooth === 'auto') { const a = lpa(autoCut * 1.961), S3 = this.sp3[k]; S3[0] += (sp - S3[0]) * a; S3[1] += (S3[0] - S3[1]) * a; S3[2] += (S3[1] - S3[2]) * a; this.spF[k] = S3[2]; }   // PT3
+      else if (smooth === 'off') this.spF[k] = sp;
+      else this.spF[k] += (sp - this.spF[k]) * lpa(40);            // RC smoothing
       this.sp[k] = this.spF[k];
       this.gf[k] += (gyro[k] - this.gf[k]) * lpa(180);          // gyro LPF
       const pid = t.pid[name];

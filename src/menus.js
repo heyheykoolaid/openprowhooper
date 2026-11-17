@@ -98,6 +98,14 @@ function renderGarage() {
       <label class="chk"><input type=checkbox data-tb="airmode" ${tune.airmode ? 'checked' : ''}> Airmode</label>
       <label class="chk"><input type=checkbox data-tb="itermRelax" ${tune.itermRelax ? 'checked' : ''}> I-term relax</label>
     </div>
+    <details class="gAdv" ${tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim') ? 'open' : ''}><summary>Advanced: radio link and stick smoothing</summary>
+      <p class="note">By default your sticks reach the flight controller instantly, which is crisper than any real quad. These add what a real radio link does. Try "Real radio feel" if the sim feels harsher than your quad on the same rates.</p>
+      <label>Radio link rate<select id="gLinkHz">${[[0, 'ideal (no packets)'], [50, '50 Hz'], [100, '100 Hz'], [150, '150 Hz'], [250, '250 Hz'], [333, '333 Hz'], [500, '500 Hz'], [1000, '1000 Hz']].map(([v, l]) => `<option value="${v}" ${(+tune.rcLinkHz || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>Link delay (ms)<input type=number min=0 max=80 step=1 data-t="rcDelayMs" value="${+tune.rcDelayMs || 0}"></label>
+      <label>Stick smoothing<select id="gRcSmooth">${[['sim', 'sim default (light)'], ['off', 'off'], ['auto', 'Betaflight auto']].map(([v, l]) => `<option value="${v}" ${(tune.rcSmooth || 'sim') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>Auto smoothing factor<input type=number min=0 max=250 step=5 data-t="rcSmoothFactor" value="${tune.rcSmoothFactor ?? 30}" ${tune.rcSmooth === 'auto' ? '' : 'disabled'}></label>
+      <div class="row"><button id="gLinkReal">Real radio feel</button><button id="gLinkIdeal" class="ghost">Back to ideal</button></div>
+    </details>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
   drawRateCurve(); garagePreviewRefresh();
@@ -113,6 +121,9 @@ function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tun
 // Whole builds, named and kept like rate profiles: the five parts and the colours.
 const myBuilds = () => { const a = store.get('builds', []); return Array.isArray(a) ? a.filter(b => b && typeof b.name === 'string' && b.spec && S.PARTS.frames[b.spec.frame] && S.PARTS.motors[b.spec.motor] && S.PARTS.props[b.spec.prop] && S.PARTS.batteries[b.spec.battery] && S.PARTS.electronics[b.spec.electronics]) : []; };
 document.addEventListener('click', e => {
+  // a typical ExpressLRS 250 Hz link: packets 250 times a second, about 12 ms from stick to flight controller, Betaflight's stock auto smoothing
+  if (e.target.id === 'gLinkReal') { Object.assign(tune, { rcLinkHz: 250, rcDelayMs: 12, rcSmooth: 'auto', rcSmoothFactor: 30 }); saveTune(); renderGarage(); }
+  if (e.target.id === 'gLinkIdeal') { Object.assign(tune, { rcLinkHz: 0, rcDelayMs: 0, rcSmooth: 'sim', rcSmoothFactor: 30 }); saveTune(); renderGarage(); }
   if (e.target.id === 'gBuildSave') { const name = String($('#gBuildName').value || '').replace(/[<>"&]/g, '').trim().slice(0, 30); if (!name) { $('#gBuildName').focus(); return; }
     const all = myBuilds().filter(b => b.name !== name); all.push({ name, spec: JSON.parse(JSON.stringify(spec)) }); all.sort((a, b) => a.name.localeCompare(b.name)); store.set('builds', all.slice(0, 40)); renderGarage(); }
   if (e.target.id === 'gBuildDel') { const name = $('#gMyBuild').value; if (name) { store.set('builds', myBuilds().filter(b => b.name !== name)); renderGarage(); } }
@@ -156,6 +167,8 @@ document.addEventListener('change', e => {
     if (d) { tune.ratesType = d.ratesType; tune.rates = JSON.parse(JSON.stringify(d.rates)); tune.rateProfile = d.name; saveTune(); renderGarage(); } }
   if (t.dataset.pid) { const [ax, k] = t.dataset.pid.split('.'); tune.pid[ax][k] = +t.value; saveTune(); }
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
+  if (t.id === 'gLinkHz') { tune.rcLinkHz = +t.value; saveTune(); }
+  if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
   if (t.id === 'vol') { store.set('vol', +t.value); if (window._master) window._master.gain.value = +t.value; }
 });
