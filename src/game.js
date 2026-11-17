@@ -550,6 +550,7 @@ function frame(now) {
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
   if (mode === 'editor') { editorFrame(dt); return; }
+  if (mode === 'bbreplay') brStep(dt);
   if (race.on) raceVisuals(dt);
   if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);
   // drone visual
@@ -619,7 +620,7 @@ document.addEventListener('click', e => {
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') startJudge();
@@ -1650,7 +1651,7 @@ function renderBB() {
     <p class="note">Pick .bbl / .bfl / .bbs files (from Betaflight Configurator, an SD card, or the flash in mass-storage mode) and a diff as .txt.</p>
     <input type="file" id="bbFiles" multiple accept=".bbl,.bfl,.bbs,.txt,.csv">${bb.files.length ? ` <span class="note">${bb.files.map(x => x.name).join(', ')}</span>` : ''}
     ${questionnaire()}
-    <div class="row"><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button>
+    <div class="row"><button id="bbReplayBtn" ${bb.log || bb.files.some(x => /\.(bbl|bfl|bbs)$/i.test(x.name)) ? '' : 'disabled'}>▶ Replay it in the sim</button><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button>
       <button id="bbUpload" ${bb.log || bb.diff || bb.files.length ? '' : 'disabled'}>↑ Upload to GitHub</button><span id="ghStatus" class="ghs"></span></div>
     <p class="note">${gh.bbEnabled && gh.token ? `Uploads go to <code>${gh.owner}/${gh.repo}/blackbox/</code>.` : 'GitHub upload is off — turn on "Upload Blackbox logs" in Options.'} Downloading doesn't erase anything on the quad.</p>`;
   renderGhStatus();
