@@ -622,7 +622,21 @@ class Drone {
     this.reset(world.spawn);
   }
   setParams(params, tune) {
-    this.p = params; this.tune = tune;
+    // Physics feel (Garage → Advanced, FEEL_KEYS; every one 1 by default, and at 1 the physics is exactly as it was). They
+    // scale what the physics sees, never the parts list or the Garage figures:
+    //   weightFeel  mass and rotational inertia (lighter: quicker, floatier; heavier: more momentum, drops harder)
+    //   dragFeel    air drag on the body and the props' sideways drag (more: slows down sooner, less coasting)
+    //   washFeel    prop wash: the shake and thrust loss when descending into your own air (0 = none)
+    //   motorFeel   how fast the motors spin up and down (more = quicker; less = laggier, like heavier props or a
+    //               softer ESC)
+    //   sagFeel     battery voltage sag under load (0 = a perfect battery)
+    //   groundFeel  ground effect: the cushion close above the floor (0 = none)
+    const f = k => Number.isFinite(+tune[k]) ? clamp(+tune[k], FEEL_KEYS[k][0], FEEL_KEYS[k][1]) : 1, F = {}; for (const k in FEEL_KEYS) F[k] = f(k);
+    this.feel = F; const all1 = Object.values(F).every(v => v === 1);
+    this.p = all1 ? params : { ...params, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel, params.I.y * F.weightFeel, params.I.z * F.weightFeel),
+      cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel), rotorDrag: params.rotorDrag * F.dragFeel,
+      rotorJ: params.rotorJ / F.motorFeel, bat: { ...params.bat, r: params.bat.r * F.sagFeel } };
+    this.tune = tune;
     if (!this.fc) this.fc = new FlightController(params, tune); else this.fc.setup(params, tune);
   }
   reset(sp, keepBattery = false) {
@@ -699,9 +713,9 @@ class Drone {
       const turb = clamp(vrs + air.turb, 0, 1.6);
       // filtered noise per motor (~25Hz band)
       this.noise[i] += (this.rng() * 1.7 - this.noise[i]) * (1 - Math.exp(-2 * Math.PI * 25 * dt));
-      T *= (1 - 0.22 * vrs) * (1 + 0.38 * turb * this.noise[i]);
+      { const wf = this.feel ? this.feel.washFeel : 1; T *= (1 - 0.22 * vrs * wf) * (1 + 0.38 * turb * wf * this.noise[i]); }
       // ground effect (Cheeseman-Bennett), only when roughly upright over a surface
-      if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6); T *= clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); }
+      if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6), ge = clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); T *= 1 + (ge - 1) * (this.feel ? this.feel.groundFeel : 1); }
       T = Math.max(0, T); if (sW < 0) T *= -p.revEff;   // spun backward the prop pushes the other way, and (unless it is a 3D prop) not as hard
       this.thrust[i] = T;
       sumW += Math.abs(w);
@@ -880,6 +894,7 @@ function setCommunity(c) { COMMUNITY = cleanCommunity(c); return COMMUNITY; }
 // are compared by dynamic time warping, so a slow floaty version lines up with a snappy one.
 // Live it does two things: votes in the Watcher on every rule call (weight 2), and when the rules call nothing for a move
 // that closely matches examples of a trick, says "maybe <trick>?" (never scored; the pilot confirms it in review).
+const FEEL_KEYS = { weightFeel: [0.5, 1.5], dragFeel: [0.5, 2], washFeel: [0, 2], motorFeel: [0.5, 2], sagFeel: [0, 2], groundFeel: [0, 2] };   // see Drone.setParams
 let LIBRARY = null; const MAYBE_NAMES = new Set();   // filled from OPEN_TRICKS and OBSTACLE_TRICKS below
 const LIB_N = 24, LIB_HZ = 25, LIB_ON = 90, LIB_QUIET = 0.35, LIB_WAIT = 2.5, LIB_THR = 0.3, LIB_GAP = 0.06;
 // up: the up.y of the quad at each sample (from the attitude; when missing, as in a GIF, it is integrated from the rotation
@@ -2709,6 +2724,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

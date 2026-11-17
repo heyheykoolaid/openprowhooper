@@ -215,6 +215,13 @@ Off by default (the sticks reach the FC instantly: crisper than a real quad; a p
 PT1, the default), `off`, or `auto` (Betaflight's rule: PT3 at link rate × 1.5 / (1 + `rcSmoothFactor`/10)). "Real
 radio feel" sets 250 Hz, 12 ms, auto 30. Defaults leave the physics hash unchanged; test/modes.js covers the options.
 
+## Physics feel (Garage → Advanced; `FEEL_KEYS`, `Drone.setParams`)
+Six sliders, all 100% by default (and at 100% the physics is exactly as built from the parts: `d.p === params`):
+`tune.weightFeel` (mass and inertia, 50-150%), `dragFeel` (body cdA and rotor H-drag, 50-200%), `washFeel` (prop wash /
+vortex-ring thrust loss and shake, 0-200%), `motorFeel` (spin-up speed: rotor inertia ÷ it, 50-200%), `sagFeel` (battery
+internal resistance, 0-200%), `groundFeel` (ground-effect cushion, 0-200%). They scale only what the physics sees, never
+the parts or the Garage figures. A pilot found the whoops "heavy". test/modes.js checks each one.
+
 ## Learning from reviews (src/sim.js `learnFromLabels`, src/recap.js `learnRun`)
 When a review is saved, the game re-flies the labelled stretches of that run and of the last five reviewed runs on the
 same map (`Sim.replayTrace`, now in sim.js and shared with the Node tools; the trace carries attitude, position — so

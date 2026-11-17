@@ -1,3 +1,10 @@
+// physics feel sliders (Garage → Advanced): [tune key, name, what it does]
+const FEEL = [['weightFeel', 'Weight', 'Lighter accelerates and stops quicker and floats more; heavier carries more momentum and drops harder'],
+  ['dragFeel', 'Air drag', 'More slows the whoop down sooner and it coasts less; less lets it carry speed'],
+  ['washFeel', 'Prop wash', 'The shake and loss of thrust when you drop into your own air (0% = none)'],
+  ['motorFeel', 'Motor response', 'How quickly the motors spin up and down: lower is laggier, like heavier props or a softer ESC'],
+  ['sagFeel', 'Battery sag', 'How much the pack voltage drops under load and as it empties (0% = a perfect battery)'],
+  ['groundFeel', 'Ground effect', 'The air cushion just above the floor (0% = none)']];
 // ============================================================ menus
 // Maps: the choice is remembered and the page reloads into it. Trick Calibration and Judge the Bot name specific
 // playground objects, so they stay on the playground.
@@ -108,6 +115,11 @@ function renderGarage() {
       <label>Auto smoothing factor<input type=number min=0 max=250 step=5 data-t="rcSmoothFactor" value="${tune.rcSmoothFactor ?? 30}" ${tune.rcSmooth === 'auto' ? '' : 'disabled'}></label>
       <div class="row"><button id="gLinkReal">Real radio feel</button><button id="gLinkIdeal" class="ghost">Back to ideal</button></div>
     </details>
+    <details class="gAdv" ${FEEL.some(([k]) => (tune[k] ?? 1) !== 1) ? 'open' : ''}><summary>Advanced: physics feel</summary>
+      <p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts; these change only how the physics feels, not the parts or the figures above. Drag a slider to try it while you fly next.</p>
+      ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label title="${help}">${name} <b id="gFeelV-${k}">${v}%</b><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
+      <div class="row"><button id="gFeelReset" class="ghost">All back to 100%</button></div>
+    </details>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
   drawRateCurve(); garagePreviewRefresh();
@@ -157,6 +169,8 @@ document.addEventListener('click', e => {
   if (e.target.id === 'gRPDel' && tune.rateProfile) { store.set('rateProfiles', rateProfiles().filter(p => p.name !== tune.rateProfile)); tune.rateProfile = ''; saveTune(); renderGarage(); }
 });
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
+document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.feel; if (k) { const v = $('#gFeelV-' + k); if (v) v.textContent = e.target.value + '%'; } });
+document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; saveTune(); renderGarage(); } });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}), ...(spec.canopy ? { canopy: spec.canopy } : {}) }; applyParts(); }
@@ -171,6 +185,7 @@ document.addEventListener('change', e => {
   if (t.dataset.pid) { const [ax, k] = t.dataset.pid.split('.'); tune.pid[ax][k] = +t.value; saveTune(); }
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
   if (t.id === 'gLinkHz') { tune.rcLinkHz = +t.value; saveTune(); }
+  if (t.dataset.feel) { tune[t.dataset.feel] = +t.value / 100; saveTune(); }
   if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
   if (t.id === 'vol') { store.set('vol', +t.value); if (window._master) window._master.gain.value = +t.value; }

@@ -60,4 +60,20 @@ for (const preset of ['Air65 3D', '75mm 2S 3D']) {
   check('a real link makes the response later and rounder, and it still settles on the commanded rate', real.t63 > ideal.t63 + 10 && real.late < 12 && real.over <= ideal.over + 3, `63% at ${ideal.t63.toFixed(0)} -> ${real.t63.toFixed(0)} ms, overshoot ${ideal.over.toFixed(0)} -> ${real.over.toFixed(0)}%`);
   check('a slow link with its heavier auto smoothing is later still', slow.t63 > real.t63 + 15 && slow.late < 12, `${slow.t63.toFixed(0)} ms`);
   check('smoothing off flies too (steps from the packets, no blow-up)', raw.late < 15 && raw.over < 40, `overshoot ${raw.over.toFixed(0)}%`); }
+// ---- Advanced: weight feel (scales the mass and inertia the physics sees; 1 = unchanged)
+{ const climb = k => { const { d, P, tune } = make('Air65 Racing', 'acro'); tune.weightFeel = k; d.setParams(P, tune); const y0 = d.pos.y; run(d, { thr: 0.7, roll: 0, pitch: 0, yaw: 0 }, 0.5); return d.pos.y - y0; };
+  const spin = k => { const { d, P, tune } = make('Air65 Racing', 'acro'); tune.weightFeel = k; d.setParams(P, tune); run(d, { thr: P.stats.hoverThrottle, roll: 0, pitch: 0, yaw: 0 }, 0.2); let t20 = null; run(d, t => ({ thr: P.stats.hoverThrottle, roll: 1, pitch: 0, yaw: 0 }), 0.3, t => { if (t20 == null && d.pilotRates()[0] > 400) t20 = t; }); return t20; };
+  const c1 = climb(1), cL = climb(0.7), cH = climb(1.3), s1 = spin(1), sL = spin(0.7), sH = spin(1.3);
+  check('weight feel: lighter climbs harder on the same throttle, heavier less', cL > c1 * 1.15 && cH < c1 * 0.9, `${cL.toFixed(2)} / ${c1.toFixed(2)} / ${cH.toFixed(2)} m`);
+  check('…and rolls up to speed sooner (heavier later)', sL <= s1 && sH >= s1, `${(sL * 1000).toFixed(0)} / ${(s1 * 1000).toFixed(0)} / ${(sH * 1000).toFixed(0)} ms`);
+  const { d, P, tune } = make('Air65 Racing', 'acro'); tune.weightFeel = 1; d.setParams(P, tune); check('at 100% the physics sees the very same parts', d.p === P); }
+// ---- the other physics-feel sliders
+{ const fly = (extra, fn) => { const { d, P, tune } = make('Air65 Racing', 'acro'); Object.assign(tune, extra); d.setParams(P, tune); return fn(d, P); };
+  const coast = x => fly({ dragFeel: x }, (d, P) => { d.vel = S.v3(0, 0, -8); run(d, { thr: P.stats.hoverThrottle, roll: 0, pitch: 0, yaw: 0 }, 1.0); return Math.hypot(d.vel.x, d.vel.z); });
+  check('air drag: more drag loses speed sooner, less carries it', coast(2) < coast(1) && coast(0.5) > coast(1), [2, 1, 0.5].map(x => coast(x).toFixed(2)).join(' / ') + ' m/s after 1 s');
+  const spool = x => fly({ motorFeel: x }, (d) => { let t50 = null; run(d, { thr: 0.8, roll: 0, pitch: 0, yaw: 0 }, 0.3, t => { if (t50 == null && d.motorW[0] > 2500) t50 = t; }); return t50; });
+  check('motor response: lower spins the motors up later', spool(0.5) > spool(1) && spool(2) <= spool(1), [0.5, 1, 2].map(x => (spool(x) * 1000).toFixed(1)).join(' / ') + ' ms');
+  const sag = x => fly({ sagFeel: x }, (d) => { let s = 0, n = 0; run(d, { thr: 1, roll: 0, pitch: 0, yaw: 0 }, 0.3, t => { if (t > 0.1) { s += d.vbat; n++; } }); return s / n; });   // averaged: the voltage and the current pull on each other step to step
+  check('battery sag: 0% holds the voltage at full throttle, 200% drops it more', sag(0) > sag(1) && sag(2) < sag(1), [0, 1, 2].map(x => sag(x).toFixed(2)).join(' / ') + ' V');
+  check('junk values are clamped, not trusted', fly({ dragFeel: 99, motorFeel: -3 }, d => d.feel.dragFeel === 2 && d.feel.motorFeel === 0.5)); }
 console.log(`\n${ok}/${n} mode and 2S checks`); if (ok !== n) process.exitCode = 1;
