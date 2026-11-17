@@ -37,3 +37,9 @@
 - **Loop to Matty** (Advanced, cube: 550): through a cube, half powerloop pitching back to see the back gate, then a Matty
   back through the top and out the back. Needs a cube obstacle with per-face gap crossings; pairs with the RaceGOW gate
   work. Indoor variants (Indoor Rubik's Cube through a gate, etc.) belong here too.
+
+## Map objects seen in the Tricktionary demos but missing from the playground
+- Gazebo (Splitback, Split Yaw, Split Stall Matty Rewind demos) — over/under with a roof to look down on.
+- Cube / gate (Loop to Matty, Double Dutch, Reversed Power Flip, Half Mavvy, Matty 360) — also needed for RaceGOW.
+- Car gap (Matty Flip demo), staircase (Stall Flip Rewind), indoor ceiling (Ceiling Tap), a striped pole to jump-rope.
+

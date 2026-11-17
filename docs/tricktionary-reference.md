@@ -164,3 +164,20 @@ Mapping checked on the trick pages (Wall Tap's GIF carries a "Blind Flip" captio
   pass over/under an obstacle.
 - New flights in `test/phase2.js`: Burrito Roll, Double Dutch, 360 Stall Rewind beside the pilot.
 
+## Objects: what the demos fly tricks on (and what changed in the playground)
+
+Across the demos, the objects used most are **trees** (loops, Power*, mavericks, Mattys, Barani, Split-S, pole
+dancing, stall rewinds) and **the pilot** (through the legs: Immelmann, Power Swap, Half Matty; beside: stall rewinds;
+as a pole: Cradle, Side-Lock Rewind, Facepunch). Others: indoor cubes/gates, a play-structure slide, a gazebo,
+a car gap, a chair, fences/walls/garage doors, a hallway ceiling, a staircase, an apartment building.
+
+- Trees are now over/under obstacles from **any** approach direction: within ~3 m the over/under line is aimed across
+  your path through the trunk; under = below the canopy (2.6 m × tree scale), over = above the treetop (5.8 m × scale).
+  They stay poles too (orbits, trippies).
+- The pilot stands with a wide stance; flying between the legs below 0.55 m counts as passing under, above 1.95 m as over.
+- `trickSpots(name, cat)` in `src/sim.js`: which playground objects each trick suits, plus the demo's object; shown in
+  the in-game Tricktionary ("Fly it on: … · demo: …").
+- Not in the playground yet (from the demos): gazebo (Split family), cube / gate (Loop to Matty, indoor variants,
+  Double Dutch, Reversed Power Flip), car gap, staircase, ceiling. See docs/NOTES.md.
+- Tests: `test/demos.js` — tree powerloop and maverick loop from a diagonal approach, Immelmann through the pilot's legs.
+

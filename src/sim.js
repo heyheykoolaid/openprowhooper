@@ -446,12 +446,18 @@ function buildPlayground() {
   for (const [x, z] of [[-2, 0], [-1, 1.5], [0, 3], [1, 4.5]]) { const c = O('Cone', 'deco'); pipe(c, v3(x, 0.02, z), v3(x, 0.35, z), 0.08, 'cone', { cone: true }); }
   for (const [x, z, s] of [[14, 8, 1], [-15, -6, 1.2], [13, -11, 0.9]]) {
     const tr = O('Tree', 'pole');
+    // the Tricktionary's favourite obstacle: loops, Mattys, Split-S and mavericks go under the canopy and over the top.
+    // Round, so the over/under line is re-aimed across the approach direction (see trackCrossings).
+    tr.round = { c: v3(x, 0, z), r: 2.0 * s, under: 2.6 * s, over: 5.8 * s };
+    tr.obstacle = { a: v3(x - 2.0 * s, 0, z), b: v3(x + 2.0 * s, 0, z), under: 2.6 * s, over: 5.8 * s };
     pipe(tr, v3(x, 0, z), v3(x, 3.2 * s, z), 0.16 * s, 'bark');
     ball(tr, v3(x, 4.2 * s, z), 1.5 * s, 'leaves'); ball(tr, v3(x + 0.9 * s, 3.7 * s, z + 0.3), 1.0 * s, 'leaves'); ball(tr, v3(x - 0.7 * s, 3.8 * s, z - 0.6), 1.1 * s, 'leaves');
   }
   // ---- the pilot (you), standing by the spawn with goggles on — fly into the face for a Facepunch
   const pl = O('Pilot', 'pilot'); const PX = 2.6, PZ = 14.2;
-  pipe(pl, v3(PX - 0.1, 0, PZ), v3(PX - 0.1, 0.85, PZ), 0.07, 'jeans'); pipe(pl, v3(PX + 0.1, 0, PZ), v3(PX + 0.1, 0.85, PZ), 0.07, 'jeans');
+  // wide stance (as in the demos): fly between the legs (Immelmann, Power Swap demos) or over the head
+  pipe(pl, v3(PX - 0.36, 0, PZ), v3(PX - 0.1, 0.88, PZ), 0.07, 'jeans'); pipe(pl, v3(PX + 0.36, 0, PZ), v3(PX + 0.1, 0.88, PZ), 0.07, 'jeans');
+  pl.obstacle = { a: v3(PX - 0.26, 0, PZ), b: v3(PX + 0.26, 0, PZ), under: 0.55, over: 1.95 };
   pipe(pl, v3(PX, 0.9, PZ), v3(PX, 1.42, PZ), 0.19, 'hoodie');
   pipe(pl, v3(PX - 0.24, 1.38, PZ), v3(PX - 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie'); pipe(pl, v3(PX + 0.24, 1.38, PZ), v3(PX + 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie');
   box(pl, v3(PX, 1.13, PZ - 0.33), v3(0.13, 0.08, 0.05), 'radio');
@@ -831,6 +837,18 @@ class TrickDetector {
   }
   trackCrossings(d, t) {
     for (const o of this.world.objs) {
+      if (o.round) {   // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
+        const R = o.round, st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
+        const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
+        if (dh < R.r + 3) st.tNear = t;
+        else if (vh > 0.5 && t - (st.tNear ?? -9) > 2.5) {
+          const ax = d.vel.x / vh, az = d.vel.z / vh;
+          if (!st.ax || ax * st.ax + az * st.az < 0.97) {
+            st.ax = ax; st.az = az; delete this.prevSide[o.id];
+            o.obstacle = { a: v3(R.c.x + az * R.r, 0, R.c.z - ax * R.r), b: v3(R.c.x - az * R.r, 0, R.c.z + ax * R.r), under: R.under, over: R.over };
+          }
+        }
+      }
       if (o.obstacle) {
         const { a, b, under, over } = o.obstacle;
         const ab = sub(b, a); ab.y = 0; const L = len(ab); const u = mul(ab, 1 / L);
@@ -1717,6 +1735,39 @@ function importDiff(text, tune) {
 
 const EVENT_TRICKS_DRAFT = ['Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
+// Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
+const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'the pilot'];
+const SPOT_BY_CAT = {
+  'Open Air Tricks': ['open air'], 'Powerloops': OVER_UNDER, 'Maverick Loops': OVER_UNDER, 'Matty Flips': [...OVER_UNDER, 'Picnic Table'],
+  'SplitS': OVER_UNDER, 'Pole Dancing': ['Tree', 'Lamp Post', 'Hoop Pole', 'the pilot'], 'Jump Roping': ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower'],
+  'Rewinds': ['Tree', 'Lamp Post', 'Slide Tower', 'the pilot', 'Brick Building'], 'Wall Tricks': ['Graffiti Wall', 'Brick Building', 'Fence'],
+  'Gaps': ['Wall Slot', 'Hoop'], 'Other Tricks': ['open air'],
+};
+const SPOT_OVERRIDE = {
+  'Stall Rewind': ['Tree', 'Lamp Post', 'Brick Building'], 'Dive': ['Brick Building'], 'Ceiling Tap': ['Slide Tower roof'],
+  'Maverick Tap Rewind': ['Swing Set', 'Monkey Bars', 'Slide Tower'], 'Power Switch Tap': ['Swing Set', 'Monkey Bars', 'Slide Tower'],
+  'Facepunch': ['the pilot'], 'Slide Disarm': ['the ground'], 'Perch': ['Brick Building roof'], 'Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'],
+  'Stellar Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'], 'Inverted Yaw Tracking': ['Tree', 'Lamp Post', 'the pilot'],
+  'Juicy Flick': ['open air (best tracking an object)'], 'Snapback': OVER_UNDER, 'Forani': OVER_UNDER, 'True Barani': OVER_UNDER,
+};
+const DEMO_SPOT = {
+  'Flip': 'garage (open air)', 'Double Flip': 'backyard', 'Roll': 'at the pilot', 'Double Roll': 'backyard', 'Segmented Flips/Rolls': 'street',
+  'Yaw Spin': 'through an LED cube', 'Invert Rewind': 'backyard', 'Vanny Roll': 'street', "Rubik's Cube": 'street', "Cubik's Rube": 'street',
+  'Juicy Flick': 'sidewalk', 'Snapback': 'under a tree', 'Inverted Yaw Spin': 'street', 'Inverted Yaw Tracking': 'tree',
+  'Powerloop': 'tall statue in a fountain', 'Immelmann Turn': "through the pilot's legs", 'Power Split': 'tree', 'Power Flip': 'tree',
+  'Reversed Power Flip': 'indoor cube', 'Power Swap': "through the pilot's legs", 'Power Switch': 'tree', 'Power Roll': 'tree',
+  'Inverted 360 Powerloop': 'tree', 'Barani': 'tree', 'Maverick Loop': 'tree', 'Mavvy Roll': 'tree', 'Half Mavvy': 'indoor gate tower',
+  "Mavik's Loop": 'living room', 'Mavani': 'tree', 'Donkey Loop': 'tree', 'Beginner Matty': 'chair', 'Matty Flip': 'gap between two cars',
+  'Matty Twister': 'tree branch', 'Half Matty': "through the pilot's legs", '540 Half Matty': 'tree', 'Matty 360': 'indoor gate',
+  'Forani': 'the pilot (park)', 'Split-S': 'tree', '540 Split S': 'tree branch', 'Split-Back': 'gazebo', 'Split Yaw': 'gazebo',
+  'Split Stall Matty Rewind': 'gazebo', 'Orbit x2': 'tree', 'Cradle': 'the pilot', 'Side-Lock Rewind': 'the pilot', 'Whiplash': 'tree',
+  'Pole Dance': 'tree', 'Trippy Spin x2': 'tree', 'Trippy Switch': 'tree trunk', 'Double Rolling Trippy Spin': 'tree trunk',
+  'Jump Rope': 'indoor striped pole', 'Cinnamon Roll': 'indoor striped pole', 'Burrito Roll': 'play structure slide', 'Side Loop': 'play structure slide',
+  'Double Dutch': 'indoor cube', 'Flip Stall Rewind': 'indoor staircase', '360 Stall Rewind': 'the pilot', 'Matty Stall Rewind': 'tree',
+  'Half Matty Stall Rewind': 'the pilot', 'Dive': 'apartment building', 'Wall Ride': 'garage door', 'Wall Tap': 'garage wall', 'Roll Tap': 'fence',
+  'Loop Tap': 'fence', 'Ceiling Tap': 'hallway ceiling', 'Reverse Wall Ride': 'house wall',
+};
+function trickSpots(name, cat) { const n = name.trim(); return { on: SPOT_OVERRIDE[n] || SPOT_BY_CAT[(cat || '').trim()] || ['open air'], demo: DEMO_SPOT[n] || null }; }
 const DETECTABLE = [...new Set([...OBSTACLE_TRICKS.map(t => t.name), ...OPEN_TRICKS.map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT, 'Maverick Loop', 'Mavvy Roll', 'Beginner Matty', 'Knife Edge', 'Ninja Star',
   'Wall Tap', 'Wall Ride', 'Dive', 'Stall Rewind', 'Slide Disarm', 'Perch', 'Segmented Flips/Rolls', 'Facepunch'])];
 const DRAFT = new Set([...OBSTACLE_TRICKS.filter(t => t.draft).map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT]);
@@ -1726,6 +1777,6 @@ function hoverInfo(p) {
   const s = motorSteady(p, 3.75 * hi); const amps = 4 * s.current * hi + 0.35;
   return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
 }
-root.Sim = { DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot };
 })(typeof window !== 'undefined' ? window : globalThis);

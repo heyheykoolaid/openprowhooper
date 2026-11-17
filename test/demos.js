@@ -135,4 +135,27 @@ function splitDemo(rollDeg, rollT) {
 }
 run('demo split-s (slow 0.8 s roll)', splitDemo(180, 0.8), 6, ['Split-S']);
 run('demo 540 split s (0.7 s roll)', splitDemo(540, 0.7), 6, ['540 Split S']);
+
+// ---- objects as used in the demos: trees (any approach angle) and the pilot's legs ----
+const YUP = S.v3(0, 1, 0);
+function loopAround(C, hv, RZ, RY) {            // loop geometry around centre C, heading hv (unit, horizontal)
+  const psi = Math.atan2(-hv.x, -hv.z), face = S.qaxis(YUP, psi);
+  const at = th => S.add(C, S.add(S.mul(hv, RZ * Math.sin(th)), S.v3(0, -RY * Math.cos(th), 0)));
+  const arcG = (a, b, wmin, wmax, att = th => pitchQ(th)) => { const sw = sweep(a, b, wmin, wmax); return { T: sw.T, f: t => { const th = sw.at(t); return { pos: at(th), q: S.qmul(face, att(th)) }; } }; };
+  const lineG = (p0, v, T, q = { w: 1, x: 0, y: 0, z: 0 }) => ({ T, f: t => ({ pos: S.add(p0, S.mul(v, t)), q: S.qmul(face, q) }) });
+  return { face, at, arcG, lineG };
+}
+{ // park tree #1 (x 14, z 8): approach diagonally, pass beside the trunk under the canopy, loop over the top
+  const hv = S.v3(-0.6, 0, -0.8), side = S.v3(0.8 * 0.6, 0, -0.6 * 0.6);           // 0.6 m to the side of the trunk
+  const C = S.add(S.v3(14, 4.2, 8), side), L = loopAround(C, hv, 2.4, 1.9), b0 = L.at(0);
+  const appr = L.lineG(S.sub(b0, S.mul(hv, 4)), S.mul(hv, 4), 1.0), out = L.lineG(b0, S.mul(hv, 4), 0.8), hold = { T: 1.2, f: () => ({ pos: S.add(b0, S.mul(hv, 3.2)), q: L.face }) };
+  run('tree powerloop (diagonal approach)', chain([appr, L.arcG(0, 2 * P, 90, 280), out, hold]), 9, ['Powerloop']);
+  run('tree maverick loop', chain([appr, L.arcG(0, 2 * P, 150, 240, th => S.qmul(pitchQ(th), mavAtt(th))), out, hold]), 9, ['Maverick Loop']);
+}
+{ // the pilot (x 2.6, z 14.2, facing -z): through the legs from behind, half loop up and over the head, roll 180, away
+  const hv = S.v3(0, 0, -1), C = S.v3(2.6, 1.3, 14.2), L = loopAround(C, hv, 1.3, 0.85), b0 = L.at(0), top = L.at(P), inv = S.qmul(L.face, pitchQ(P));
+  run("immelmann through the pilot's legs", chain([L.lineG(S.sub(b0, S.mul(hv, 3)), S.mul(hv, 3), 1.0), L.arcG(0, P, 220, 380),
+    { T: 0.4, f: t => ({ pos: S.add(top, S.v3(0, 0, 2.5 * t)), q: S.qmul(inv, S.qaxis(FWD_ROLL, P * t / 0.4)) }) },
+    straight(S.add(top, S.v3(0, 0, 1.0)), S.v3(0, 0, 3), 1.4, S.qmul(inv, S.qaxis(FWD_ROLL, P)))]), 7, ['Immelmann Turn']);
+}
 console.log(`\n${pass}/${total} demo loops`);
