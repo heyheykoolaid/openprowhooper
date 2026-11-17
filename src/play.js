@@ -164,6 +164,7 @@ function frame(now) {
   // drone visual
   droneMesh.position.set(drone.pos.x, drone.pos.y, drone.pos.z);
   droneMesh.quaternion.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w);
+  droneMesh.scale.setScalar(mode === 'judge' && judge.cam !== 'fpv' ? 2.5 : 1);   // big only for Judge the Bot's spectator view; real size everywhere else
   for (let i = 0; i < 4; i++) { const w = drone.motorW[i]; propGroups[i].rotation.y += params.motors[i].spin * Math.max(-0.9, Math.min(w * dt, 0.9)); propDiscs[i].material.opacity = Math.min(0.35, Math.abs(w) / params.stats.rpmMax * 2.4); propGroups[i].visible = w < 2500; }
   // cameras
   let cam;
@@ -177,7 +178,7 @@ function frame(now) {
     const tgt = new THREE.Vector3(drone.pos.x, drone.pos.y, drone.pos.z); judge.lookS = judge.lookS ? judge.lookS.lerp(tgt, 1 - Math.exp(-dt * 5)) : tgt.clone();
     chaseCam.lookAt(judge.lookS);
   } else if ((mode === 'judge' ? judge.cam : camMode) === 'fpv') {
-    cam = fpvCam; const cp = S.add(drone.pos, S.qrot(drone.q, params.camPos));
+    cam = fpvCam; const cp = S.add(drone.pos, S.qrot(drone.q, droneLens || params.camPos));
     fpvCam.position.set(cp.x, cp.y, cp.z);
     tmpQ.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w); tiltQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), tune.camTilt * Math.PI / 180);
     fpvCam.quaternion.copy(tmpQ).multiply(tiltQ);

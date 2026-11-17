@@ -372,7 +372,9 @@
       return { pos: add(s.pos, d), q: qmul(s.q, wob(t)) }; } };
   }
   // fly a scripted maneuver through a fresh detector (500 Hz, body rates from attitude differences) -> detected events
-  function detect(m, world, camTilt) {
+  // opt.rows: also record the flight as 100 Hz trace rows in the game's columns (Judge the Bot sends judged flights as mini
+  // flights: pro-whooper-flight/1 with the judge's verdict as labels)
+  function detect(m, world, camTilt, opt = {}) {
     const det = new S.TrickDetector(world); if (camTilt != null) det.camTilt = camTilt;
     const d = Object.create(S.Drone.prototype); Object.assign(d, { pos: v3(), vel: v3(), q: ID, w: v3(), armed: true, crashed: false, contactThisStep: false });
     const dt = 0.002; let prev = m.at(0); const got = [];
@@ -380,7 +382,7 @@
     // needs along the body's up axis), so the Watcher's sticks witness sees the same kind of input as in the game
     const R = S.defaultTune().rates, inv = (rate, r) => { const a = Math.abs(rate); if (a < 1) return 0; let lo = 0, hi = 1;
       for (let i = 0; i < 22; i++) { const m = (lo + hi) / 2; if (S.applyRate(m, r, 'ACTUAL') < a) lo = m; else hi = m; } return Math.sign(rate) * hi; };
-    let vPrev = null, acc = v3(), thr = 0.35;
+    let vPrev = null, acc = v3(), thr = 0.35, k = 0; const rows = opt.rows ? [] : null;
     for (let t = dt; t < m.T; t += dt) {
       const s = m.at(t); let q = s.q; if (q.w * prev.q.w + q.x * prev.q.x + q.y * prev.q.y + q.z * prev.q.z < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
       let r = qmul({ w: prev.q.w, x: -prev.q.x, y: -prev.q.y, z: -prev.q.z }, q); if (r.w < 0) r = { w: -r.w, x: -r.x, y: -r.y, z: -r.z };
@@ -390,10 +392,11 @@
       if (vPrev) { const a = mul(sub(d.vel, vPrev), 1 / dt); acc = add(mul(acc, 0.96), mul(a, 0.04)); } vPrev = d.vel;
       { const up = d.up(), need = (acc.x * up.x + (acc.y + 9.81) * up.y + acc.z * up.z) / 9.81; thr += (Math.max(0, Math.min(1, 0.35 * need)) - thr) * 0.08; }
       const pr = d.pilotRates();
-      det.update(d, dt, { thr, roll: inv(pr[0], R.roll), pitch: -inv(pr[1], R.pitch), yaw: inv(pr[2], R.yaw) });
+      const rc = { thr, roll: inv(pr[0], R.roll), pitch: -inv(pr[1], R.pitch), yaw: inv(pr[2], R.yaw) }; det.update(d, dt, rc);
+      if (rows && (k++ % 5 === 0)) { const r6 = x => Math.round(x * 1e4) / 1e4, r2 = x => Math.round(x * 100) / 100; rows.push([r6(t), r6(d.pos.x), r6(d.pos.y), r6(d.pos.z), r6(q.w), r6(q.x), r6(q.y), r6(q.z), r2(pr[0]), r2(pr[1]), r2(pr[2]), r6(thr), 0, 1, 0, 0, 0, 0, 0, 0, 0, r6(d.vel.x), r6(d.vel.y), r6(d.vel.z), r6(rc.roll), r6(rc.pitch), r6(rc.yaw)]); }
       for (const e of det.drain()) if (e.name !== 'near' && e.name !== 'Crash') got.push({ name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, t, watch: e.watch });
     }
-    Object.defineProperty(got, 'det', { value: det });   // for inspecting the Watcher's reviews
+    Object.defineProperty(got, 'det', { value: det }); if (rows) Object.defineProperty(got, 'rows', { value: rows });   // for inspecting the Watcher's reviews
     return got;
   }
   // pole-dance flights built from the TPW text only (no demo measurement yet): left out of the quick suites until real reps confirm them

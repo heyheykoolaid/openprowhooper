@@ -15,6 +15,7 @@ function show(id) { for (const el of document.querySelectorAll('.screen')) el.cl
 function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
 function startFlyGo(withSession) {
   combo.names = []; combo.pts = 0; combo.active = false;
+  if (!$('#judgeBox').classList.contains('hide')) stopJudge();   // however Judge the Bot was left, its panel, trail and big model go
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
   if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;

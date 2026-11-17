@@ -30,13 +30,13 @@ async function load(files) {
     const votes = [];
     for (const lf of labelFiles.filter(x => x.flight === fl.id)) for (const l of lf.labels) {
       if (!l || typeof l !== 'object' || l.undone || !(l.verdict === 'yes' || l.verdict === 'no') || !Number.isFinite(+l.t)) continue;
-      const author = l.reviewer ? who(l.by, l.byId) : who(lf.name, lf.pilot), rev = !!l.reviewer || (author !== fl.pilot && author !== '?');
+      const author = l.reviewer ? who(l.by, l.byId) : who(lf.name, lf.pilot), bot = fl.pilot === 'bot', rev = !bot && (!!l.reviewer || (author !== fl.pilot && author !== '?'));   // a verdict on a bot flight is the judge's own call on a scripted move: weight 1, src 'bot'
       // a review of a leaderboard run (anyone can open one) is a vote: it counts once a second pilot agrees. The owner's
       // Flight desk reviews are reviewer labels.
       const vote = !!l.judge || (rev && l.src === 'board');
       const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
       if (a < T0 - 5 || b > T1 + 5) continue;
-      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: vote ? 'judge' : rev ? 'reviewer' : 'own' };
+      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own' };
       if (vote) { votes.push(item); continue; }
       labelled.push([a - 1, b + 2]);
       if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: rev ? W.reviewer : W.own, author, src: item.src });

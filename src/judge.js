@@ -29,7 +29,7 @@ function judgeNext() {
   judge.name = judge.want === 'random' ? MV.tricks[Math.floor(Math.random() * MV.tricks.length)] : judge.want;
   judge.seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
   judge.m = MV.make(judge.name, world, judge.seed, { human: true });   // real whoops wander: drift, bob, uneven speed
-  judge.events = MV.detect(judge.m, world, tune.camTilt);
+  judge.events = MV.detect(judge.m, world, tune.camTilt, { rows: true }); judge.rows = judge.events.rows || null;
   judge.t = 0; judge.phase = 'watch'; trailClear();
   // spectator spot: beside the flight path, looking across it, like a pilot watching line-of-sight
   const pts = []; for (let t = 0; t < judge.m.T; t += 0.05) pts.push(judge.m.at(t).pos);
@@ -47,7 +47,6 @@ function judgeStep(dt) {
   if (judge.t >= m.T && judge.phase === 'watch') { judge.phase = 'ask'; renderJudge(); }
   const s = m.at(judge.t); drone.pos = s.pos; drone.q = s.q; for (let i = 0; i < 4; i++) drone.motorW[i] = 2600;
   if (judge.t < m.T) trailPush(s.pos);
-  droneMesh.scale.setScalar(judge.cam === 'fpv' ? 1 : 2.5);   // a 65 mm whoop is a speck from the spectator spot
 }
 function judgeReplay() { judge.t = 0; trailClear(); }
 canvas.addEventListener('mousedown', e => { if (mode !== 'judge' || judge.cam !== 'spectator') return; judge.drag = { x: e.clientX, y: e.clientY }; });
@@ -62,8 +61,23 @@ function judgeVerdict(v) {
   const like = v === 'wrong' ? ($('#jLike') && $('#jLike').value) || null : null;
   const rec = { id: `${Date.now()}-${judge.seed}`, at: new Date().toISOString(), trick: judge.name, seed: judge.seed, human: true, object: judge.m.object, params: judge.m.params,
     verdict: v, lookedLike: like, detected: judge.events.map(e => ({ name: e.name, exec: e.exec, clean: e.clean })), detectorRight: detOK, agree: valid === detOK, build: '0.1' };
-  judge.session.push(rec); idb.put('judge', rec); judge.phase = 'reveal'; renderJudge();
+  judge.session.push(rec); idb.put('judge', rec); judge.phase = 'reveal'; renderJudge(); judgeShare(rec);
   if (judge.session.filter(x => !x.up).length >= 10) judgeUpload();
+}
+// Every judged flight goes to the project as a mini flight, the bot as its pilot ('bot': one shared identity), with the
+// judge's verdict as labels on it: tools/community.js and tools/library.js learn from it like any shared flight (src 'bot').
+// The judge's own click, so it goes even with automatic sharing off; nothing about the judge but their pilot name and id.
+async function judgeShare(rec) {
+  const rows = judge.rows; if (!rows || rows.length < 50) return;
+  const id = `bot${rec.seed.toString(36)}${Date.now().toString(36).slice(-4)}`.slice(0, 40), T1 = rows[rows.length - 1][0], ev = judge.events.map(e => ({ t: +e.t.toFixed(3), t0: +Math.max(0, e.t - 1.5).toFixed(3), name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle || null, conf: e.watch ? e.watch.conf : null }));
+  try {
+    const trace = await FlightLog.pack(rows, TRACE_COLS, 100);
+    await telQueue('flight', id, { format: 'pro-whooper-flight/1', build: '0.1', id, started: rec.at, ended: 'judged', pilot: 'bot', name: 'bot', map: MAP_ID, mode: 'bot', camTilt: tune.camTilt, craft: null, tune: null, profile: null, input: null, score: null, events: ev, missed: [], summary: { bot: { trick: rec.trick, seed: rec.seed, object: rec.object || null, human: true }, seconds: +T1.toFixed(1) }, trace }, true);
+    const span = { repStart: 0.3, t: +Math.max(0.5, T1 - 0.3).toFixed(3) }, labels = [], ok = rec.verdict !== 'wrong', what = ok ? rec.trick : rec.lookedLike;
+    labels.push({ target: rec.trick, verdict: ok ? 'yes' : 'no', actual: ok ? rec.trick : (what || 'not a trick'), ...span, detected: ev.map(e => e.name), execActual: rec.verdict === 'clean' ? 'CLEAN' : rec.verdict === 'sloppy' ? 'SLOPPY' : null, via: 'judge-bot', src: 'bot' });
+    for (const e of ev) if (e.name !== rec.trick && e.name !== what) labels.push({ target: e.name, verdict: 'no', actual: 'not a trick', repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, via: 'judge-bot', src: 'bot' });   // a bot flight is one trick: any other call in it was wrong
+    await telQueue('labels', id + '-v', { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: id, started: rec.at, pilot: telPilot(), name: pilotName() || null, labels }, true);
+  } catch { /* stays in Judge the Bot's own records */ }
 }
 function judgeUpload() {
   const list = judge.session.filter(x => !x.up); if (!list.length) return;

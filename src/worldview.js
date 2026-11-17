@@ -322,7 +322,7 @@ function addGraffiti(v) {
 }
 
 // ============================================================ drone model
-let droneMesh, propGroups = [], propDiscs = [];
+let droneMesh, propGroups = [], propDiscs = [], droneLens = null;   // droneLens: where the model's camera lens is (body frame): the FPV view sits there
 // ---- The whoop, built from its parts so that what is in the Garage is what you see: frame size, duct style and colour,
 // motor size and bell colour (from its name, e.g. 0702 = 7 mm x 2 mm stator), prop size / blade count / colour, the
 // battery's size and cell count, the canopy that comes with the electronics, and the pilot's own colours (spec.look).
@@ -433,11 +433,11 @@ function makeWhoopMesh(p, sp, tn) {
     const arch = add(new THREE.Mesh(new THREE.TorusGeometry(pr0, 0.0012, 8, 24, Math.PI), canMat), 0, base, 0); arch.scale.y = CL.h / pr0;
     g.add(pipeMesh({ x: 0, y: base, z: pr0 }, { x: 0, y: top * 0.96, z: 0.003 }, 0.0011, canMat)); g.add(pipeMesh({ x: 0, y: top * 0.96, z: 0.003 }, { x: 0, y: camY + 0.0052, z: camZ + 0.003 }, 0.0011, canMat));
     for (const sx of [-1, 1]) { g.add(pipeMesh({ x: sx * 0.0052, y: camY, z: camZ + 0.0015 }, { x: sx * pr0 * 0.72, y: base + CL.h * 0.62, z: -0.001 }, 0.001, canMat)); g.add(pipeMesh({ x: sx * 0.0048, y: camY - 0.0042, z: camZ + 0.002 }, { x: 0, y: base, z: -pr0 }, 0.0009, canMat)); }
-    const cradle = add(new THREE.Mesh(new THREE.TorusGeometry(0.0052, 0.001, 8, 20), canMat), 0, camY, camZ + 0.0015); cradle.rotation.x = -tiltR;
+    const cradle = add(new THREE.Mesh(new THREE.TorusGeometry(0.0052, 0.001, 8, 20), canMat), 0, camY, camZ + 0.0015); cradle.rotation.x = tiltR;
   } else { const can = add(new THREE.Mesh(new THREE.SphereGeometry(CL.w, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), canMat), 0, 0.0045, 0.001); can.scale.set(0.92, CL.h / CL.w, 1.18);
-    const hood = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0058, 0.006, 14, 1, true), canMat), 0, camY, camZ); hood.rotation.x = Math.PI / 2 - tiltR; }
-  // the camera: a fat black barrel with a glass dome, tilted to the pilot's camera angle, on its little board
-  const cam = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0044, 0.0046, 0.0072, 18), std(0x0c0c0e, { metalness: 0.4, roughness: 0.35 })), 0, camY, camZ); cam.rotation.x = Math.PI / 2 - tiltR;
+    const hood = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0058, 0.006, 14, 1, true), canMat), 0, camY, camZ); hood.rotation.x = -(Math.PI / 2 - tiltR); }
+  // the camera: a fat black barrel with a glass dome looking forward (-z), tilted up by the pilot's camera angle, on its little board
+  const cam = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0044, 0.0046, 0.0072, 18), std(0x0c0c0e, { metalness: 0.4, roughness: 0.35 })), 0, camY, camZ); cam.rotation.x = -(Math.PI / 2 - tiltR);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0041, 0.0007, 6, 18), std(0x1c1c20, { metalness: 0.6, roughness: 0.3 })); rim.rotation.x = Math.PI / 2; rim.position.y = 0.0036; cam.add(rim);
   const lens = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), new THREE.MeshStandardMaterial({ color: 0x16284f, metalness: 0.95, roughness: 0.04 })); lens.position.y = 0.0028; cam.add(lens);
   const cb = new THREE.Mesh(new THREE.BoxGeometry(0.0095, 0.0009, 0.0095), std(0x101114)); cb.position.y = -0.004; if (!printed) cam.add(cb);   // (the printed canopy has its own camera plate)
@@ -458,11 +458,12 @@ function makeWhoopMesh(p, sp, tn) {
   if (!FM) for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0012, bh + 0.002, 0.004), frameMat), sx * (bw / 2 + 0.0008), by + 0.0008, 0.002);   // battery holder rails
   if (ring && !FM) for (const z of [-0.008, 0.012]) { add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.003, 0.0009, 0.0022), frameMat), 0, by - bh / 2 - 0.0006, z); for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0011, bh + 0.0035, 0.0022), frameMat), sx * (bw / 2 + 0.0009), by + 0.0012, z); }   // the cage the pack slides into
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  return { g, pgs, discs };
+  // the FPV view: just in front of the lens of the camera drawn on the model, so the picture comes from where the camera is
+  return { g, pgs, discs, lens: { x: 0, y: camY + 0.0081 * Math.sin(tiltR), z: camZ - 0.0081 * Math.cos(tiltR) } };   // the barrel points forward and up by the camera tilt
 }
 function buildDroneMesh() {
   if (droneMesh) scene.remove(droneMesh);
-  const W = makeWhoopMesh(params, spec, tune); propGroups = W.pgs; propDiscs = W.discs; droneMesh = W.g; scene.add(droneMesh);
+  const W = makeWhoopMesh(params, spec, tune); propGroups = W.pgs; propDiscs = W.discs; droneMesh = W.g; droneLens = W.lens || null; scene.add(droneMesh);
   if (typeof garagePreviewRefresh === 'function') garagePreviewRefresh();
 }
 const PARTS = () => S.PARTS;

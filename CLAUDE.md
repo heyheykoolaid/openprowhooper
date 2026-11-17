@@ -353,6 +353,19 @@ shared flights and counts the maybes. build.py ships it (`Sim.setLibrary`); Node
 test/library.js; `PW_LIBRARY=file npm run bench`. First build: 107 examples (66 demos), leave-one-out 54%, 30 maybes in
 22 flights, none against a label. The weekly scheduled run rebuilds it before the community learner.
 
+## Judge the Bot feeds the data, and the FPV view sits at the lens (2026-11-17)
+Every judged bot flight goes to the project as a **mini flight** (`judgeShare` in judge.js): `pro-whooper-flight/1` with
+`pilot: 'bot'` (one shared identity), `mode: 'bot'`, the 100 Hz trace recorded while the detector watched it
+(`Maneuvers.detect(m, world, tilt, { rows: true })` → `got.rows`; re-flies to the same calls), the calls, and
+`summary.bot` (trick, seed, object); plus `pro-whooper-flight-labels/1` from the judge (`via: 'judge-bot'`, `src: 'bot'`):
+the verdict on the scripted trick over the flight, and "not a trick" on any other call in it. The judge's click, so it is
+sent even with sharing off. tools/evidence.js gives verdicts on bot flights weight 1 (src 'bot', author = the judge), so
+they feed tools/community.js and tools/library.js like any labels. The bot's detector, like every detector, starts from
+the community profile and the trick library. The FPV camera sits just in front of the lens of the camera drawn on the
+model (`makeWhoopMesh` returns `lens`, `droneLens` in worldview.js; `params.camPos` only as a fallback), and the model's
+camera barrel now points forward and up by the tilt. The model is drawn 2.5x only in Judge the Bot's spectator view
+(set every frame in play.js); starting a flight closes Judge the Bot whatever way it was left.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).
