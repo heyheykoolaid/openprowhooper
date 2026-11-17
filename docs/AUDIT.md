@@ -81,3 +81,19 @@ overwrites or reads, and rate-limits. What it cannot prevent: someone faking the
 and sending well-formed junk within the limits. That is bounded (800 files a day, 1 MB each), lands in a private repo,
 and is only ever parsed as data. The "GitHub menus only for heyheykoolaid" rule is tidiness, not protection. Pilot names
 are whatever people type, so a name in the data proves nothing about who flew.
+
+## Third pass (2026-11-17)
+Checked: the whole game module and every sim module with a linter (undefined names, unused code, duplicate keys,
+unreachable code, self-assignments), a CPU profile of physics + detector on both maps, and the day's new systems.
+- Lint: no undefined names or unreachable code. Removed dead code (`openSync`, `radioLabel`, `armSwitchPrev`, an unused
+  world-space rotation computed 4000 times a second in `Drone.step`, a self-assignment in the diff importer).
+- Found by the audit: the detector's stick history (`fb[].rc`) would have aliased one object once the per-step stick
+  record was reused; it now stores copies. The Garage's hover figures ignored 2S packs (fixed with `cells`).
+- Per-step garbage in the detector cut (stick record reused, old sightings pruned every 50 ms instead of every 1 ms,
+  no sort of an empty pending list). Detector cost on an active flight: about 100 → 80 ms per simulated second on the
+  playground, 80 → 75 on the school; physics 25–50. `sense()` and `trackCrossings()` are the remaining hot spots
+  (per-pole and per-object work every millisecond): the next step would be running them at 250 Hz, which needs the
+  stress seeds re-run because pass timing shifts slightly.
+- Not changed: 13 scripts in test/ are debugging helpers that `npm test` does not run (cruise_dbg, fpsweep, col, perf,
+  speed, t1, t2, t4, …); `LegacyTrickDetector` is the base class of the live detector, not dead code.
+- New: error log with shared flights, tools/signatures.js, Video Review teach/share.

@@ -223,6 +223,22 @@ A tile can hold several tricks (`extra` on the call / flag: "＋ trick in this t
 tile's span with `tile`, `order`, `of`. Handle colours on the timeline show review state (grey not reviewed, green
 approved, orange corrected, red not a trick, blue added).
 
+## Using the data (tools/signatures.js) and the error log
+`node tools/signatures.js <data folder>` is the first thing to run on new shared data: it re-flies every flight and
+prints (1) each trick's signature as really flown (degrees per axis, rates, passes, sticks, throttle, pilot ✓/✗),
+(2) every stretch a pilot labelled that the game did not call, with the rotations, passes and sticks measured there
+(the to-do list for rule work), (3) big rotations no call claimed, and any errors pilots' games reported.
+`--trick "Name"` narrows it, `--json` saves it. The game keeps a small log of its own JS errors (`errLog` in
+dropoff.js: message and place only, tokens scrubbed) that rides in `summary.errors` of a shared flight and in feedback.
+
+## Video Review and the learner
+Video Review runs the detector with the pilot's learned profile (`detectClip` `opt.pilot`) and offers the review
+variants. "Teach the game from this clip" runs `learnFromLabels` on the clip (a run may carry `detect(profile)` and
+`span` instead of trace rows) and takes the pace of the confirmed real moves into `pilot.rate` (only slower); it
+applies in the sim too. "Share with the project" sends measured motion, marks and labels (never the video or its file
+name) through the drop-off as kind `video` (`telemetry/inbox/video/`; the player's own click, works with flight
+sharing off).
+
 ## Processing pause (src/dropoff.js `procFlight`, `procShow`)
 Heavy work never runs under the pilot's hands: when a shared flight ends (menu, session over, run it back, map change)
 `telCapture` returns a promise and `procFlight` shows a modal with a progress bar until it is packed and has had its

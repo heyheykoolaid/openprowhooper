@@ -99,3 +99,8 @@ Posted by the player's own click after a 2:00 Session: `name`, random `pilot` id
 flight). Public for the day: anyone can read TODAY's board and open one of its runs. Earlier days are not served by the relay; their files stay in the private data repo as labelled runs with replays. Scores are what the game reported;
 to check one, replay its trace through the detector and ScoreKeeper. The file name carries the board entry
 (`<score>-<map>-<name>-<pilot>-<time>.json`), so the relay never opens a file to build the board.
+
+## Video reviews through the drop-off (`pro-whooper-video/1`, `telemetry/inbox/video/`)
+Sent by the player's own click in Video Review: `frames` ([t, roll, pitch, yaw] camera rotation per sample, at most
+6000), `marks` (U/O), `detected`, `labels`, `analysis` (lens FOV, tilt, rate), pilot name/id and profile. Never the
+video and never its file name. Labelled REAL flying: weigh it above sim labels when tuning.

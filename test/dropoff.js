@@ -57,5 +57,11 @@
     r = await get('/run?day=' + TODAY + '&id=' + B[0].id); const jr = await r.json(); check('GET /run returns one posted run, known fields only', r.status === 200 && jr.score === 12345 && !('secretField' in jr));
     for (const bad of ['../../telemetry/inbox/flight/x', 'README', '00012345-school-VGVzdGVy-abc123xyz-1794930000000/../../x']) { const m = calls.length; r = await get('/run?day=' + TODAY + '&id=' + encodeURIComponent(bad)); check(`GET /run cannot be pointed at "${bad.slice(0, 24)}…"`, r.status === 400 && calls.length === m); }
     r = await get('/'); check('any other GET is refused', r.status === 405); }
+  // ---- video reviews (measured motion + labels; never the video)
+  { const vid = (extra = {}) => ({ format: 'pro-whooper-video/1', file: 'my-private-file-name.mp4', duration: 12, frames: Array.from({ length: 40 }, (_, i) => [i / 30, 0, 0, 1]), marks: [{ t: 1, kind: 'U' }], labels: [{ verdict: 'added', actual: 'Roll', t0: 1, t1: 2 }], name: 'Tester', pilot: 'abc123xyz', ...extra });
+    const n0 = calls.length; r = await post({ kind: 'video', payload: vid() }, { ip: '7.7.8.1' }); const st = JSON.parse(Buffer.from(JSON.parse(calls[calls.length - 1].init.body).content, 'base64').toString());
+    check('a video review is stored under telemetry/inbox/video/, without the file name', r.status === 200 && calls.length === n0 + 1 && /telemetry\/inbox\/video\//.test(calls[calls.length - 1].url) && !('file' in st) && st.frames.length === 40);
+    r = await post({ kind: 'video', payload: vid({ frames: [[0, 'x', 0, 0]] }) }, { ip: '7.7.8.2' }); check('frames that are not numbers are refused', r.status === 400);
+    r = await post({ kind: 'video', payload: vid({ frames: Array.from({ length: 6001 }, () => [0, 0, 0, 0]) }) }, { ip: '7.7.8.3' }); check('an over-long clip is refused', r.status === 400); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

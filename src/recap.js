@@ -399,7 +399,7 @@ function fbPayload() {
   const name = $('#fbName').value.trim(); store.set('fb.name', name);
   const p = { format: 'pro-whooper-feedback/1', at: new Date().toISOString(), build: '0.1', category: $('#fbCat').value, text: $('#fbText').value.trim(), name: name || null };
   if ($('#fbCtx').checked) p.context = { screen: mode, racing: !!race.on, track: race.on && race.track ? race.track.name : mode === 'editor' && ed.track ? ed.track.name : null, craft: { ...spec }, camTilt: tune.camTilt, ratesType: tune.ratesType, rates: tune.rates,
-    pilot: store.get('pilot', null), input: inputCfg.mode, lastCalls: recap.events.slice(-6).map(e => ({ name: e.name, exec: e.exec, obstacle: e.obstacle, conf: e.conf, flagged: !!e.flag })) };
+    pilot: store.get('pilot', null), input: inputCfg.mode, errors: errLog.length ? errLog.map(e => ({ ...e })) : undefined, lastCalls: recap.events.slice(-6).map(e => ({ name: e.name, exec: e.exec, obstacle: e.obstacle, conf: e.conf, flagged: !!e.flag })) };
   return p;
 }
 const fbText = p => `[${p.category}] ${p.text}\n\n— ${p.name || 'anonymous'}, ${p.at}` + (p.context ? `\n\ncontext: ${JSON.stringify(p.context)}` : '');

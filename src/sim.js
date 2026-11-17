@@ -630,7 +630,7 @@ class Drone {
     const att = this.fc.tune.flightMode === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
     const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
     // ---- motors + battery
-    const up = this.up(), wWorld = qrot(this.q, this.w);
+    const up = this.up();
     const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
     const Vocv = ocv(this.soc, p.bat.hv, p.bat.cells);
     const Vbus = Math.max(2.5 * p.bat.cells, Vocv - this.ibat * Rint);
@@ -1430,7 +1430,7 @@ class StreamDetector extends TrickDetector {
   }
   sense(d, dt, t, rates, up) {
     let ev = false; const f = d.fwd(), vh = Math.hypot(d.vel.x, d.vel.z);
-    if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) { this.fb.push({ t, p: v3(d.pos.x, d.pos.y, d.pos.z), v: v3(d.vel.x, d.vel.y, d.vel.z), up, f, rc: this.lastRc }); if (this.fb.length > 900) this.fb.shift(); }
+    if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) { this.fb.push({ t, p: v3(d.pos.x, d.pos.y, d.pos.z), v: v3(d.vel.x, d.vel.y, d.vel.z), up, f, rc: this.lastRc ? { thr: this.lastRc.thr, roll: this.lastRc.roll, pitch: this.lastRc.pitch, yaw: this.lastRc.yaw } : null }); if (this.fb.length > 900) this.fb.shift(); }
     // deliberate taps: soft contact with anything but the ground, remembering which side of the quad touched
     if (d.contactThisStep && d.armed && !d.crashed && !d.contactGround && d.contactNormal) {
       const o = this.world.objs[d.contactOwner];
@@ -1525,8 +1525,9 @@ class StreamDetector extends TrickDetector {
       } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; } }
     }
     this.updateLive(t);
-    this.taps = this.taps.filter(x => t - x.t < 8); this.stalls = this.stalls.filter(x => t - x.t < 8); this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
-    this.passes = this.passes.filter(x => t - x.t < 8); this.orbSegs = this.orbSegs.filter(x => t - x.t1 < 10); this.faces = this.faces.filter(x => t - x.t < 4);
+    if (t - (this.prunedAt || 0) >= 0.05 || t < (this.prunedAt || 0)) { this.prunedAt = t;   // forgetting old sightings does not need doing every millisecond
+      this.taps = this.taps.filter(x => t - x.t < 8); this.stalls = this.stalls.filter(x => t - x.t < 8); this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
+      this.passes = this.passes.filter(x => t - x.t < 8); this.orbSegs = this.orbSegs.filter(x => t - x.t1 < 10); this.faces = this.faces.filter(x => t - x.t < 4); }
     return ev;
   }
   // ---- live orbit tricks (Trippy Spin, Orbit, Double Rolling Trippy): count every half lap, bank on exit, lose on crash
@@ -1754,13 +1755,14 @@ class StreamDetector extends TrickDetector {
     return out;
   }
   update(d, dt, rc) {
-    this.time += dt; this.lastD = d; this.lastRc = rc ? { thr: rc.thr ?? 0, roll: rc.roll ?? 0, pitch: rc.pitch ?? 0, yaw: rc.yaw ?? 0 } : null;
+    this.time += dt; this.lastD = d;
+    if (rc) { const L = this.lastRc || (this.lastRc = { thr: 0, roll: 0, pitch: 0, yaw: 0 }); L.thr = rc.thr ?? 0; L.roll = rc.roll ?? 0; L.pitch = rc.pitch ?? 0; L.yaw = rc.yaw ?? 0; } else this.lastRc = null;   // one object, reused: this runs 1000 times a second
     const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates); TOL_X = this.learned.tol;
     this.trackCrossings(d, t);
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
     this.continuousDetectors(d, dt, t, rc);
     if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
-    this.contacts = this.contacts.filter(c => t - c.t < 6);
+    if (this.contacts.length && t - this.contacts[0].t >= 6) this.contacts = this.contacts.filter(c => t - c.t < 6);
     const ctxEv = this.sense(d, dt, t, rates, up);
     if (d.crashed && !this.crashSeen) {               // finished tricks still count; anything mid-air is lost
       this.crashSeen = true;
@@ -1797,7 +1799,7 @@ class StreamDetector extends TrickDetector {
     if (this.pend.some(p => p.hold === HOLD_OBST) && t - this.lastRetrig > 0.1) { this.lastRetrig = t; this.trigger(t, false); }
     // an upside-down yaw spin just ended: keep looking for a little while to see the quad come back upright
     else if (t - this.lastRetrig > 0.1 && up.y > 0.45 && this.toks.length) { const k = this.toks[this.toks.length - 1]; if (k.usedUntil < k.t1 && ((k.ax === 'Y' && k.raw > 250 && t - k.t1 < 2.0 && k.inv > k.n * 0.5 && up.y > 0.55) || (k.ax !== 'Y' && k.raw >= 150 && k.raw < 312 && t - k.t1 < 0.6))) { this.lastRetrig = t; this.trigger(t, false); } }   // …or a roll/flip that read short finish its slow tail (revolution witness)
-    for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
+    if (this.pend.length) for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
       if (t < p.deadline) continue;
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
       // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
@@ -2390,7 +2392,6 @@ function importDiff(text, tune) {
   if (num('thr_mid') !== undefined) t.thrMid = num('thr_mid') / 100;
   if (num('thr_expo') !== undefined) t.thrExpo = num('thr_expo') / 100;
   if (set.iterm_relax) t.itermRelax = set.iterm_relax.toUpperCase() !== 'OFF';
-  if (num('fpv_mix_degrees') !== undefined) t.camTilt = t.camTilt; // ignored (camera mix)
   return { tune: t, found };
 }
 
@@ -2493,7 +2494,7 @@ const LEARN_STEPS = [
 const learnClone = p => { const c = JSON.parse(JSON.stringify(p || {})); c.learn = { tol: 0, rev: 0, crossBack: 0, ...(c.learn || {}) }; return c; };
 // runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
 function learnWindows(run) {
-  const T0 = run.rows[0][0], T1 = run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && l.verdict !== 'unlabelled' && (l.actual || l.verdict === 'no'))
+  const T0 = run.span ? run.span[0] : run.rows[0][0], T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && l.verdict !== 'unlabelled' && (l.actual || l.verdict === 'no'))
     .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' ? l.actual : null, not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
   const W = []; for (const l of L) { const w = W[W.length - 1], a = Math.max(T0, l.a - 4), b = Math.min(T1, l.b + 1.2); if (w && a <= w.b) { w.b = Math.max(w.b, b); w.labels.push(l); } else W.push({ a, b, labels: [l] }); }
   return W;
@@ -2501,7 +2502,7 @@ function learnWindows(run) {
 function learnScore(runs, profile) {
   let hits = 0, want = 0, bad = 0, calls = 0; const missed = [], hitNames = [];
   for (const run of runs) for (const w of (run._win || (run._win = learnWindows(run)))) {
-    const ev = replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false }).events.filter(e => e.name !== 'near' && e.name !== 'Crash');
+    const ev = (run.detect ? run.detect(profile, w).filter(e => e.t >= w.a - 0.2 && e.t <= w.b + 2) : replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false }).events).filter(e => e.name !== 'near' && e.name !== 'Crash');
     calls += ev.length;
     for (const l of w.labels) {
       const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t <= l.b + 2.2);
@@ -2512,7 +2513,7 @@ function learnScore(runs, profile) {
 }
 // Greedy and careful: one small step at a time, kept only when it clearly helps. `tick` lets the game breathe between replays.
 async function learnFromLabels(runs, profile, opts = {}) {
-  runs = runs.filter(r => r && r.rows && r.rows.length > 50 && r.world && Array.isArray(r.labels)); let cur = learnClone(profile);
+  runs = runs.filter(r => r && Array.isArray(r.labels) && (typeof r.detect === 'function' && r.span || r.rows && r.rows.length > 50 && r.world)); let cur = learnClone(profile);
   const base = learnScore(runs, cur), report = { labels: base.want, before: base.hits, after: base.hits, changes: [], fixed: [], still: base.missed.slice(), wrongBefore: base.bad, wrongAfter: base.bad };
   if (!base.want || base.hits === base.want) return { profile: cur, report, changed: false };
   let best = base;

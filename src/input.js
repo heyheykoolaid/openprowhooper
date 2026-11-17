@@ -47,7 +47,7 @@ function readPad(kind = inputCfg.mode) {
 }
 const kb = { thr: 0, yaw: 0, pitch: 0, roll: 0 };
 let armSeen = null, armMovedAt = -1e9, resetAskAt = 0;
-let armSwitchPrev = null, resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
+let resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
 const ARM_THR_MAX = 0.08;
 // safe to arm: throttle at the bottom, or (3D mode, where the middle of the stick is zero thrust) in the middle
 const thrArmOk = thr => thr <= ARM_THR_MAX || (tune.flightMode === '3d' && Math.abs(thr - 0.5) <= 0.07);
@@ -70,7 +70,7 @@ function getRC(dt) {
     else {
       // Switch arming: armed while the switch is on and throttle was low when it armed.
       // After a crash the switch can stay on: zero throttle rights the quad and re-arms it (play.js).
-      const sw = switchOn(pad, P.arm); armSwitchPrev = sw;
+      const sw = switchOn(pad, P.arm);
       if (!sw) { crashLock = false; if (drone.armed) setArmed(false); armBlock = 'ARM SWITCH OFF'; }
       else if (!drone.armed) {
         if (drone.crashed) { crashLock = true; armBlock = tune.flightMode === '3d' ? 'CRASHED · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
@@ -96,7 +96,6 @@ function getRC(dt) {
   if (keys.KeyX) kb.thr = tune.flightMode === '3d' ? 0.5 : 0;   // throttle cut (3D: back to the middle)
   return { thr: kb.thr, yaw: kb.yaw, pitch: kb.pitch, roll: kb.roll };
 }
-function radioLabel() { const d = describePad(readPad('radio')); return d ? d.name : null; }
 function onKey(e) {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
   if (e.code === 'Escape') { if (mode === 'fly') pause(); else if (mode === 'paused') resume(); }

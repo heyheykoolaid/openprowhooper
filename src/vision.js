@@ -216,6 +216,7 @@
   function detectClip(S, frames, marks, opt = {}) {
     const world = { objs: [], prims: [], spawn: { pos: S.v3(0, 1, 0) } };
     const det = new S.TrickDetector(world); if (opt.camTilt != null) det.camTilt = opt.camTilt; det.watcherOn = false;   // the live Watcher is for the sim only
+    if (opt.pilot) det.setPilot(opt.pilot);   // what the game has learned about this pilot applies to their real footage too
     const d = Object.create(S.Drone.prototype); Object.assign(d, { pos: S.v3(0, 6, 0), vel: S.v3(), q: { w: 1, x: 0, y: 0, z: 0 }, w: S.v3(), armed: true, crashed: false, contactThisStep: false });
     const out = [], dt = 0.002, ms = [...(marks || [])].sort((a, b) => a.t - b.t); let mi = 0, side = 1;
     // fill short gaps (blur) linearly, leave long ones still

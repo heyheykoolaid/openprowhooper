@@ -52,7 +52,6 @@ function uploadRun(reason) {
 // (This only tidies the menus for everyone else; it is not a lock. Nothing secret is behind it.)
 function ghMenus() { return pilotName().toLowerCase() === 'heyheykoolaid'; }
 function renderGhStatus() { const el = $('#ghStatus'); if (el) el.textContent = !ghMenus() ? '' : !gh.enabled ? 'upload off (Options)' : gh.token ? (ghState.queue.length ? `uploading… (${ghState.queue.length} left)` : ghState.last || `ready → ${gh.owner}/${gh.repo}`) : 'not set up'; }
-function openSync() { openOptions(); }
 function openOptions() {
   show('#optionsScreen'); if (mode === 'fly') { mode = 'paused'; train.pausedForList = true; }
   $('#optBody').innerHTML = `

@@ -43,7 +43,7 @@ async function rvAnalyze(resume) {
 }
 function rvDetect() {
   if (!rv.frames.length) { rv.dets = []; return; }
-  rv.dets = Vision.detectClip(S, rv.frames, rv.marks, { camTilt: rv.tilt, axisCleanup: rv.cleanup, objectName: 'the obstacle' })
+  rv.dets = Vision.detectClip(S, rv.frames, rv.marks, { camTilt: rv.tilt, axisCleanup: rv.cleanup, objectName: 'the obstacle', pilot: store.get('pilot', null) })
     .map(e => ({ ...e, t0: e.toks.length ? Math.min(...e.toks.map(k => k.t0)) : e.t - 0.8, t1: e.toks.length ? Math.max(...e.toks.map(k => k.t1)) : e.t }));
   renderReview(); drawTimeline();
 }
@@ -65,10 +65,39 @@ function rvPayload() {
     detected: rv.dets.map(d => ({ name: d.name, exec: d.exec, t0: +d.t0.toFixed(2), t: +d.t.toFixed(2), draft: !!d.draft })), labels: rv.labels };
 }
 async function rvExport() { const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); await saveFile(`video-review-${stamp}.json`, JSON.stringify(rvPayload())); }
+// ---- Sharing and learning. A reviewed video is the best data there is: REAL flying with the pilot's own labels.
+// Share sends the measured motion, marks and labels through the drop-off (never the video, never the file name).
+function rvShare() {
+  if (!rv.frames.length || !rv.labels.length) { flashNow('label a few tricks first'); return; }
+  const p = rvPayload(); delete p.file; p.frames = p.frames.slice(0, 6000); p.name = pilotName() || null; p.pilot = telPilot(); p.profile = store.get('pilot', null);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 6);
+  procShow('Sharing your video review…', 'Only the measured motion, your marks and your labels: not the video', 0.1); procCreep(0.9, 3000);
+  procWait(telQueue('video', stamp, p).then(async () => ((await telList()).find(x => x.id === 'video/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued'), 9000).then(async r => {
+    procShow(procThanks(), (r === 'sent' ? 'Your video review was shared with the Open Pro Whooper Project.' : 'Your video review is saved and will be sent as soon as the drop-off can be reached.') + ' Labelled real flying is the most valuable data there is.', 1);
+    await new Promise(res => setTimeout(res, 1800)); procHide(); });
+}
+// labels in the learner's shape; the "run" is re-flown by measuring the clip again with a looser profile
+const rvLearnLabels = () => rv.labels.filter(l => l.verdict !== 'no' || l.actual).map(l => ({ target: l.det ? l.det.name : l.actual, verdict: l.verdict === 'no' ? 'no' : 'yes', actual: l.actual, repStart: l.t0, t: l.t1 }));
+async function rvTeach() {
+  if (!rv.frames.length || !rv.labels.length) { flashNow('label a few tricks first'); return; }
+  procShow('Learning from your real flying…', 'Re-checking the tricks you labelled', 0.08); let ticks = 0, said = 'Nothing new to learn from this clip.';
+  try {
+    const run = { labels: rvLearnLabels(), span: [rv.frames[0].t, rv.frames[rv.frames.length - 1].t], detect: profile => Vision.detectClip(S, rv.frames, rv.marks, { camTilt: rv.tilt, axisCleanup: rv.cleanup, objectName: 'the obstacle', pilot: profile }) };
+    const res = await S.learnFromLabels([run], store.get('pilot', null), { tick: () => { ticks++; proc.frac = 0.08 + 0.87 * (1 - Math.exp(-ticks / 9)); const b = document.querySelector('#procModal .procBar i'); if (b) b.style.width = Math.round(proc.frac * 100) + '%'; return new Promise(r => setTimeout(r, 15)); } });
+    // the pace of the real flying: how fast the confirmed moves really turned (only ever slower than what the game assumes)
+    const prof = res.profile, by = { R: [], P: [], Y: [] }; for (const d of rv.dets) { const l = rvLabelFor(d); if (!l || l.verdict !== 'yes') continue; for (const k of d.toks || []) if (k.raw >= 150 && by[k.ax]) by[k.ax].push(k.raw / Math.max(0.05, k.t1 - k.t0)); }
+    let pace = false; for (const ax of 'RPY') { const a = by[ax].sort((x, y) => x - y); if (a.length < 2) continue; const m = Math.round(a[Math.floor((a.length - 1) / 2)]), cur = prof.rate && prof.rate[ax]; if (m >= 120 && (!cur || m < cur)) { if (!prof.learn.orig) prof.learn.orig = { rate: prof.rate ? { ...prof.rate } : null, air: prof.air ?? null }; (prof.rate = prof.rate || {})[ax] = m; pace = true; } }
+    if (res.changed || pace) { prof.learn.at = new Date().toISOString(); prof.learn.video = true; if (!prof.learn.orig) { const old = store.get('pilot', null) || {}; prof.learn.orig = { rate: old.rate || null, air: old.air ?? null }; } store.set('pilot', prof); applyPilot(); rvDetect();
+      said = `${res.changed ? `${res.report.after - res.report.before} more of your labelled tricks are now recognised (${[...new Set(res.report.changes)].join(', ')}). ` : ''}${pace ? 'The game now knows the pace of your real flying.' : ''}`; }
+    else if (res.report.labels && res.report.before === res.report.labels) said = 'The game already recognises every trick you labelled in this clip.';
+    store.set('learnReport', { ...res.report, at: new Date().toISOString(), runs: 1, video: true });
+  } catch (err) { said = 'Could not learn from this clip.'; }
+  procShow('Done', said + ' It applies in the sim and in Video Review.', 1); await new Promise(r => setTimeout(r, 2600)); procHide(); renderReview(); drawTimeline();
+}
 function rvUpload() { const stamp = new Date().toISOString().replace(/[:.]/g, '-'); const ok = ghEnqueue(`calibration/video/${stamp}.json`, rvPayload(), `video review: ${rv.labels.length} labels`); flash(ok ? '<b>UPLOADING</b><small>motion + labels only — not the video</small>' : '<b>UPLOAD IS OFF</b><small>turn it on in Options</small>', ok ? '' : 'warn'); }
 function renderReview() {
   const el = $('#rvSide'); if (!el) return; const v = $('#rvVideo'), has = !!v.duration;
-  const names = ALL_TRICKS().map(x => nameOf(x));
+  const names = recapNames();   // every trick plus the open-air and single-lap variants
   const items = rv.dets.map((d, i) => { const l = rvLabelFor(d), cls = l ? (l.verdict === 'yes' ? 'ok' : 'bad') : '';
     return `<div class="rvItem ${cls}" data-i="${i}"><span class="t">${fmtT(d.t0)}–${fmtT(d.t)}</span><b>${d.name}</b> <small>${d.exec}${d.draft ? ' · draft' : ''}</small>
       <div class="row"><button data-rv="go" data-i="${i}">▶</button><button data-rv="yes" data-i="${i}">✓ Yes</button><button data-rv="no" data-i="${i}">✗ No</button>
@@ -84,7 +113,8 @@ function renderReview() {
     <p class="note">${rv.frames.length ? `Detector suggestions: <b>${rv.dets.length}</b> · you: ✓${nYes} ✗${nNo} +${nAdd} · obstacle marks ${rv.marks.length}` : 'Measure the motion, then mark when you pass under (U) or over (O) things — that unlocks loops, Mattys and Split-S.'}</p>
     ${items}${added}
     <div class="row"><select id="rvAddName"><option value="">＋ add a trick at the playhead…</option>${names.map(n => `<option>${n}</option>`).join('')}</select></div>
-    <div class="row"><button data-rv="export" class="ghost" ${rv.frames.length ? '' : 'disabled'}>Export labels</button><button data-rv="upload" class="ghost" ${rv.frames.length ? '' : 'disabled'}>↑ Upload</button><button data-act="menu" class="ghost">Menu</button></div>
+    <div class="row"><button data-rv="teach" class="primary" ${rv.labels.length ? '' : 'disabled'} title="The game re-checks the tricks you labelled and loosens itself to match how you really fly">Teach the game from this clip</button><button data-rv="share" ${rv.labels.length ? '' : 'disabled'} title="Send the measured motion, marks and labels to the project (never the video)">Share with the project</button></div>
+    <div class="row"><button data-rv="export" class="ghost" ${rv.frames.length ? '' : 'disabled'}>Export labels</button>${ghMenus() ? `<button data-rv="upload" class="ghost" ${rv.frames.length ? '' : 'disabled'}>↑ Upload</button>` : ''}<button data-act="menu" class="ghost">Menu</button></div>
     <p class="note">The camera tilt and lens matter: tilt splits a roll into roll + yaw. "One axis at a time" works best for flips/rolls/spins; turn it off for trippies and orbits (coordinated roll + yaw).</p>`;
 }
 function drawTimeline() {
@@ -153,7 +183,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-rv]'); if (b) { const a = b.dataset.rv, i = +b.dataset.i;
-    if (a === 'analyze') rvAnalyze(false); if (a === 'resume') rvAnalyze(true); if (a === 'cancel') rv.cancel = true; if (a === 'export') rvExport(); if (a === 'upload') rvUpload();
+    if (a === 'analyze') rvAnalyze(false); if (a === 'resume') rvAnalyze(true); if (a === 'cancel') rv.cancel = true; if (a === 'export') rvExport(); if (a === 'upload') rvUpload(); if (a === 'share') rvShare(); if (a === 'teach') rvTeach();
     if (a === 'yes') rvJudge(i, 'yes'); if (a === 'no') rvJudge(i, 'no'); if (a === 'del') { rv.labels.splice(+b.dataset.k, 1); renderReview(); }
     if (a === 'go') { const v = $('#rvVideo'); v.currentTime = Math.max(0, rv.dets[i].t0 - 0.6); v.play(); }
     return; }

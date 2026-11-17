@@ -42,5 +42,12 @@ const names = (rows, pilot) => S.replayTrace(rows, { world, camTilt: 0, pilot, d
   // 4. bounds: a profile from storage cannot push the knobs past their caps
   const det = new S.TrickDetector(world); det.setPilot({ learn: { tol: 9999, rev: -5, crossBack: 'x' } });
   check('stored values are clamped', det.learned.tol === S.LEARN_MAX.tol && det.learned.rev === 0 && det.learned.crossBack === 0);
+  // 5. real footage: Video Review has no trace, only measured camera motion. The same learner re-measures the clip.
+  { require('../src/vision.js'); const V = globalThis.Vision, frames = []; for (let i = 0; i < 240; i++) { const tt = i / 30, yaw = (tt > 1 && tt < 3.4) || (tt > 5 && tt < 7.4) ? 150 / 30 : 0; frames.push({ t: tt, rpy: [0, 0, yaw] }); }
+    const detect = profile => V.detectClip(S, frames, [], { camTilt: 0, axisCleanup: true, pilot: profile });
+    check('video: slow real yaw spins are not called on the stock settings', detect(null).filter(e => e.name === 'Yaw Spin').length === 0);
+    const run = { span: [0, 8], detect, labels: [{ target: 'Yaw Spin', verdict: 'yes', actual: 'Yaw Spin', repStart: 1, t: 3.4 }, { target: 'Yaw Spin', verdict: 'yes', actual: 'Yaw Spin', repStart: 5, t: 7.4 }] };
+    r = await S.learnFromLabels([run], null);
+    check('video: labelling them teaches the game the pilot\'s real pace', r.changed && r.report.after === 2 && detect(r.profile).filter(e => e.name === 'Yaw Spin').length === 2, JSON.stringify(r.report.changes)); }
   console.log(`\n${ok}/${n} learning checks`); if (ok !== n) process.exitCode = 1;
 })();

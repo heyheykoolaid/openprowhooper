@@ -18,6 +18,14 @@ function telPilot() { if (!tel.pilot) { tel.pilot = 'p' + Math.random().toString
 const telStamp = r => `${r.started.replace(/[:.]/g, '-')}-${r.id}`;
 function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { telPilot(); telPump(true); } telRenderStatus(); }
 
+// ---- Things that went wrong in the game's own code on this machine (message and where, nothing else). The last few
+// ride along with a shared flight or a feedback note, so a bug a pilot hits can be found without them reporting it.
+const errLog = [];
+function errNote(msg, where) { const m = String(msg || '').replace(/gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}/g, '[token]').slice(0, 160), w = String(where || '').replace(/^.*\//, '').slice(0, 60);
+  const e = errLog.find(x => x.m === m && x.w === w); if (e) { e.n++; return; } if (errLog.length < 12) errLog.push({ m, w, n: 1, mode, at: Math.round(performance.now() / 1000) }); }
+addEventListener('error', e => { if (e && e.message) errNote(e.message, (e.filename || '') + ':' + (e.lineno || 0)); });
+addEventListener('unhandledrejection', e => { const r = e && e.reason; errNote(r && r.message ? r.message : r, 'promise'); });
+
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
   if (!tel.on || !recap.id || recap.telDone === recap.id || race.on || recap.guest) return null;
@@ -36,7 +44,7 @@ function telCapture(reason) {
     missed: recap.flags.map(f => ({ t: f.t })) };
   const stamp = telStamp(recap);
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
 
 // ---- "Processing…": the heavy moments (packing and sending a flight, learning from a review) happen behind a short
@@ -101,7 +109,7 @@ const TEL_BACKOFF = [60, 120, 300, 900, 3600];
 async function telPump(force) {
   if (telState.busy) return; if (!force && telState.retryAt && Date.now() < telState.retryAt) return; telState.busy = true;
   try {
-    for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && !tel.on) continue;
+    for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && it.kind !== 'video' && !tel.on) continue;   // feedback and a video review are sent by the player's own click
       let route = (await telToDb(it)) ? 'project database' : null, refused = false;
       if (!route && TEL.relay && !telState.relayOff) { const st = await telToRelay(it);
         if (st >= 200 && st < 300) route = 'project drop-off';

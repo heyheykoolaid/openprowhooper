@@ -21,12 +21,13 @@
 // default https://heyheykoolaid.github.io), PER_IP_HOUR (30), DAILY_CAP (800), ENABLED. Optional KV binding LIMITS makes
 // the daily cap exact across Cloudflare's machines (one small write per upload); without it, and for the per-address
 // limit, counts are kept in memory on each machine (best effort).
-const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1' };
+const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1', video: 'pro-whooper-video/1' };
 const MAX_BYTES = 1000000;
 const KEYS = {
   flight: ['format', 'build', 'id', 'started', 'ended', 'pilot', 'name', 'map', 'mode', 'camTilt', 'craft', 'tune', 'profile', 'input', 'score', 'events', 'missed', 'summary', 'trace'],
   labels: ['format', 'build', 'flight', 'started', 'pilot', 'name', 'labels'],
   feedback: ['format', 'at', 'build', 'category', 'text', 'name', 'context'],
+  video: ['format', 'build', 'duration', 'video', 'analysis', 'frames', 'marks', 'detected', 'labels', 'name', 'pilot', 'profile'],   // measured camera motion + marks + labels (never the video or its file name)
   score: ['format', 'build', 'name', 'pilot', 'score', 'map', 'mode', 'flight', 'totals', 'sheet', 'events', 'camTilt', 'camFov', 'craft', 'trace'],
 };
 const str = (v, max) => typeof v === 'string' && v.length <= max;
@@ -62,6 +63,10 @@ function clean(kind, p) {
     if (!optStr(out.flight, 40) || (out.sheet != null && (!Array.isArray(out.sheet) || out.sheet.length > 400)) || (out.events != null && (!Array.isArray(out.events) || out.events.length > 400))) return null;
     const t = out.trace; out.trace = undefined; if (!sane(out) || JSON.stringify(out).length > 60000) return null;
     if (t != null) { if (!okTrace(t) || t.rows > 20000) return null; out.trace = { enc: t.enc, hz: t.hz, cols: t.cols, rows: t.rows, data: t.data }; }
+  } else if (kind === 'video') {
+    const F = out.frames; if (!Array.isArray(F) || F.length < 10 || F.length > 6000 || !F.every(r => Array.isArray(r) && r.length === 4 && r.every(Number.isFinite))) return null;
+    if (!Array.isArray(out.labels) || out.labels.length > 600 || (out.marks != null && (!Array.isArray(out.marks) || out.marks.length > 2000)) || (out.detected != null && (!Array.isArray(out.detected) || out.detected.length > 2000))) return null;
+    out.frames = undefined; if (!sane(out)) return null; out.frames = F;
   } else if (kind === 'labels') {
     if (!str(out.flight, 40) || !Array.isArray(out.labels) || out.labels.length > 3000 || !sane(out)) return null;
   } else {
