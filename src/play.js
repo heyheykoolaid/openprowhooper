@@ -165,6 +165,7 @@ function frame(now) {
   }
   if (mode === 'review') { reviewTick(); return; }
   renderer.render(scene, cam);
+  if (mode === 'recap' && recap.rec) recapRecFrame();
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 }
 function resize() {

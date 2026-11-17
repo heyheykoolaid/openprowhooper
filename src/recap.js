@@ -27,12 +27,14 @@ addEventListener('keydown', e => {
 const recapItems = () => [...recap.events.map((e, i) => ({ kind: 'call', i, t: e.t, e })), ...recap.flags.map((f, i) => ({ kind: 'miss', i, t: f.t, f }))]
   .sort((a, b) => { const pa = a.kind === 'miss' || a.e.flag ? 0 : a.e.conf != null && a.e.conf < 0.7 ? 1 : 2, pb = b.kind === 'miss' || b.e.flag ? 0 : b.e.conf != null && b.e.conf < 0.7 ? 1 : 2; return pa - pb || a.t - b.t; });
 function openRecap(from) {
-  if (!recap.events.length && !recap.flags.length) { flash('<b>NOTHING TO REVIEW YET</b><small>fly some tricks first</small>', 'near'); return; }
+  if (recap.trace.length < TRACE_HZ) { flash('<b>NOTHING TO REPLAY YET</b><small>fly first</small>', 'near'); return; }
   recap.back = from || 'pause'; mode = 'recap'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#recapUI').classList.remove('hide'); document.body.classList.add('bbr');
-  recap.saved = { pos: drone.pos, q: drone.q, vel: drone.vel }; const first = recapItems()[0]; recapPlay(first); renderRecap();
+  recap.saved = { pos: drone.pos, q: drone.q, vel: drone.vel }; recap.clip = null; recap.rec = null; recap.review = store.get('recapReview', true);
+  const first = recap.review ? recapItems()[0] : null; if (first) recapPlay(first); else { const [T0] = recapSpan(); recap.play = { t: T0, playing: true, speed: 1, looping: true, loop: null, key: null }; }
+  renderRecap();
 }
 function closeRecap() {
-  recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
+  recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
   if (recap.back === 'results') { mode = 'paused'; show('#resultsScreen'); } else if (recap.back === 'menu') { mode = 'menu'; show('#mainMenu'); } else { mode = 'paused'; show('#pause'); }
 }
 // The player: the whole run on a timeline. Picking a call (or a mark on the timeline) jumps to it and loops that moment;
@@ -45,11 +47,13 @@ function recapSeek(t, keepLoop) { const p = recap.play; if (!p) return; const [T
 function recapRowAt(t) { const T = recap.trace; let lo = 0, hi = T.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m][0] <= t) lo = m; else hi = m; } return T[lo]; }
 function recapStep(dt) {
   const p = recap.play; if (!p || !recap.trace.length) return; const [T0, T1] = recapSpan();
-  if (p.playing) { p.t += dt * p.speed; if (p.loop && p.looping && p.t > p.loop.b + 0.4) p.t = p.loop.a; if (p.t >= T1) { p.t = T1; p.playing = false; recapBarState(); } }
+  const C = recap.clip, R = recap.rec;
+  if (p.playing) { p.t += dt * p.speed; if (R) { if (p.t >= R.b) { p.t = R.b; p.playing = false; recapRecStop(); } } else if (C && p.looping) { if (p.t > C.b || p.t < C.a - 0.05) p.t = C.a; } else if (p.loop && p.looping && p.t > p.loop.b + 0.4) p.t = p.loop.a; if (p.t >= T1) { p.t = T1; p.playing = false; recapBarState(); } }
   const r = recapRowAt(p.t); drone.pos = S.v3(r[1], r[2], r[3]); drone.q = { w: r[4], x: r[5], y: r[6], z: r[7] }; drone.vel = S.v3(r[21], r[22], r[23]); for (let i = 0; i < 4; i++) drone.motorW[i] = r[13] && p.playing ? 2600 : 0;
   camMode = recap.cam; const trail = []; for (let k = 15; k >= 1; k--) { const q = recapRowAt(Math.max(T0, p.t - k * 0.03)); trail.push({ thr: q[11], roll: q[24], pitch: q[25], yaw: q[26] }); }
   drawSticks($('#recapSticks'), { thr: r[11], roll: r[24], pitch: r[25], yaw: r[26] }, trail);
   const now = recap.events.filter(e => p.t >= e.t - 0.15 && p.t <= e.t + 0.9); $('#recapNow').innerHTML = now.map(e => `${e.name}<small>${e.exec}</small>`).join('');
+  if (R) { const m = $('#rcRecMsg'); if (m) m.textContent = `● recording ${(p.t - R.a).toFixed(1)} / ${(R.b - R.a).toFixed(1)} s`; }
   const head = $('#rcHead'); if (head) { head.style.left = ((p.t - T0) / Math.max(0.01, T1 - T0) * 100) + '%'; $('#rcTime').textContent = `${fmtT(p.t - T0)} / ${fmtT(T1 - T0)}`; }
 }
 const recapSel = () => { const p = recap.play; if (!p || !p.key) return null; return recapItems().find(it => it.kind + it.i === p.key) || null; };
@@ -68,17 +72,24 @@ function renderRecapBar() {
   const selBox = !sel ? '<span class="note">Click a trick on the timeline, or move to a spot and add one.</span>'
     : sel.kind === 'miss' ? `<b>${sel.f.added ? 'Added' : 'Missed'} @ ${fmtT(sel.t - T0)}</b><select data-rcmiss="${sel.i}"><option value="">what was it?</option>${names.map(n => `<option ${sel.f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="remove" title="Take this off the timeline (Delete)">🗑 Remove</button>`
     : `<b>${esc(sel.e.name)} @ ${fmtT(sel.t - T0)}</b>${recapCallSelect(sel.i, sel.e, names)}<button data-rc="remove" title="This wasn't a trick: take it off the timeline (Delete)">${sel.e.verdict === 'no' && sel.e.actual === 'not a trick' ? '↩ Put back' : '🗑 Remove'}</button>`;
-  el.innerHTML = `<div class="rcTrack" id="rcTrack"><div class="rcMarks">${marks}</div><div id="rcHead"></div></div>
+  const C = recap.clip, clipBand = C ? `<div class="rcClip" style="left:${pc(C.a)}%;width:${Math.max(0.3, pc(C.b) - pc(C.a))}%"></div>` : '';
+  document.body.classList.toggle('rcWide', !recap.review);
+  el.innerHTML = `<div class="rcTrack" id="rcTrack">${clipBand}<div class="rcMarks">${marks}</div><div id="rcHead"></div></div>
     <div class="rcRow"><button data-rc="prev" title="Previous trick ([)">⏮</button><button data-rc="back" title="Back 1 s (←)">−1s</button><button data-rc="fb" title="Back one frame (,)">◂</button><button data-rc="toggle" id="rcPlay" class="primary" title="Play / pause (Space)">⏸</button><button data-rc="ff" title="Forward one frame (.)">▸</button><button data-rc="fwd" title="Forward 1 s (→)">+1s</button><button data-rc="next" title="Next trick (])">⏭</button>
       <select id="rcSpeed" title="Playback speed">${[0.1, 0.25, 0.5, 1, 2].map(v => `<option value="${v}" ${p.speed === v ? 'selected' : ''}>${v}×</option>`).join('')}</select>
       <button data-rc="loop" id="rcLoop" title="Loop the selected trick (L)">⟲ loop</button><button data-rc="cam" title="Camera (C)">📷</button><span id="rcTime"></span>
-      <button data-rc="add" class="add" title="Add a trick the game missed, at the playhead (A)">＋ Add trick here</button></div>
-    <div class="rcRow rcSel">${selBox}</div>`;
+      ${recap.review ? '<button data-rc="add" class="add" title="Add a trick the game missed, at the playhead (A)">＋ Add trick here</button>' : ''}</div>
+    <div class="rcRow"><b>Clip</b><button data-rc="in" title="Start the clip at the playhead (I)">[ In</button><button data-rc="out" title="End the clip at the playhead (O)">Out ]</button>
+      <span class="note">${C ? `${fmtT(C.a - T0)} → ${fmtT(C.b - T0)} · ${(C.b - C.a).toFixed(1)} s` : sel ? 'no clip set: export uses the selected trick' : 'mark In and Out, or pick a trick'}</span>
+      ${C ? '<button data-rc="clipclear">Clear</button>' : ''}<button data-rc="exportclip" class="primary" title="Record the clip from this camera, at this speed, as a video file">⬇ Export video</button><span id="rcRecMsg" class="note"></span>
+      <label class="chk" style="margin-left:auto"><input type="checkbox" id="rcReview" ${recap.review ? 'checked' : ''}> Review tricks</label><button data-rc="close">${recap.review ? 'Done' : 'Close'}</button></div>
+    ${recap.review ? `<div class="rcRow rcSel">${selBox}</div>` : ''}`;
   recapBarState();
 }
 const recapCallSelect = (i, e, names) => `<select data-rcfix="${i}" class="${e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : ''}"><option value="">it was…</option><option value="${esc(e.name)}" ${e.verdict === 'yes' ? 'selected' : ''}>✓ ${esc(e.name)} (correct)</option><option ${e.verdict === 'no' && e.actual === 'not a trick' ? 'selected' : ''}>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option ${e.verdict === 'no' && e.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
 function renderRecap() {
   const el = $('#recapSide'), names = ALL_TRICKS().map(x => nameOf(x)), items = recapItems(), [T0] = recapSpan();
+  el.classList.toggle('hide', !recap.review); if (!recap.review) { renderRecapBar(); return; }
   const done = recap.events.filter(e => e.verdict === 'yes' || (e.verdict === 'no' && e.actual)).length + recap.flags.filter(f => f.actual).length;
   el.innerHTML = `<h3>REVIEW YOUR RUN</h3>
     <p class="note">${recap.events.length} calls${recap.flags.length ? `, ${recap.flags.length} added / missed` : ''} · ${done} labelled. Flagged and unsure calls are first. Pick what each one really was; every label makes the detector better.</p>
@@ -90,7 +101,7 @@ function renderRecap() {
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button></div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
     <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
-    <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera</p>`;
+    <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera · <kbd>I</kbd><kbd>O</kbd> clip in / out</p>`;
   renderRecapBar();
 }
 function recapPayload() {
@@ -107,6 +118,39 @@ function recapSave(force) {
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
   // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
   if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels }); }
+}
+// ---- clip export: play the clip once and record what the game draws (with the trick call-outs, the sticks and a
+// small credit) through the browser's own video recorder. Recorded at the chosen speed, so slow motion stays slow.
+function recapRecStart() {
+  const p = recap.play, msg = t => { const m = $('#rcRecMsg'); if (m) m.textContent = t; }; if (!p) return;
+  const sel = recapSel(), c = recap.clip || (p.loop ? { a: p.loop.a, b: p.loop.b } : null);
+  if (!c) { msg('Mark In and Out first (I and O), or pick a trick.'); return; }
+  if ((c.b - c.a) / p.speed > 90) { msg('That would be over 90 seconds of video: shorten the clip or speed it up.'); return; }
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) { msg('This browser cannot record video here.'); return; }
+  const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720; const ctx = cv.getContext('2d');
+  const mime = ['video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+  if (!mime) { msg('This browser cannot record video here.'); return; }
+  let recorder; try { recorder = new MediaRecorder(cv.captureStream(60), { mimeType: mime, videoBitsPerSecond: 10e6 }); } catch { msg('This browser cannot record video here.'); return; }
+  const chunks = [], R = recap.rec = { cv, ctx, recorder, a: c.a, b: c.b, cancelled: false, was: { looping: p.looping, loop: p.loop } };
+  recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = async () => { recap.rec = null; p.looping = R.was.looping; p.loop = R.was.loop; renderRecapBar(); if (R.cancelled) { msg('Recording cancelled.'); return; }
+    const blob = new Blob(chunks, { type: mime.split(';')[0] }), ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm', name = `pro-whooper-${slug(!recap.clip && sel && sel.kind === 'call' ? sel.e.name : 'clip')}-${recap.id}.${ext}`;
+    recap.lastClip = { size: blob.size, type: blob.type, name };
+    let ok = false; if (window.claude && window.claude.use) ok = (await saveFile(name, blob)) === true; else { try { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); ok = true; } catch {} }
+    msg(ok ? `Saved ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Could not save the video here.'); };
+  p.t = c.a; p.playing = true; recorder.start(250); renderRecapBar(); recapBarState();
+  const b = document.querySelector('#recapBar [data-rc="exportclip"]'); if (b) b.textContent = '■ Stop';
+}
+function recapRecStop(cancel) { const R = recap.rec; if (!R) return; R.cancelled = !!cancel; try { if (R.recorder.state !== 'inactive') setTimeout(() => { try { R.recorder.stop(); } catch {} }, cancel ? 0 : 250); } catch { recap.rec = null; } }
+// called right after the 3D view is drawn, while its picture can still be copied
+function recapRecFrame() {
+  const R = recap.rec, p = recap.play; if (!R || !p) return; const { cv, ctx } = R, src = renderer.domElement, W = cv.width, H = cv.height;
+  const s = Math.max(W / src.width, H / src.height), dw = src.width * s, dh = src.height * s; ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  const now = recap.events.filter(e => p.t >= e.t - 0.15 && p.t <= e.t + 1.4 && !(e.verdict === 'no' && e.actual === 'not a trick'));
+  ctx.textBaseline = 'top'; ctx.lineJoin = 'round'; let y = 28;
+  for (const e of now) { const name = e.verdict === 'no' && e.actual ? e.actual : e.name; ctx.font = "44px 'Bungee', Impact, sans-serif"; ctx.lineWidth = 8; ctx.strokeStyle = '#111'; ctx.strokeText(name, 36, y); ctx.fillStyle = '#fff'; ctx.fillText(name, 36, y); y += 56; }
+  const st = $('#recapSticks'); if (st && st.width) ctx.drawImage(st, 28, H - 28 - 110, 238, 110);
+  ctx.font = "600 18px system-ui, sans-serif"; ctx.textAlign = 'right'; ctx.lineWidth = 4; ctx.strokeStyle = '#000a'; const tag = `Open Pro Whooper${pilotName() ? ' · ' + pilotName() : ''}${p.speed !== 1 ? ' · ' + p.speed + '×' : ''}`; ctx.strokeText(tag, W - 24, H - 40); ctx.fillStyle = '#fff'; ctx.fillText(tag, W - 24, H - 40); ctx.textAlign = 'left';
 }
 function recapJump(dir) { const p = recap.play; if (!p) return; const L = recapItems().slice().sort((a, b) => a.t - b.t); const it = dir > 0 ? L.find(x => x.t > p.t + 0.05 && x.kind + x.i !== p.key) : L.slice().reverse().find(x => x.t < p.t - 0.3 && x.kind + x.i !== p.key); if (it) recapPlay(it); }
 document.addEventListener('click', e => {
@@ -126,6 +170,11 @@ document.addEventListener('click', e => {
       if (a === 'prev' || a === 'next') recapJump(a === 'next' ? 1 : -1);
       if (a === 'loop') { p.looping = !p.looping; recapBarState(); return; }
       if (a === 'cam') { recap.cam = recap.cam === 'fpv' ? 'chase' : 'fpv'; return; }
+      if (recap.rec && a !== 'exportclip') return;                       // hands off while a clip is recording
+      if (a === 'in') { const [, T1] = recapSpan(), c = recap.clip; recap.clip = { a: p.t, b: c && c.b > p.t + 0.2 ? c.b : Math.min(T1, p.t + 5) }; }
+      if (a === 'out') { const [T0] = recapSpan(), c = recap.clip; recap.clip = { a: c && c.a < p.t - 0.2 ? c.a : Math.max(T0, p.t - 5), b: p.t }; }
+      if (a === 'clipclear') recap.clip = null;
+      if (a === 'exportclip') { if (recap.rec) recapRecStop(true); else recapRecStart(); }
       if (a === 'add') recapAddAt(p.t);
       if (a === 'remove') recapRemove(recapSel());
     }
@@ -141,13 +190,14 @@ addEventListener('pointermove', e => { if (recapDrag) recapScrub(e); });
 addEventListener('pointerup', () => { recapDrag = false; });
 document.addEventListener('change', e => {
   if (mode !== 'recap') return;
+  if (e.target.id === 'rcReview') { recap.review = e.target.checked; store.set('recapReview', recap.review); renderRecap(); return; }
   if (e.target.id === 'rcSpeed') { if (recap.play) recap.play.speed = +e.target.value; e.target.blur(); return; }
   if (e.target.dataset.rcfix !== undefined) { recapSetCall(+e.target.dataset.rcfix, e.target.value); renderRecap(); }
   if (e.target.dataset.rcmiss !== undefined) { recap.flags[+e.target.dataset.rcmiss].actual = e.target.value || null; recap.dirty = true; renderRecap(); }
 });
 addEventListener('keydown', e => {
   if (mode !== 'recap' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; const p = recap.play, click = a => { const b = document.querySelector(`#recapBar [data-rc="${a}"]`); if (b) b.click(); };
-  const map = { Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove' };
+  const map = { Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove', KeyI: 'in', KeyO: 'out' };
   if (map[e.code] && p) { e.preventDefault(); click(map[e.code]); }
   if (e.code === 'Escape') closeRecap();
 });

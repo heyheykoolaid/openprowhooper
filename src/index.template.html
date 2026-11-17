@@ -226,11 +226,13 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #recapBar .rcM { position: absolute; transform: translateX(-50%); max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
 #recapBar .rcM.ok { background: #1f7a44; } #recapBar .rcM.bad { background: #a8521c; } #recapBar .rcM.unsure { background: #8a6d10; } #recapBar .rcM.add { background: #1d5fa8; } #recapBar .rcM.gone { background: #4a2020; text-decoration: line-through; color: #c99; }
 #recapBar .rcM.on { outline: 2px solid #ffd34d; z-index: 2; }
+#recapBar .rcClip { position: absolute; top: 0; bottom: 0; background: #ffd34d2b; border-left: 2px solid #ffd34d; border-right: 2px solid #ffd34d; pointer-events: none; }
+body.rcWide #recapBar { right: 12px; }
 #rcHead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4d2e; pointer-events: none; z-index: 3; }
 #recapBar .rcRow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 6px; } #recapBar .rcRow button, #recapBar .rcRow select { font-size: 12px; padding: 3px 8px; }
 #recapBar #rcTime { font: 12px var(--mono); margin: 0 8px; color: #cfc6b4; } #recapBar .add { margin-left: auto; } #recapBar #rcLoop.lp { outline: 2px solid #ffd34d; }
 #recapBar .rcSel select { max-width: 260px; } #recapSide select.ok, #recapBar select.ok { border-color: #2fa35f; } #recapSide select.bad, #recapBar select.bad { border-color: #d0702c; } #recapSide select { max-width: 230px; }
-#recapSticks { position: absolute; left: 12px; bottom: 172px; width: 208px; height: 96px; pointer-events: none !important; }
+#recapSticks { position: absolute; left: 12px; bottom: 214px; width: 208px; height: 96px; pointer-events: none !important; }
 #warmBox { position: absolute; right: 16px; top: 70px; width: 300px; background: rgba(14,13,12,.92); border: 2px solid #0b0a09; padding: 10px 12px; color: #eee; font: 13px/1.4 var(--mono); z-index: 5; }
 #warmBox .jTop { display: flex; justify-content: space-between; color: #ff7a5a; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; } #warmBox h3 { margin: 4px 0; }
 #warmBox .wStep { padding: 4px 6px; margin: 3px 0; border: 1px solid #2c2925; opacity: .6; } #warmBox .wStep.cur { opacity: 1; border-color: #ffd34d; } #warmBox .wStep.ok { opacity: .85; border-color: #3c8a4a; }
@@ -322,7 +324,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
-  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Review my tricks</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
+  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="fbToast"></div>
