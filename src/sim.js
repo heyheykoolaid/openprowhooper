@@ -2629,6 +2629,34 @@ function hoverInfo(p) {
   return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
 }
 // ---- Replay: recorded rows (TRACE_COLS) through a fresh detector at 1 kHz. Shared by the Node tools and the game.
+// Bot replica (2026-11-17, the pilot's idea): re-fly a stretch of a recorded flight with the REAL physics and the pilot's
+// own recorded sticks, from the recorded position, attitude, velocity and rates, so one checked trick becomes a small,
+// self-contained bot flight that can be flown again for training and validation. A trace has no motor speeds, PID
+// integrators or battery state, so the first `warm` seconds fly "on rails" (state pinned to the recording at every row)
+// while those settle; from `from` the quad flies free on the sticks alone. Rows come back in the trace's columns, with how
+// far the free flight drifted from the recording (metres, degrees). Sticks hold between rows (the trace is 100 Hz).
+function replicaFly(rows, opts) {
+  const { params, tune, world } = opts, warm = opts.warm ?? 0.8, from = opts.from, to = opts.to; if (!rows || rows.length < 10 || !(to > from)) return null;
+  let k = rows.findIndex(r => r[0] >= from - warm); if (k < 0) return null; const hasV = rows[0].length >= 24, hasS = rows[0].length >= 27;
+  const d = new Drone(params, tune || {}, world); d.reset({ pos: v3(rows[k][1], rows[k][2], rows[k][3]), yaw: 0 }); if (opts.soc != null) d.soc = opts.soc;
+  const pin = (r, r1) => { d.pos = v3(r[1], r[2], r[3]); d.q = { w: r[4], x: r[5], y: r[6], z: r[7] }; d.w = v3(r[9] * D2R, -r[10] * D2R, -r[8] * D2R);
+    d.vel = hasV ? v3(r[21], r[22], r[23]) : r1 ? v3((r1[1] - r[1]) / (r1[0] - r[0]), (r1[2] - r[2]) / (r1[0] - r[0]), (r1[3] - r[3]) / (r1[0] - r[0])) : v3(); };
+  const qAng = (a, b) => 2 * Math.acos(Math.min(1, Math.abs(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z))) * R2D;
+  const out = [], drift = { pos: 0, ang: 0, at: null }; d.time = rows[k][0]; d.armed = true; d.crashed = false;
+  for (let i = k; i < rows.length - 1 && rows[i][0] <= to; i++) {
+    const r = rows[i], r1 = rows[i + 1], free = r[0] >= from; if (!free) pin(r, r1);
+    d.armed = !!r[13] || r[13] == null; const rc = { thr: r[11], roll: hasS ? r[24] : 0, pitch: hasS ? r[25] : 0, yaw: hasS ? r[26] : 0 };
+    const n = Math.max(1, Math.round((r1[0] - r[0]) * 1000)); let hit = null;
+    for (let j = 0; j < n; j++) { d.step(rc, 0.001); if (d.contactThisStep && d.contactNormal) hit = { n: d.contactNormal, obj: d.contactOwner ?? -1, imp: d.lastImpact || 0, g: d.contactGround ? 1 : 0 }; }
+    d.time = r1[0]; const R = d.pilotRates(), f4 = x => +x.toFixed(4), f3 = x => +x.toFixed(3);
+    out.push([f3(d.time), f4(d.pos.x), f4(d.pos.y), f4(d.pos.z), +d.q.w.toFixed(5), +d.q.x.toFixed(5), +d.q.y.toFixed(5), +d.q.z.toFixed(5), Math.round(R[0]), Math.round(R[1]), Math.round(R[2]), r1[11],
+      hit ? 1 : 0, d.armed ? 1 : 0, d.crashed ? 1 : 0, hit ? f3(hit.n.x) : 0, hit ? f3(hit.n.y) : 0, hit ? f3(hit.n.z) : 0, hit ? hit.obj : -1, hit ? +hit.imp.toFixed(2) : 0, hit ? hit.g : 0,
+      f3(d.vel.x), f3(d.vel.y), f3(d.vel.z), hasS ? r1[24] : 0, hasS ? r1[25] : 0, hasS ? r1[26] : 0]);
+    if (free) { const e = Math.hypot(d.pos.x - r1[1], d.pos.y - r1[2], d.pos.z - r1[3]), a = qAng(d.q, { w: r1[4], x: r1[5], y: r1[6], z: r1[7] });
+      if (e > drift.pos) drift.pos = +e.toFixed(3); if (a > drift.ang) { drift.ang = +a.toFixed(1); drift.at = r1[0]; } }
+  }
+  return { rows: out, drift, from, to, warm, crashed: d.crashed };
+}
 function replayTrace(rows, opts = {}) {
   const det = new StreamDetector(opts.world); det.camTilt = opts.camTilt ?? 20; if (opts.pilot) det.setPilot(opts.pilot);
   if (opts.hook) opts.hook(det);
@@ -2724,6 +2752,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -40,7 +40,7 @@ document.addEventListener('keydown', e => { if ($('#mapScreen').classList.contai
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu') { const j = $('#judgeBtn'); if (j) j.classList.toggle('hide', !ghMenus()); } }   // Judge the community: the project owner's tool for now
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { const j = $('#judgeBtn'); if (j) j.classList.toggle('hide', !ghMenus()); } }   // Judge the community: the project owner's tool for now
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
 function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
 function startFlyGo(withSession) {
@@ -63,8 +63,8 @@ function endSession() {
     <p>Biggest trick: <b>${r.biggest ? r.biggest.name + ' (' + r.biggest.net + ')' : '—'}</b> · Max streak ×${r.maxStreak.toFixed(2)} · Obstacles ${r.uniqueObs.size}</p>
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
-    <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="menu">Menu</button></div><div id="lbBox"></div>`;
-  show('#resultsScreen'); lbSessionOver(r); procFlight(telCapture('session-over'));
+    <div class="row"><button data-act="session">Run it back</button><button data-act="quick" class="primary" title="Say whether the game got its least sure calls right">Quick check</button><button data-act="recap" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="menu">Menu</button></div><div id="lbBox"></div>`;
+  show('#resultsScreen'); quickLabels(); lbSessionOver(r); procFlight(telCapture('session-over'));
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;

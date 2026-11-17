@@ -405,6 +405,18 @@ model (`makeWhoopMesh` returns `lens`, `droneLens` in worldview.js; `params.camP
 camera barrel now points forward and up by the tilt. The model is drawn 2.5x only in Judge the Bot's spectator view
 (set every frame in play.js); starting a flight closes Judge the Bot whatever way it was left.
 
+## Quick check and bot replicas (2026-11-17; src/recap.js `openQuick`, src/sim.js `replicaFly`)
+**Quick check** (pause menu, results screen; daily goal `QUICK_GOAL` 3 on the main menu, `store 'quickDay'`): after a run,
+the 3 calls most worth asking about (flagged with F, then the library's maybes, then the lowest Watcher confidence) loop
+one at a time in the main view with Yes / "No, it was…" / Skip (Y / N / K). Answers are ordinary decided review labels:
+`recapSave` keeps them, shares them with the flight when sharing is on, and feeds `learnRun`, exactly like SKITTLES mode.
+**Bot replicas**: every answered call is re-flown by `Sim.replicaFly` with the real physics from the recorded position,
+attitude, velocity and rates using the pilot's own recorded sticks (0.8 s "on rails" first so motors and PID settle; the
+trace has no motor speeds, integrators or battery). Faithful = drift under 0.5 m and 30°. With sharing on, faithful
+replicas go out as mini bot flights (`mode: 'replica'`, `pilot: 'bot'`, `summary.replica` with drift and the calls on
+recording vs replica) plus the pilot's verdict (`via: 'quick-replica'`); tools/evidence.js skips unfaithful ones and
+weighs the rest 0.5 (the label on the real flight already counts 1). test/replica.js.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

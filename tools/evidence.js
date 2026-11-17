@@ -4,7 +4,7 @@
 // with ev = [{ kind: want | not | miss | custom, name, a, b, w, author, src }]. All of it is untrusted: parsed, never run.
 const fs = require('fs');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
-const W = { reviewer: 1.5, own: 1.0, judge: 1.0, flag: 0.5, q: 0.3, keep: 0.1, cap: 6 };
+const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, keep: 0.1, cap: 6 };
 const worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (S.MAPS[id] || S.MAPS.playground).build());
 const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
 // a pilot is their chosen name where they gave one (the same person flies from more than one browser, each with its own
@@ -15,12 +15,13 @@ async function load(files) {
   for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
     const items = j.format === 'pro-whooper-telemetry-bundle/1' && Array.isArray(j.items) ? j.items.map(x => x && x.payload).filter(Boolean) : [j];
     for (const p of items) {
-      if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
+      if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, replica: p.mode === 'replica' ? !!(p.summary && p.summary.replica && p.summary.replica.faithful === true) : null, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
       if (p.format === 'pro-whooper-score/1' && str(p.flight) && p.trace && !flights.has(p.flight)) flights.set(p.flight, { id: p.flight, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: null, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: [], src: 'leaderboard' });
       if (p.format === 'pro-whooper-flight-labels/1' && str(p.flight) && Array.isArray(p.labels)) labelFiles.push(p);
     } }
   const runs = [];
   for (const fl of flights.values()) {
+    if (fl.replica === false) continue;   // a bot replica that drifted away from the pilot's flight shows nothing about that trick
     let rows; try { rows = await FL.unpack(fl.trace); } catch { continue; } if (!Array.isArray(rows) || rows.length < 100) continue;
     const T0 = rows[0][0], T1 = rows[rows.length - 1][0], ev = [];
     // the pilot's pace from their Warm-up, without what their own reviews taught their game (that is theirs, not everyone's)
@@ -39,8 +40,8 @@ async function load(files) {
       const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own' };
       if (vote) { votes.push(item); continue; }
       labelled.push([a - 1, b + 2]);
-      if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: rev ? W.reviewer : W.own, author, src: item.src });
-      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: rev ? W.reviewer : W.own, author, src: item.src });
+      if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src });
+      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src });
       if (l.custom && actual) ev.push({ kind: 'custom', name: actual.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40), label: actual, a, b, author });
     }
     // judge votes count only where two different voters agree on the same call

@@ -40,7 +40,7 @@ function openRecap(from) {
   renderRecap();
 }
 function closeRecap() {
-  recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
+  recap.quick = null; $('#recapUI').classList.remove('quick'); recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
   if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
     recap.guest = false; recap.guestOf = null; if (LB.keep) { Object.assign(recap, LB.keep); LB.keep = null; } else { recapReset(); recap.telDone = recap.id; }
     if (src === 'judge') { const k = (of0 || {}).clip; if (k && ev0.some(e => e.verdict)) { JG.done[k] = 1; store.set('judgeDone', JG.done); } mode = 'menu'; show('#judgeScreen'); judgeRender(); return; }
@@ -180,6 +180,7 @@ const recapExecBtns = (i, e) => `<span class="rcExec" title="How was it flown? (
 const recapCallSelect = (i, e, names) => `<select data-rcfix="${i}" class="${e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : ''}"><option value="">it was…</option><option value="${esc(e.name)}" ${e.verdict === 'yes' ? 'selected' : ''}>✓ ${esc(e.name)} (correct)</option><option ${e.verdict === 'no' && e.actual === 'not a trick' ? 'selected' : ''}>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option ${e.verdict === 'no' && e.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
 function renderRecap() {
   const el = $('#recapSide'), names = recapNames(), items = recapItems(), [T0] = recapSpan();
+  $('#recapUI').classList.toggle('quick', !!recap.quick); if (recap.quick) { el.classList.remove('hide'); renderQuick(); return; }
   el.classList.toggle('hide', !recap.review); if (!recap.review) { renderRecapBar(); return; }
   const done = recap.events.filter(e => e.verdict === 'yes' || (e.verdict === 'no' && e.actual)).length + recap.flags.filter(f => f.actual).length;
   el.innerHTML = `<h3>${recap.guest ? 'REVIEWING ' + esc(String((recap.guestOf || {}).name || 'A PILOT').toUpperCase()) + "'S RUN" : 'SKITTLES MODE'}</h3>${recap.guest ? '<p class="note" style="color:#ffd34d">You are a reviewer here: your verdicts are sent as reviewer labels for this pilot\'s flight. Nothing changes in their run or in your own learning.</p>' : ''}
@@ -391,7 +392,10 @@ document.addEventListener('change', e => {
   if (e.target.dataset.rcmiss !== undefined) { recap.flags[+e.target.dataset.rcmiss].actual = e.target.value || null; recap.dirty = true; renderRecap(); }
 });
 addEventListener('keydown', e => {
-  if (mode !== 'recap' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; const p = recap.play, click = a => { const b = document.querySelector(`#recapBar [data-rc="${a}"]`); if (b) b.click(); };
+  if (mode !== 'recap' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
+  if (recap.quick) { const k = { KeyY: 'yes', KeyK: 'skip', Enter: 'next' }[e.code]; if (k) { const b = document.querySelector(`#recapSide [data-qk="${k}"]`); if (b) { e.preventDefault(); b.click(); } return; }
+    if (e.code === 'KeyN') { const s = $('#recapSide [data-qkfix]'); if (s) { e.preventDefault(); s.focus(); } return; } if (e.code === 'Escape') { closeRecap(); return; } if (e.code !== 'Space' && e.code !== 'KeyC') return; }
+  const p = recap.play, click = a => { const b = document.querySelector(`#recapBar [data-rc="${a}"]`); if (b) b.click(); };
   const map = { KeyS: 'split', KeyT: 'then', Equal: 'zin', Minus: 'zout', Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove', KeyI: 'in', KeyO: 'out' };
   if ((e.code === 'Delete' || e.code === 'Backspace') && recap.multi && recap.multi.size > 1) { e.preventDefault(); for (const it of recapItems().filter(x => recap.multi.has(recapKey(x)))) recapRemove(it); renderRecap(); return; }
   if (map[e.code] && p) { e.preventDefault(); click(map[e.code]); }
@@ -484,3 +488,85 @@ document.addEventListener('click', async e => {
   if (a === 'issue') { const ctx = p.context || {}; window.open(`https://github.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/issues/new?title=${encodeURIComponent(`[${p.category}] ${p.text.slice(0, 60)}`)}&body=${encodeURIComponent(fbText({ ...p, context: p.context ? ctx : null }).slice(0, 5000))}`, '_blank', 'noopener'); msg('Opened GitHub in a new tab (you need a GitHub account to post it).'); }
 });
 function flashNote(t) { const el = $('#fbToast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2600); }
+
+// ---- Quick check (2026-11-17): after a run, the few calls the game is least sure of, one at a time. The moment loops in
+// the main view; the pilot answers Yes, "No, it was…" or Skip. Answers are ordinary decided review labels, so they go
+// through recapSave like SKITTLES mode (kept, shared with the flight when sharing is on, and fed to the learner). Picked:
+// calls the pilot flagged with F, then the library's maybes, then the lowest Watcher confidence. A daily goal of
+// QUICK_GOAL answers is shown on the main menu, the pause menu and the results screen.
+const QUICK_N = 3, QUICK_GOAL = 3;
+const quickDecided = e => e.verdict === 'yes' || (e.verdict === 'no' && !!e.actual);
+const quickToday = () => { const d = new Date().toISOString().slice(0, 10), q = store.get('quickDay', null); return q && q.d === d ? q : { d, n: 0 }; };
+function quickBump() { const q = quickToday(); q.n++; store.set('quickDay', q); quickLabels(); }
+function quickPick() {
+  const c = recap.events.map((e, i) => ({ kind: 'call', i, t: e.t, e })).filter(x => !x.e.hidden && !quickDecided(x.e));
+  const pri = x => x.e.flag ? -2 : x.e.maybe ? -1 : x.e.conf != null ? x.e.conf : 0.75;
+  return c.sort((a, b) => pri(a) - pri(b) || a.t - b.t).slice(0, QUICK_N);
+}
+function quickCount() { return recap.guest ? 0 : Math.min(QUICK_N, recap.events.filter(e => !e.hidden && !quickDecided(e)).length); }
+function quickLabels() {   // the buttons and the menu line say how many calls are waiting and how today's goal is going
+  const q = quickToday(), n = quickCount(), goal = q.n >= QUICK_GOAL ? `today's ${QUICK_GOAL} done ✓` : `today ${q.n}/${QUICK_GOAL}`;
+  for (const b of document.querySelectorAll('[data-act="quick"]')) { b.classList.toggle('hide', !n); b.innerHTML = `Quick check<small>${n} call${n === 1 ? '' : 's'} · about 20 s · ${goal}</small>`; }
+  const m = $('#quickGoal'); if (m) m.innerHTML = q.n >= QUICK_GOAL ? `Quick checks today: <b>${q.n}</b> ✓ thanks, that helps the trick detection` : `Quick checks today: <b>${q.n} / ${QUICK_GOAL}</b> · after a run, press Quick check and say if the game got it right`;
+}
+function openQuick(from) {
+  if (recap.trace.length < TRACE_HZ) { flash('<b>NOTHING TO CHECK YET</b><small>fly first</small>', 'near'); return; }
+  const list = quickPick(); if (!list.length) { flash('<b>NOTHING TO CHECK</b><small>no calls waiting for an answer in this run</small>', 'near'); return; }
+  recap.quick = { list: list.map(x => x.i), k: 0, n: 0 }; openRecap(from); recapPlay(list[0]); renderRecap();
+}
+function quickNext() { const Q = recap.quick; if (!Q) return; Q.k++; const i = Q.list[Q.k]; if (i != null) recapPlay({ kind: 'call', i, t: recap.events[i].t, e: recap.events[i] }); renderRecap(); }
+function quickAnswer(i, val) { const Q = recap.quick, e = recap.events[i]; if (!Q || !e || !val) return; recapSetCall(i, val); if (quickDecided(e)) { Q.n++; quickBump(); setTimeout(() => quickReplica(i), 30); } quickNext(); }
+function renderQuick() {
+  const el = $('#recapSide'), Q = recap.quick, i = Q.list[Q.k], e = recap.events[i], q = quickToday(), names = recapNames();
+  const dots = Q.list.map((_, k) => `<i class="${k < Q.k ? 'done' : k === Q.k ? 'on' : ''}"></i>`).join('');
+  if (!e) { el.innerHTML = `<div class="qkHead"><b>QUICK CHECK</b><span class="qkDots">${dots}</span></div>
+      <p class="qkQ">${Q.n ? `Thanks! ${Q.n} answer${Q.n === 1 ? '' : 's'} saved.` : 'Nothing answered this time.'}</p>${quickReplicaLine()}
+      <p class="note">${Q.n ? (tel.on ? 'They go to the project with this flight and teach your game your tricks.' : 'They teach your game your tricks. Turn on sharing in Options to help everyone\'s detection too.') : ''} Today: ${q.n}${q.n >= QUICK_GOAL ? ' ✓' : ' / ' + QUICK_GOAL}.</p>
+      <div class="row"><button data-qk="full" class="ghost">Open SKITTLES mode</button><button data-qk="done" class="primary">Done</button></div>`; return; }
+  const sure = e.conf != null && !e.maybe ? ` · the game was ${Math.round(e.conf * 100)}% sure` : '';
+  const ask = e.flag ? `You flagged <b>${esc(e.name)}</b>. What was it really?` : e.maybe ? `Was that a <b>${esc(e.name)}</b>? <small>(the game's guess)</small>` : `Was that a <b>${esc(e.name)}</b>?`;
+  el.innerHTML = `<div class="qkHead"><b>QUICK CHECK</b> <span class="note">${Q.k + 1} of ${Q.list.length}</span><span class="qkDots">${dots}</span></div>
+    <p class="qkQ">${ask}</p><p class="note">${e.obstacle ? esc(e.obstacle) : 'open air'}${sure} · it's looping above</p>
+    <div class="row">${e.flag ? '' : '<button data-qk="yes" class="primary" title="Y">✓ Yes</button>'}<select data-qkfix="${i}" title="N"><option value="">${e.flag ? 'it was…' : '✗ No, it was…'}</option><option>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option>${esc(n)}</option>`).join('')}</select><button data-qk="skip" class="ghost" title="K">Skip</button></div>
+    <p class="note"><kbd>Y</kbd> yes · <kbd>N</kbd> no, pick what it was · <kbd>K</kbd> skip · <kbd>C</kbd> camera · <kbd>Esc</kbd> stop</p>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-qk]'); if (b && mode === 'recap' && recap.quick) { const a = b.dataset.qk, i = recap.quick.list[recap.quick.k];
+    if (a === 'yes') quickAnswer(i, recap.events[i].name); if (a === 'skip') quickNext();
+    if (a === 'full') { recap.quick = null; recap.review = true; store.set('recapReview', true); renderRecap(); } if (a === 'done') closeRecap(); return; }
+  const o = e.target.closest('[data-act="quick"]'); if (o) openQuick(mode === 'paused' && !$('#resultsScreen').classList.contains('hide') ? 'results' : mode === 'menu' ? 'menu' : 'pause');
+});
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.qkfix !== undefined && recap.quick) quickAnswer(+e.target.dataset.qkfix, e.target.value); });
+setTimeout(quickLabels, 0);
+
+// ---- Bot replicas of checked tricks (Sim.replicaFly): every answered call is re-flown with the real physics from the
+// recorded state with the pilot's own recorded sticks, and the detector is run on both. A replica that stays with the
+// recording (under 0.5 m and 30 degrees) is "faithful": with sharing on it goes to the project as its own mini bot
+// flight (mode 'replica', pilot 'bot') carrying the pilot's verdict, so the trick can be flown again exactly for training
+// and validation. tools/evidence.js skips unfaithful replicas and weighs the rest 0.5 (the pilot's own label on the real
+// flight already counts 1).
+const REPLICA_OK = { pos: 0.5, ang: 30 };
+function quickReplica(i) {
+  const e = recap.events[i], T = recap.trace; if (!e || recap.guest || T.length < 200 || e.replica) return;
+  const from = Math.max(T[0][0] + 0.9, e.t0 - 1.2), to = Math.min(T[T.length - 1][0], e.t + 1.0); let rep;
+  try { rep = S.replicaFly(T, { params, tune, world: activeWorld, from, to }); } catch (err) { return; } if (!rep) return;
+  const det = rows => { try { return S.replayTrace(rows, { world: activeWorld, camTilt: tune.camTilt, pilot: store.get('pilot', null) }).events.filter(x => x.name !== 'near' && x.name !== 'Crash').map(x => x.name); } catch { return []; } };
+  const c0 = det(T.filter(r => r[0] >= from - rep.warm && r[0] <= to)), c1 = det(rep.rows);
+  const faithful = rep.drift.pos < REPLICA_OK.pos && rep.drift.ang < REPLICA_OK.ang && !rep.crashed, same = c0.join() === c1.join();
+  e.replica = { drift: rep.drift, faithful, same, calls: c1 };
+  if (recap.quick && !recap.quick.list[recap.quick.k]) renderRecap();   // the thank-you screen reports the replicas
+  if (!tel.on || !faithful) return;   // the pilot's own flight data: shared only when they share flights
+  const id = `rep${recap.id}${i}`.slice(0, 40), actual = e.verdict === 'yes' ? e.name : e.actual;
+  (async () => { try {
+    const trace = await FlightLog.pack(rep.rows, TRACE_COLS, 100), at = new Date().toISOString();
+    await telQueue('flight', id, { format: 'pro-whooper-flight/1', build: '0.1', id, started: at, ended: 'replica', pilot: 'bot', name: 'bot', map: MAP_ID, mode: 'replica', camTilt: tune.camTilt, craft: { ...spec }, tune, profile: null, input: null, score: null,
+      events: c1.map(name => ({ name })), missed: [], summary: { replica: { of: recap.id, t0: e.t0, t: e.t, from, to, warm: rep.warm, drift: rep.drift, faithful, same, recorded: c0, trick: e.name }, seconds: +(to - from + rep.warm).toFixed(2) } });
+    await telQueue('labels', id + '-v', { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: id, started: at, pilot: telPilot(), name: pilotName() || null,
+      labels: [{ target: e.name, verdict: e.verdict, actual, repStart: e.t0, t: e.t, detected: c1, via: 'quick-replica', src: 'bot' }] });
+  } catch { /* the label on the real flight still stands */ } })();
+}
+function quickReplicaLine() {
+  const r = recap.events.filter(e => e.replica); if (!r.length) return '';
+  const f = r.filter(e => e.replica.faithful).length, s = r.filter(e => e.replica.faithful && e.replica.same).length;
+  return `<p class="note">The bot re-flew ${r.length === 1 ? 'it' : `all ${r.length}`} with your own stick inputs from the same spot: ${f} stayed with your flight${f ? `, and the game called the same thing on ${s} of ${f}` : ''}.${tel.on && f ? ' Those go to the project as bot runs for training and checking.' : ''}</p>`;
+}

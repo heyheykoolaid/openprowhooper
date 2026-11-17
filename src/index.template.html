@@ -233,6 +233,9 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 
 #recapUI { position: absolute; inset: 0; pointer-events: none; } #recapUI > * { pointer-events: auto; }
 #recapSide { position: absolute; right: 0; top: 0; bottom: 0; width: 350px; overflow: auto; background: #12141aee; padding: 10px 12px; color: #eee; font-size: 13px; }
+#recapUI.quick #recapBar, #recapUI.quick #recapSticks { display: none; } #pause [data-act=quick] small { display: block; font-size: 11px; opacity: .75; } #recapUI.quick #recapSide { padding-bottom: 14px !important; top: auto; bottom: 22px; right: auto; left: 50%; transform: translateX(-50%); width: min(560px, 94vw); padding: 14px 18px; border: 2px solid var(--cyan); }
+#recapSide .qkHead { display: flex; gap: 10px; align-items: baseline; font-family: 'Bungee'; font-size: 15px; } #recapSide .qkDots { margin-left: auto; display: flex; gap: 6px; } #recapSide .qkDots i { width: 10px; height: 10px; border-radius: 50%; background: #3a3631; } #recapSide .qkDots i.on { background: var(--cyan); } #recapSide .qkDots i.done { background: #2fa35f; }
+#recapSide .qkQ { font-size: 19px; margin: 10px 0 2px; } #recapSide .qkQ small { font-size: 12px; opacity: .7; }
 #recapSide .rvItem.on { outline: 2px solid #ffffff; outline-offset: 1px; } #recapSide .row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 #recapNow { position: absolute; left: 16px; top: 12px; font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; pointer-events: none !important; }
 #recapNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
@@ -365,6 +368,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <p class="sub">tiny whoop freestyle · <span id="menuMap">the playground</span> · v0.1 · best <b id="best">0</b></p>
   <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b><br>Music: <b>8BiT_</b> · Air65 frame: <b>BetaFPV</b> · Beast Brain canopy: <b>_tcmore</b></p>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
+  <p id="quickGoal" class="note" style="margin:-4px 0 8px"></p>
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
@@ -382,7 +386,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
-  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
+  <button class="primary" data-act="resume">Resume</button><button data-act="quick" class="hide" title="Say whether the game got its least sure calls right">Quick check</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="procModal" class="hide"></div><div id="fbToast"></div>
