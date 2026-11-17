@@ -16,6 +16,7 @@ const world = S.buildPlayground();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
 const detector = new S.TrickDetector(world);
+let activeWorld = world;   // the playground, or a race track's room + gates (editor.js useWorld)
 let score = new S.ScoreKeeper();
 let mode = 'menu';           // menu | fly | paused
 let session = null;          // {timeLeft} for 2-minute runs
@@ -29,6 +30,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
+const playRoot = new THREE.Group(); scene.add(playRoot);   // the playground; race rooms have their own group (editor.js)
 scene.fog = new THREE.Fog(0xc7ae8c, 28, 110);
 const fpvCam = new THREE.PerspectiveCamera(90, 1, 0.004, 400);
 const chaseCam = new THREE.PerspectiveCamera(70, 1, 0.01, 400);
@@ -195,22 +197,22 @@ function buildScene() {
   gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a');
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
-  scene.add(sky);
+  playRoot.add(sky);
   // lights
-  scene.add(new THREE.HemisphereLight(0xa9c0e0, 0x5a4532, 0.9));
+  playRoot.add(new THREE.HemisphereLight(0xa9c0e0, 0x5a4532, 0.9));
   const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.set(-30, 22, 18); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; sh.left = -32; sh.right = 32; sh.top = 32; sh.bottom = -32; sh.near = 1; sh.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
-  scene.add(sun); scene.add(sun.target);
+  playRoot.add(sun); playRoot.add(sun.target);
   // ground
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true;
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 60, guv.getY(i) * 60);
-  scene.add(gnd);
+  playRoot.add(gnd);
   for (const z of world.zones) {
     const g = new THREE.PlaneGeometry(z.h.x * 2, z.h.z * 2); const uv = g.attributes.uv; const d = z.mat === 'court' ? 1 : 0.5;
     if (z.mat !== 'court') for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * z.h.x * 2 * d, uv.getY(i) * z.h.z * 2 * d);
     // layered ground: each zone gets its own depth offset so overlapping zones never flicker (z-fighting) at a distance
     const zm = MAT[z.mat].clone(); zm.polygonOffset = true; zm.polygonOffsetFactor = -1 - (z.mat === 'rubberMat' ? 0 : 2); zm.polygonOffsetUnits = -4 - (z.mat === 'rubberMat' ? 0 : 8);
-    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = z.mat === 'rubberMat' ? 1 : 2; scene.add(m);
+    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = z.mat === 'rubberMat' ? 1 : 2; playRoot.add(m);
   }
   // objects
   for (const o of world.objs) for (const v of o.vis) {
@@ -222,22 +224,22 @@ function buildScene() {
     } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
     else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
     if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink'; m.receiveShadow = true; scene.add(m);
+    m.castShadow = v.mat !== 'chainlink'; m.receiveShadow = true; playRoot.add(m);
   }
   // lamp lights
-  for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(0xffc98a, 6, 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); scene.add(l); }
+  for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(0xffc98a, 6, 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
   // skyline beyond the fence (no collision)
   const sk = new THREE.MeshStandardMaterial({ color: 0x4d4a52, roughness: 1, map: TX.concrete });
   for (let i = 0; i < 26; i++) {
     const ang = rnd() * Math.PI * 2, R = 55 + rnd() * 35, w = 6 + rnd() * 14, h = 8 + rnd() * 30;
     const x = Math.cos(ang) * R, z = Math.sin(ang) * R; if (z < -20 && Math.abs(x) < 18) continue;
-    const m = new THREE.Mesh(boxGeo(new THREE.Vector3(w / 2, h / 2, w / 2), 0.08), sk); m.position.set(x, h / 2, z); scene.add(m);
+    const m = new THREE.Mesh(boxGeo(new THREE.Vector3(w / 2, h / 2, w / 2), 0.08), sk); m.position.set(x, h / 2, z); playRoot.add(m);
   }
   // power lines
   const pl = new THREE.MeshStandardMaterial({ color: 0x3a2e24 });
-  for (const x of [-30, 0, 30]) scene.add(pipeMesh({ x, y: 0, z: 30 }, { x, y: 9, z: 30 }, 0.12, pl));
+  for (const x of [-30, 0, 30]) playRoot.add(pipeMesh({ x, y: 0, z: 30 }, { x, y: 9, z: 30 }, 0.12, pl));
   const wire = new THREE.LineBasicMaterial({ color: 0x111111 });
-  for (const dy of [8.6, 8.2]) { const pts = []; for (let x = -30; x <= 30; x += 2) pts.push(new THREE.Vector3(x, dy - 0.6 * Math.cos(((x + 30) % 30) / 30 * Math.PI * 2 - Math.PI) * 0.5 - 0.3, 30)); scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wire)); }
+  for (const dy of [8.6, 8.2]) { const pts = []; for (let x = -30; x <= 30; x += 2) pts.push(new THREE.Vector3(x, dy - 0.6 * Math.cos(((x + 30) % 30) / 30 * Math.PI * 2 - Math.PI) * 0.5 - 0.3, 30)); playRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wire)); }
 }
 function addGraffiti(v) {
   const h = v.h; let w, hh, pos, rotY = 0, rotX = 0, opts = {};
@@ -259,7 +261,7 @@ function addGraffiti(v) {
   const grp = new THREE.Group(); grp.position.copy(pos); m.position.set(0, 0, 0);
   if (v.graffiti === 'top') { m.rotation.x = -Math.PI / 2; grp.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ'); }
   else m.rotation.y = rotY;
-  grp.add(m); m.receiveShadow = true; scene.add(grp);
+  grp.add(m); m.receiveShadow = true; playRoot.add(grp);
 }
 
 // ============================================================ drone model
@@ -390,6 +392,7 @@ function onKey(e) {
   if (e.code === 'KeyT') flipOver();
   if (e.code === 'KeyC') camMode = camMode === 'fpv' ? 'chase' : 'fpv';
   if (e.code === 'Tab') { e.preventDefault(); $('#breakdown').classList.toggle('hide'); }
+  if (e.code === 'KeyB' && race.on && race.fromEditor) { backToEditor(); return; }
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); }   // V: stick overlay
 }
 let lastRC = { thr: 0, roll: 0, pitch: 0, yaw: 0 };
@@ -430,7 +433,7 @@ function flipOver() { // "turtle mode" simplified: right the quad where it lies
   const f = drone.fwd(); const yaw = Math.atan2(-f.x, -f.z);
   drone.q = S.qaxis(S.v3(0, 1, 0), yaw); drone.w = S.v3(); drone.vel = S.v3(); drone.pos.y = Math.max(drone.pos.y, 0.03); drone.crashed = false; drone.fc.reset();
 }
-function respawn() { drone.reset(world.spawn, true); detector.reset(); crashLock = false; }
+function respawn() { if (race.on) { raceRespawn(); return; } drone.reset(activeWorld.spawn, true); detector.reset(); crashLock = false; }
 
 // ============================================================ audio
 let actx = null, osc = [], gains = [], noiseG = null;
@@ -525,7 +528,9 @@ function frame(now) {
     const rc = getRC(dt); lastRC = rc;
     acc += dt; let n = 0;
     while (acc >= DT && n < 120) {
+      const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
       drone.step(rc, DT); detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); acc -= DT; n++;
+      if (race.on) raceStep(p0, DT);
     }
     if (n >= 120) acc = 0;
     for (const ev of detector.drain()) onTrick(ev);
@@ -534,9 +539,11 @@ function frame(now) {
     if (drone.crashed) crashLock = true;
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
-    updateAudio(); hud(); stickHud(rc);
+    updateAudio(); hud(); stickHud(rc); if (race.on) raceHud();
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
+  if (mode === 'editor') { editorFrame(dt); return; }
+  if (race.on) raceVisuals(dt);
   if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);
   // drone visual
   droneMesh.position.set(drone.pos.x, drone.pos.y, drone.pos.z);
@@ -578,7 +585,7 @@ function show(id) { for (const el of document.querySelectorAll('.screen')) el.cl
 function startFly(withSession) {
   combo.names = []; combo.pts = 0; combo.active = false;
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
-  score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
+  if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
   flash(withSession ? '<b>2:00 SESSION</b><small>timer starts when you arm</small>' : '<b>FREE FLY</b><small>Space / arm switch to arm</small>');
@@ -602,10 +609,11 @@ document.addEventListener('click', e => {
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') startJudge();
+  if (a === 'race') openRaceMenu();
 });
 
 // ---------------- garage
@@ -656,7 +664,7 @@ function drawRateCurve() {
   const cols = { roll: '#ff5a5a', pitch: '#5ad1ff', yaw: '#ffd25a' }, max = 2000;
   for (const ax of ['roll', 'pitch', 'yaw']) { g.strokeStyle = cols[ax]; g.beginPath(); for (let i = 0; i <= 100; i++) { const x = i / 100, r = S.applyRate(x, tune.rates[ax], tune.ratesType); const px = x * c.width, py = c.height - r / max * c.height; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); g.fillStyle = cols[ax]; g.fillText(`${ax} ${Math.round(S.applyRate(1, tune.rates[ax], tune.ratesType))}°/s`, 6, 14 + ['roll', 'pitch', 'yaw'].indexOf(ax) * 13); }
 }
-function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(world.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
+function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(activeWorld.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('change', e => {
   const t = e.target;

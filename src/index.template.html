@@ -156,6 +156,45 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
   .rvSide input[type=number] { width: 60px; } .rvBar { height: 6px; background: #222; margin: 6px 0; } .rvBar i { display: block; height: 100%; background: var(--acid); }
   .rvItem { border: 1px solid #2c2925; padding: 6px 8px; margin: 6px 0; background: #0e0d0c; } .rvItem.ok { border-color: #3c8a4a; } .rvItem.bad { border-color: #8a3c3c; } .rvItem.pilot { border-color: #3c6a8a; }
   .rvItem b { color: #fff; } .rvItem .t { color: #a89f8e; float: right; } .rvItem button { font-size: 11px; padding: 3px 6px; } .rvItem select { max-width: 100%; font-size: 11px; }
+
+/* ---- RaceGOW tracks, race HUD and the track editor */
+.panel.wide { max-width: 1100px; width: 94vw; }
+#raceBody .rTracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 10px; }
+#raceBody .rCard { background: #0006; border: 1px solid #fff2; border-radius: 10px; padding: 10px 12px; }
+#raceBody .rCard h3 { margin: 0 0 2px; font-size: 17px; } #raceBody .rCard small { opacity: .7; }
+#raceBody .rCard .rBest { font-family: var(--mono); font-size: 13px; margin: 6px 0; }
+#raceBody .rCard .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } #raceBody .rCard button { padding: 5px 9px; font-size: 13px; }
+#raceBody .rTop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } #raceBody .rTop label { font-size: 13px; }
+#hud.racing #scoreBox, #hud.racing #kwad, #hud.racing #combo, #hud.racing #comboBank, #hud.racing #sessionT { display: none; }
+body.editing #music { right: auto !important; left: 6px !important; bottom: 6px !important; transform: scale(0.55); transform-origin: bottom left; }
+#raceHud { position: absolute; inset: 0; pointer-events: none; font-family: var(--mono); color: #fff; text-shadow: 0 0 3px #000, 1px 1px 0 #000; }
+#rhLap { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 40px; font-weight: 700; letter-spacing: 1px; }
+#rhSub { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); font-size: 15px; opacity: .92; white-space: nowrap; }
+#rhMsg { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #ff6b5a; white-space: nowrap; }
+#rhMsg.good { color: #7dff9a; }
+#rhCount { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); font-size: 110px; font-weight: 800; color: #ffd34d; }
+#rhBox { position: absolute; right: 18px; top: 14px; text-align: right; font-size: 14px; line-height: 1.45; background: #0005; padding: 8px 12px; border-radius: 8px; }
+#rhBox b { font-size: 22px; color: #ffd34d; } #rhBox .bad { color: #ff7d6e; text-decoration: line-through; } #rhBox .dim { opacity: .65; }
+#editorUI { position: absolute; inset: 0; pointer-events: none; font-size: 13px; color: #eee; }
+#editorUI > div { pointer-events: auto; }
+#edTop { position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #12141add; border-bottom: 1px solid #fff2; flex-wrap: wrap; }
+#edTop .edGroup { display: flex; gap: 4px; align-items: center; } #edTop .sp { flex: 1; }
+#edTop button, #edLeft button, #edRight button, #editorUI select { padding: 4px 8px; font-size: 12px; }
+#edTop button.on { background: #ffd34d; color: #111; } #editorUI kbd { font-size: 10px; opacity: .7; }
+#edLeft { position: absolute; left: 0; top: 46px; bottom: 0; width: 210px; overflow: auto; padding: 10px; background: #12141add; border-right: 1px solid #fff2; }
+#edRight { position: absolute; right: 0; top: 46px; bottom: 0; width: 290px; overflow: auto; padding: 10px; background: #12141add; border-left: 1px solid #fff2; }
+#editorUI h4 { margin: 12px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
+#editorUI label { display: block; margin: 4px 0; } #editorUI input:not([type=checkbox]), #editorUI select { width: 100%; box-sizing: border-box; }
+#edLib { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; } #edLib button { text-align: left; } #edLib button.on { background: #ffd34d; color: #111; }
+.edEnv { margin: 6px 0; font-size: 12px; opacity: .85; }
+#edOrder .oRow { display: flex; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+#edOrder .oRow:hover { background: #fff1; } #edOrder .oRow.sel { background: #ffd34d33; outline: 1px solid #ffd34d88; }
+#edOrder .oRow .n { width: 26px; font-family: var(--mono); opacity: .8; } #edOrder .oRow .lb { flex: 1; } #edOrder .oRow button { padding: 1px 6px; }
+#edOrder .oRow.opt .lb { opacity: .55; font-style: italic; }
+#edProps .pGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; } #edProps .pGrid label { margin: 0; font-size: 11px; }
+#edValid .err { color: #ff8b7d; } #edValid .warn { color: #ffd34d; } #edValid .ok { color: #7dff9a; }
+#edHint { position: absolute; left: 220px; right: 300px; bottom: 8px; text-align: center; pointer-events: none !important; font-size: 12px; opacity: .85; text-shadow: 0 0 3px #000; }
+#editorUI .hint { font-size: 11px; opacity: .7; line-height: 1.4; } #editorUI .chk { font-size: 12px; } #editorUI .chk input { width: auto; }
 </style>
 <!--THREE-->
 <script>
@@ -186,6 +225,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
   <div id="popups"></div>
   <div id="combo" class="hide"></div><div id="comboBank"></div>
+  <div id="raceHud" class="hide"><div id="rhLap"></div><div id="rhSub"></div><div id="rhMsg"></div><div id="rhCount"></div><div id="rhBox"></div></div>
   <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
   <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
     <span class="o" id="osdThr"></span><span class="o" id="osdSpd"></span><span class="o" id="osdAlt"></span><span class="o" id="osdTimer"></span><span class="o" id="osdState"></span><span class="o" id="washMeter">≋ PROPWASH ≋</span></div>
@@ -214,6 +254,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
+    <button data-act="race">RaceGOW Tracks</button>
     <button data-act="garage">Garage &amp; Tune</button>
     <button data-act="controls">Controls / Radio</button>
     <button data-act="options">Options</button>
@@ -228,7 +269,40 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
-  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="menu">Quit to menu</button></div></div></div>
+  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
+
+<div id="raceScreen" class="screen hide"><div class="panel wide">
+  <div class="topbar"><h2>RaceGOW Tracks</h2><span class="sp"></span><button data-act="back">Back</button></div>
+  <div id="raceBody"></div>
+</div></div>
+
+<div id="raceResults" class="screen hide"><div class="panel" style="max-width:520px"><div id="raceResBody"></div></div></div>
+
+<div id="editorUI" class="hide">
+  <div id="edTop">
+    <span class="edGroup"><button data-ed="tool:move" title="Move (W)">Move <kbd>W</kbd></button><button data-ed="tool:rotate" title="Rotate (E)">Rotate <kbd>E</kbd></button><button data-ed="tool:scale" title="Scale (R)">Scale <kbd>R</kbd></button><button data-ed="tool:paint" title="Paint a path of gates (P)">Paint path <kbd>P</kbd></button></span>
+    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><select id="edSnap" title="Rotation snap"><option value="0">free rotate</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button></span>
+    <span class="edGroup"><button data-ed="ground" title="Drop to the floor (G)">Ground <kbd>G</kbd></button><button data-ed="clone" title="Clone (Ctrl+D)">Clone</button><button data-ed="delete" title="Delete (Del)">Delete</button><button data-ed="focus" title="Focus on selection (F)">Focus <kbd>F</kbd></button><button data-ed="ortho" id="edOrtho" title="Orthographic / perspective (O)">Persp</button></span>
+    <span class="edGroup"><button data-ed="undo" title="Undo (Ctrl+Z)">↶</button><button data-ed="redo" title="Redo (Ctrl+Y)">↷</button></span>
+    <span class="sp"></span>
+    <span class="edGroup"><button data-ed="save" class="primary">Save</button><button data-ed="test" class="primary" title="Fly test (T); B brings you back">Fly test <kbd>T</kbd></button><button data-ed="exit">Exit</button></span>
+  </div>
+  <div id="edLeft">
+    <label>Track name <input id="edName" maxlength="60"></label>
+    <div class="edEnv" id="edEnv"></div>
+    <h4>Gate library</h4><div id="edLib"></div>
+    <label>Colour <select id="edColor"></select></label>
+    <p class="hint">Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
+  </div>
+  <div id="edRight">
+    <h4>Gate order <small id="edCount"></small></h4>
+    <label class="chk"><input type="checkbox" id="edSF"> Start gate is also the finish (laps)</label>
+    <div id="edOrder"></div>
+    <h4>Selection</h4><div id="edProps"><p class="hint">Nothing selected.</p></div>
+    <h4>Checks</h4><div id="edValid"></div>
+  </div>
+  <div id="edHint"></div>
+</div>
 
 <div id="garage" class="screen hide"><div class="panel">
   <div class="topbar"><h2>Garage</h2><button data-act="back">Back</button></div>
@@ -264,6 +338,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*ART*/</script>
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
+<script>/*RACE*/</script>
 <script>/*MANEUVERS*/</script>
 <script>/*VISION*/</script>
 <script>if (!window.THREE) __pwErr.push('The 3D engine (three.js) did not load.');</script>
