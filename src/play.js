@@ -42,7 +42,7 @@ function updateAudio() {
 
 // ============================================================ HUD
 const popups = $('#popups');
-function flash(text, cls = '') { const el = document.createElement('div'); el.className = 'popup ' + cls; el.innerHTML = text; popups.prepend(el); setTimeout(() => el.classList.add('out'), 1900); setTimeout(() => el.remove(), 2600); while (popups.children.length > 3) popups.lastChild.remove(); }
+function flash(text, cls = '') { const el = document.createElement('div'); el.className = 'popup ' + cls; el.innerHTML = text; popups.prepend(el); setTimeout(() => el.classList.add('out'), 1900); setTimeout(() => el.remove(), 2600); while (popups.children.length > 2) popups.lastChild.remove(); /* two at a time: the column stays short */ }
 // ---- combo (Tony Hawk style presentation; points follow the TPW calculator exactly)
 // A combo runs while you keep doing tricks; it banks after COMBO_IDLE s with no trick or rotation; a crash bails it.
 const COMBO_IDLE = 2.0;
@@ -79,7 +79,7 @@ function onTrick(ev) {
   if (!r) return;
   comboAdd(r);
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
-  flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}<em>+${r.net}</em>${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
+  flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
   updateBreakdown();
 }
 function updateBreakdown() {

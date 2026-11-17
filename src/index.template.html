@@ -28,14 +28,17 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #kwad span { font-family: 'Bungee'; font-size: 30px; color: rgba(255,255,255,.18); -webkit-text-stroke: 1.5px rgba(0,0,0,.6); transform: skew(-8deg); }
 #kwad span.on { color: var(--hot); -webkit-text-stroke: 2px #111; text-shadow: 2px 2px 0 #111; }
 #sessionT { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) skew(-6deg); font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1.5px #111; text-shadow: 2px 2px 0 #111; }
-#popups { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 6px; }
+/* trick call-outs and the combo line share one column above the stick boxes, so they stack and never overlap */
+#hudStack { position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 80vw; pointer-events: none; }
+#popups { display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; }
 .popup { font-family: 'Bungee'; text-align: center; transform: skew(-7deg); animation: pop .25s cubic-bezier(.2,1.6,.4,1); transition: opacity .6s, transform .6s; }
 .popup.out { opacity: 0; transform: skew(-7deg) translateY(-20px); }
 .popup b { display: block; font-size: 24px; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 3px 3px 0 #111; font-weight: 400; }
-.popup em { font-style: normal; font-size: 20px; color: var(--acid); -webkit-text-stroke: 1.5px #111; text-shadow: 2px 2px 0 #111; margin-left: 10px; }
+.popup em { font-style: normal; font-size: 20px; color: var(--acid); -webkit-text-stroke: 1.5px #111; text-shadow: 2px 2px 0 #111; }
+.popup .pRow { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 3px 0 1px; }
 .popup small { display: block; font-family: var(--mono); font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000; }
 .popup small.kw { color: var(--hot); font-family: 'Bungee'; font-size: 16px; }
-.popup .ex { font-size: 16px; padding: 1px 8px; border: 2px solid #111; margin-left: 4px; vertical-align: 6px; }
+.popup .ex { font-size: 16px; padding: 1px 8px; border: 2px solid #111; }
 .popup.warn b { color: #ffd23a; font-size: 22px; } .popup.crash b { color: var(--hot); }
 @keyframes pop { from { transform: skew(-7deg) scale(.4); opacity: 0 } to { transform: skew(-7deg) scale(1); opacity: 1 } }
 .ex.CLEAN, td.CLEAN, span.CLEAN { background: #39d353; color: #111; } .ex.SLOPPY, td.SLOPPY, span.SLOPPY { background: #ffd23a; color: #111; }
@@ -123,7 +126,7 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .optExplain { background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid var(--cyan); padding: 8px 12px; font: 13px/1.5 var(--mono); color: #cfc6b4; } .optExplain p { margin: 6px 0; }
 .trMsg { color: var(--acid); margin-top: 6px; } .trFoot { margin-top: 6px; color: #a89f8e; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .trFoot button { font-size: 11px; padding: 3px 8px; }
 #trOut { height: 60px; font-size: 10px; width: 100%; margin-top: 6px; }
-#combo { position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%) skew(-6deg); text-align: center; max-width: 80vw; }
+#combo { transform: skew(-6deg); text-align: center; max-width: 80vw; }
 #combo .cList { font-family: 'Bungee'; font-size: 15px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; white-space: nowrap; overflow: hidden; }
 #combo .live { color: var(--acid); animation: livePulse .6s ease-in-out infinite alternate; } #combo .live b { color: #fff; } @keyframes livePulse { to { color: #fff; } }
 .logoSub { font-family: 'Bungee'; letter-spacing: 10px; color: #f3ead8; -webkit-text-stroke: 1px #111; text-shadow: 3px 3px 0 #e2312b; margin: 2px 0 18px 10px; transform: rotate(-4deg); font-size: 18px; }
@@ -326,8 +329,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="scoreBox"><div id="score">0</div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
-  <div id="popups"></div>
-  <div id="combo" class="hide"></div><div id="comboBank"></div>
+  <div id="hudStack"><div id="popups"></div><div id="combo" class="hide"></div></div><div id="comboBank"></div>
   <div id="raceHud" class="hide"><div id="rhLap"></div><div id="rhSub"></div><div id="rhMsg"></div><div id="rhCount"></div><div id="rhBox"></div></div>
   <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
   <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdMode" title="Flight mode: 1 acro · 2 angle · 3 3D"></span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
