@@ -65,9 +65,9 @@ on top (the looser of the two per knob). The owner approves each change: the wee
 
 | evidence | where it comes from | weight |
 |---|---|---|
-| reviewer label | the owner's Flight desk review of someone else's flight | 1.5 |
+| reviewer label | the owner's Flight desk or Judge-the-community review of someone else's flight | 1.5 |
 | own review label | a pilot's decided ✓ / ✗ / correction / named added trick on their own flight | 1.0 |
-| judge pair | two pilots agreeing on a Judge-the-community moment, or on a leaderboard run they watched | 1.0 |
+| judge pair | two pilots agreeing on a leaderboard run they watched and reviewed | 1.0 |
 | F flag | "that call was wrong", pressed while flying, never reviewed | 0.5 |
 | Q flag | "a trick was missed here", pressed while flying, never named | 0.3 |
 | unreviewed call | every call nobody flagged or reviewed ("probably fine": losing one costs a little) | 0.1 |

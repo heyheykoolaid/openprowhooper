@@ -290,7 +290,7 @@ function guestOpen(rows, events, of, review) {
 }
 async function reviewerSave() {
   const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); recap.dirty = false; if (!L.length || !of.flight) return;
-  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'judge' || of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a public run is a vote (tools/community.js counts it once a second pilot agrees)
+  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a leaderboard run is a vote (tools/community.js counts it once a second pilot agrees); the owner's Judge-the-community and Flight desk verdicts are reviewer labels
   procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
   const stamp = `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}`;
   const r = await procWait(telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued'), 9000);
@@ -300,7 +300,7 @@ async function reviewerSave() {
 // ============================================================ Judge the community
 // Moments from today's posted leaderboard runs (public: each was posted by its pilot's own click, with its replay) where
 // the game is unsure or now calls something different from what it called then. Anyone can judge them; the verdicts go
-// out as votes (reviewer labels with judge: true) and tools/community.js counts a vote once a second pilot agrees.
+// out as reviewer labels (only the owner, heyheykoolaid, sees this mode).
 // The pilot's own runs are left out. Re-flying a run takes a few seconds, so it happens here in the menu, never in flight.
 const JG = { clips: null, msg: '', done: store.get('judgeDone', {}) };
 const jgKey = c => `${c.id}@${c.t.toFixed(1)}`;
@@ -330,7 +330,7 @@ async function judgeLoad() {
 function judgeRender() {
   const el = $('#judgePanel'); if (!el) return; const C = JG.clips || [];
   el.innerHTML = `<h2>JUDGE THE COMMUNITY</h2>
-    <p class="note">Moments from today's posted runs on ${esc(lbMapTitle(MAP_ID))} where the game is unsure, or now calls something different from what it called during the run. Open one, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdict counts once another pilot agrees with it, and agreed verdicts are what the game learns from every week. Your own runs are not in the list.</p>
+    <p class="note">Moments from today's posted runs on ${esc(lbMapTitle(MAP_ID))} where the game is unsure, or now calls something different from what it called during the run. Open one, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
     ${C.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${C.map((c, i) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>` : `<p class="note">${esc(JG.msg || "Nothing to judge right now: every call in today's runs looks settled.")}</p>`}
     <div class="row"><button data-jg="refresh">↻ Look again</button><button data-jg="close" class="primary">Back</button></div>`;
 }
