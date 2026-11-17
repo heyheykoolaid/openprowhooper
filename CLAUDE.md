@@ -101,7 +101,7 @@ While flying, `F` flags the last call as wrong and `Q` flags a missed trick. "Re
 replays each call for ✓ / ✗ / "it was actually…", flagged and low-confidence (Watcher < 70%) calls first; saved as
 `pro-whooper-session/2` with `via: "review"` to `calibration/review/` (the benchmark reads it). The review screen is a full player
 (timeline of the whole run with every call on it, scrub, frame step, speed, loop); each call has a dropdown for what it
-really was, and the pilot can add a trick at the playhead (`via: "review-added"`) or remove a call ("not a trick"). The same screen is the
+really was, and the pilot can add a trick at the playhead (`via: "review-added"`) or remove a call ("not a trick"), and grade how it was flown (clean / sloppy / bump → `execActual` on the label, next to the game's `exec` and `clean` %). The same screen is the
 replay viewer ("Replay & review"; the Review tricks toggle hides the labelling): mark a clip with In / Out and Export
 video records it from the current camera at the current speed with the call-outs and sticks drawn in
 (`recapRecStart`, MediaRecorder on a composited canvas; MP4 where the browser can, else WebM; no sound). Pilot Warm-up measures

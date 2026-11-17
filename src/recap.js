@@ -71,7 +71,7 @@ function renderRecapBar() {
     return `<div class="rcSpan" style="left:${pc(e.t0)}%;width:${Math.max(0.3, pc(e.t) - pc(e.t0))}%"></div><div class="rcM ${cls} ${on ? 'on' : ''}" style="left:${pc(e.t)}%;top:${4 + (k % 3) * 17}px" data-rcm="call" data-i="${it.i}" title="${esc(e.name)}${e.actual ? ' → ' + esc(e.actual) : ''}">${esc(e.verdict === 'no' && e.actual && !gone ? e.actual : e.name)}</div>`; }).join('');
   const selBox = !sel ? '<span class="note">Click a trick on the timeline, or move to a spot and add one.</span>'
     : sel.kind === 'miss' ? `<b>${sel.f.added ? 'Added' : 'Missed'} @ ${fmtT(sel.t - T0)}</b><select data-rcmiss="${sel.i}"><option value="">what was it?</option>${names.map(n => `<option ${sel.f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="remove" title="Take this off the timeline (Delete)">🗑 Remove</button>`
-    : `<b>${esc(sel.e.name)} @ ${fmtT(sel.t - T0)}</b>${recapCallSelect(sel.i, sel.e, names)}<button data-rc="remove" title="This wasn't a trick: take it off the timeline (Delete)">${sel.e.verdict === 'no' && sel.e.actual === 'not a trick' ? '↩ Put back' : '🗑 Remove'}</button>`;
+    : `<b>${esc(sel.e.name)} @ ${fmtT(sel.t - T0)}</b>${recapCallSelect(sel.i, sel.e, names)}${recapExecBtns(sel.i, sel.e)}<button data-rc="remove" title="This wasn't a trick: take it off the timeline (Delete)">${sel.e.verdict === 'no' && sel.e.actual === 'not a trick' ? '↩ Put back' : '🗑 Remove'}</button>`;
   const C = recap.clip, clipBand = C ? `<div class="rcClip" style="left:${pc(C.a)}%;width:${Math.max(0.3, pc(C.b) - pc(C.a))}%"></div>` : '';
   document.body.classList.toggle('rcWide', !recap.review);
   el.innerHTML = `<div class="rcTrack" id="rcTrack">${clipBand}<div class="rcMarks">${marks}</div><div id="rcHead"></div></div>
@@ -86,6 +86,8 @@ function renderRecapBar() {
     ${recap.review ? `<div class="rcRow rcSel">${selBox}</div>` : ''}`;
   recapBarState();
 }
+// how it was flown, as the pilot saw it: the game's own grade is outlined until the pilot picks one
+const recapExecBtns = (i, e) => `<span class="rcExec" title="How was it flown? (the game said ${e.exec})">${[['CLEAN', 'clean'], ['SLOPPY', 'sloppy'], ['BUMP', 'bump']].map(([x, l]) => `<button data-rc="exec" data-i="${i}" data-x="${x}" class="${e.execActual === x ? 'on' : !e.execActual && e.exec === x ? 'was' : ''}">${l}</button>`).join('')}</span>`;
 const recapCallSelect = (i, e, names) => `<select data-rcfix="${i}" class="${e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : ''}"><option value="">it was…</option><option value="${esc(e.name)}" ${e.verdict === 'yes' ? 'selected' : ''}>✓ ${esc(e.name)} (correct)</option><option ${e.verdict === 'no' && e.actual === 'not a trick' ? 'selected' : ''}>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option ${e.verdict === 'no' && e.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
 function renderRecap() {
   const el = $('#recapSide'), names = ALL_TRICKS().map(x => nameOf(x)), items = recapItems(), [T0] = recapSpan();
@@ -97,7 +99,7 @@ function renderRecap() {
         return `<div class="rvItem pilot ${on ? 'on' : ''}"><span class="t">${fmtT(f.t - T0)}</span><b>${f.added ? 'You added a trick' : 'You flagged a missed trick'}</b><div class="row"><button data-rc="go" data-k="miss" data-i="${it.i}">▶</button><select data-rcmiss="${it.i}"><option value="">what was it?</option>${names.map(n => `<option ${f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="delmiss" data-i="${it.i}">✕</button></div></div>`; }
       const e = it.e, cls = e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : '', unsure = e.conf != null && e.conf < 0.7;
       return `<div class="rvItem ${cls} ${on ? 'on' : ''}"><span class="t">${fmtT(e.t - T0)}</span><b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
-        <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button>${recapCallSelect(it.i, e, names)}</div></div>`; }).join('')}
+        <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button></div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
     <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
@@ -106,7 +108,7 @@ function renderRecap() {
 }
 function recapPayload() {
   const labels = [];
-  for (const e of recap.events) if (e.verdict) labels.push({ target: e.name, verdict: e.verdict, actual: e.verdict === 'no' ? (e.actual || null) : e.name, repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, flagged: !!e.flag, via: 'review' });
+  for (const e of recap.events) if (e.verdict) labels.push({ target: e.name, verdict: e.verdict, actual: e.verdict === 'no' ? (e.actual || null) : e.name, repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, flagged: !!e.flag, exec: e.exec, clean: e.clean, execActual: e.execActual || null, via: 'review' });
   for (const f of recap.flags) if (f.actual) labels.push({ target: f.actual, verdict: 'yes', actual: f.actual, repStart: +(f.t - (f.added ? 2.5 : 5)).toFixed(3), t: +(f.t + (f.added ? 2.5 : 0.5)).toFixed(3), detected: [], via: f.added ? 'review-added' : 'flag-missed' });
     else labels.push({ target: 'unknown', verdict: 'unlabelled', actual: null, repStart: +(f.t - 5).toFixed(3), t: f.t, detected: [], via: 'flag-missed', undone: true });
   return { format: 'pro-whooper-session/2', source: 'review', build: '0.1', map: MAP_ID, camTilt: tune.camTilt, craft: { ...spec }, tune, pilot: store.get('pilot', null),
@@ -158,6 +160,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-rc]'); if (b && mode === 'recap') { const a = b.dataset.rc, i = +b.dataset.i, p = recap.play;
     if (a === 'go') recapPlay(b.dataset.k === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] });
     if (a === 'yes') { const ev = recap.events[i]; recapSetCall(i, ev.name); }
+    if (a === 'exec') { const ev = recap.events[i]; ev.execActual = ev.execActual === b.dataset.x ? null : b.dataset.x; if (ev.execActual && !ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
     if (a === 'delmiss') { recap.flags.splice(i, 1); recap.dirty = true; if (p) p.key = null; }
     if (a === 'allyes') { for (const ev of recap.events) if (!ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
     if (a === 'export') saveFile(`run-review-${recap.id}.json`, JSON.stringify(recapPayload()));
