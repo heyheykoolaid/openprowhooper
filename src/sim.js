@@ -1082,12 +1082,17 @@ class TrickDetector {
         // between going over and coming back under: a beginner matty only nods (well under a half turn), a Matty goes round.
         const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0;
         const flipped = tumble >= 230 && !(this.cur && this.cur[1] && this.cur[1].raw > 45) && !toks.some(x => x.ax === 'R' && x.raw > 120) && !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) && !toks.some(x => x.ax === 'Y' && x.raw > 120);
-        if (!big.length && brisk && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1])) best = { name: flipped ? 'Matty Flip' : 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 2, part: p2, ct1: p2[1].t };
+        // a Beginner Matty never goes inverted and never tumbles (pilot: a powerloop round the covered walkway was called one):
+        // if it tumbled but the flip can't be read yet (rotation still going), say nothing and wait
+        const gentle = tumble < 200 && (!this.stayedUpright || this.stayedUpright(p2[0].t - 0.3, p2[1].t));
+        if (!big.length && brisk && (flipped || gentle) && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1])) best = { name: flipped ? 'Matty Flip' : 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 2, part: p2, ct1: p2[1].t };
       }
       if (/OUO/.test(kinds) && !best) {
         const big = toks.filter(x => x.raw > 200);
         const p3 = seq.slice(kinds.lastIndexOf('OUO'), kinds.lastIndexOf('OUO') + 3);
-        if (!big.length && p3.every(c => (c.spd ?? 9) >= 1.5) && toks.some(x => x.ax === 'P' && x.raw >= 60)) best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part: p3, ct1: p3[2].t };
+        // over, back under flying BACKWARD and upright, up and over again — upright the whole way round
+        const bm = p3[1].fwdDot < -0.2 && p3[1].upY > 0.45 && p3[0].dir !== p3[1].dir && p3[1].dir !== p3[2].dir && p3[2].t - p3[0].t < 6 && (!this.stayedUpright || this.stayedUpright(p3[0].t, p3[2].t)) && (!this.sweptBetween || this.sweptBetween(p3[0].t, p3[2].t) < 260);
+        if (bm && !big.length && p3.every(c => (c.spd ?? 9) >= 1.5) && toks.some(x => x.ax === 'P' && x.raw >= 60)) best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part: p3, ct1: p3[2].t };
       }
     }
     // knife edge through a gap
@@ -1275,7 +1280,7 @@ class StreamDetector extends TrickDetector {
     super.reset();
     this.cur = [null, null, null]; this.toks = []; this.pend = []; this.crashSeen = false; this.nCross = 0; this.lastD = null;
     this.liveTaps = true; this.camTilt = this.camTilt ?? 20; this.live = null; this.lastTrippy = null;
-    this.watcher = new Watcher(this); this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
+    { const st = this.watcher && this.watcher.style; this.watcher = new Watcher(this); if (st) this.watcher.style = st; } this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
     this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
     this.orb = {}; this.passTr = {}; this.vst = {}; this.hst = {}; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
     // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
@@ -1619,7 +1624,7 @@ class StreamDetector extends TrickDetector {
       if (t < p.deadline) continue;
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
       // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
-      const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < AIR_OPEN) ? HOLD_MAX + 1.4 : HOLD_MAX;
+      const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen) ? HOLD_MAX + 1.4 : HOLD_MAX;
       if (t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
@@ -1688,7 +1693,7 @@ class StreamDetector extends TrickDetector {
         }
         // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
         // demo yaws (Vanny) measured down to ~266°/s; at the pilot's own rates a yaw inside a sequence can be slower (a lone slow yaw is just a turn)
-        const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
+        const fast = suf.every(x => x.rateSum / x.n >= this.minRate(x.ax, x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
         const orbit = this.orbiting();
         const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
         if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
@@ -1773,7 +1778,13 @@ class StreamDetector extends TrickDetector {
   // in the air between two segments: nothing rotating yet, but the rotations so far are the start of a longer open-air
   // trick and the quad is holding steady (not tumbling) — give the next segment up to AIR_OPEN to begin
   // how much air a gap may have: hanging upside down (or on edge) mid-trick means another segment has to come, so more
-  airAllowed(a, b) { const W = this.fbIn(a, b); return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? AIR_OPEN * 1.5 : AIR_OPEN; }
+  // Pilot profile (from the warm-up, see the game's Pilot Warm-up): typical rotation speed per axis (deg/s) and the pilot's
+  // natural gap between segments. It only ever loosens: slower pilots' rotations still count as deliberate, and pilots who
+  // leave more air get more (up to 1.8 s).
+  setPilot(p) { this.pilot = p || null; this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null; }
+  get airOpen() { const a = this.pilot && this.pilot.air; return a ? clamp(Math.max(AIR_OPEN, a * 1.8 + 0.2), AIR_OPEN, 1.8) : AIR_OPEN; }
+  minRate(ax, base) { const r = this.pilot && this.pilot.rate && this.pilot.rate[ax]; return r ? Math.min(base, Math.max(90, r * 0.5)) : base; }
+  airAllowed(a, b) { const W = this.fbIn(a, b), A = this.airOpen; return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? A * 1.5 : A; }
   awaitingSegment(p) {
     const t = this.time, gap = t - p.tDone; if (!p.toks.length || p.part || (p.clen || 0) > 0 || gap > this.airAllowed(p.tDone, t)) return false;   // an open-air extension never beats a context/obstacle trick
     if (gap > 0.15 && this.sweptBetween(p.tDone, t) / gap > 150) return false;
@@ -1788,7 +1799,7 @@ class StreamDetector extends TrickDetector {
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?
     if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
     const pLast = p.toks[p.toks.length - 1]; if (!pLast) return false;
-    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < AIR_OPEN);
+    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < this.airOpen);
     if (!live.length) return this.awaitingSegment(p);
     const near = this.crossWindow(p.t0).some(c => c.kind !== 'G');   // obstacle tricks only once a pass has happened
     const N0 = this.normalized(), pool = near ? [...OPEN_TRICKS, ...OBSTACLE_TRICKS.filter(x => !x.tap)] : OPEN_TRICKS;

@@ -147,6 +147,11 @@ runX('one upright lap, half a lap rolled over (no trippy)', trip({ pre: 1.0, lap
 // 6f. pilot: ordinary movement round a pole was called a Whiplash
 runX('banked half lap past a lamp post, flying on (no whiplash)', trip({ pre: 0.5, laps: 0, c: LP, R: 1.5, rate: 120, y: 2 }), []);
 runX('banked 3/4 lap round the flagpole, flying on (no whiplash)', trip({ pre: 0.75, laps: 0, R: 2, rate: 90, y: 2.5 }), []);
+// 6g. pilot: a powerloop round the covered walkway was called Beginner Matty. Arriving OVER the object first and then
+// looping it gives over-under-over passes mid-loop; that is only a Beginner Matty if the pass under is flown backward, upright
+for (const obj of ['Covered Walkway', 'Swing Set']) { const m = M.make('Powerloop', W, 77, { object: obj, tilt: 30 }), s0 = m.at(0), s1 = m.at(0.5), hv = S.mul(S.sub(s1.pos, s0.pos), 2), far = add(s0.pos, mul(hv, 2.2)), Tp = 1.6, Td = 0.6;
+  const hi = y => v3(0, 4.6 - y, 0);
+  run(`fly over the ${obj}, then powerloop it (not a beginner matty)`, { T: m.T + Tp + Td, at: t => t < Tp ? { pos: add(add(far, mul(S.sub(s0.pos, far), t / Tp)), hi(far.y)), q: s0.q } : t < Tp + Td ? { pos: add(s0.pos, mul(hi(s0.pos.y), 1 - (t - Tp) / Td)), q: s0.q } : m.at(t - Tp - Td) }, ['Powerloop']); }
 // 6c. jump ropes only on real over/under bars (pilot: they triggered on other objects): sideways over a bench and back,
 // and sideways over the swing bar twice (no pass under), are not jump ropes
 { const side = (x0, z0, y, dz, T) => at([{ T, f: t => ({ pos: v3(x0, y, z0 + dz * Math.cos(2 * Math.PI * t / T)), q: faceQ(v3(1, 0, 0)) }) }, hold(v3(x0, y, z0 + dz), faceQ(v3(1, 0, 0)), 1.5)]);
