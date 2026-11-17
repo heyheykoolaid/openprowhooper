@@ -211,6 +211,7 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #bbrSticks { position: absolute; left: 12px; bottom: 166px; width: 208px; height: 96px; pointer-events: none !important; }
 #bbrTimeline { position: absolute; left: 0; right: 330px; bottom: 0; width: calc(100% - 330px); height: 150px; background: #0e0d0c; cursor: crosshair; }
 #mainMenu .menuBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
+#menuThanks { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid #fff2; font: 12px/1.5 var(--mono); color: #cfc6b4; text-align: center; } #menuThanks b { color: #ffd34d; font-weight: 600; }
 </style>
 <!--THREE-->
 <script>
@@ -283,6 +284,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
+  <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · and <b>the Whoop Community!</b></p>
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
