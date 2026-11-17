@@ -211,3 +211,11 @@ a car gap, a chair, fences/walls/garage doors, a hallway ceiling, a staircase, a
   demos recognised with no pilot input; on a stitched 30 fps MP4 of Roll + Flip + Vanny Roll + Rubik's Cube it finds 3–4
   depending on the axis setting. Real DVR at 30/60 fps should do better than 2× slowed, compressed GIFs.
 
+
+
+### Barani as pilots fly it (2026-11-17)
+The first labelled Barani from a shared flight was called a Matty Flip. Measured: a half loop up in front of a tree with no
+pass under it first (P+169), a ~140° yaw upside-down over it, then a sloppy ~265° Matty (P-153 upside-down + P-112) out under
+it flying backward. Rule change: a second Barani entry with crossings `OU` (over, then under backward), and the last half of
+both Barani patterns is loose (`P±~180`). test/barani.js pins it with the measured numbers plus near-misses (no yaw on top =
+Matty Flip; yaw upright or finishing forward = not a Barani). Bot stress and benchmark unchanged.

@@ -326,7 +326,8 @@ and opens one for review on its own map (switching map and coming back if needed
 prints (1) each trick's signature as really flown (degrees per axis, rates, passes, sticks, throttle, pilot ✓/✗),
 (2) every stretch a pilot labelled that the game did not call, with the rotations, passes and sticks measured there
 (the to-do list for rule work), (3) big rotations no call claimed, and any errors pilots' games reported.
-`--trick "Name"` narrows it, `--json` saves it. The game keeps a small log of its own JS errors (`errLog` in
+`--trick "Name"` narrows it, `--json` saves it. `node tools/probe-label.js "<trick>" <data folder>` prints, around every
+decided label of that trick, the tokens, passes, calls, up.y and heading every 0.1 s: how a rule fix starts. The game keeps a small log of its own JS errors (`errLog` in
 dropoff.js: message and place only, tokens scrubbed) that rides in `summary.errors` of a shared flight and in feedback.
 
 ## Video Review and the learner
@@ -427,6 +428,8 @@ weighs the rest 0.5 (the label on the real flight already counts 1). test/replic
 - `ScoreKeeper` — TPW calculator rules.
 
 ## Confirmed by the pilot
+- Barani: may start with the half loop up IN FRONT of the object (no pass under first), the inverted yaw ~140–180°, and
+  the Matty out of it sloppy (up to ~270°); it ends under the object flying backward (test/barani.js).
 - Matty Flip: over the object → ~360° forward flip → finish upright, facing the object, flying backward under it.
 - Powerloops go inverted over the top; Maverick loops stay upright and forward-looking the whole way.
 - Inverted Yaw Spin at any camera angle: the half roll in may carry a nose tip (folded into the roll in `normalized`),

@@ -979,7 +979,10 @@ const OBSTACLE_TRICKS = [
   { name: 'Reversed Power Flip', pats: ['P+180 P-360 P+180'], cross: 'UOU', end: 'fwd' },
   { name: 'Power Roll', pats: ['P+180 Ra360 P+180'], cross: 'UOU', end: 'fwd' },
   { name: 'Inverted 360 Powerloop', pats: ['P+180 Ya360i P+180'], cross: 'UOU', end: 'fwd' },
-  { name: 'Barani', pats: ['P+180 Ya180i P+180', 'P+180 Ya180i P-180'], cross: 'UOU', end: 'back' },
+  { name: 'Barani', pats: ['P+180 Ya180i P+~180', 'P+180 Ya180i P-~180'], cross: 'UOU', end: 'back' },
+  // as pilots really fly it (shared flight, 2026-11-17): half loop up IN FRONT of the object (no pass under first), half
+  // yaw upside-down over it (~140°), then a sloppy Matty (~265°, often read as two pieces) out under it flying backward
+  { name: 'Barani', pats: ['P+180 Ya180i P-~180', 'P+180 Ya180i P+~180'], cross: 'OU', end: 'back' },
   { name: 'Rollani', pats: ['P+180 Ya180i Rb360 P*180'], cross: 'UOU', end: 'back' },
   { name: 'Flipani', pats: ['P+180 Ya180i P-540', 'P+180 Ya180i P-360 P+180'], cross: 'UOU', end: 'back' },
   { name: 'Immelmann Turn', pats: ['P+180 Ra180'], cross: 'UO' },
