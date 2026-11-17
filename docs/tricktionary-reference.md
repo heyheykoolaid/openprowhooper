@@ -196,3 +196,18 @@ a car gap, a chair, fences/walls/garage doors, a hallway ceiling, a staircase, a
 | Stall Rewind | climbs up a house wall, stalls, rewinds back down | matches |
 | Beginner Switch | over and back under the gazebo | matches |
 
+## Advanced pass (tools/gif_rotation2.py) and the browser tracker (src/vision.js)
+
+- **Advanced GIF pass:** bridges motion blur by matching a sharp frame to the next sharp one up to 6 frames later (with
+  the 360° ambiguity resolved from the rotation rate), and closes loops across fast bursts. Frames tracked: 87% → 88%
+  at the 140° lens (36 clips better, 9 worse); measured angles closer to the truth (Roll 332° → 351°); the replay test
+  goes from 8 to 9 cases (an Invert Rewind rep).
+- **Lens choice is a trap:** choosing each clip's lens by "most frames tracked" reached 91% coverage, but it favoured
+  narrow lenses, which shrink pitch and yaw. The replay test fell from 8/8 to 2/8, so that variant was not adopted.
+- **Still out of reach for feature matching:** flips that are blurred for 8–20 frames in a row (Flip, Double Flip, Juicy
+  Flick, most Invert Rewind reps, Snapback). The browser tracker's coarse photometric search does recover the single
+  Flip (369°), so the two methods complement each other.
+- **Browser tracker on whole, untrimmed demo clips** (tools/vision_gifcheck.js, local frames): about 5–6 of 12 open-air
+  demos recognised with no pilot input; on a stitched 30 fps MP4 of Roll + Flip + Vanny Roll + Rubik's Cube it finds 3–4
+  depending on the axis setting. Real DVR at 30/60 fps should do better than 2× slowed, compressed GIFs.
+

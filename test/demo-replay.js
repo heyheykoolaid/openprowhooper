@@ -4,7 +4,7 @@
 require('../src/tricks.js'); require('../src/sim.js');
 const S = globalThis.Sim; const W = S.buildPlayground(); const fs = require('fs'), path = require('path');
 const DIR = path.join(__dirname, '..', 'calibration', 'demos'); const D = Math.PI / 180; const MODE = process.env.MODE || 'dominant';
-const CASES = [   // file, frame window around the trick, expected detections
+const CASES = process.env.EXTRA ? JSON.parse(process.env.EXTRA) : [   // file, frame window around the trick, expected detections
   ['roll.json', [8, 30], ['Roll']],
   ['vanny-roll.json', [4, 80], ['Vanny Roll']],
   ['segmented.json', [26, 60], ['Segmented Flips/Rolls']],
@@ -13,6 +13,7 @@ const CASES = [   // file, frame window around the trick, expected detections
   ["rubiks-cube.json", [18, 64], ["Rubik's Cube"]],
   ["cubiks-rube.json", [20, 68], ["Cubik's Rube"]],
   ['yaw-spin.json', [4, 30], ['Yaw Spin']],
+  ['inverted-rewind.json', [52, 86], ['Invert Rewind']],   // added with the advanced pass (tools/gif_rotation2.py)
 ];
 function fill(frames, a, b) {     // linearly fill short blurred gaps; report anything longer
   const out = frames.slice(a, b + 1); let longest = 0;

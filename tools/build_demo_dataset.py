@@ -50,7 +50,7 @@ def tilt(fr):   # camera uptilt from roll-dominant frames: body yaw ~ 0 during a
     return round(math.degrees(math.atan2(num, den)), 1) if den > 2000 else None
 index = []
 for d, trick, src, ms, obj in C:
-    v2 = f'{G}/{d}-rot2.json'
+    v2 = f'{G}/{d}-rot3.json'
     if os.path.exists(v2):   # advanced pass (tools/gif_rotation2.py): blur bridging, lens choice, loop closure
         R2 = json.load(open(v2)); fr = R2['frames']; method = {'tool': 'gif_rotation2', 'hfov': R2['hfov'], 'closures': R2['closures']}
     else:
