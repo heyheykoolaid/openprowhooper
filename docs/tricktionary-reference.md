@@ -181,3 +181,18 @@ a car gap, a chair, fences/walls/garage doors, a hallway ceiling, a staircase, a
   Double Dutch, Reversed Power Flip), car gap, staircase, ceiling. See docs/NOTES.md.
 - Tests: `test/demos.js` — tree powerloop and maverick loop from a diagonal approach, Immelmann through the pilot's legs.
 
+## Batch 8: taps, gaps, eject, blind loop, stall rewind, beginner switch
+
+| Trick | What the clip shows | Verdict |
+|---|---|---|
+| Downtown Tap | house wall: roll + pitch back, tap looking down/away, front flip, away | matches draft |
+| Maverick Tap Rewind | indoor: maverick pull-up, bottom tap on a beam, Matty rewind back under | matches draft |
+| Power Switch Tap | indoor: loop up, pitch back to tap the beam, Matty rewind | matches draft |
+| Reverse Knife Edge | indoor gate, mostly blurred | not measurable |
+| Ninja Star | knife-edge yaw spin through the gap between two tree trunks | playground has no trunk gap yet |
+| Eject Roll | climbs in front of an indoor cube (~1 m), pitch down, 360 roll on the way down | **rule changed**: object ≥ 0.8 m (was 3 m) |
+| Blindflip ("Blind Loop" on the site) | yaw ~180 short of the tree, pitch-back loop over it flying blind, forward under it | matches the sheet's Blindflip rule; demo flight added |
+| True Barani | inverts with what measures as a ~190° roll, inverted yaw ~180, then a half loop | unclear: a roll-inversion can't end facing the tree as the clip does, so the roll is probably a distorted pitch; rule unchanged |
+| Stall Rewind | climbs up a house wall, stalls, rewinds back down | matches |
+| Beginner Switch | over and back under the gazebo | matches |
+

@@ -42,4 +42,5 @@
 - Gazebo (Splitback, Split Yaw, Split Stall Matty Rewind demos) — over/under with a roof to look down on.
 - Cube / gate (Loop to Matty, Double Dutch, Reversed Power Flip, Half Mavvy, Matty 360) — also needed for RaceGOW.
 - Car gap (Matty Flip demo), staircase (Stall Flip Rewind), indoor ceiling (Ceiling Tap), a striped pole to jump-rope.
+- Two trees close together (trunk gap) for Ninja Star / gap tricks between trunks (Ninja Star demo).
 

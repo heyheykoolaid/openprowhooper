@@ -158,4 +158,15 @@ function loopAround(C, hv, RZ, RY) {            // loop geometry around centre C
     { T: 0.4, f: t => ({ pos: S.add(top, S.v3(0, 0, 2.5 * t)), q: S.qmul(inv, S.qaxis(FWD_ROLL, P * t / 0.4)) }) },
     straight(S.add(top, S.v3(0, 0, 1.0)), S.v3(0, 0, 3), 1.4, S.qmul(inv, S.qaxis(FWD_ROLL, P)))]), 7, ['Immelmann Turn']);
 }
+
+{ // Blindflip ("Blind Loop" on prowhooper.com; demo: tree): fly at the tree, yaw 180 just before it, pitch back into a loop over it flying blind,
+  // down the far side and forward under it
+  const hv = S.v3(-0.6, 0, -0.8), g = S.mul(hv, -1), side = S.v3(0.48, 0, -0.36);
+  const C = S.add(S.v3(14, 4.2, 8), side), L = loopAround(C, g, 2.4, 1.9), near = L.at(P / 2), faceHv = S.qaxis(YUP, Math.atan2(-hv.x, -hv.z));
+  const appr = { T: 1.0, f: t => ({ pos: S.add(near, S.mul(hv, -4 + 4 * t)), q: S.qmul(faceHv, S.qaxis(YUP, Math.PI * Math.min(1, Math.max(0, (t - 0.35) / 0.55)))) }) };
+  const sw = sweep(P / 2, 2 * P, 110, 280);
+  const loop = { T: sw.T, f: t => { const th = sw.at(t); return { pos: L.at(th), q: S.qmul(L.face, pitchQ((th - P / 2) / (1.5 * P) * 2 * P)) }; } };
+  const out = { T: 1.2, f: t => ({ pos: S.add(L.at(2 * P), S.mul(g, 3 * t)), q: L.face }) };
+  run('blindflip / "Blind Loop" (tree)', chain([appr, loop, out]), 8, ['Blindflip']);
+}
 console.log(`\n${pass}/${total} demo loops`);

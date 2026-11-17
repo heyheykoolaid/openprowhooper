@@ -772,7 +772,7 @@ const OBSTACLE_TRICKS = [
   { name: 'Split Stall Matty Rewind', pats: ['Ra180 P-~270', 'Ra180 P+~90 P-~270', 'Ra180 P-~360'], cross: 'OU', end: 'back', draft: true },
   { name: 'Maverick Tap Rewind', pats: ['P-~360', 'P-~90 P-~270'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
   { name: 'Power Switch Tap', pats: ['P+~180 P-~270', 'P+~270 P-~180', 'P+~180 P-~360'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
-  { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' },
+  { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' },   // demo GIF unclear (see tricktionary-reference.md)
 ];
 const OPEN_TRICKS = [
   // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
@@ -794,7 +794,8 @@ const CONTEXT_TRICKS = [
   { name: 'Loop Tap', pats: ['R*~90 P+~180', 'R*~90 P+~270', 'P+~90 R*~90 P+~180'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
   { name: 'Ceiling Tap', pats: ['P+~180', 'P+~270'], req: { tap: { face: 'bottom', surface: 'ceiling' } }, draft: true },
   { name: 'Downtown Tap', pats: ['R*~180 P-~360', 'R*~180 P+~90 P-~360', 'R*~180 P-~270'], req: { tap: { face: 'any', surface: 'any' } }, draft: true },
-  { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: true }, draft: true },
+  // demo GIF: ascends in front of an indoor cube (~1 m), not a tall object
+  { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: 0.8 }, draft: true },
   { name: 'Stellar Eject Roll', pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'], req: { climbBefore: true, endBack: true }, draft: true },
   // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
   { name: 'Flip Stall Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
@@ -1746,8 +1747,8 @@ const SPOT_BY_CAT = {
 const SPOT_OVERRIDE = {
   'Stall Rewind': ['Tree', 'Lamp Post', 'Brick Building'], 'Dive': ['Brick Building'], 'Ceiling Tap': ['Slide Tower roof'],
   'Maverick Tap Rewind': ['Swing Set', 'Monkey Bars', 'Slide Tower'], 'Power Switch Tap': ['Swing Set', 'Monkey Bars', 'Slide Tower'],
-  'Facepunch': ['the pilot'], 'Slide Disarm': ['the ground'], 'Perch': ['Brick Building roof'], 'Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'],
-  'Stellar Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'], 'Inverted Yaw Tracking': ['Tree', 'Lamp Post', 'the pilot'],
+  'Facepunch': ['the pilot'], 'Slide Disarm': ['the ground'], 'Perch': ['Brick Building roof'], 'Eject Roll': ['Tree', 'Lamp Post', 'Slide Tower', 'Brick Building'],
+  'Stellar Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'], 'Blindflip': OVER_UNDER, 'Inverted Yaw Tracking': ['Tree', 'Lamp Post', 'the pilot'],
   'Juicy Flick': ['open air (best tracking an object)'], 'Snapback': OVER_UNDER, 'Forani': OVER_UNDER, 'True Barani': OVER_UNDER,
 };
 const DEMO_SPOT = {
@@ -1766,6 +1767,8 @@ const DEMO_SPOT = {
   'Double Dutch': 'indoor cube', 'Flip Stall Rewind': 'indoor staircase', '360 Stall Rewind': 'the pilot', 'Matty Stall Rewind': 'tree',
   'Half Matty Stall Rewind': 'the pilot', 'Dive': 'apartment building', 'Wall Ride': 'garage door', 'Wall Tap': 'garage wall', 'Roll Tap': 'fence',
   'Loop Tap': 'fence', 'Ceiling Tap': 'hallway ceiling', 'Reverse Wall Ride': 'house wall',
+  'Downtown Tap': 'house wall', 'Maverick Tap Rewind': 'indoor beam', 'Power Switch Tap': 'indoor beam', 'Reverse Knife Edge': 'indoor gate',
+  'Ninja Star': 'gap between two tree trunks', 'Eject Roll': 'indoor cube', 'Blindflip': 'tree (site name: Blind Loop)', 'True Barani': 'tree', 'Stall Rewind': 'house wall', 'Beginner Switch': 'gazebo',
 };
 function trickSpots(name, cat) { const n = name.trim(); return { on: SPOT_OVERRIDE[n] || SPOT_BY_CAT[(cat || '').trim()] || ['open air'], demo: DEMO_SPOT[n] || null }; }
 const DETECTABLE = [...new Set([...OBSTACLE_TRICKS.map(t => t.name), ...OPEN_TRICKS.map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT, 'Maverick Loop', 'Mavvy Roll', 'Beginner Matty', 'Knife Edge', 'Ninja Star',
