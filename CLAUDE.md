@@ -262,7 +262,7 @@ parts + colours), like rate profiles. Reference photos are the pilot's; no brand
 **Model parts from the pilot's STLs** (`tools/stl_to_mesh.py` → `assets/meshes/<key>.json` → `src/meshes.js`, `PW_MESHES`, first
 in the game module; int16 hundredths of a mm in game axes): the Air65 frame (`WHOOP_LOOK.frames.air65.mesh`, real size, top
 face at `FT`, posts 17.8 mm out, motors on its hubs 12.4 mm down, pack on the cage floor 13.3 mm down) and the "Beast Brain"
-canopy (default on ring frames with Air electronics, `spec.canopy` 'beastbrain' | 'bridge' in the Garage; its three tabs sit on
+canopy by tcmore_ (the frame is BetaFPV's; both credited on the main menu and in the README) (default on ring frames with Air electronics, `spec.canopy` 'beastbrain' | 'bridge' in the Garage; its three tabs sit on
 the side and front posts, scaled at run time to other frames' posts; the camera sits level in its hood, no camera board drawn).
 The Champion and Air75 frames are still drawn from primitives. Visual only: physics and colliders are unchanged.
 Arming is required to fly. Take-off without arming is an option in Controls, off by default (`autoArmTick` in input.js,
