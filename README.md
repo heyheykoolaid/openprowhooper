@@ -23,6 +23,8 @@ A browser-based tiny-whoop FPV freestyle sim where tricks are scored like Tony H
   matches orangebox value for value.
 - **Video Review** — measure an FPV clip's motion in the browser, confirm/correct the detector's calls; full player
   controls, stop/resume measuring, estimated stick overlay and a ghost quad.
+- **Flight telemetry (opt-in)** — share each run (path, sticks, trick calls, F/Q flags; nothing personal) with the
+  project through a drop-off: the Claude link, a small relay for testers, or your own GitHub token. See docs/DATA.md.
 - **Dev tools** — Trick Calibration checklist (5 reps per trick, rounds), Pause & Ask mode, flight recorder, Judge the
   Bot (orbit/zoom camera, humanized bot flights), Blackbox Lab (USB log download over Web Serial), opt-in uploads of
   calibration data and Blackbox logs to this repo, and one benchmark over every labelled source (`npm run bench`,

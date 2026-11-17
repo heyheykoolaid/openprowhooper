@@ -2,8 +2,8 @@ import pathlib
 root = pathlib.Path(__file__).parent
 t = (root / 'src/index.template.html').read_text()
 # the game module is game.js followed by the track editor / race UI (editor.js shares its scope)
-t = t.replace('/*GAME*/', '/*GAME*//*EDITOR*//*BBREPLAY*//*RECAP*/')
-for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('RECAP', 'recap.js'), ('BBL', 'bbl.js')]:
+t = t.replace('/*GAME*/', '/*GAME*//*EDITOR*//*BBREPLAY*//*RECAP*//*DROPOFF*/')
+for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('RECAP', 'recap.js'), ('DROPOFF', 'dropoff.js'), ('BBL', 'bbl.js'), ('FLIGHTLOG', 'flightlog.js')]:
     t = t.replace('/*%s*/' % key, (root / 'src' / f).read_text().replace('</script', '<\\/script'))
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it
@@ -17,6 +17,13 @@ import shutil
 for f in (root / 'assets' / 'music').iterdir():
     shutil.copy(f, out / 'music' / f.name)
 import base64, json, sys
+# Telemetry drop-off (tools/dropoff-worker.mjs): a public URL that accepts opt-in flight telemetry and feedback from
+# players who have no GitHub token. Not a secret. Set it with --dropoff=https://... or a one-line dropoff.txt.
+drop = next((x.split('=', 1)[1] for x in sys.argv[1:] if x.startswith('--dropoff=')), None)
+if drop is None and (root / 'dropoff.txt').exists():
+    drop = (root / 'dropoff.txt').read_text().strip()
+drop = drop if drop and drop.startswith('https://') else ''
+t = t.replace('<script>/*DROPOFF_URL*/</script>', '<script>window.PW_DROPOFF=' + json.dumps(drop) + ';</script>')
 tracks = [{'title': 'Ghostrider', 'artist': 'awesometexture2251', 'src': 'music/ghostrider.mp3', 'art': 'music/ghostrider.jpg', 'theme': True}]
 # the pilot's graffiti pieces (assets/graffiti/*.webp), embedded as data URLs in both builds
 art = [{'name': f.stem, 'src': 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode()} for f in sorted((root / 'assets' / 'graffiti').glob('*.webp'))]

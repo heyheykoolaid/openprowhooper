@@ -100,6 +100,20 @@ replays each call for ✓ / ✗ / "it was actually…", flagged and low-confiden
 the pilot's rotation speeds and natural gap between moves; `detector.setPilot(profile)` only ever loosens (slower
 deliberate rotations, more air between segments). The roadmap doc lists what is built and what is next.
 
+## Flight telemetry and the drop-offs (src/flightlog.js, src/dropoff.js) — docs/DATA.md
+Opt-in ("Share flight telemetry" in Options, asked once on the main menu, off by default). When a Free Fly / Session run
+ends it is packed (`pro-whooper-flight/1`: the 100 Hz trace delta-coded and deflated, the calls with Watcher confidence,
+F/Q flags, craft/tune, a random pilot id) and sent to the first drop-off that copy can reach: the artifact database
+(`telemetry/<viewer>/flight/<stamp>` + `parts/`, only the owner and org Contributors can write there), the relay
+(`tools/dropoff-worker.mjs`, URL in `dropoff.txt` → `window.PW_DROPOFF`; commits to `telemetry/inbox/`), or GitHub with
+the player's token (`telemetry/flight/<pilot>/`). Otherwise it waits in IndexedDB and Options saves a bundle file.
+Review labels (`pro-whooper-flight-labels/1`) and feedback follow the same route. Never put a token in any of it.
+When asked to "look at the telemetry": `git pull`, then `node tools/flights.js telemetry/ [bundle.json…]` — it re-flies
+every flight through the current detector and lists calls that changed, unsure calls and flagged calls per trick. In the
+artifact database, read the index documents (summary, events) with db_query; ask the owner to press "Download everything
+in the project database" in Options for the traces (they are too big to read through tools). Telemetry is unlabelled:
+it does not count in `npm run bench` unless labels came with it.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

@@ -596,6 +596,7 @@ addEventListener('resize', resize);
 // ============================================================ menus
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
 function startFly(withSession) {
+  telCapture('restart');
   combo.names = []; combo.pts = 0; combo.active = false;
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
   if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
@@ -615,7 +616,7 @@ function endSession() {
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
     <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary">Review my tricks</button><button data-act="menu">Menu</button></div>`;
-  show('#resultsScreen');
+  show('#resultsScreen'); telCapture('session-over');
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
@@ -623,7 +624,7 @@ document.addEventListener('click', e => {
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { telCapture('menu'); if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') startJudge();
@@ -1223,11 +1224,11 @@ function recordTrace(rc) {
 // ---- tiny IndexedDB wrapper (falls back to nothing if the browser blocks storage)
 const idb = (() => {
   let dbp = null;
-  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('prowhooper', 2);
-    r.onupgradeneeded = () => { const db = r.result; for (const s of ['examples', 'runs', 'judge']) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' }); };
+  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('prowhooper', 3);
+    r.onupgradeneeded = () => { const db = r.result; for (const s of ['examples', 'runs', 'judge', 'telemetry']) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' }); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }));
   const tx = async (store, mode, fn) => { try { const db = await open(); return await new Promise((res, rej) => { const t = db.transaction(store, mode), q = fn(t.objectStore(store)); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); } catch { return null; } };
-  return { put: (s, v) => tx(s, 'readwrite', o => o.put(v)), all: async s => (await tx(s, 'readonly', o => o.getAll())) || [], clear: s => tx(s, 'readwrite', o => o.clear()), ok: async () => { try { await open(); return true; } catch { return false; } } };
+  return { put: (s, v) => tx(s, 'readwrite', o => o.put(v)), all: async s => (await tx(s, 'readonly', o => o.getAll())) || [], clear: s => tx(s, 'readwrite', o => o.clear()), del: (s, k) => tx(s, 'readwrite', o => o.delete(k)), ok: async () => { try { await open(); return true; } catch { return false; } } };
 })();
 const TRAIN_OBST = {
   'Powerloops': ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Picnic Table'],
@@ -1460,11 +1461,12 @@ function openOptions() {
     <label>Motor sound<input id="optVol" type="range" min="0" max="1" step="0.01" value="${store.get('vol', 0.35)}"></label>
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
     <h3>Sharing data with the project</h3>
+    ${telOptionsHtml()}
     <label class="chk big"><input type="checkbox" id="ghEnabled" ${gh.enabled ? 'checked' : ''}> Upload calibration data to GitHub</label>
     <div class="optExplain">
       <p><b>What it does:</b> when you fly <i>Trick Calibration</i>, every rep you confirm is recorded — the flight path and rotations, your ✓/✗ labels, what the trick detector decided, and your craft and tune. With this on, those recordings are uploaded to the project repo <code>${gh.owner}/${gh.repo}</code> in the <code>calibration/</code> folder: one file each time a trick reaches 5 reps, and the whole session when a round is finished (or when you press ↑ Upload).</p>
       <p><b>Why:</b> so Claude can pull the data whenever you ask, replay your real flights through the detector, see where it disagrees with you, and tune the trick rules to how pilots actually fly.</p>
-      <p><b>What's not sent:</b> no personal details, no radio or device info, and never your access token. Free flying and sessions outside calibration are never uploaded. Off by default — with it off, data stays in this browser and you can still export a file by hand.</p>
+      <p><b>What's not sent:</b> no personal details, no radio or device info, and never your access token. Free flying is only shared if you turn on flight telemetry above. Off by default — with it off, data stays in this browser and you can still export a file by hand.</p>
     </div>
     <label class="chk big"><input type="checkbox" id="bbEnabled" ${gh.bbEnabled ? 'checked' : ''}> Upload Blackbox logs to GitHub</label>
     <div class="optExplain">
@@ -1486,8 +1488,10 @@ function openOptions() {
         <li>Set an expiry, generate, paste it here. It's kept in this browser only — never in the game file, exports or uploads.</li></ol></details>
       <p class="note">Uploading works from the standalone game file or a hosted copy. The preview inside Claude blocks connections to other sites.</p>
     </div>`;
+  telRenderStatus();
 }
 document.addEventListener('change', e => {
+  if (e.target.id === 'telOn') telSet(e.target.checked);
   if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); renderGhStatus(); }
   if (e.target.id === 'optVol') { store.set('vol', +e.target.value); if (window._master) window._master.gain.value = +e.target.value; const v = $('#vol'); if (v) v.value = e.target.value; }
 });

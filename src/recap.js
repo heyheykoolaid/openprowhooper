@@ -6,8 +6,8 @@
 // Saved as pro-whooper-session/2 (via: "review"), which test/benchmark.js already reads.
 const recap = { trace: [], events: [], flags: [], id: null, started: null, play: null, cam: 'fpv', back: 'pause', dirty: false };
 const RECAP_MAX = 100 * 60 * 8;   // 8 minutes at 100 Hz
-function recapReset() { recap.trace = []; recap.events = []; recap.flags = []; recap.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); recap.started = new Date().toISOString(); recap.dirty = false; }
-function recapRow(row) { if (mode !== 'fly' || race.on) return; if (!recap.id) recapReset(); recap.trace.push(row); if (recap.trace.length > RECAP_MAX) recap.trace.shift(); }
+function recapReset() { recap.trace = []; recap.events = []; recap.flags = []; recap.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); recap.started = new Date().toISOString(); recap.dirty = false; recap.mode = null; }
+function recapRow(row) { if (mode !== 'fly' || race.on) return; if (!recap.id) recapReset(); recap.trace.push(row); if (!recap.mode && recap.trace.length > 100) recap.mode = train.on ? 'calibration' : session ? 'session' : 'free'; if (recap.trace.length > RECAP_MAX) recap.trace.shift(); }
 function recapEvent(ev) {
   if (mode !== 'fly' || race.on || ev.name === 'near' || ev.name === 'Crash') return;
   const toks = ev.toks || [], t = drone.time, t0 = toks.length ? t - (detector.time - Math.min(...toks.map(k => k.t0))) : t - (ev.laps ? ev.laps * 4 : 1.5);
@@ -70,6 +70,8 @@ function recapSave(force) {
   if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false;
   try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
+  // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
+  if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), labels: pl.run.labels }); }
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-rc]'); if (b && mode === 'recap') { const a = b.dataset.rc, i = +b.dataset.i;
@@ -173,7 +175,7 @@ document.addEventListener('click', async e => {
   if (a === 'close') { $('#fbModal').classList.add('hide'); return; }
   const p = fbPayload(); if (!p.text) { msg('Write a comment first.'); return; }
   const all = store.get('feedback', []); if (!all.some(x => x.at === p.at)) { all.push(p); store.set('feedback', all.slice(-50)); }
-  if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); $('#fbModal').classList.add('hide'); flashNote(sent ? 'Feedback sent — thank you!' : 'Feedback saved in this browser — thank you!'); }
+  if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); if (!sent) telQueue('feedback', `${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}`, p); $('#fbModal').classList.add('hide'); flashNote(sent ? 'Feedback sent — thank you!' : 'Feedback saved in this browser — thank you!'); }
   if (a === 'file') { await saveFile(`feedback-${p.at.slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(p, null, 1)); msg('Saved. Send that file to the project.'); }
   if (a === 'copy') { try { await navigator.clipboard.writeText(fbText(p)); msg('Copied — paste it anywhere.'); } catch { msg('Could not copy here; use Save as file.'); } }
   if (a === 'issue') { const { browser, ...ctx } = p.context || {}; window.open(`https://github.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/issues/new?title=${encodeURIComponent(`[${p.category}] ${p.text.slice(0, 60)}`)}&body=${encodeURIComponent(fbText({ ...p, context: p.context ? ctx : null }).slice(0, 5000))}`, '_blank', 'noopener'); msg('Opened GitHub in a new tab (you need a GitHub account to post it).'); }
