@@ -68,6 +68,7 @@ function renderGarage() {
     <label>Props<select data-part="prop">${opt(P.props, spec.prop)}</select></label>
     <label>Battery<select data-part="battery">${opt(P.batteries, spec.battery)}</select></label>
     <label>Electronics<select data-part="electronics">${opt(P.electronics, spec.electronics)}</select></label>
+    ${(WHOOP_LOOK.frames[spec.frame] || {}).ring && (WHOOP_LOOK.canopies[spec.electronics] || {}).bridge ? `<label>Canopy<select id="gCanopy"><option value="beastbrain" ${(spec.canopy || 'beastbrain') === 'beastbrain' ? 'selected' : ''}>Beast Brain (printed)</option><option value="bridge" ${spec.canopy === 'bridge' ? 'selected' : ''}>Air bridge</option></select></label>` : ''}
     <div class="row gLook"><span>Colours</span>${[['frame', 'frame'], ['canopy', 'canopy'], ['props', 'props']].map(([k, l]) => `<label title="${l} colour"><input type="color" data-look="${k}" value="${/^#[0-9a-f]{6}$/i.test(look[k] || '') ? look[k] : hex(dflt[k])}">${l}</label>`).join('')}${spec.look ? '<button id="gLookReset" class="ghost" title="Back to the parts\' own colours">reset</button>' : ''}</div>
     ${params.warnings.map(w => `<p class="warn">⚠ ${w}</p>`).join('')}
     <div class="stats">
@@ -157,8 +158,9 @@ document.addEventListener('click', e => {
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}) }; applyParts(); }
+  if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}), ...(spec.canopy ? { canopy: spec.canopy } : {}) }; applyParts(); }
   if (t.id === 'gMyBuild' && t.value) { const b = myBuilds().find(x => x.name === t.value); if (b) { spec = JSON.parse(JSON.stringify(b.spec)); applyParts(); } }
+  if (t.id === 'gCanopy') { spec.canopy = t.value; store.set('spec', spec); buildDroneMesh(); renderGarage(); }
   if (t.dataset.look) { spec.look = { ...(spec.look || {}), [t.dataset.look]: t.value }; store.set('spec', spec); buildDroneMesh(); }
   if (t.dataset.part) { spec[t.dataset.part] = t.value; applyParts(); }
   if (t.id === 'gRT') { tune.ratesType = t.value; rateEdited(); saveTune(); renderGarage(); }

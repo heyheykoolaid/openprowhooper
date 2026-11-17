@@ -329,13 +329,22 @@ let droneMesh, propGroups = [], propDiscs = [];
 const WHOOP_LOOK = {
   // Air frames (from the pilot's reference photos): a thin coloured ring round each prop, standing on three slim legs that
   // run down to the motor mount; slightly see-through plastic. Meteor and 2S frames keep a full duct wall.
-  frames: { air65: { c: 0x7fd0f2, lip: 0.0008, ring: true, clear: 0.9, braces: 4 }, air65champ: { c: 0x5a5d63, lip: 0.0007, ring: true, clear: 0.72, braces: 3 }, meteor65: { c: 0x1f4fd6, lip: 0.0015 }, air75: { c: 0xe6e8ea, lip: 0.0009, ring: true, clear: 0.6, braces: 4 }, meteor75: { c: 0xd62828, lip: 0.0015 },
+  frames: { air65: { c: 0x7fd0f2, lip: 0.0008, ring: true, clear: 0.9, braces: 4, mesh: 'air65' }, air65champ: { c: 0x5a5d63, lip: 0.0007, ring: true, clear: 0.72, braces: 3 }, meteor65: { c: 0x1f4fd6, lip: 0.0015 }, air75: { c: 0xe6e8ea, lip: 0.0009, ring: true, clear: 0.6, braces: 4 }, meteor75: { c: 0xd62828, lip: 0.0015 },
     whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
   motors: { m0702se_23k: 0x3b82f6, m0702se_27k: 0xe11d48, m0702ii_30k: 0xf5b301, m0702ii_36k: 0x9333ea, evo_31k: 0x111111, evo_33k: 0xc9a227, m0802_19k: 0x10b981, m1002_19k: 0xf97316, m0802_16k: 0x64748b, m1102_13k: 0x0ea5e9, m1103_11k: 0xef4444 },
   props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5 },
   batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
   canopies: { air: { c: 0xf1f3f5, h: 0.0125, w: 0.0125, bridge: true }, std: { c: 0x22c55e, h: 0.0145, w: 0.014 }, aio2s: { c: 0xfacc15, h: 0.016, w: 0.0155 } },
 };
+// a part mesh from src/meshes.js (int16 hundredths of a millimetre) as geometry in metres, built once
+const meshGeo = {};
+function meshGeometry(key) {
+  if (meshGeo[key]) return meshGeo[key]; const C = typeof PW_MESHES !== 'undefined' && PW_MESHES[key]; if (!C) return null;
+  const bin = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; };
+  const v16 = new Int16Array(bin(C.v)), pos = new Float32Array(v16.length); for (let i = 0; i < v16.length; i++) pos[i] = v16[i] * 1e-5;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(new Uint16Array(bin(C.i)), 1)); g.computeVertexNormals();
+  return (meshGeo[key] = g);
+}
 const lookHex = (v, d) => { const m = typeof v === 'string' && /^#[0-9a-f]{6}$/i.exec(v); return m ? parseInt(v.slice(1), 16) : d; };
 function makeWhoopMesh(p, sp, tn) {
   const g = new THREE.Group(), pgs = [], discs = [], L = sp.look || {}, FL = WHOOP_LOOK.frames[sp.frame] || { c: 0x18181c, lip: 0.0012 }, CL = WHOOP_LOOK.canopies[sp.electronics] || WHOOP_LOOK.canopies.air;
@@ -349,13 +358,17 @@ function makeWhoopMesh(p, sp, tn) {
   // Air frames, to the published figures: duct about 34.9 mm across on a 65, the ring itself 3.8 mm tall, 13-14.5 mm overall
   // (the motor hangs below the ring on its braces and is what the quad lands on), board holes 26 mm square mounted
   // corner-forward, battery slot 11.6 x 6.0 mm underneath.
-  const ring = !!FL.ring, ringR = ring ? Math.min(p.rDuct, R + 0.0019) : p.rDuct, ringY = 0.0072, yM = ring ? -0.0056 : 0, post = 0.0184;
+  // The Air65 itself is the pilot's frame model (assets/meshes/air65.json, from their STL, real size): its top face (ring tops and
+  // post tops, where the board sits) is at FT; motors stand on its hubs 12.4 mm below that; posts 17.8 mm out; the pack lies on
+  // the floor of its cage 13.3 mm down.
+  const FM = FL.mesh ? meshGeometry(FL.mesh) : null, FT = 0.004;
+  const ring = !!FL.ring, ringR = ring ? Math.min(p.rDuct, R + 0.0019) : p.rDuct, ringY = 0.0072, yM = FM ? FT - 0.0124 : ring ? -0.0056 : 0, post = FM ? 0.0178 : 0.0184;
   // one blade: a swept, tapered outline, thin, twisted to its pitch
   const blade = (() => { const sh = new THREE.Shape(), r0 = 0.0022, c0 = R * 0.34, c1 = R * 0.16; sh.moveTo(r0, -c0 * 0.35); sh.quadraticCurveTo(R * 0.55, -c0 * 0.75, R * 0.98, -c1 * 0.2); sh.quadraticCurveTo(R * 1.0, c1 * 0.5, R * 0.9, c1 * 0.75); sh.quadraticCurveTo(R * 0.5, c0 * 0.55, r0, c0 * 0.3); sh.closePath();
     const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.0006, bevelEnabled: false, curveSegments: 6 }); geo.rotateX(-Math.PI / 2); return geo; })();
   for (const m of p.motors) {
     const at = (o, y) => { o.position.set(m.pos.x, y, m.pos.z); g.add(o); return o; };
-    if (ring) {   // Air style: a slim ring at prop height; braces sweep down and in to the motor mount below it
+    if (FM) { /* rings, braces and hub are in the frame model */ } else if (ring) {   // Air style: a slim ring at prop height; braces sweep down and in to the motor mount below it
       at(new THREE.Mesh(new THREE.CylinderGeometry(ringR, ringR * 0.99, 0.0038, 40, 1, true), ductMat), ringY);
       for (const dy of [0.0019, -0.0019]) { const lip = at(new THREE.Mesh(new THREE.TorusGeometry(dy > 0 ? ringR : ringR * 0.99, wall * (dy > 0 ? 1 : 0.7), 8, 40), frameMat), ringY + dy); lip.rotation.x = Math.PI / 2; }
       const nb = FL.braces || 4, a0 = Math.atan2(m.pos.x, m.pos.z) + (nb === 3 ? Math.PI : Math.PI / 4);
@@ -368,13 +381,14 @@ function makeWhoopMesh(p, sp, tn) {
       const foot = at(new THREE.Mesh(new THREE.TorusGeometry(p.rDuct * 0.955, wall * 0.7, 6, 28), frameMat), 0.0025 - ductH / 2); foot.rotation.x = Math.PI / 2;
       for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + Math.atan2(m.pos.x, m.pos.z), st = new THREE.Mesh(new THREE.BoxGeometry(0.0014, 0.0022, p.rDuct * 0.96), frameMat); st.position.set(m.pos.x + Math.sin(a) * p.rDuct * 0.48, -0.0015, m.pos.z + Math.cos(a) * p.rDuct * 0.48); st.rotation.y = a; g.add(st); }   // struts to the motor mount
     }
-    at(new THREE.Mesh(new THREE.CylinderGeometry(bellR + 0.0012, bellR + 0.0012, 0.0014, 16), frameMat), yM - 0.0015);                          // motor mount
+    if (!FM) at(new THREE.Mesh(new THREE.CylinderGeometry(bellR + 0.0012, bellR + 0.0012, 0.0014, 16), frameMat), yM - 0.0015);                          // motor mount
     at(new THREE.Mesh(new THREE.CylinderGeometry(statD / 2, statD / 2, statH + 0.001, 12), copper), yM + 0.0002 + statH / 2);                    // windings showing under the bell
     at(new THREE.Mesh(new THREE.CylinderGeometry(bellR, bellR, bellH * 0.55, 18), bellMat), yM + 0.0012 + bellH * 0.72);
     at(new THREE.Mesh(new THREE.CylinderGeometry(bellR + 0.0001, bellR + 0.0001, bellH * 0.12, 18), steel), yM + 0.0012 + bellH * 0.42);                 // the bright band at the bell's base                          // bell
     at(new THREE.Mesh(new THREE.CylinderGeometry(bellR * 0.55, bellR, bellH * 0.2, 18), steel), yM + 0.0012 + bellH * 1.08);                    // bell top taper
-    at(new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, ring ? 0.0075 : 0.004, 6), steel), yM + 0.0012 + bellH * 1.3 + (ring ? 0.0015 : 0));                                   // shaft
-    const pg = new THREE.Group(); pg.position.set(m.pos.x, ring ? ringY - 0.0006 : 0.0018 + bellH * 1.22, m.pos.z);
+    if (FM) { const s0 = yM + 0.0012 + bellH * 1.08, s1 = FT - 0.001; at(new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, s1 - s0, 6), steel), (s0 + s1) / 2); }   // shaft up to the prop
+    else at(new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, ring ? 0.0075 : 0.004, 6), steel), yM + 0.0012 + bellH * 1.3 + (ring ? 0.0015 : 0));                                   // shaft
+    const pg = new THREE.Group(); pg.position.set(m.pos.x, FM ? FT - 0.0022 : ring ? ringY - 0.0006 : 0.0018 + bellH * 1.22, m.pos.z);
     pg.add(new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.0023, 0.0022, 10), propMat));                                                  // hub
     for (let b = 0; b < pr.blades; b++) { const bl = new THREE.Mesh(blade, propMat), h = new THREE.Group(); h.rotation.y = b / pr.blades * Math.PI * 2; bl.rotation.x = (pr.rev > 0.8 ? 0.2 : 0.38) * m.spin; if (m.spin < 0) bl.scale.z = -1; h.add(bl); pg.add(h); }
     g.add(pg); pgs.push(pg);
@@ -384,20 +398,22 @@ function makeWhoopMesh(p, sp, tn) {
   }
   // centre: frame plate, flight controller with its plug and components, canopy with the camera, antenna
   const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); g.add(mesh); return mesh; };
-  const pcb = std(0x101114, { roughness: 0.55 }), chip = (x, z, w, d, c = 0x1b1d22, h = 0.001) => { const b = add(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(c, { metalness: 0.35, roughness: 0.5 })), x, 0.0052 + h / 2, z); return b; };
+  const pcb = std(0x101114, { roughness: 0.55 }), chip = (x, z, w, d, c = 0x1b1d22, h = 0.001) => { const b = add(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(c, { metalness: 0.35, roughness: 0.5 })), x, (FM ? FT + 0.001 : 0.0052) + h / 2, z); return b; };
+  if (FM) add(new THREE.Mesh(FM, std(frameC, { roughness: 0.32, side: THREE.DoubleSide })), 0, FT, 0);
   if (ring) {
     // where neighbouring rings meet they are one piece; four posts between the rings carry the board, corner-forward
-    for (const [x, z] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) { const d = Math.hypot(p.motors[0].pos.x, p.motors[0].pos.z) / Math.SQRT2, gap = Math.max(0.0012, (d - ringR) * 2 + 0.0012);
+    if (!FM) for (const [x, z] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) { const d = Math.hypot(p.motors[0].pos.x, p.motors[0].pos.z) / Math.SQRT2, gap = Math.max(0.0012, (d - ringR) * 2 + 0.0012);
       add(new THREE.Mesh(new THREE.BoxGeometry(x ? 0.003 : gap, 0.0038, x ? gap : 0.003), frameMat), x * d, ringY, z * d);   // the web joining two neighbouring rings
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0019, ringY + 0.0005, 10), frameMat), x * post, (ringY - 0.0045) / 2 + 0.0022, z * post);     // post
       g.add(pipeMesh({ x: x * post, y: 0.0028, z: z * post }, { x: x * d, y: ringY - 0.001, z: z * d }, 0.0009, frameMat));
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 0.0016, 8), std(0xd9c9a3, { roughness: 0.85 })), x * post, 0.0046, z * post);             // grommet
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0012, 0.0009, 8), steel), x * post, 0.0066, z * post); }                                       // screw head
-    for (const m of p.motors) g.add(pipeMesh({ x: m.pos.x * 0.2, y: 0.0024, z: m.pos.z * 0.2 }, { x: m.pos.x - Math.sign(m.pos.x) * ringR * 0.72, y: ringY - 0.0016, z: m.pos.z - Math.sign(m.pos.z) * ringR * 0.72 }, 0.0008, frameMat));   // the X under the board
-    const bd = add(new THREE.Mesh(new THREE.BoxGeometry(0.0262, 0.001, 0.0262), pcb), 0, 0.0052 - 0.0005, 0); bd.rotation.y = Math.PI / 4;                    // the board, a diamond
+    if (FM) for (const [x, z] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0012, 0.0009, 8), steel), x * post, FT + 0.0016, z * post);   // screw heads on the board (the canopy covers three)
+    else for (const m of p.motors) g.add(pipeMesh({ x: m.pos.x * 0.2, y: 0.0024, z: m.pos.z * 0.2 }, { x: m.pos.x - Math.sign(m.pos.x) * ringR * 0.72, y: ringY - 0.0016, z: m.pos.z - Math.sign(m.pos.z) * ringR * 0.72 }, 0.0008, frameMat));   // the X under the board
+    const bd = add(new THREE.Mesh(new THREE.BoxGeometry(0.0262, 0.001, 0.0262), pcb), 0, (FM ? FT + 0.001 : 0.0052) - 0.0005, 0); bd.rotation.y = Math.PI / 4;                    // the board, a diamond
     chip(0, 0.002, 0.0062, 0.0062); chip(-0.0062, -0.0018, 0.0034, 0.0044, 0x23262c); chip(0.006, -0.002, 0.0036, 0.003, 0x8a8f98, 0.0013); chip(0.0005, -0.0075, 0.0042, 0.0026, 0x23262c);
     chip(0.0, 0.0095, 0.0052, 0.003, 0xe9e3d2, 0.0022); chip(-0.0088, 0.0052, 0.002, 0.002, 0xb87333); chip(0.0086, 0.0058, 0.002, 0.002, 0xb87333);   // battery plug socket, pads
-    for (const m of p.motors) { const sx = Math.sign(m.pos.x), sz = Math.sign(m.pos.z); for (const [c, o] of [[0x111111, -0.0006], [0x111111, 0], [0x111111, 0.0006]]) g.add(pipeMesh({ x: sx * 0.0085 + o, y: 0.0052, z: sz * 0.0085 }, { x: m.pos.x - sx * 0.003 + o, y: yM + 0.0005, z: m.pos.z - sz * 0.003 }, 0.0003, new THREE.MeshBasicMaterial({ color: c }))); }   // motor wires
+    for (const m of p.motors) { const sx = Math.sign(m.pos.x), sz = Math.sign(m.pos.z); for (const [c, o] of [[0x111111, -0.0006], [0x111111, 0], [0x111111, 0.0006]]) g.add(pipeMesh({ x: sx * 0.0085 + o, y: FM ? FT + 0.001 : 0.0052, z: sz * 0.0085 }, { x: m.pos.x - sx * 0.003 + o, y: yM + 0.0005, z: m.pos.z - sz * 0.003 }, 0.0003, new THREE.MeshBasicMaterial({ color: c }))); }   // motor wires
   } else {
     add(new THREE.Mesh(new THREE.BoxGeometry(0.029, 0.0024, 0.029), frameMat), 0, -0.0012, 0);
     add(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.0012, 0.026), pcb), 0, 0.003, 0);
@@ -405,8 +421,14 @@ function makeWhoopMesh(p, sp, tn) {
     for (const [x, z, w, d, c] of [[-0.006, 0.006, 0.006, 0.006, 0x16181c], [0.007, 0.004, 0.004, 0.003, 0x16181c], [0.006, -0.007, 0.003, 0.005, 0x8a8f98], [-0.008, -0.006, 0.0025, 0.0025, 0xb87333]]) add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.0012, d), std(c, { metalness: 0.4 })), x, 0.0042, z);
   }
   const canC = lookHex(L.canopy, CL.c), canMat = std(canC, { roughness: 0.3, emissive: canC, emissiveIntensity: 0.05, transparent: !!CL.bridge, opacity: CL.bridge ? 0.78 : 1, side: THREE.DoubleSide });
-  const tiltR = tn.camTilt * Math.PI / 180, camY = (ring && CL.bridge ? 0.0066 : 0.0045) + CL.h * 0.62, camZ = ring && CL.bridge ? -0.0128 : -CL.w * 0.82;
-  if (CL.bridge) {   // the Air canopy: a see-through hoop from side post to side post, a spine from the tail post over the top to the camera cradle
+  // the Air canopy on a ring frame is the pilot's own printed one ("Beast Brain", from their STL): three tabs that sit on
+  // the side and front posts, and a hood the camera looks out of. The plain bridge is still there as a choice.
+  const printed = ring && CL.bridge && (sp.canopy || 'beastbrain') === 'beastbrain' ? meshGeometry('beastbrain') : null, baseY = FM ? FT + 0.001 : 0.0062;
+  let tiltR = tn.camTilt * Math.PI / 180, camY = (ring && CL.bridge ? 0.0066 : 0.0045) + CL.h * 0.62, camZ = ring && CL.bridge ? -0.0128 : -CL.w * 0.82;
+  if (printed) { tiltR = 0; camY = baseY + 0.014 * post / 0.0178; camZ = -0.0112 * post / 0.0178; }   // the hood holds the camera level, its lens 14 mm above the tabs
+  if (printed) { const pm = std(canC, { roughness: 0.55, side: THREE.DoubleSide }); add(new THREE.Mesh(printed, pm), 0, baseY, 0).scale.setScalar(post / 0.0178);
+    for (const [x, z] of [[post, 0], [-post, 0], [0, -post]]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 0.0009, 8), steel), x, baseY + 0.0015, z);   // the three screws through its tabs
+  } else if (CL.bridge) {   // the Air canopy: a see-through hoop from side post to side post, a spine from the tail post over the top to the camera cradle
     const pr0 = ring ? post : CL.w * 0.95, base = ring ? 0.0066 : 0.0042, top = base + CL.h;
     const arch = add(new THREE.Mesh(new THREE.TorusGeometry(pr0, 0.0012, 8, 24, Math.PI), canMat), 0, base, 0); arch.scale.y = CL.h / pr0;
     g.add(pipeMesh({ x: 0, y: base, z: pr0 }, { x: 0, y: top * 0.96, z: 0.003 }, 0.0011, canMat)); g.add(pipeMesh({ x: 0, y: top * 0.96, z: 0.003 }, { x: 0, y: camY + 0.0052, z: camZ + 0.003 }, 0.0011, canMat));
@@ -418,14 +440,14 @@ function makeWhoopMesh(p, sp, tn) {
   const cam = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0044, 0.0046, 0.0072, 18), std(0x0c0c0e, { metalness: 0.4, roughness: 0.35 })), 0, camY, camZ); cam.rotation.x = Math.PI / 2 - tiltR;
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0041, 0.0007, 6, 18), std(0x1c1c20, { metalness: 0.6, roughness: 0.3 })); rim.rotation.x = Math.PI / 2; rim.position.y = 0.0036; cam.add(rim);
   const lens = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), new THREE.MeshStandardMaterial({ color: 0x16284f, metalness: 0.95, roughness: 0.04 })); lens.position.y = 0.0028; cam.add(lens);
-  const cb = new THREE.Mesh(new THREE.BoxGeometry(0.0095, 0.0009, 0.0095), std(0x101114)); cb.position.y = -0.004; cam.add(cb);
+  const cb = new THREE.Mesh(new THREE.BoxGeometry(0.0095, 0.0009, 0.0095), std(0x101114)); cb.position.y = -0.004; if (!printed) cam.add(cb);   // (the printed canopy has its own camera plate)
   // antenna: a thick black base rising at the back with a thin whip
   const az = ring && CL.bridge ? post * 0.8 : CL.w * 0.55, a0 = { x: 0, y: 0.0045 + CL.h * 0.5, z: az }, a1 = { x: 0, y: 0.0045 + CL.h * 1.3, z: az + 0.011 }, a2 = { x: 0, y: 0.0045 + CL.h * 1.95, z: az + 0.021 };
   g.add(pipeMesh(a0, a1, 0.0013, std(0x0c0c0e))); g.add(pipeMesh(a1, a2, 0.0004, std(0x0c0c0e)));
   for (const [c, x] of [[0xcc2222, -0.003], [0xe8c21a, 0], [0x111111, 0.003]]) g.add(pipeMesh({ x, y: 0.0045, z: -0.004 }, { x: x * 0.4, y: camY - 0.002, z: camZ + 0.005 }, 0.00035, new THREE.MeshBasicMaterial({ color: c })));   // camera wires
   // battery: one stick for 1S, two cells stacked for 2S, sized by capacity, with its lead and plug
   const B = S.PARTS.batteries[sp.battery] || { cap: 300 }, cells = B.cells || 1, bl = 0.036 + B.cap * 0.00006, bw = cells > 1 ? 0.016 : 0.0118, bh = (cells > 1 ? 0.0064 : 0.0068) * cells;
-  const batC = WHOOP_LOOK.batteries[sp.battery] ?? 0x2b6ad6, by = -0.0035 - bh / 2;
+  const batC = WHOOP_LOOK.batteries[sp.battery] ?? 0x2b6ad6, by = FM ? FT - 0.0133 + bh / 2 : -0.0035 - bh / 2;
   add(new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bl), std(batC, { roughness: 0.45 })), 0, by, 0.002);
   add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.0003, bh + 0.0003, bl * 0.2), std(0x111214, { roughness: 0.6 })), 0, by, 0.002 - bl * 0.26);     // label blocks
   add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.0003, bh * 0.45, bl * 0.3), std(0x111214, { roughness: 0.6 })), 0, by, 0.002 + bl * 0.12);
@@ -433,8 +455,8 @@ function makeWhoopMesh(p, sp, tn) {
   add(new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0035, 0.006), std(0xf4f4f5, { roughness: 0.6 })), 0, by, 0.002 + bl / 2 + 0.005);                // plug
   g.add(pipeMesh({ x: 0.001, y: by, z: 0.002 + bl / 2 }, { x: 0.001, y: by, z: 0.002 + bl / 2 + 0.004 }, 0.0007, new THREE.MeshBasicMaterial({ color: 0xcc2222 })));
   g.add(pipeMesh({ x: -0.001, y: by, z: 0.002 + bl / 2 }, { x: -0.001, y: by, z: 0.002 + bl / 2 + 0.004 }, 0.0007, new THREE.MeshBasicMaterial({ color: 0x111111 })));
-  for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0012, bh + 0.002, 0.004), frameMat), sx * (bw / 2 + 0.0008), by + 0.0008, 0.002);   // battery holder rails
-  if (ring) for (const z of [-0.008, 0.012]) { add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.003, 0.0009, 0.0022), frameMat), 0, by - bh / 2 - 0.0006, z); for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0011, bh + 0.0035, 0.0022), frameMat), sx * (bw / 2 + 0.0009), by + 0.0012, z); }   // the cage the pack slides into
+  if (!FM) for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0012, bh + 0.002, 0.004), frameMat), sx * (bw / 2 + 0.0008), by + 0.0008, 0.002);   // battery holder rails
+  if (ring && !FM) for (const z of [-0.008, 0.012]) { add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.003, 0.0009, 0.0022), frameMat), 0, by - bh / 2 - 0.0006, z); for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0011, bh + 0.0035, 0.0022), frameMat), sx * (bw / 2 + 0.0009), by + 0.0012, z); }   // the cage the pack slides into
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return { g, pgs, discs };
 }
