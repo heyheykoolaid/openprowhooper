@@ -13,6 +13,7 @@ const checks = [
   ['race rules (gates, laps, best 3 consecutive, validation)', () => { const o = run('race.js', []); return /(\d+)\/\1 race checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['blackbox decoder matches orangebox on a real flight', () => { const o = run('bbl.js', []); return /(\d+)\/\1 blackbox decoder checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['flight telemetry packing (round trip, size, same trick calls)', () => { const o = run('flightlog.js', []); return /(\d+)\/\1 flight log checks/.test(o) ? null : o; }],
+  ['slide disarm with the real physics (slide, re-arm, fly away)', () => { const o = run('slide.js', []); return /(\d+)\/\1 slide checks/.test(o) ? null : o; }],
   ['telemetry drop-off relay (formats, paths, no tokens)', () => { const o = run('dropoff.js', []); return /(\d+)\/\1 drop-off checks/.test(o) ? null : o; }],
   ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['video review tracker (synthetic fisheye footage)', () => { const o = run('vision.js'); const m = o.match(/(\d+)\/(\d+) vision checks/); return m && m[1] === m[2] ? null : o; }],

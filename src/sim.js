@@ -1201,23 +1201,35 @@ class TrickDetector {
         this.climb = null;
       } else if (t - this.climb.t0 > 4 || this.climb.rot > 200) this.climb = null;
     }
-    // Slide disarm / perch: handled from pilot arm events (see onArmChange)
+    // Slide Disarm (TPW: disarm on the move, slide across the ground or an object's surface, re-arm before stopping, fly
+    // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
+    // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
+    if (d.contactThisStep) this.lastTouch = t;
+    const sl = this.slide;
+    if (sl) { const hs = Math.hypot(d.vel.x, d.vel.z);
+      if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) { sl.lastC = t; const o = this.world.objs[d.contactOwner]; sl.surface = d.contactGround || !o ? 'the ground' : o.name; }
+      const on = t - sl.lastC < 0.15; if (on) sl.dist += hs * dt;
+      if (on && hs < 0.15) { if (sl.stopT == null) sl.stopT = t; } else sl.stopT = null;
+      if (d.crashed || t - sl.t > 10 || (sl.stopT != null && t - sl.stopT > 1.0)) this.slide = null;   // came to rest: the moment has passed
+    }
   }
   onArmChange(d, armed) {
     const t = this.time, speed = len(d.vel);
     if (!armed && !d.crashed) {
-      if (d.pos.y < 0.4 && speed > 3) this.slide = { t };
+      if (speed > 1.2) this.slide = { t, dist: 0, lastC: -9, stopT: null, surface: null };   // disarmed on the move: a slide may follow
       else if (d.pos.y > 4.5 && speed < 1 && d.up().y > 0.8) this.perch = { t, y: d.pos.y };
     } else if (armed) {
-      if (this.slide && t - this.slide.t < 3 && speed > 0.3) this.pendingFly = { name: 'Slide Disarm', t };
-      if (this.perch && d.pos.y > 4.4) this.pendingFly = { name: 'Perch', t };
+      // re-armed while still sliding (a moment's grace after it stops), having really slid (whoops stop quickly: 0.75 m)
+      const sl = this.slide; if (sl && sl.dist >= 0.75 && (sl.stopT == null || t - sl.stopT < 0.6)) this.pendingFly = { name: 'Slide Disarm', t, y0: d.pos.y, obstacle: sl.surface, meters: sl.dist };
+      if (this.perch && d.pos.y > 4.4) this.pendingFly = { name: 'Perch', t, y0: -9 };
       this.slide = null; this.perch = null;
     }
   }
   postStep(d) {
-    if (this.pendingFly && d.pos.y > 0.6 && this.time - this.pendingFly.t < 4 && !d.crashed && len(d.vel) > 1) {
-      this.emit({ name: this.pendingFly.name, exec: 'CLEAN', clean: 90, continuous: true }); this.pendingFly = null;
-    } else if (this.pendingFly && this.time - this.pendingFly.t > 4) this.pendingFly = null;
+    const pf = this.pendingFly; if (!pf) return;
+    const away = pf.name === 'Perch' ? d.pos.y > 0.6 : (d.pos.y > pf.y0 + 0.35 || this.time - (this.lastTouch ?? -9) > 0.35);   // off the surface and flying
+    if (d.crashed || this.time - pf.t > 4) this.pendingFly = null;
+    else if (away && len(d.vel) > 1) { this.emit({ name: pf.name, exec: 'CLEAN', clean: 90, continuous: true, obstacle: pf.obstacle || undefined, meters: pf.meters }); this.pendingFly = null; }
   }
   nearWall(d) {
     let best = null;
@@ -1430,6 +1442,7 @@ class StreamDetector extends TrickDetector {
     const out = [];
     if (this.live && this.live.laps >= 0.5) out.push({ name: this.live.name, laps: this.live.laps, pts: Math.round(trickPoints(this.live.name) * this.live.laps / 2), counts: this.live.laps >= 1 });
     if (this.wallRide && this.wallRide.emitted) out.push({ name: this.wallRide.name2 || 'Wall Ride', meters: len(sub(this.lastD.pos, this.wallRide.p0)) });
+    if (this.slide && this.slide.dist > 0.3) out.push({ name: this.slide.dist >= 0.75 ? 'Slide Disarm · re-arm!' : 'Sliding', meters: this.slide.dist });
     return out;
   }
   endOrbit(P, ob, reason) {
@@ -1859,7 +1872,7 @@ class StreamDetector extends TrickDetector {
   drainReviews() { const r = this.reviews; this.reviews = []; return r; }
   pushDebug(x) { (this.debug = this.debug || []).push(x); if (this.debug.length > 12) this.debug.shift(); }
   provisional() { return this.pend.map(p => p.name); }
-  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted); }
+  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly; }
 }
 
 // ================================================================= THE WATCHER (second, live judge)

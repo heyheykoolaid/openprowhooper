@@ -81,8 +81,9 @@ Where it goes, first one that works:
    document (format, summary, events, labels, feedback text — everything but the trace), with the whole payload as text in
    `…/parts/p000…`. Rules: each viewer writes only their own folder, only the owner and Editors read. The platform lets
    only the owner and organisation Contributors write, so outside testers cannot use this route.
-2. **Relay** (`tools/dropoff-worker.mjs`): a Cloudflare Worker holding a repo token as a secret. Accepts only the three
-   formats above, at most 1.5 MB, names the file itself (`telemetry/inbox/<kind>/<day>/<time>-<random>.json`), refuses
+2. **Relay** (`tools/dropoff-worker.mjs`, setup and safeguards in `docs/DROPOFF-SETUP.md`): a Cloudflare Worker holding a
+   repo token as a secret. Accepts only the three formats above from the game's own web address, at most 1 MB, checks
+   their shape, names the file itself (`telemetry/inbox/<kind>/<day>/<time>-<random>.json`), rate-limits, and refuses
    anything that looks like a token. Its URL goes in `dropoff.txt`; `build.py` puts it in the game.
 3. **GitHub with the player's token**: `telemetry/<kind>/<pilot>/<stamp>.json`.
 4. **Nowhere**: kept in the browser (last 40), "Save waiting flights as a file" in Options.
