@@ -265,7 +265,7 @@ List rows are clickable (`recapPick`: click, Ctrl-click, Shift-click range in ti
 the picked tricks one group number (`grp` on the call / flag; yellow frame and tag; labels carry `group`, `groupLen`);
 "＋ then" in a row or on the timeline adds the next trick and groups the two. Delete hides a trick from timeline and
 list (`hidden`; a hidden game call is still exported as "not a trick", a hidden added trick is not exported);
-"Bring back deleted" restores all. Clicking empty space lets go of the picked trick, clip and multi-selection
+"Bring back deleted" restores all. Each call row has ✓ then ▶; after a verdict on the last row in sight the list scrolls on (`recapAutoScroll`). Clicking empty space lets go of the picked trick, clip and multi-selection
 (`recapDeselect`). Added tricks have clean / sloppy / bump in the list as well as on the timeline row.
 
 ## The whoop's look and saved builds (src/worldview.js `makeWhoopMesh`, `WHOOP_LOOK`; src/menus.js)

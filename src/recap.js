@@ -125,6 +125,14 @@ function recapStep(dt) {
 }
 const recapSel = () => { const p = recap.play; if (!p || !p.key) return null; return recapItems().find(it => it.kind + it.i === p.key) || null; };
 // what the pilot says a call really was: the same trick (= correct), another trick, or not a trick at all
+// after a verdict on the last trick still in sight, the list scrolls on: that row goes to the top and the next ones come
+// into view (nothing moves while the next row is already fully visible)
+function recapAutoScroll(key) {
+  const row = document.querySelector(`.rvItem[data-rvkey="${key}"]`), box = row && row.closest('.rvSide'); if (!row || !box) return;
+  let next = row.nextElementSibling; while (next && !next.classList.contains('rvItem')) next = next.nextElementSibling; if (!next) return;
+  const bb = box.getBoundingClientRect(), nb = next.getBoundingClientRect(); if (nb.bottom <= bb.bottom - 4) return;
+  box.scrollTop += row.getBoundingClientRect().top - bb.top - 8;
+}
 function recapSetCall(i, val) { const e = recap.events[i]; if (!e) return; if (!val) { e.verdict = null; e.actual = null; } else if (val === e.name) { e.verdict = 'yes'; e.actual = null; } else { e.verdict = 'no'; e.actual = val; } recap.dirty = true; }
 // A trick the pilot adds starts AT the red line and runs 1.5 s (drag its end to fit). Playback is left alone.
 function recapAddAt(t, len = 1.5) { const [, T1] = recapSpan(), a = Math.min(t, T1 - 0.2), f = { t0: +a.toFixed(3), t: +Math.min(T1, a + len).toFixed(3), actual: null, added: true }; recap.flags.push(f); recap.dirty = true; if (recap.play) { recap.play.key = 'miss' + (recap.flags.length - 1); recap.play.loop = null; } return f; }
@@ -182,7 +190,7 @@ function renderRecap() {
           <div class="row">${thenB}<span class="rcExec" title="How was it flown?">${[['CLEAN', 'clean'], ['SLOPPY', 'sloppy'], ['BUMP', 'bump']].map(([x, l]) => `<button data-rc="execm" data-i="${it.i}" data-x="${x}" class="${f.execActual === x ? 'on' : ''}">${l}</button>`).join('')}</span></div></div>`; }
       const e = it.e, cls = e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : '', unsure = e.conf != null && e.conf < 0.7;
       return `<div class="rvItem ${cls} ${on ? 'on' : ''} ${pk} ${gr}" data-rvkey="${it.kind + it.i}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span>${gTag}<b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : e.maybe ? ' · <span style="color:#7fd0f2">maybe: the trick library\'s guess, not scored</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
-        <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}${thenB}</div></div>`; }).join('')}
+        <div class="row"><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button><button data-rc="go" data-k="call" data-i="${it.i}" title="Play it">▶</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}${thenB}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button>${recapHiddenN() ? `<button data-rc="restore" class="ghost" title="Put every deleted trick back on the timeline">↩ Bring back deleted (${recapHiddenN()})</button>` : ''}</div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
     <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
@@ -319,7 +327,7 @@ document.addEventListener('click', e => {
     if (a === 'group') { recapGroup(); recap.multi.clear(); } if (a === 'unpick') recap.multi.clear();
     if (a === 'ungroup' || a === 'thenrow') { const it = recapItems().find(x => x.kind === b.dataset.k && x.i === i); if (a === 'ungroup') recapUngroup(it); else recapAddAfter(it); }
     if (a === 'go') recapPlay(b.dataset.k === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] });
-    if (a === 'yes') { const ev = recap.events[i]; recapSetCall(i, ev.name); }
+    if (a === 'yes') { const ev = recap.events[i]; recapSetCall(i, ev.name); renderRecap(); recapAutoScroll('call' + i); return; }
     if (a === 'exec') { const ev = recap.events[i]; ev.execActual = ev.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true; }
     if (a === 'execm') { const f = recap.flags[i]; if (f) { f.execActual = f.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true; } }
     if (a === 'delmiss') { recapRemove({ kind: 'miss', i, f: recap.flags[i] }); }
@@ -379,7 +387,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'rcReview') { recap.review = e.target.checked; store.set('recapReview', recap.review); renderRecap(); return; }
   if (e.target.id === 'rcSpeed') { if (recap.play) recap.play.speed = +e.target.value; e.target.blur(); return; }
   if (e.target.dataset.rctile !== undefined) { recapTileAdd(recapSel(), e.target.value); renderRecap(); return; }
-  if (e.target.dataset.rcfix !== undefined) { recapSetCall(+e.target.dataset.rcfix, e.target.value); renderRecap(); }
+  if (e.target.dataset.rcfix !== undefined) { recapSetCall(+e.target.dataset.rcfix, e.target.value); renderRecap(); recapAutoScroll('call' + e.target.dataset.rcfix); }
   if (e.target.dataset.rcmiss !== undefined) { recap.flags[+e.target.dataset.rcmiss].actual = e.target.value || null; recap.dirty = true; renderRecap(); }
 });
 addEventListener('keydown', e => {
