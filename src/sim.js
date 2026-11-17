@@ -750,9 +750,11 @@ const OBSTACLE_TRICKS = [
   { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U' },
   { name: 'Blindflip', pats: ['Ya180 P+360'], cross: 'OU' },
   // ---- phase 2 (rules from the TPW descriptions; marked draft until confirmed with pilot examples)
-  { name: 'Power Split', pats: ['P+~180 Ra180 P+~180', 'P+~270 Ra180 P+~180'], cross: 'UOOU', draft: true },
+  // demo GIF: the loop comes all the way round to level on the start side, hovers ~1.3 s, then Split-S back over and under
+  { name: 'Power Split', pats: ['P+~180 Ra180 P+~180', 'P+~270 Ra180 P+~180', 'P+~360 Ra180 P+~180'], cross: 'UOOU', pauseOK: 2.0, draft: true },
   { name: 'Power Swap', pats: ['P+~180 Ra180 P-180'], cross: 'UOU', end: 'back', draft: true },
-  { name: 'Power Switch', pats: ['P+~180 P-~360', 'P+~270 P-~270', 'P+~180 P-~270'], cross: 'UOU', end: 'back', draft: true },
+  // demo GIF: loop round to level on the start side (no pass back under), hover ~0.7 s, Matty back over and under
+  { name: 'Power Switch', pats: ['P+~180 P-~360', 'P+~270 P-~270', 'P+~180 P-~270', 'P+~360 P-~360', 'P+~360 P-~270'], cross: 'UOOU', end: 'back', pauseOK: 1.6, draft: true },
   { name: 'Immelloop', pats: ['P+~180 Ra180', 'P+~180 Ra180 P+~90'], cross: 'UOU', end: 'back', draft: true },
   { name: 'Immelmatt', pats: ['P+~180 Ra180 P-~270'], cross: 'UOU', end: 'back', draft: true },
   { name: 'Half Mavvy', pats: ['Ra180 P*~180'], cross: 'UOU', end: 'back', draft: true },
@@ -1050,7 +1052,8 @@ class TrickDetector {
     // rotation accuracy
     clean -= Math.min(30, (r.err || 0) * 120);
     // pauses / segmentation inside the trick
-    for (let i = 0; i < used.length - 1 && !r.segmentedOK; i++) { const gap = used[i + 1].t0 - used[i].t1; if (gap > 0.22) { clean -= Math.min(30, (gap - 0.22) * 90); notes.push('segmented'); } }
+    const pauseOK = (OBSTACLE_TRICKS.find(x => x.name === r.name) || {}).pauseOK || 0;   // a level-out hover that is part of the trick
+    for (let i = 0; i < used.length - 1 && !r.segmentedOK; i++) { const gap = used[i + 1].t0 - used[i].t1; if (gap > 0.22 && gap > pauseOK) { clean -= Math.min(30, (gap - 0.22) * 90); notes.push('segmented'); } }
     if (!r.segmentedOK) for (const t of used) if (t.maxGap > 0.1) { clean -= Math.min(50, (t.maxGap - 0.06) * 180); notes.push('stalled mid-rotation'); }
     // off-axis wobble
     for (const t of used) if (t.offRatio > 0.35) { clean -= Math.min(20, (t.offRatio - 0.35) * 60); notes.push('off-axis'); }
@@ -1313,6 +1316,7 @@ class StreamDetector extends TrickDetector {
       (!spec.face || spec.face === 'any' || x.face === spec.face) && (!spec.surface || spec.surface === 'any' || x.surface === spec.surface)) || null;
   }
   fbIn(a, b) { return this.fb.filter(x => x.t >= a && x.t <= b); }
+  sweptBetween(a, b) { const W = this.fbIn(a, b); let s = 0; for (let i = 1; i < W.length; i++) s += Math.acos(Math.max(-1, Math.min(1, dot(W[i - 1].up, W[i].up)))); return s * R2D; }
   minUpBetween(a, b) { const W = this.fbIn(a, b); return W.length ? Math.min(...W.map(x => x.up.y)) : 1; }
   backFrac(a, b) { const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.z) > 0.8); if (!W.length) return 0;
     return W.filter(x => { const fh = Math.hypot(x.f.x, x.f.z) || 1, vh = Math.hypot(x.v.x, x.v.z); return (x.f.x * x.v.x + x.f.z * x.v.z) / (fh * vh) < -0.35; }).length / W.length; }
@@ -1446,8 +1450,9 @@ class StreamDetector extends TrickDetector {
       const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25);   // throttle-cut float over the top of a loop
       const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55;   // 180 · pause · 180 = Segmented, keep apart
       if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && !segPause && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
-        out[out.length - 1] = { ...l, raw: l.raw + a.raw, t1: a.t1, n: l.n + a.n, inv: l.inv + a.inv, off: l.off + a.off, rateSum: l.rateSum + a.rateSum, rateSq: l.rateSq + a.rateSq,
-          maxGap: Math.max(l.maxGap || 0, gap), segments: (l.segments || 1) + 1, spans: [...l.spans, ...a.spans], base: null };
+        const fl = floatOver && a.ax === 'P' ? this.sweptBetween(l.t1, a.t0) : 0;   // slow float over the top: still rotation
+        out[out.length - 1] = { ...l, raw: l.raw + a.raw + fl, t1: a.t1, n: l.n + a.n, inv: l.inv + a.inv, off: l.off + a.off, rateSum: l.rateSum + a.rateSum, rateSq: l.rateSq + a.rateSq,
+          maxGap: fl || floatOver ? (l.maxGap || 0) : Math.max(l.maxGap || 0, gap), segments: (l.segments || 1) + (floatOver ? 0 : 1), floated: floatOver || l.floated, spans: [...l.spans, ...a.spans], base: null };
       } else out.push({ ...a, maxGap: a.maxGap || 0, segments: 1 });
     }
     for (const t of out) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / Math.max(1, t.raw); }

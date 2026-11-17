@@ -8,6 +8,7 @@ const checks = [
   ['fast combos', () => { const o = run('combo.js'); return /12\/12 combos correct/.test(o) ? null : o; }],
   ['powerloop vs maverick', () => { const o = run('loops.js'); return /\n5\/5/.test(o) ? null : o; }],
   ['phase-2 tricks + live counters', () => { const o = run('phase2.js'); const m = o.match(/(\d+)\/(\d+) phase-2/); return m && m[1] === m[2] ? null : o; }],
+  ['tricktionary demo loops', () => { const o = run('demos.js'); const m = o.match(/(\d+)\/(\d+) demo loops/); return m && m[1] === m[2] ? null : o; }],
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],
   ...['session-flips-rolls.json', 'upload-roll-x5.json', 'training-v1-flip.json'].map(f => [`replay fixture ${f}`, () => { const o = run('replay.js', [path.join(__dirname, 'fixtures', f)]); const m = o.match(/(\d+)\/(\d+) labels agree/); return m && m[1] === m[2] ? null : o; }]),
 ];

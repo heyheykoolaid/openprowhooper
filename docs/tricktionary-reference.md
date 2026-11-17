@@ -1,8 +1,9 @@
 # Tricktionary demo GIFs: measured reference
 
-Fourteen demo GIFs from prowhooper.com, supplied by the pilot (batch 1: Flip, Double Flip, Roll, Double Roll, Segmented
+Twenty-one demo GIFs from prowhooper.com, supplied by the pilot (batch 1: Flip, Double Flip, Roll, Double Roll, Segmented
 Flips/Rolls, Yaw Spin; batch 2: Invert Rewind, Vanny Roll, Rubik's Cube, Cubik's Rube, Juicy Flick, Snapback,
-Inverted Yaw Spin, Inverted Yaw Tracking). The GIFs themselves are **not** in this repo (Tyrantt's / other pilots' footage). Only
+Inverted Yaw Spin, Inverted Yaw Tracking; batch 3: Immelmann, Power Split, Power Flip, Reversed Power Flip, Power Swap,
+Power Switch, Power Roll. The Powerloop file received was a single still frame, the site's resized `-768x576` copy). The GIFs themselves are **not** in this repo (Tyrantt's / other pilots' footage). Only
 measurements derived from them are recorded here. Tool: `tools/gif_rotation.py` (SIFT matches → rotation-only fit,
 equidistant fisheye, hfov 140° assumed).
 
@@ -48,3 +49,27 @@ All numbers below are real time.
 
 **Not measurable from these clips:** flips blur out completely at this frame rate (feature matching fails), so flip
 timing comes from frame counting. GIFs give no obstacle positions or stick inputs.
+
+## Batch 3: powerloop family
+
+| Trick | What the clip shows | Real timing |
+|---|---|---|
+| Immelmann | through the pilot's legs → pitch back to inverted → roll 180 → fly away level | half loop ~0.6 s, roll ~0.4 s |
+| Power Roll | under a tree → half loop → roll 360 at the peak → rest of the loop → back under | ~0.72 s / ~0.65 s / ~0.5 s |
+| Power Flip | under a tree → big floaty loop (~1.4 s of plain sky over the top) with a fast backflip at the peak → back under | ≈ 4 s total |
+| Reversed Power Flip | indoors over a cube: loop up, **front** flip at the top, down and through | |
+| Power Swap | through the legs → pitch back → roll 180 looking at the sky → pitch the other way → backward under the legs | ~0.65 s / ~0.2 s / ~0.5 s |
+| Power Switch | under a tree → loop **all the way round to level** on the start side (no pass back under) → **hover ≈ 0.7 s** → Matty back over and backward under | |
+| Power Split | loop **all the way round to level** → **hover ≈ 1.3 s** → roll 180 → Split-S half-loop back over and under | |
+
+**Changes made from batch 3:**
+- Floaty loops: the demos slow far below the 95°/s token threshold over the top, so only ~283° of a 360° loop was
+  counted and loops graded SLOPPY. When a loop is merged across a float over the obstacle, the rotation swept during
+  the float is now added from the attitude history, and the float no longer counts as a mid-rotation stall.
+- Power Switch (draft): crossings are under → over → over → under (was under → over → under), first part may be a full
+  ~360° loop, and a level-out hover of up to 1.6 s is part of the trick (no pause deduction).
+- Power Split (draft): first part may be a full ~360° loop; hover up to 2.0 s allowed (it also has to climb back over).
+- `test/demos.js`: seven flights shaped and timed like these demos, run by `npm test`.
+- Still drafts: Power Switch, Power Split and Power Swap match the demos' rotation order, but the obstacle geometry in
+  the tests is an interpretation of the GIFs. Confirm with real calibration reps before promoting.
+
