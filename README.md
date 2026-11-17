@@ -48,3 +48,7 @@ node test/calibrate.js <file> [trick]   # per-rep measurements and disagreements
 ## Credits
 
 Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.com) calculator.
+
+## Art
+Graffiti pieces in `assets/graffiti/` — HeyHey KoolAid, Clappy and RWDC — are original drawings by the pilot (heyheykoolaid)
+and are used with permission in this game only.

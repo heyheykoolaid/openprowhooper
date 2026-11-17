@@ -109,20 +109,40 @@ function bubble(g, word, x, y, size, pal, rot = 0) {
 function tag(g, x, y, size, col) { g.save(); g.translate(x, y); g.rotate((rnd() - 0.5) * 0.5); g.font = `${size}px "Permanent Marker", cursive`; g.fillStyle = col; g.globalAlpha = 0.85;
   const w = ['krz', 'TPW', 'whp!', 'Ø65', 'acro', 'yaw', 'zap', 'fpv', 'nrv', 'sk8'][(rnd() * 10) | 0]; g.fillText(w, 0, 0); g.lineWidth = 2; g.strokeStyle = col; g.beginPath(); g.moveTo(0, size * 0.25); g.quadraticCurveTo(size, size * 0.6, size * 2, size * 0.1); g.stroke(); g.restore(); }
 function stencil(g, x, y, size, text) { g.save(); g.font = `bold ${size}px "Bungee", Impact`; g.fillStyle = 'rgba(20,20,20,0.82)'; g.fillText(text, x, y); g.restore(); }
+// ---- the pilot's own pieces (assets/graffiti/, drawn by heyheykoolaid): HeyHey KoolAid, Clappy, RWDC
+const ART = {};
+async function loadArt() {
+  await Promise.all((window.PW_ART || []).map(a => new Promise(res => { const im = new Image(); im.onload = () => { ART[a.name] = im; res(); }; im.onerror = () => res(); im.src = a.src; })));
+}
+function sprayArt(g, im, cx, cy, hPx, rot) {
+  const w = hPx * im.width / im.height; g.save(); g.translate(cx, cy); g.rotate(rot);
+  g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.ellipse(0, 0, w * 0.56, hPx * 0.56, 0, 0, 7); g.fill();   // buffed patch
+  g.globalCompositeOperation = 'source-over'; g.shadowColor = 'rgba(10,10,10,0.45)'; g.shadowBlur = Math.max(2, hPx * 0.025);       // overspray
+  g.globalAlpha = 0.95; g.drawImage(im, -w / 2, -hPx / 2, w, hPx); g.shadowBlur = 0; g.globalAlpha = 1;
+  g.globalCompositeOperation = 'destination-out';                                                                                  // wear
+  for (let i = 0, n = w * hPx / 260; i < n; i++) { g.fillStyle = `rgba(0,0,0,${0.12 + rnd() * 0.45})`; const s = 1 + rnd() * 2.5; g.fillRect((rnd() - 0.5) * w, (rnd() - 0.5) * hPx, s, s); }
+  g.restore();
+}
+let artTurn = 0;
 function graffitiTexture(wM, hM, density = 1, opts = {}) {
   const ppm = opts.ppm || 64; const W = Math.min(4096, Math.round(wM * ppm)), H = Math.min(2048, Math.round(hM * ppm));
   const [c, g] = cnv(W, H);
   const n = Math.max(1, Math.round(wM / 6 * density));
   const sx = W / wM, sy = H / hM;
+  // pieces of the pilot's own art get their own spot on the wall: words are painted around them, not under them
+  const artBoxes = (opts.art || []).filter(a => ART[a.name]).map(a => { const im = ART[a.name], hp = a.h * sy, wp = hp * im.width / im.height; return { x0: a.x * W - wp * 0.62, x1: a.x * W + wp * 0.62, y0: H - a.y * sy - hp * 0.62, y1: H - a.y * sy + hp * 0.62 }; });
+  const clash = (x, y, s, word) => { const hw = s * word.length * 0.3; return artBoxes.some(b => x + hw > b.x0 && x - hw < b.x1 && y + s * 0.6 > b.y0 && y - s * 0.6 < b.y1); };
   for (let i = 0; i < n; i++) {
     const word = GRAF_WORDS[(rnd() * GRAF_WORDS.length) | 0], pal = GRAF_PAL[(rnd() * GRAF_PAL.length) | 0];
     const size = (0.6 + rnd() * 0.9) * sy * (opts.big || 1);
     const yM = opts.top ? hM * 0.5 : Math.min(hM - 0.8, 0.9 + rnd() * 1.6);
-    bubble(g, word, (i + 0.5 + (rnd() - 0.5) * 0.6) * W / n, H - yM * sy, size, pal, (rnd() - 0.5) * 0.15);
+    const x = (i + 0.5 + (rnd() - 0.5) * 0.6) * W / n, y = H - yM * sy;
+    if (!clash(x, y, size, word)) bubble(g, word, x, y, size, pal, (rnd() - 0.5) * 0.15);
   }
   for (let i = 0; i < n * 5; i++) tag(g, rnd() * W, H - (0.3 + rnd() * 2.2) * sy, (0.15 + rnd() * 0.25) * sy, ['#111', '#e8e8e8', '#d23', '#2ad', '#fd3'][(rnd() * 5) | 0]);
   if (opts.stencil) stencil(g, W * 0.1, H - 2.4 * sy, 0.45 * sy, opts.stencil);
   if (opts.heaven) bubble(g, 'OPEN PRO WHOOPER', W * 0.5, H * 0.18, H * 0.14, ['#ffe14a', '#ff3d2e', '#111'], -0.03);
+  for (const a of opts.art || []) if (ART[a.name]) sprayArt(g, ART[a.name], a.x * W, H - a.y * sy, a.h * sy, a.rot || 0);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 }
 
@@ -218,8 +238,14 @@ function addGraffiti(v) {
   if (v.graffiti === 'south') { w = h.x * 2; hh = h.y * 2; pos = new THREE.Vector3(v.c.x, v.c.y, v.c.z + h.z + e); }
   else if (v.graffiti === 'east') { w = h.z * 2; hh = h.y * 2; pos = new THREE.Vector3(v.c.x + h.x + e, v.c.y, v.c.z); rotY = Math.PI / 2; }
   else if (v.graffiti === 'top') { w = h.x * 2; hh = h.z * 2; pos = new THREE.Vector3(v.c.x, v.c.y + h.y + e, v.c.z); rotX = -Math.PI / 2; opts = { top: true, big: 0.4 }; }
-  if (hh > 10) opts = { heaven: true, stencil: 'NO WHOOPS', ppm: 48 };
+  if (hh > 10) opts = { heaven: true, stencil: 'NO WHOOPS', ppm: 64 };
   if (w < 3) opts.big = (opts.big || 1) * 0.5;
+  // the pilot's pieces: a big wall of all three on the building, one per graffiti-wall section, small ones on props
+  const turn = () => ['heyhey', 'clappy', 'rwdc'][artTurn++ % 3];
+  if (hh > 10) opts.art = [{ name: 'clappy', x: 0.17, y: 6.2, h: 6.4, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 6.6, h: 4.6, rot: 0.02 }, { name: 'rwdc', x: 0.83, y: 6.0, h: 5.2, rot: 0.05 }];
+  else if (v.graffiti === 'east' && w > 4) opts.art = [{ name: turn(), x: 0.25 + rnd() * 0.5, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];
+  else if (v.graffiti === 'south' && w > 2.5 && hh < 2) opts.art = [{ name: 'clappy', x: 0.5, y: hh * 0.5, h: hh * 0.86, rot: 0.06 }];
+  else if (v.graffiti === 'south' && w < 2.5 && hh < 1.5) opts.art = [{ name: 'rwdc', x: 0.5, y: hh * 0.52, h: hh * 0.85 }];
   const t = graffitiTexture(w, hh, hh > 10 ? 1.4 : 1, opts);
   const mat = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), mat); m.position.copy(pos);
@@ -851,7 +877,7 @@ function ghostStep(dt) {
 // ============================================================ boot
 (async function boot() {
   try { await Promise.all(['80px "Sedgwick Ave Display"', '40px "Permanent Marker"', '30px "Bungee"'].map(f => document.fonts.load(f))); } catch {}
-  detector.camTilt = tune.camTilt; makeTextures(); mats(); buildScene(); buildDroneMesh(); resize();
+  await loadArt(); detector.camTilt = tune.camTilt; makeTextures(); mats(); buildScene(); buildDroneMesh(); resize();
   $('#best').textContent = store.get('best', 0).toLocaleString();
   $('#vol').value = store.get('vol', 0.35); updateMenuDevice(); setInterval(updateMenuDevice, 2000);
   $('#loading').classList.add('hide'); show('#mainMenu');

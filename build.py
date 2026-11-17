@@ -16,6 +16,9 @@ for f in (root / 'assets' / 'music').iterdir():
     shutil.copy(f, out / 'music' / f.name)
 import base64, json, sys
 tracks = [{'title': 'Ghostrider', 'artist': 'awesometexture2251', 'src': 'music/ghostrider.mp3', 'art': 'music/ghostrider.jpg', 'theme': True}]
+# the pilot's graffiti pieces (assets/graffiti/*.webp), embedded as data URLs in both builds
+art = [{'name': f.stem, 'src': 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode()} for f in sorted((root / 'assets' / 'graffiti').glob('*.webp'))]
+t = t.replace('<script>/*ART*/</script>', '<script>window.PW_ART=' + json.dumps(art) + ';</script>')
 (out / 'index.html').write_text(t.replace('<!--THREE-->', CDN).replace('<script>/*TRACKS*/</script>', '<script>window.PW_TRACKS=' + json.dumps(tracks) + ';</script>'))
 # standalone single-file build with the music embedded
 emb = [dict(x) for x in tracks]
