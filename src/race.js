@@ -54,7 +54,12 @@
       build: g => ({ ...GATE_TYPES.gate.build(g), decor: [{ shape: 'banner', a: P(-g.w / 2, g.lift + g.h + 0.02, 0), b: P(g.w / 2, g.lift + g.h + 0.02, 0), hgt: 0.35 }] }) },
     pylon:  { label: 'Pylon', desc: 'Turn marker (a prop, not a gate)', defaults: { w: 0.5, h: 2, lift: 0 }, prop: true,
       build: g => ({ pipes: [[P(0, 0, 0), P(0, g.h, 0)], [P(-g.w / 2, 0, 0), P(g.w / 2, 0, 0)], [P(0, 0, -g.w / 2), P(0, 0, g.w / 2)]], decor: [{ shape: 'cap', at: P(0, g.h, 0) }], opening: null }) },
-    invisible: { label: 'Invisible gate', desc: 'Timing only: no pipes', defaults: { w: 1, h: 1, lift: 0.5 }, invisible: true,
+    // loose pipes for building one connected structure (RaceGOW tracks are a single frame; the checkpoints are its openings)
+    pipe:   { label: 'Pipe ↕ upright', desc: 'One upright pipe, h sections long (gets a foot when it stands on the floor)', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true,
+      build: g => ({ pipes: [[P(0, 0, 0), P(0, g.h, 0)], ...(g.pos[1] < 0.02 && !(g.rot[1] || g.rot[2]) ? [[P(-0.09, 0, 0), P(0.09, 0, 0)], [P(0, 0, -0.09), P(0, 0, 0.09)]] : [])], opening: null }) },
+    bar:    { label: 'Pipe ↔ flat', desc: 'One horizontal pipe, w sections long', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true,
+      build: g => ({ pipes: [[P(-g.w / 2, 0, 0), P(g.w / 2, 0, 0)]], opening: null }) },
+    invisible: { label: 'Checkpoint', desc: 'A rectangle to fly through, any size and angle, no pipes of its own: put it in an opening of your structure', defaults: { w: 1, h: 1, lift: 0 }, invisible: true,
       build: g => ({ pipes: [], opening: { x0: -g.w / 2, x1: g.w / 2, y0: g.lift, y1: g.lift + g.h } }) },
   };
   for (const t of Object.values(GATE_TYPES)) if (t.base) t.build = GATE_TYPES[t.base].build;
@@ -108,6 +113,23 @@
   function resetPoint(G) {
     const c = G.centre, p = add(c, mul(G.fwd, 0.55)), fh = Math.hypot(G.fwd.x, G.fwd.z) || 1;
     return { pos: v3(p.x, Math.max(0.05, p.y), p.z), yaw: Math.atan2(-G.fwd.x / fh, -G.fwd.z / fh) };
+  }
+  // connectors for the whole structure: wherever a pipe end of one part touches a pipe of another part
+  function segPoint(p, a, b) { const ab = sub(b, a), L2 = dot(ab, ab) || 1e-9, f = Math.max(0, Math.min(1, dot(sub(p, a), ab) / L2)); return add(a, mul(ab, f)); }
+  function trackJoints(geoms) {
+    const out = [], seen = new Set(), key = p => Math.round(p.x * 50) + ',' + Math.round(p.y * 50) + ',' + Math.round(p.z * 50);
+    geoms.forEach((G, i) => { if (G.invisible) return; for (const [a, b] of G.pipes) for (const e of [a, b]) {
+      if (seen.has(key(e))) continue;
+      for (let j = 0; j < geoms.length; j++) { if (j === i || geoms[j].invisible) continue;
+        if (geoms[j].pipes.some(([c, d]) => len(sub(segPoint(e, c, d), e)) < 0.02)) { seen.add(key(e)); out.push(e); break; } } } });
+    return out;
+  }
+  // magnet: the smallest shift that puts one of this part's pipe ends on another part's pipe end (or onto its pipe)
+  function snapDelta(G, others, tol = 0.12) {
+    let best = null; const ends = []; for (const [a, b] of G.pipes) ends.push(a, b); if (!ends.length) return null;
+    for (const O of others) { if (O.invisible) continue; for (const [c, d] of O.pipes) for (const e of ends) {
+      for (const [q, w] of [[c, 0], [d, 0], [segPoint(e, c, d), 0.02]]) { const dv = sub(q, e), L = len(dv) + w; if (L < tol && (!best || L < best.L)) best = { L, d: dv }; } } }
+    return best ? best.d : null;
   }
   function gatePrims(G) { return G.invisible ? [] : G.pipes.map(([a, b]) => S.makeCapsule(a, b, PIPE_R)); }
 
@@ -171,9 +193,9 @@
     if (!t || !Array.isArray(t.gates)) throw new Error('not a track file');
     const n = x => (typeof x === 'number' && isFinite(x) ? x : 0);
     return { format: 'pro-whooper-track/1', id: String(t.id || ('t' + Date.now().toString(36))), name: String(t.name || 'Track').slice(0, 60), env: ENVIRONMENTS[t.env] ? t.env : 'livingroom',
-      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false,
+      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false, nextOnly: !!t.nextOnly,
       gates: t.gates.filter(g => GATE_TYPES[g.type]).slice(0, 300).map(g => ({ id: String(g.id || ('g' + nextId++)), type: g.type, pos: (g.pos || [0, 0, 0]).slice(0, 3).map(n), rot: (g.rot || [0, 0, 0]).slice(0, 3).map(n),
-        scale: Math.min(4, Math.max(0.25, n(g.scale) || 1)), w: Math.min(8, Math.max(0.25, n(g.w) || GATE_TYPES[g.type].defaults.w)), h: Math.min(8, Math.max(0.25, n(g.h) || GATE_TYPES[g.type].defaults.h)),
+        scale: Math.min(4, Math.max(0.25, n(g.scale) || 1)), w: Math.min(12, Math.max(0.125, n(g.w) || GATE_TYPES[g.type].defaults.w)), h: Math.min(12, Math.max(0.125, n(g.h) || GATE_TYPES[g.type].defaults.h)),
         lift: Math.min(8, Math.max(0, g.lift == null ? GATE_TYPES[g.type].defaults.lift : n(g.lift))), color: COLORS[g.color] ? g.color : 'white', required: g.required !== false && !GATE_TYPES[g.type].prop, bidir: !!g.bidir })) };
   }
   // the physics world for a track: the room (or the playground) plus every gate's pipes as obstacles
@@ -203,13 +225,13 @@
     track.gates.forEach((g, i) => {
       const G = geoms[i]; if (!G.opening) return;
       const rp = resetPoint(G), own = W.objs.findIndex(o => o.gateId === g.id);
-      if (blocked(rp.pos, 0.09, own)) errors.push(`Gate ${i + 1}: its reset point is blocked.`);
+      if (blocked(rp.pos, G.invisible ? 0.045 : 0.09, own)) (G.invisible ? warnings : errors).push(`Gate ${i + 1}: its reset point is ${G.invisible ? 'tight against a pipe' : 'blocked'}.`);
       if (W.size && (Math.abs(rp.pos.x) > W.size.x / 2 - 0.05 || Math.abs(rp.pos.z) > W.size.z / 2 - 0.05)) errors.push(`Gate ${i + 1}: its reset point is outside the room.`);
       const top = G.pipes.reduce((m, [a, b]) => Math.max(m, a.y, b.y), 0); if (W.size && top > W.size.h) warnings.push(`Gate ${i + 1} goes through the ceiling.`);
       if (G.opening && (G.opening.x1 - G.opening.x0) < 0.2) warnings.push(`Gate ${i + 1} is narrower than 20 cm.`);
     });
     for (let i = 0; i < track.gates.length; i++) for (let j = i + 1; j < track.gates.length; j++) {
-      const a = geoms[i].centre, b = geoms[j].centre; if (len(sub(a, b)) < 0.15) warnings.push(`Gates ${i + 1} and ${j + 1} are on top of each other.`);
+      const a = geoms[i].centre, b = geoms[j].centre; if (!track.nextOnly && geoms[i].opening && geoms[j].opening && len(sub(a, b)) < 0.15) warnings.push(`Gates ${i + 1} and ${j + 1} are on top of each other (turn on \"only the next gate counts\" if that's intended).`);
     }
     return { ok: !errors.length, errors, warnings };
   }
@@ -246,7 +268,10 @@
         const g = this.track.gates[gi]; if (!g.required || isProp(g)) continue;
         let c = crossing(this.geoms[gi], p0, p1); if (!c) continue; if (g.bidir) c = 1; hits.push([gi, c]);
       }
-      if (hits.length > 1) { const want = this.state === 'waiting' ? this.req[0] : this.req[this.next], h = hits.find(x => x[0] === want); if (h) hits.splice(0, hits.length, h); }
+      const want = this.state === 'waiting' || this.holeshot ? this.req[0] : this.req[this.next];
+      // structure tracks reuse the same pipes for many checkpoints, flown from different sides: only the next one counts
+      if (this.track.nextOnly) { const h = hits.filter(x => x[0] === want); hits.splice(0, hits.length, ...h); }
+      else if (hits.length > 1) { const h = hits.find(x => x[0] === want); if (h) hits.splice(0, hits.length, h); }
       for (const [gi, c] of hits) this.onGate(gi, c, t, ev);
       return ev;
     }
@@ -264,7 +289,7 @@
         return;
       }
       if (gi === this.lastGate && gi !== expected) return;   // wobbling back and forth through the gate you just passed
-      if (dir < 0) { if (this.mode !== 'laps') this.spoil(`wrong way through gate ${gi + 1}`, ev); ev.push({ type: 'wrongway', gate: gi }); return; }
+      if (dir < 0) { if (this.mode !== 'laps' && !this.track.nextOnly) this.spoil(`wrong way through gate ${gi + 1}`, ev); ev.push({ type: 'wrongway', gate: gi }); return; }
       if (gi === expected) {
         this.lastGate = gi; this.splits.push(t - this.lapT0);
         if (this.next === 0 || (this.track.startFinish === false && this.next === req.length - 1)) { this.completeLap(t, ev); return; }
@@ -321,7 +346,33 @@
   function sampleTracks() {
     const mk = (env, name, list, launch, extra = {}) => { const t = newTrack(env, name); t.id = 'sample-' + env + '-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'); t.sample = true;
       t.gates = list.map(([type, x, y, z, yaw, more]) => newGate(type, v3(x, y, z), yaw, more || {})); if (launch) t.launch = { pos: [launch[0], 0.03, launch[1]], yaw: launch[2] || 0 }; return Object.assign(t, extra); };
-    return [
+    // One connected PVC structure with ten checkpoints through its openings, flown from different sides: laid out after the
+    // RaceGOW 5 "Track 8" diagram (rail on legs, end gate, square box frame, tall goal-post frame, flat dive square).
+    const st = newTrack('garage', 'Structure 8 (RaceGOW-style)'); st.id = 'sample-garage-structure-8'; st.sample = true; st.nextOnly = true;
+    { const up = (x, z, h, y = 0) => newGate('pipe', v3(x * U, y * U, z * U), 0, { h }), bar = (x, y, z, w, yaw = 0) => newGate('bar', v3(x * U, y * U, z * U), yaw, { w });
+      const cp = (x, y, z, w, h, yaw, pitch = 0, more = {}) => { const g = newGate('invisible', v3(x * U, y * U, z * U), yaw, { w, h, lift: 0, ...more }); g.rot[1] = pitch; return g; };
+      st.gates = [
+        // the structure (x along the rail, z across; heights in sections)
+        up(-2, 0, 2), up(-2, 1, 1), bar(-2, 1, 0.5, 1, 90),                       // end gate: tall post, short post, bar between
+        bar(0, 1, 0, 4),                                                           // the long rail, one section up
+        up(0, 0, 1), up(0.5, -1, 1), bar(0.5, 1, -0.5, 1, 90), up(0.5, 0, 1.5, 1),  // mid leg, branch back with its own leg, pole up from the rail
+        bar(2.5, 1, 0, 1), bar(2.5, 1, -1, 1), bar(2, 1, -0.5, 1, 90), bar(3, 1, -0.5, 1, 90),   // the square box frame
+        up(2, 0, 1), up(3, 0, 1), up(2, -1, 3), up(3, -1, 4), bar(2.5, 3, -1, 1),  // legs, the goal-post frame with one tall post
+        // the lap: ten checkpoints through the openings
+        cp(-2, 0, 0.5, 1, 1, 270),                        // 1 through the end gate
+        cp(2.5, 3, -1, 1, 1, 0),                          // 2 over the goal-post bar, between the posts
+        cp(2.5, 1, -1, 1, 2, 180),                        // 3 back through the goal-post frame
+        cp(-0.5, 0, 0, 3, 1, 0),                          // 4 under the rail
+        cp(-1, 1, 0, 2, 1.25, 180),                       // 5 back over the rail
+        cp(3, 0, -0.5, 1, 1, 270),                        // 6 under the box, out the end
+        cp(2.5, 1, -0.5, 1, 1, 0, -90, { lift: -0.5 }),   // 7 dive down through the box
+        cp(2.5, 0, 0, 1, 1, 180),                         // 8 out under the box toward the rail side
+        cp(1.25, 1, 0, 1.5, 1.5, 0),                      // 9 over the rail by the pole
+        cp(0.5, 0, -0.5, 1, 1, 90),                       // 10 under the branch, heading back to the end gate
+      ];
+      st.gates.slice(-10).forEach((g, i) => { g.color = 'green'; });
+      st.launch = { pos: [-2.6, 0.03, 0.3], yaw: 270 }; }
+    return [st,
       mk('livingroom', 'Couch Circuit', [
         ['start', 0, 0, 1.2, 0], ['gate', -1.8, 0, 0.6, 50], ['arch', -2.6, 0, -0.6, 90], ['hurdle', -1.2, 0, -1.0, 180, { w: 1.5 }],
         ['tall', 0.6, 0, -1.4, 200], ['gate', 2.4, 0, -0.9, 250], ['ladder', 2.6, 0, 0.6, 290], ['flag', 1.4, 0, 1.8, 330]], [0, 2.3, 0]),
@@ -331,7 +382,7 @@
       mk('warehouse', 'Warehouse Sprint', [
         ['start', 0, 0, 5, 0], ['big', -5, 0, 1, 40], ['ladder', -8, 0, -3, 90, { color: 'yellow' }], ['tall', -3, 0, -5.5, 160], ['big', 3, 0, -5.5, 200, { color: 'blue' }],
         ['arch', 8, 0, -2.5, 250], ['hurdle', 8.5, 0, 2.5, 300, { w: 3 }], ['flag', 4, 0, 5.5, 340, { color: 'red' }]], [0, 6.8, 0]),
-    ].map(t => { // the sample layouts are hand-placed: tidy the order so each gate faces the next
+    ].map(t => { if (t.nextOnly) return t;   // the sample layouts are hand-placed: tidy the order so each gate faces the next
       t.gates.forEach((g, i) => { const n = t.gates[(i + 1) % t.gates.length], p = t.gates[(i - 1 + t.gates.length) % t.gates.length];
         if (g.rot[0] === 0 && i === 0) return; const dx = n.pos[0] - p.pos[0], dz = n.pos[2] - p.pos[2]; if (g.autoFace !== false) g.rot[0] = Math.round(Math.atan2(-dx, -dz) / D2R); });
       const g0 = t.gates[0], g1 = t.gates[1]; g0.rot[0] = Math.round(Math.atan2(-(g1.pos[0] - g0.pos[0]), -(g1.pos[2] - g0.pos[2])) / D2R);
@@ -340,5 +391,5 @@
   }
 
   root.Race = { U, PIPE_R, COLORS, GATE_TYPES, ENVIRONMENTS, newGate, newTrack, cleanTrack, gateGeom, crossing, insideOpening, local, resetPoint, gatePrims,
-    buildTrackWorld, validateTrack, RaceSession, best3, GhostRecorder, ghostAt, joinLaps, sampleTracks, rotM, mv, mtv, isProp, required };
+    buildTrackWorld, validateTrack, trackJoints, snapDelta, RaceSession, best3, GhostRecorder, ghostAt, joinLaps, sampleTracks, rotM, mv, mtv, isProp, required };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -18,6 +18,10 @@ function raceMats() {
   PVC.flagB = new THREE.MeshStandardMaterial({ color: 0x2f7bff, roughness: 0.8, side: THREE.DoubleSide });
   { const [c, g] = cnv(128, 32); for (let x = 0; x < 16; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#f5f5f5'; g.fillRect(x * 8, y * 8, 8, 8); }
     PVC.checker = new THREE.MeshStandardMaterial({ map: tex(c), roughness: 0.8, side: THREE.DoubleSide }); }
+  PVC.panel = new THREE.MeshBasicMaterial({ color: 0x2fd24a, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
+  PVC.panelEd = new THREE.MeshBasicMaterial({ color: 0x2fd24a, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
+  PVC.panelLine = new THREE.LineBasicMaterial({ color: 0x2fd24a }); PVC.arrowGo = new THREE.MeshBasicMaterial({ color: 0x9dffb0 });
+  PVC.flight = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
   PVC.pad = new THREE.MeshStandardMaterial({ color: 0x2b2f38, roughness: 0.9 }); PVC.resetOk = new THREE.MeshBasicMaterial({ color: 0x7dff9a }); PVC.resetBad = new THREE.MeshBasicMaterial({ color: 0xff5a5a });
   PVC.padMark = new THREE.MeshBasicMaterial({ color: 0xffd34d });
   // rooms
@@ -89,13 +93,18 @@ function cutaway(cam) {
 const gateRoot = new THREE.Group(); scene.add(gateRoot);
 function gateMesh(G, opts = {}) {
   raceMats(); const g = new THREE.Group(), mat = PVC[G.g.color] || PVC.white; g.userData.gid = G.g.id; g.userData.pipes = [];
-  if (G.invisible) {
-    if (opts.editor) { const op = G.opening, pts = [[op.x0, op.y0], [op.x1, op.y0], [op.x1, op.y1], [op.x0, op.y1], [op.x0, op.y0]].map(([x, y]) => { const p = S.add(G.o, S.add(S.mul(G.right, x), S.mul(G.up, y))); return new THREE.Vector3(p.x, p.y, p.z); });
-      const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x59d3e8 })); l.userData.ownMat = true; g.add(l);
-      const hit = new THREE.Mesh(new THREE.PlaneGeometry(op.x1 - op.x0, op.y1 - op.y0), new THREE.MeshBasicMaterial({ color: 0x59d3e8, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
-      hit.userData.ownMat = true; const c = G.centre; hit.position.set(c.x, c.y, c.z); hit.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(G.right.x, G.right.y, G.right.z), new THREE.Vector3(G.up.x, G.up.y, G.up.z), new THREE.Vector3(-G.fwd.x, -G.fwd.y, -G.fwd.z))); g.add(hit); }
-    return g;
+  const basis = new THREE.Matrix4().makeBasis(new THREE.Vector3(G.right.x, G.right.y, G.right.z), new THREE.Vector3(G.up.x, G.up.y, G.up.z), new THREE.Vector3(-G.fwd.x, -G.fwd.y, -G.fwd.z));
+  if (G.opening) {   // the green panel: shown for the next checkpoint while racing (and always, faintly, for checkpoints in the editor)
+    const op = G.opening, c = G.centre, panel = new THREE.Mesh(new THREE.PlaneGeometry(op.x1 - op.x0, op.y1 - op.y0), opts.editor ? PVC.panelEd : PVC.panel);
+    panel.position.set(c.x, c.y, c.z); panel.quaternion.setFromRotationMatrix(basis); panel.visible = !!(opts.editor && G.invisible); panel.renderOrder = 5; g.add(panel); g.userData.panel = panel;
+    if (opts.editor && G.invisible) {
+      const pts = [[op.x0, op.y0], [op.x1, op.y0], [op.x1, op.y1], [op.x0, op.y1], [op.x0, op.y0]].map(([x, y]) => { const p = S.add(G.o, S.add(S.mul(G.right, x), S.mul(G.up, y))); return new THREE.Vector3(p.x, p.y, p.z); });
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), PVC.panelLine));
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.14, 10), PVC.arrowGo); cone.position.set(c.x + G.fwd.x * 0.1, c.y + G.fwd.y * 0.1, c.z + G.fwd.z * 0.1);
+      cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(G.fwd.x, G.fwd.y, G.fwd.z)); g.add(cone);
+    }
   }
+  if (G.invisible) return g;
   for (const [a, b] of G.pipes) { const m = pipeMesh(a, b, RC.PIPE_R, mat); m.castShadow = true; m.receiveShadow = true; g.add(m); g.userData.pipes.push(m); }
   for (const j of G.joints) { const m = new THREE.Mesh(new THREE.CylinderGeometry(RC.PIPE_R * 1.45, RC.PIPE_R * 1.45, RC.PIPE_R * 4, 10), PVC.joint); m.position.set(j.x, j.y, j.z); m.scale.setScalar(1); g.add(m); }
   for (const d of G.decor) {
@@ -114,6 +123,8 @@ function gateMesh(G, opts = {}) {
     g.add(m); }
   return g;
 }
+function structureJoints(geoms) { const grp = new THREE.Group(); grp.userData.gid = null;
+  for (const j of RC.trackJoints(geoms)) { const m = new THREE.Mesh(new THREE.SphereGeometry(RC.PIPE_R * 1.75, 10, 8), PVC.joint); m.position.set(j.x, j.y, j.z); m.castShadow = true; grp.add(m); } return grp; }
 function clearGroup(g) { for (const c of [...g.children]) { g.remove(c); c.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.userData.ownMat && o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); } }
 function textSprite(text, col = '#ffd34d', size = 0.16) {
   const [c, g] = cnv(128, 64); g.font = 'bold 44px ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 8; g.strokeStyle = '#000'; g.strokeText(text, 64, 34); g.fillStyle = col; g.fillText(text, 64, 34);
@@ -139,8 +150,8 @@ function raceStart(track, rmode, opts = {}) {
   document.body.classList.remove('editing'); $('#editorUI').classList.add('hide');
   ghostOff(); train.on = false; renderTrain(); if (typeof ask !== 'undefined') ask.pending = [];
   const W = RC.buildTrackWorld(track, world); race.W = W; race.track = track; race.mode = rmode; race.laps = opts.laps || race.opts.laps || 3; race.fromEditor = !!opts.fromEditor;
-  setEnv(track.env); useWorld(W); ed.extras.visible = false; cutaway(null);
-  clearGroup(gateRoot); race.meshes = W.geoms.map(G => { const m = gateMesh(G); gateRoot.add(m); return m; }); race.launch = launchMesh(track); gateRoot.add(race.launch);
+  setEnv(track.env); useWorld(W); ed.extras.visible = false; if (ed.flightMesh) ed.flightMesh.visible = false; cutaway(null);
+  clearGroup(gateRoot); race.meshes = W.geoms.map(G => { const m = gateMesh(G); gateRoot.add(m); return m; }); race.launch = launchMesh(track); gateRoot.add(race.launch); gateRoot.add(structureJoints(W.geoms));
   race.sess = new RC.RaceSession(track, W.geoms, rmode, { laps: race.laps, countdown: rmode === 'laps' });
   race.t = 0; race.rec = new RC.GhostRecorder(30); race.lapRecs = []; race.winStart = 0; race.improved = false; race.crashT = null; race.on = true; race.results = null;
   race.best = store.get(bestKey(track), {}); race.ghosts = { best3: race.best.best3Ghost || null, bestLap: race.best.bestLapGhost || null, prev: null, nemesis: race.nemesis && race.nemesis.trackId === track.id ? race.nemesis.ghost : null };
@@ -182,7 +193,7 @@ function raceEvent(e) {
   if (e.type === 'start') { race.rec.begin(race.t); race.winStart = race.t; raceMsg('Lap 1 — go!', true, 1.2); }
   if (e.type === 'gate' && e.late) raceMsg(`Missed a gate — lap won't count`);
   if (e.type === 'invalid') raceMsg(e.why === 'crash' ? 'Crashed — lap won\'t count' : e.why === 'respawn' ? 'Respawned — lap won\'t count' : `${e.why[0].toUpperCase() + e.why.slice(1)} — lap won't count`);
-  if (e.type === 'wrongway' && race.mode === 'laps') raceMsg(`Wrong way through gate ${n(e.gate)}`);
+  if (e.type === 'wrongway' && (race.mode === 'laps' || race.track.nextOnly)) raceMsg(`Wrong way through gate ${race.sess.req.indexOf(e.gate) + 1}`);
   if (e.type === 'skip') raceMsg(`Gate ${n(e.want)} first!`);
   if (e.type === 'lap') {
     const rec = race.rec.take(); race.rec.begin(race.t); race.lapRecs.push({ rec, time: e.time, clean: e.clean }); if (race.lapRecs.length > 6) race.lapRecs.shift();
@@ -235,7 +246,7 @@ function raceVisuals(dt) {
   const s = race.sess; if (!s) return; race.msgT -= dt;
   // the next gate glows (and its connectors keep the PVC look)
   const want = s.state === 'waiting' || s.holeshot ? s.req[0] : s.state === 'racing' ? s.req[s.next] : -1;
-  race.meshes.forEach((m, i) => { const hot = i === want, col = race.track.gates[i].color || 'white'; for (const p of m.userData.pipes) p.material = hot ? PVC[col + 'Hot'] : PVC[col]; });
+  race.meshes.forEach((m, i) => { const hot = i === want, col = race.track.gates[i].color || 'white'; for (const p of m.userData.pipes) p.material = hot ? PVC[col + 'Hot'] : PVC[col]; if (m.userData.panel) m.userData.panel.visible = hot; });
   // ghosts
   const lapU = s.state === 'racing' && s.lapT0 != null ? race.t - s.lapT0 : -1, winU = s.state === 'racing' ? race.t - race.winStart : -1;
   const place = (k, rec, u, on) => { const m = race.gm[k]; const g = on && rec && u >= 0 ? RC.ghostAt(rec, u) : null; m.visible = !!g; if (g) { m.position.set(g.pos.x, g.pos.y, g.pos.z); m.quaternion.set(g.q.x, g.q.y, g.q.z, g.q.w); } };
@@ -308,7 +319,7 @@ document.addEventListener('click', e => {
 // ============================================================ the track editor
 const edCamP = new THREE.PerspectiveCamera(55, 1, 0.02, 400), edCamO = new THREE.OrthographicCamera(-5, 5, 5, -5, -100, 400);
 const ed = { track: null, sel: new Set(), tool: 'move', space: 'global', snap: 15, grid: false, ortho: false, place: null, paint: null, undo: [], redo: [], cam: { t: new THREE.Vector3(), dist: 8, yaw: 0.6, pitch: 0.75 },
-  drag: null, color: 'white', meshes: new Map(), extras: new THREE.Group(), box: null, valid: null, validT: 0, W: null, mouse: new THREE.Vector2(), hover: null, dirty: false };
+  drag: null, color: 'white', magnet: true, flight: false, flightMesh: null, flightT: 0, meshes: new Map(), extras: new THREE.Group(), box: null, valid: null, validT: 0, W: null, mouse: new THREE.Vector2(), hover: null, dirty: false };
 scene.add(ed.extras);
 function openEditor(track, keepCam) {
   raceMats(); if (race.on) raceOff();
@@ -316,13 +327,13 @@ function openEditor(track, keepCam) {
   if (track.env === 'playground') { setEnv('playground'); } else setEnv(track.env);
   if (!keepCam) { const E = RC.ENVIRONMENTS[track.env], sz = E.build ? E.build().size : { x: 30, z: 30, h: 8 }; ed.cam.t.set(0, 0.3, 0); ed.cam.dist = Math.max(sz.x, sz.z) * 0.9; ed.cam.yaw = 0.5; ed.cam.pitch = 0.8; }
   mode = 'editor'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#editorUI').classList.remove('hide'); ed.extras.visible = true; document.body.classList.add('editing');
-  $('#edName').value = track.name; $('#edSF').checked = track.startFinish !== false;
+  $('#edName').value = track.name; $('#edSF').checked = track.startFinish !== false; $('#edNext').checked = !!track.nextOnly;
   $('#edEnv').textContent = `Room: ${RC.ENVIRONMENTS[track.env].label} — ${RC.ENVIRONMENTS[track.env].desc}`;
   $('#edLib').innerHTML = Object.entries(RC.GATE_TYPES).map(([k, T]) => `<button data-ed="lib:${k}" title="${T.desc}">${T.label}</button>`).join('');
   $('#edColor').innerHTML = Object.keys(RC.COLORS).map(c => `<option ${c === ed.color ? 'selected' : ''}>${c}</option>`).join('');
   edRebuild(); edPanels(); edToolbar(); resize();
 }
-function editorClose() { $('#editorUI').classList.add('hide'); document.body.classList.remove('editing'); clearGroup(gateRoot); clearGroup(ed.extras); cutaway(null); setEnv('playground'); }
+function editorClose() { if (ed.flightMesh) ed.flightMesh.visible = false; $('#editorUI').classList.add('hide'); document.body.classList.remove('editing'); clearGroup(gateRoot); clearGroup(ed.extras); cutaway(null); setEnv('playground'); }
 const edSnapshot = () => JSON.stringify(ed.track);
 function edPush() { ed.undo.push(edSnapshot()); if (ed.undo.length > 120) ed.undo.shift(); ed.redo = []; ed.dirty = true; }
 function edUndo() { if (!ed.undo.length) return; ed.redo.push(edSnapshot()); ed.track = JSON.parse(ed.undo.pop()); edAfter(); }
@@ -338,7 +349,7 @@ function edRebuild() {
     const G = ed.W.geoms[i], m = gateMesh(G, { editor: true }); gateRoot.add(m); ed.meshes.set(g.id, m);
     const top = G.pipes.length ? G.pipes.reduce((a, [p, q]) => Math.max(a, p.y, q.y), 0) : G.centre.y + 0.4;
     const req = g.required && !G.prop; if (req) num++;
-    const lab = textSprite(req ? String(num) : '·', req ? (num === 1 ? '#7dff9a' : '#ffd34d') : '#aaa'); lab.position.set(G.centre.x, top + 0.18, G.centre.z); ed.extras.add(lab);
+    if (!RC.GATE_TYPES[g.type].loose) { const lab = textSprite(req ? String(num) : '·', req ? (num === 1 ? '#7dff9a' : '#ffd34d') : '#aaa'); if (G.invisible) lab.position.set(G.centre.x, G.centre.y, G.centre.z); else lab.position.set(G.centre.x, top + 0.18, G.centre.z); ed.extras.add(lab); }
     if (G.opening) { const rp = RC.resetPoint(G), col = bad.has(i) ? PVC.resetBad : PVC.resetOk;
       const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), col); s.position.set(rp.pos.x, rp.pos.y, rp.pos.z); ed.extras.add(s);
       const c = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 10), col); c.position.set(rp.pos.x + G.fwd.x * 0.07, rp.pos.y + G.fwd.y * 0.07, rp.pos.z + G.fwd.z * 0.07);
@@ -348,7 +359,35 @@ function edRebuild() {
   const req = RC.required(T); if (req.length > 1) { const pts = req.map(i => ed.W.geoms[i].centre).map(p => new THREE.Vector3(p.x, p.y, p.z)); if (T.startFinish !== false) pts.push(pts[0].clone());
     const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xffd34d, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: 0.6 })); l.computeLineDistances(); l.userData.ownMat = true; ed.extras.add(l); }
   const lm = launchMesh(T); gateRoot.add(lm); ed.meshes.set('launch', lm);
+  gateRoot.add(structureJoints(ed.W.geoms)); edFlightLine();
   edSelBox();
+}
+// the lap as a line: from the launch pad through every checkpoint in order (approach, centre, exit), like a track diagram.
+// With "Flight line" on, a red stroke runs round it so you can see how the track is flown.
+function edFlightLine() {
+  if (ed.flightMesh) { scene.remove(ed.flightMesh); ed.flightMesh.geometry.dispose(); ed.flightMesh = null; }
+  if (!ed.flight || mode !== 'editor' && !ed.track) return; const T = ed.track, req = RC.required(T); if (req.length < 2) return;
+  const pts = [new THREE.Vector3(T.launch.pos[0], 0.15, T.launch.pos[2])], order = T.startFinish !== false ? [...req, req[0]] : req;
+  for (const i of order) { const G = ed.W.geoms[i], op = G.opening, r = Math.min(0.45, 0.2 + 0.25 * Math.min(op.x1 - op.x0, op.y1 - op.y0)), c = G.centre;
+    for (const k of [-r, 0, r]) pts.push(new THREE.Vector3(c.x + G.fwd.x * k, Math.max(0.08, c.y + G.fwd.y * k), c.z + G.fwd.z * k)); }
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal'), SEG = Math.min(1600, pts.length * 24), RAD = 6;
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, SEG, 0.014, RAD, false), PVC.flight); m.userData.seg = SEG; m.userData.rad = RAD; m.userData.len = curve.getLength(); m.frustumCulled = false;
+  ed.flightMesh = m; scene.add(m);
+}
+function edFlightTick(dt) {
+  const m = ed.flightMesh; if (!m) return; m.visible = mode === 'editor'; const SEG = m.userData.seg, per = m.userData.rad * 6;
+  ed.flightT = (ed.flightT + dt * 3.2 / Math.max(1, m.userData.len)) % 1.25;   // ~3.2 m/s, then a short pause
+  const head = Math.min(1, ed.flightT), tail = Math.max(0, head - 2.2 / Math.max(1, m.userData.len)), i0 = Math.floor(tail * SEG), i1 = Math.floor(head * SEG);
+  m.geometry.setDrawRange(i0 * per, Math.max(0, i1 - i0) * per);
+}
+// magnet: pipe ends click onto nearby pipe ends / pipes of other parts (checkpoints don't snap: size them to the opening)
+function edMagnet(ids) {
+  if (!ed.magnet) return false; const list = ids.filter(id => id !== 'launch').map(gateById).filter(Boolean); if (!list.length) return false;
+  const others = ed.track.gates.filter(g => !list.includes(g)).map(RC.gateGeom); let best = null;
+  for (const g of list) { const d = RC.snapDelta(RC.gateGeom(g), others, 0.14); if (d && (!best || S.len(d) < S.len(best))) best = d; }
+  if (!best || S.len(best) < 1e-4) return false;
+  for (const g of list) { g.pos[0] = +(g.pos[0] + best.x).toFixed(4); g.pos[1] = Math.max(0, +(g.pos[1] + best.y).toFixed(4)); g.pos[2] = +(g.pos[2] + best.z).toFixed(4); }
+  return true;
 }
 function edSelBox() {
   if (ed.box) { ed.extras.remove(ed.box); ed.box.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.userData.ownMat) o.material.dispose(); }); ed.box = null; }
@@ -363,7 +402,7 @@ function edCam() {
   return cam;
 }
 function editorFrame(dt) {
-  const cam = edCam(); cutaway(cam);
+  const cam = edCam(); cutaway(cam); edFlightTick(dt);
   droneMesh.visible = false;
   renderer.render(scene, cam); droneMesh.visible = true;
   ed.validT -= dt;
@@ -386,14 +425,41 @@ const snapA = a => ed.snap ? Math.round(a / ed.snap) * ed.snap : Math.round(a * 
 function camYawDeg() { return Math.round((((ed.cam.yaw * 180 / Math.PI) % 360) + 360) % 360); }   // gates placed facing away from the camera
 function edPlace(type, p) {
   edPush(); const g = RC.newGate(type, { x: snapG(p.x), y: 0, z: snapG(p.z) }, snapA(camYawDeg()), { color: ed.color }); clampToRoom(g.pos);
-  ed.track.gates.push(g); ed.sel.clear(); ed.sel.add(g.id); edRebuild(); edPanels(); return g;
+  ed.track.gates.push(g); ed.sel.clear(); ed.sel.add(g.id); if (RC.GATE_TYPES[type].loose) edMagnet([g.id]); edRebuild(); edPanels(); return g;
 }
 function faceAlong(g, from, to) { const dx = to[0] - from[0], dz = to[2] - from[2]; if (Math.hypot(dx, dz) > 0.05) g.rot[0] = snapA(Math.atan2(-dx, -dz) * 180 / Math.PI); }
+// Define gate: click two opposite corners and the rectangle between them becomes a checkpoint. Corners snap to pipe
+// ends and connectors (or land on the floor), so any opening in the structure, or any open space, can be a gate.
+function edCorner(e) {
+  const cam = ed.ortho ? edCamO : edCamP, r = canvas.getBoundingClientRect(); let best = null;
+  for (const G of ed.W.geoms) { if (G.invisible) continue; for (const [a, b] of G.pipes) for (const p of [a, b]) { const v = new THREE.Vector3(p.x, p.y, p.z).project(cam); if (v.z > 1) continue;
+    const d = Math.hypot((v.x + 1) / 2 * r.width + r.left - e.clientX, (1 - v.y) / 2 * r.height + r.top - e.clientY); if (d < 22 && (!best || d < best.d)) best = { d, p: { x: p.x, y: p.y < 0.03 ? 0 : p.y, z: p.z } }; } }
+  if (best) return best.p; const f = edFloor(e); return f ? { x: snapG(f.x), y: 0, z: snapG(f.z) } : null;
+}
+function edDefine(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, hz = Math.hypot(dx, dz), U = RC.U, cam = ed.ortho ? edCamO : edCamP, look = new THREE.Vector3(); cam.getWorldDirection(look);
+  let g;
+  if (Math.abs(dy) < 0.06 && hz > 0.1) {   // both corners at one height: a flat gate (dive through it); sides follow the structure's axes
+    if (Math.abs(dx) < 0.08 || Math.abs(dz) < 0.08) { edHint('Those two corners are in line: click the opposite corner of the opening (diagonal).'); return null; }
+    g = RC.newGate('invisible', { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }, 0, { w: Math.abs(dx) / U, h: Math.abs(dz) / U, color: 'green' }); g.rot[1] = look.y <= 0 ? -90 : 90; g.lift = -g.h / 2;
+  } else if (hz > 0.08 && Math.abs(dy) > 0.06) {   // a standing gate between the two corners
+    let yaw = Math.atan2(-dz, dx) * 180 / Math.PI;   // local +x along the horizontal run
+    g = RC.newGate('invisible', { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y), z: (a.z + b.z) / 2 }, 0, { w: hz / U, h: Math.abs(dy) / U, color: 'green' });
+    g.rot[0] = yaw; const G = RC.gateGeom(g); if (G.fwd.x * look.x + G.fwd.z * look.z < 0) g.rot[0] = yaw + 180;   // flown away from where you're looking; "Reverse direction" flips it
+    g.rot[0] = ((Math.round(g.rot[0] * 10) / 10) % 360 + 360) % 360;
+  } else { edHint('Pick two corners that are diagonal from each other (for a standing gate: one low, one high).'); return null; }
+  edPush(); ed.track.gates.push(g); ed.sel.clear(); ed.sel.add(g.id); edRebuild(); edPanels();
+  edHint(`Gate ${RC.required(ed.track).length} defined (${(g.w).toFixed(2)} × ${(g.h).toFixed(2)} sections). Raise h in the panel for an open-topped gate; "Reverse direction" flips it.`); return g;
+}
 canvas.addEventListener('contextmenu', e => { if (mode === 'editor') e.preventDefault(); });
 canvas.addEventListener('mousedown', e => {
   if (mode !== 'editor') return; e.preventDefault();
   if (e.button === 2 || e.button === 1) { ed.drag = { kind: e.button === 1 || e.shiftKey ? 'pan' : 'orbit', x: e.clientX, y: e.clientY }; return; }
   if (e.button !== 0) return;
+  if (ed.tool === 'define') { const c = edCorner(e); if (!c) return;
+    if (!ed.defA) { ed.defA = c; const m = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), PVC.arrowGo); m.position.set(c.x, c.y, c.z); ed.extras.add(m); edHint('First corner set. Now click the opposite (diagonal) corner. Esc cancels.'); }
+    else { const a = ed.defA; ed.defA = null; if (!edDefine(a, c)) edRebuild(); }
+    return; }
   if (ed.tool === 'paint') { const p = edFloor(e); if (!p) return; const prev = ed.paint && ed.paint.last ? gateById(ed.paint.last) : null;
     const type = ed.place || 'gate', g = edPlace(type, p); if (prev) { faceAlong(prev, ed.paint.prevPrev || prev.pos, g.pos); faceAlong(g, prev.pos, g.pos); }
     ed.paint = { last: g.id, prevPrev: prev ? prev.pos : null }; edRebuild(); edPanels(); return; }
@@ -431,7 +497,7 @@ addEventListener('mousemove', e => {
 });
 addEventListener('mouseup', () => {
   if (mode !== 'editor' || !ed.drag) return; const d = ed.drag; ed.drag = null;
-  if (d.kind === 'xf' && d.moved) { ed.undo.push(d.snap); ed.redo = []; ed.dirty = true; edPanels(); }
+  if (d.kind === 'xf' && d.moved) { ed.undo.push(d.snap); ed.redo = []; ed.dirty = true; if (ed.tool !== 'scale' && edMagnet(d.items.map(x => x.id))) { edRebuild(); edHint('Snapped onto the pipe ✓ (Magnet is on)'); } edPanels(); }
 });
 canvas.addEventListener('wheel', e => { if (mode !== 'editor') return; e.preventDefault(); ed.cam.dist = Math.max(0.6, Math.min(80, ed.cam.dist * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
 // ---- keyboard
@@ -441,6 +507,7 @@ addEventListener('keydown', e => {
   if (ctl && k === 'KeyZ') { e.preventDefault(); e.shiftKey ? edRedo() : edUndo(); return; } if (ctl && k === 'KeyY') { e.preventDefault(); edRedo(); return; }
   if (ctl && k === 'KeyD') { e.preventDefault(); edAct('clone'); return; } if (ctl && k === 'KeyS') { e.preventDefault(); edAct('save'); return; }
   if (k === 'KeyW') edAct('tool:move'); if (k === 'KeyE') edAct('tool:rotate'); if (k === 'KeyR') edAct('tool:scale'); if (k === 'KeyP') edAct('tool:paint');
+  if (k === 'KeyD' && !ctl) edAct('tool:define');
   if (k === 'KeyL') edAct('space'); if (k === 'KeyG') edAct('ground'); if (k === 'KeyF') edAct('focus'); if (k === 'KeyO') edAct('ortho'); if (k === 'KeyT') edAct('test');
   if (k === 'Delete' || k === 'Backspace') edAct('delete');
   if (k === 'Escape') { if (ed.place || ed.paint || ed.tool === 'paint') { ed.place = null; ed.paint = null; if (ed.tool === 'paint') ed.tool = 'move'; edToolbar(); } else { ed.sel.clear(); edSelBox(); edPanels(); } }
@@ -457,11 +524,13 @@ addEventListener('keydown', e => {
 document.addEventListener('click', e => { const b = e.target.closest('[data-ed]'); if (!b || mode !== 'editor') return; edAct(b.dataset.ed); });
 function edAct(a) {
   const T = ed.track;
-  if (a.startsWith('tool:')) { ed.tool = a.slice(5); if (ed.tool !== 'paint') ed.paint = null; else { ed.paint = null; if (!ed.place) ed.place = 'gate'; } }
+  if (a.startsWith('tool:')) { ed.tool = a.slice(5); ed.defA = null; if (ed.tool === 'define') ed.place = null; if (ed.tool !== 'paint') ed.paint = null; else { ed.paint = null; if (!ed.place) ed.place = 'gate'; } }
   if (a.startsWith('lib:')) { const t = a.slice(4); ed.place = ed.place === t ? null : t; if (ed.tool === 'paint' && !ed.place) ed.place = 'gate'; }
   if (a === 'space') ed.space = ed.space === 'global' ? 'local' : 'global';
   if (a === 'grid') ed.grid = !ed.grid;
   if (a === 'ortho') ed.ortho = !ed.ortho;
+  if (a === 'magnet') ed.magnet = !ed.magnet;
+  if (a === 'flight') { ed.flight = !ed.flight; ed.flightT = 0; edFlightLine(); }
   if (a === 'undo') edUndo(); if (a === 'redo') edRedo();
   if (a === 'ground' && ed.sel.size) { edPush(); for (const id of ed.sel) if (id !== 'launch') gateById(id).pos[1] = 0; edRebuild(); edPanels(); }
   if (a === 'delete' && ed.sel.size) { edPush(); T.gates = T.gates.filter(g => !ed.sel.has(g.id)); ed.sel.clear(); edRebuild(); edPanels(); }
@@ -480,8 +549,8 @@ function edToolbar() {
   for (const b of document.querySelectorAll('#edTop [data-ed^="tool:"]')) b.classList.toggle('on', b.dataset.ed === 'tool:' + ed.tool);
   for (const b of document.querySelectorAll('#edLib [data-ed]')) b.classList.toggle('on', b.dataset.ed === 'lib:' + ed.place);
   $('#edSpace').textContent = ed.space === 'global' ? 'Global' : 'Local'; $('#edGrid').textContent = 'Grid: ' + (ed.grid ? '6 in' : 'off'); $('#edOrtho').textContent = ed.ortho ? 'Ortho' : 'Persp';
-  $('#edSnap').value = String(ed.snap);
-  edHint(ed.tool === 'paint' ? `Paint path: click the floor to lay ${RC.GATE_TYPES[ed.place || 'gate'].label}s in order — each one turns to face along the path. Esc to stop.`
+  $('#edSnap').value = String(ed.snap); $('#edMagnet').textContent = 'Magnet: ' + (ed.magnet ? 'on' : 'off'); $('#edMagnet').classList.toggle('on', ed.magnet); $('#edFlight').classList.toggle('on', ed.flight);
+  edHint(ed.tool === 'define' ? 'Define gate: click two opposite corners of any opening or open space. Corners snap to pipe ends; elsewhere they land on the floor. Same height = a flat gate to dive through.' : ed.tool === 'paint' ? `Paint path: click the floor to lay ${RC.GATE_TYPES[ed.place || 'gate'].label}s in order — each one turns to face along the path. Esc to stop.`
     : ed.place ? `Click in the room to place a ${RC.GATE_TYPES[ed.place].label} (Shift+click to place several). Esc to cancel.`
     : ed.sel.size ? `${ed.tool === 'move' ? 'Drag to move (Alt+drag: up/down)' : ed.tool === 'rotate' ? 'Drag sideways to rotate' : 'Drag up/down to scale'} · arrows nudge · PgUp/PgDn height · [ ] rotate · Ctrl+D clone · Del delete`
     : 'Click a gate to select it (Shift+click adds). Pick a part on the left to place it.');
@@ -490,10 +559,11 @@ let hintT = 0; function edHint(t) { $('#edHint').textContent = t; hintT = perfor
 function edPanels() {
   const T = ed.track; ed.valid = RC.validateTrack(T, ed.W || RC.buildTrackWorld(T, world));
   let num = 0;
-  $('#edOrder').innerHTML = T.gates.map((g, i) => { const req = g.required && !RC.isProp(g); if (req) num++;
+  const nLoose = T.gates.filter(g => RC.GATE_TYPES[g.type].loose).length;
+  $('#edOrder').innerHTML = (nLoose ? `<div class="oRow opt"><span class="n">–</span><span class="lb">${nLoose} loose pipes (the structure)</span></div>` : '') + T.gates.map((g, i) => { if (RC.GATE_TYPES[g.type].loose) return ''; const req = g.required && !RC.isProp(g); if (req) num++;
     return `<div class="oRow ${ed.sel.has(g.id) ? 'sel' : ''} ${req ? '' : 'opt'}" data-oi="${i}"><span class="n">${req ? num + (num === 1 ? '▶' : '') : '–'}</span><span class="lb">${RC.GATE_TYPES[g.type].label}${g.color !== 'white' ? ' · ' + g.color : ''}${g.bidir ? ' ⇄' : ''}</span>
       <button data-oup="${i}" title="Earlier">↑</button><button data-odn="${i}" title="Later">↓</button></div>`; }).join('') + `<div class="oRow ${ed.sel.has('launch') ? 'sel' : ''}" data-olaunch><span class="n">▣</span><span class="lb">Launch pad</span></div>`;
-  $('#edCount').textContent = `(${RC.required(T).length} gates)`;
+  $('#edCount').textContent = `(${RC.required(T).length} gates)`; $('#edNext').checked = !!T.nextOnly;
   const v = ed.valid; $('#edValid').innerHTML = (v.errors.map(x => `<div class="err">✗ ${x}</div>`).join('') + v.warnings.map(x => `<div class="warn">! ${x}</div>`).join('')) || '<div class="ok">✓ Ready to race</div>';
   edPropsPanel();
 }
@@ -507,10 +577,11 @@ function edPropsPanel() {
   const g = gateById(ids[0]); if (!g) return; const T = RC.GATE_TYPES[g.type], f = (k, v, st) => `<label>${k} <input type="number" step="${st}" data-p="${k}" value="${v}"></label>`;
   el.innerHTML = `<label>Part <select data-p="type">${Object.entries(RC.GATE_TYPES).map(([k, t]) => `<option value="${k}" ${k === g.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
     <div class="pGrid">${f('x', g.pos[0].toFixed(3), 0.05)}${f('y', g.pos[1].toFixed(3), 0.05)}${f('z', g.pos[2].toFixed(3), 0.05)}${f('yaw', g.rot[0].toFixed(1), ed.snap || 1)}${f('pitch', g.rot[1].toFixed(1), ed.snap || 1)}${f('roll', g.rot[2].toFixed(1), ed.snap || 1)}
-    ${f('scale', g.scale, 0.05)}${T.prop ? '' : f('w', g.w, 0.25)}${f('h', g.h, 0.25)}${T.prop ? '' : f('lift', g.lift, 0.25)}</div>
+    ${f('scale', g.scale, 0.05)}${g.type === 'pipe' ? '' : f('w', g.w, 0.25)}${g.type === 'bar' ? '' : f('h', g.h, 0.25)}${T.prop ? '' : f('lift', g.lift, 0.25)}</div>
     <p class="hint">w / h / lift in 24-inch sections.</p>
     <label>Colour <select data-p="color">${Object.keys(RC.COLORS).map(c => `<option ${c === g.color ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     ${T.prop ? '' : `<label class="chk"><input type="checkbox" data-p="required" ${g.required ? 'checked' : ''}> numbered (part of the lap)</label><label class="chk"><input type="checkbox" data-p="bidir" ${g.bidir ? 'checked' : ''}> either direction counts</label>`}
+    ${T.invisible ? `<div class="row" style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0"><button data-pfn="stand">Standing</button><button data-pfn="down">Flat: dive down through</button><button data-pfn="upw">Flat: climb up through</button><button data-pfn="flip">Reverse direction</button><button data-pfn="again">Use this opening again</button></div><p class="hint">Size it to the opening in your structure (w × h in sections). It can stick out past the pipes for an open-topped gate.</p>` : ''}
     <div class="row" style="display:flex;gap:4px;flex-wrap:wrap"><button data-pfn="face">Face the next gate</button><button data-pfn="first">Make it gate 1</button></div>`;
 }
 function edPropsLive() {   // keep the numbers in the panel in step while dragging
@@ -521,6 +592,7 @@ document.addEventListener('change', e => {
   if (mode !== 'editor') return; const t = e.target;
   if (t.id === 'edName') { ed.track.name = t.value.trim() || 'Track'; ed.dirty = true; return; }
   if (t.id === 'edSF') { edPush(); ed.track.startFinish = t.checked; edRebuild(); edPanels(); return; }
+  if (t.id === 'edNext') { edPush(); ed.track.nextOnly = t.checked; edRebuild(); edPanels(); return; }
   if (t.id === 'edSnap') { ed.snap = +t.value; edToolbar(); return; }
   if (t.id === 'edColor') { ed.color = t.value; return; }
   if (t.dataset.pl !== undefined) { edPush(); const L = ed.track.launch; if (t.dataset.pl === 'yaw') L.yaw = +t.value || 0; else L.pos[+t.dataset.pl] = +t.value || 0; clampToRoom(L.pos); L.pos[1] = 0.03; edRebuild(); edPanels(); return; }
@@ -542,6 +614,10 @@ document.addEventListener('click', e => {
   if (lr) { ed.sel.clear(); ed.sel.add('launch'); edSelBox(); edPanels(); return; }
   if (fn) { const g = gateById([...ed.sel][0]); if (!g) return; edPush();
     if (fn.dataset.pfn === 'first') { T.gates = [g, ...T.gates.filter(x => x !== g)]; }
+    if (fn.dataset.pfn === 'stand') { g.rot[1] = 0; g.rot[2] = 0; if (g.lift < 0) g.lift = 0; }
+    if (fn.dataset.pfn === 'down' || fn.dataset.pfn === 'upw') { g.rot[1] = fn.dataset.pfn === 'down' ? -90 : 90; g.rot[2] = 0; g.lift = -g.h / 2; }   // centred on its position
+    if (fn.dataset.pfn === 'flip') { if (Math.abs(g.rot[1]) > 45) g.rot[1] = -g.rot[1]; else g.rot[0] = (g.rot[0] + 180) % 360; }
+    if (fn.dataset.pfn === 'again') { const c = JSON.parse(JSON.stringify(g)); c.id = RC.newGate(g.type, { x: 0, y: 0, z: 0 }).id; if (Math.abs(c.rot[1]) > 45) c.rot[1] = -c.rot[1]; else c.rot[0] = (c.rot[0] + 180) % 360; T.gates.push(c); ed.sel.clear(); ed.sel.add(c.id); T.nextOnly = true; edHint('Added the same opening again, flown the other way, at the end of the order. "Only the next gate counts" is now on.'); }
     if (fn.dataset.pfn === 'face') { const req = T.gates.filter(x => x.required && !RC.isProp(x)), i = req.indexOf(g), nx = req[(i + 1) % req.length]; if (nx && nx !== g) faceAlong(g, g.pos, nx.pos); }
     edRebuild(); edPanels(); }
 });

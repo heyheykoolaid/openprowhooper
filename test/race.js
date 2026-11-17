@@ -82,7 +82,23 @@ const N = track.gates.length, lap = [...Array(N).keys()].slice(1).concat([0]);  
   const rt = R.cleanTrack(JSON.parse(JSON.stringify(track))); ok('track file round-trips', JSON.stringify(rt.gates.map(g => [g.type, g.pos, g.rot])) === JSON.stringify(track.gates.map(g => [g.type, g.pos, g.rot])));
   let threw = false; try { R.cleanTrack({ hello: 1 }); } catch { threw = true; } ok('junk is rejected', threw);
   const evil = R.cleanTrack({ gates: [{ type: 'gate', pos: [0, 0, 0], scale: 1e9, w: -5, color: '<script>' }], name: 'x'.repeat(500) });
-  ok('track values are clamped and sanitised', evil.gates[0].scale <= 4 && evil.gates[0].w >= 0.25 && evil.gates[0].color === 'white' && evil.name.length <= 60); }
+  ok('track values are clamped and sanitised', evil.gates[0].scale <= 4 && evil.gates[0].w >= 0.125 && evil.gates[0].color === 'white' && evil.name.length <= 60); }
+// structure tracks: loose pipes joined into one frame, checkpoints through its openings, only the next one counts
+{ const st = R.sampleTracks().find(t => t.nextOnly), SW = R.buildTrackWorld(st, PG), SG = SW.geoms, req = R.required(st);
+  ok('structure sample: pipes + 10 checkpoints, connectors found', req.length === 10 && st.gates.some(g => g.type === 'pipe') && R.trackJoints(SG).length >= 8, req.length + ' ' + R.trackJoints(SG).length);
+  ok('a flat checkpoint is flown downward', Math.abs(SG[req[6]].fwd.y + 1) < 1e-6);
+  const s = new R.RaceSession(st, SG, 'infinite'); const pts = [v3(st.launch.pos[0], 0.3, st.launch.pos[2])];
+  const lapOrder = [...req, ...req.slice(1), req[0], ...req.slice(1), req[0], ...req.slice(1), req[0]];
+  for (const i of lapOrder) { const g = SG[i]; pts.push(sub(g.centre, mul(g.fwd, 0.3)), add(g.centre, mul(g.fwd, 0.3))); }
+  let prev = pts[0], t = 0; const ev = [];
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], L = S.len(sub(b, a)), n = Math.max(1, Math.ceil(L / 0.02)); for (let k = 1; k <= n; k++) { const p = add(a, mul(sub(b, a), k / n)); t += L / n / 4; ev.push(...s.update(t, prev, p, false)); prev = p; } }
+  const laps = ev.filter(e => e.type === 'lap');
+  ok('structure: straight lines between checkpoints cut through other checkpoints, laps stay clean', laps.length === 3 && laps.every(l => l.clean) && s.best3, JSON.stringify(laps.map(l => [l.clean, l.why])));
+  const strict = JSON.parse(JSON.stringify(st)); strict.nextOnly = false; const s2 = new R.RaceSession(strict, SG, 'infinite'); prev = pts[0]; t = 0; const ev2 = [];
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], L = S.len(sub(b, a)), n = Math.max(1, Math.ceil(L / 0.02)); for (let k = 1; k <= n; k++) { const p = add(a, mul(sub(b, a), k / n)); t += L / n / 4; ev2.push(...s2.update(t, prev, p, false)); prev = p; } }
+  ok('…and without "only the next gate counts" the same flight is spoilt', ev2.some(e => e.type === 'invalid'));
+  const a = R.gateGeom(R.newGate('pipe', v3(0, 0, 0), 0, { h: 1 })), b = R.gateGeom(R.newGate('bar', v3(0.33, 0.58, 0.02), 0, { w: 1 })), d = R.snapDelta(b, [a]);
+  ok('magnet: a bar dropped near the top of an upright snaps onto it', d && Math.abs(d.x + 0.0252) < 0.01 && Math.abs(d.y - 0.0296) < 0.01 && Math.abs(d.z + 0.02) < 0.01, JSON.stringify(d)); }
 // the drone really hits a crossbar
 { const d = new S.Drone(S.buildDrone(S.PRESETS['Air65 Racing']), S.defaultTune(), W); const g = G[1], top = g.pipes[2][0];
   const mid = add(g.pipes[2][0], mul(sub(g.pipes[2][1], g.pipes[2][0]), 0.5)); d.reset({ pos: sub(mid, mul(g.fwd, 0.3)), yaw: 0 }); d.pos = sub(mid, mul(g.fwd, 0.3)); d.vel = mul(g.fwd, 3); d.armed = true; void top;

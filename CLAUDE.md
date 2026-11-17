@@ -79,6 +79,10 @@ allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad ho
 ## RaceGOW racing (src/race.js, src/editor.js)
 Pure rules/geometry in race.js (tested by test/race.js); the editor and race HUD in editor.js (same module as game.js,
 concatenated by build.py). Tracks: `pro-whooper-track/1`; race results/ghosts: `pro-whooper-race/1` (`races/…`).
+A RaceGOW track is usually ONE connected PVC structure whose openings are the gates, flown many times from different
+sides: build it from loose `pipe`/`bar` parts (ends magnet together, connectors via `trackJoints`), mark openings with
+`invisible` checkpoints (any size/angle, flat ones are dived through; the editor's Define-gate tool makes one from two
+clicked corners), and set `track.nextOnly` so only the next checkpoint counts.
 
 ## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
 bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log

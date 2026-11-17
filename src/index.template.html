@@ -178,7 +178,8 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #rhBox b { font-size: 22px; color: #ffd34d; } #rhBox .bad { color: #ff7d6e; text-decoration: line-through; } #rhBox .dim { opacity: .65; }
 #editorUI { position: absolute; inset: 0; pointer-events: none; font-size: 13px; color: #eee; }
 #editorUI > div { pointer-events: auto; }
-#edTop { position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #12141add; border-bottom: 1px solid #fff2; flex-wrap: wrap; }
+#edTop { position: absolute; left: 0; right: 0; top: 0; height: 34px; overflow: hidden; display: flex; gap: 6px; align-items: center; padding: 6px 10px; background: #12141add; border-bottom: 1px solid #fff2; white-space: nowrap; }
+#edTop button { padding: 3px 6px !important; }
 #edTop .edGroup { display: flex; gap: 4px; align-items: center; } #edTop .sp { flex: 1; }
 #edTop button, #edLeft button, #edRight button, #editorUI select { padding: 4px 8px; font-size: 12px; }
 #edTop button.on { background: #ffd34d; color: #111; } #editorUI kbd { font-size: 10px; opacity: .7; }
@@ -194,7 +195,7 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #edOrder .oRow.opt .lb { opacity: .55; font-style: italic; }
 #edProps .pGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; } #edProps .pGrid label { margin: 0; font-size: 11px; }
 #edValid .err { color: #ff8b7d; } #edValid .warn { color: #ffd34d; } #edValid .ok { color: #7dff9a; }
-#edHint { position: absolute; left: 220px; right: 300px; bottom: 8px; text-align: center; pointer-events: none !important; font-size: 12px; opacity: .85; text-shadow: 0 0 3px #000; }
+#edHint { position: absolute; left: 250px; right: 300px; bottom: 8px; text-align: center; pointer-events: none !important; font-size: 12px; opacity: .85; text-shadow: 0 0 3px #000; }
 #editorUI .hint { font-size: 11px; opacity: .7; line-height: 1.4; } #editorUI .chk { font-size: 12px; } #editorUI .chk input { width: auto; }
 
 #rvCtl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 12px var(--mono); color: #ddd; } #rvCtl button { padding: 3px 8px; font-size: 13px; } #rvCtl #rvSeek { flex: 1; min-width: 160px; }
@@ -303,23 +304,23 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="editorUI" class="hide">
   <div id="edTop">
-    <span class="edGroup"><button data-ed="tool:move" title="Move (W)">Move <kbd>W</kbd></button><button data-ed="tool:rotate" title="Rotate (E)">Rotate <kbd>E</kbd></button><button data-ed="tool:scale" title="Scale (R)">Scale <kbd>R</kbd></button><button data-ed="tool:paint" title="Paint a path of gates (P)">Paint path <kbd>P</kbd></button></span>
-    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><select id="edSnap" title="Rotation snap"><option value="0">free rotate</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button></span>
-    <span class="edGroup"><button data-ed="ground" title="Drop to the floor (G)">Ground <kbd>G</kbd></button><button data-ed="clone" title="Clone (Ctrl+D)">Clone</button><button data-ed="delete" title="Delete (Del)">Delete</button><button data-ed="focus" title="Focus on selection (F)">Focus <kbd>F</kbd></button><button data-ed="ortho" id="edOrtho" title="Orthographic / perspective (O)">Persp</button></span>
+    <span class="edGroup"><button data-ed="tool:move" title="Move (W)">Move <kbd>W</kbd></button><button data-ed="tool:rotate" title="Rotate (E)">Rotate <kbd>E</kbd></button><button data-ed="tool:scale" title="Scale (R)">Scale <kbd>R</kbd></button><button data-ed="tool:paint" title="Paint a path of gates (P)">Paint path <kbd>P</kbd></button><button data-ed="tool:define" title="Make any opening or open space a gate: click two opposite corners (D)">Define gate <kbd>D</kbd></button></span>
+    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><select id="edSnap" title="Rotation snap"><option value="0">free rotate</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button><button data-ed="magnet" id="edMagnet" title="Pipe ends click onto nearby pipes">Magnet: on</button></span>
+    <span class="edGroup"><button data-ed="ground" title="Drop to the floor (G)">Ground <kbd>G</kbd></button><button data-ed="clone" title="Clone (Ctrl+D)">Clone</button><button data-ed="delete" title="Delete (Del)">Delete</button><button data-ed="focus" title="Focus on selection (F)">Focus <kbd>F</kbd></button><button data-ed="ortho" id="edOrtho" title="Orthographic / perspective (O)">Persp</button><button data-ed="flight" id="edFlight" title="Animate the lap as a red line through the checkpoints, in order">Flight line</button></span>
     <span class="edGroup"><button data-ed="undo" title="Undo (Ctrl+Z)">↶</button><button data-ed="redo" title="Redo (Ctrl+Y)">↷</button></span>
-    <span class="sp"></span>
-    <span class="edGroup"><button data-ed="save" class="primary">Save</button><button data-ed="test" class="primary" title="Fly test (T); B brings you back">Fly test <kbd>T</kbd></button><button data-ed="exit">Exit</button></span>
   </div>
   <div id="edLeft">
+    <div class="edGroup" style="display:flex;gap:4px;margin-bottom:8px"><button data-ed="save" class="primary">Save</button><button data-ed="test" class="primary" title="Fly test (T); B brings you back">Fly test <kbd>T</kbd></button><button data-ed="exit">Exit</button></div>
     <label>Track name <input id="edName" maxlength="60"></label>
     <div class="edEnv" id="edEnv"></div>
     <h4>Gate library</h4><div id="edLib"></div>
     <label>Colour <select id="edColor"></select></label>
-    <p class="hint">Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
+    <p class="hint">Build one structure from loose pipes (ends snap together, connectors and feet appear by themselves), then drop Checkpoints into its openings and order them. Alt+drag lifts a part. Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
   </div>
   <div id="edRight">
     <h4>Gate order <small id="edCount"></small></h4>
     <label class="chk"><input type="checkbox" id="edSF"> Start gate is also the finish (laps)</label>
+    <label class="chk" title="For one-structure tracks where checkpoints share pipes and you fly through other checkpoints on the way"><input type="checkbox" id="edNext"> Only the next gate counts (structure tracks)</label>
     <div id="edOrder"></div>
     <h4>Selection</h4><div id="edProps"><p class="hint">Nothing selected.</p></div>
     <h4>Checks</h4><div id="edValid"></div>
