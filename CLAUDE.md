@@ -195,6 +195,20 @@ trick plays on past it unless Loop is on. After a crash, throttle to zero rights
 `crashLock`); the game's drone has `crashImpact = 9.5` (tests keep 7.5). A reset switch never fires together with the
 arm switch (input.js): arming must not send the pilot back to the start. Only R (or a separate reset switch) resets.
 
+## 2S whoops and flight modes (src/sim.js `PARTS`, `FlightController`; src/input.js `setFlightMode`)
+Batteries carry `cells` (pack voltage = cells × `ocv1`; 2S packs `b2s300/450/550`), with 2S motors (0802 16000KV,
+1102 13500KV, 1103 11000KV), 2 inch props, 75 mm and 85 mm 2S frames, a 2S AIO and presets. Their numbers are
+estimates from typical builds (thrust-to-weight about 5): fit them from a Blackbox log when one arrives.
+`tune.flightMode`: `acro` (default), `angle` (self-levelling: stick asks for a lean up to `angleLimit` 55°,
+`angleStrength` 6; yaw stays rate; the Drone passes roll/pitch angles to the FC) and `3d` (Betaflight's 3D feature:
+throttle middle = zero thrust, `deadband3d` 0.05, below the middle the FC drives the motors backward and swaps the sign
+of its corrections; nothing reverses until the stick has been to the middle once after arming or switching in:
+`wait3d`). Motors may turn backward only in 3D (`fc.reversible`; `motorW` is then signed, thrust is negative and scaled
+by the prop's `rev`: 0.55 for ordinary props, 0.95 for the 3D props `p31_3d` / `p40_3d`). In 3D lying upside-down is
+not a crash, and arming is allowed with the throttle low or centred (`thrArmOk`). Hotkeys while flying: 1 acro,
+2 angle, 3 3D; the OSD shows the mode. test/modes.js flies all of it with the real physics. The default 1S physics is
+unchanged (same hash).
+
 ## Learning from reviews (src/sim.js `learnFromLabels`, src/recap.js `learnRun`)
 When a review is saved, the game re-flies the labelled stretches of that run and of the last five reviewed runs on the
 same map (`Sim.replayTrace`, now in sim.js and shared with the Node tools; the trace carries attitude, position — so
@@ -205,6 +219,9 @@ Knobs, all loosen-only with hard caps (`LEARN_MAX`): `pilot.learn.tol` (angle to
 be), plus slower `pilot.rate` and more `pilot.air`. Stored in `store 'pilot'` (travels with shared flights), reported
 in Options with a Forget button (`learn.orig` restores the Warm-up pace). test/learn.js. It never runs while flying.
 The review list is in time order; a picked trick loops until the red line is moved off it (`recapSeek`), then plays on.
+A tile can hold several tricks (`extra` on the call / flag: "＋ trick in this tile…"); each becomes its own label over the
+tile's span with `tile`, `order`, `of`. Handle colours on the timeline show review state (grey not reviewed, green
+approved, orange corrected, red not a trick, blue added).
 
 ## Daily leaderboard (src/dropoff.js `LB`, tools/dropoff-worker.mjs)
 A finished 2:00 Session can be posted from the results screen: the player's own click every time (it publishes pilot

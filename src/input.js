@@ -49,6 +49,13 @@ const kb = { thr: 0, yaw: 0, pitch: 0, roll: 0 };
 let armSeen = null, armMovedAt = -1e9, resetAskAt = 0;
 let armSwitchPrev = null, resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
 const ARM_THR_MAX = 0.08;
+// safe to arm: throttle at the bottom, or (3D mode, where the middle of the stick is zero thrust) in the middle
+const thrArmOk = thr => thr <= ARM_THR_MAX || (tune.flightMode === '3d' && Math.abs(thr - 0.5) <= 0.07);
+// Flight modes, as on a mode switch: 1 acro, 2 angle (self-levelling), 3 3D (reversible motors: stick middle = no thrust)
+const FLIGHT_MODES = [['acro', 'ACRO', 'rate mode'], ['angle', 'ANGLE', 'self-levelling, lean limit 55°'], ['3d', '3D', 'throttle middle = zero · below = reverse thrust']];
+function setFlightMode(m) { const F = FLIGHT_MODES.find(x => x[0] === m); if (!F || (tune.flightMode || 'acro') === m) return; tune.flightMode = m; store.set('tune', tune);
+  const props3d = S.PARTS.props[spec.prop] && S.PARTS.props[spec.prop].rev > 0.8;
+  flash(`<b>${F[1]} MODE</b><small>${F[2]}${m === '3d' && drone.armed ? ' · centre the throttle to start' : ''}${m === '3d' && !props3d ? ' · these props push about half as hard backward (3D props in the Garage)' : ''}</small>`, m === '3d' ? 'warn' : undefined); }
 function axisVal(pad, a) { if (!pad || pad.axes[a.i] === undefined) return 0; let v = pad.axes[a.i]; v = ((v - a.min) / ((a.max - a.min) || 1)) * 2 - 1; v = Math.max(-1, Math.min(1, v)); return a.inv ? -v : v; }
 function switchOn(pad, s) { return s.type === 'axis' ? (pad.axes[s.i] ?? -1) > (s.th ?? 0.5) : !!(pad.buttons[s.i] && pad.buttons[s.i].pressed); }
 function getRC(dt) {
@@ -66,8 +73,8 @@ function getRC(dt) {
       const sw = switchOn(pad, P.arm); armSwitchPrev = sw;
       if (!sw) { crashLock = false; if (drone.armed) setArmed(false); armBlock = 'ARM SWITCH OFF'; }
       else if (!drone.armed) {
-        if (drone.crashed) { crashLock = true; armBlock = 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
-        else if (rc.thr > ARM_THR_MAX) armBlock = `THROTTLE HIGH (${Math.round(rc.thr * 100)}%) · LOWER TO ARM`;
+        if (drone.crashed) { crashLock = true; armBlock = tune.flightMode === '3d' ? 'CRASHED · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
+        else if (!thrArmOk(rc.thr)) armBlock = `THROTTLE HIGH (${Math.round(rc.thr * 100)}%) · ${tune.flightMode === '3d' ? 'CENTRE OR LOWER' : 'LOWER'} TO ARM`;
         else { armBlock = ''; setArmed(true); }
       } else armBlock = '';
     }
@@ -86,7 +93,7 @@ function getRC(dt) {
   kb.roll = ramp(kb.roll, (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0), 6);
   if (keys.KeyW) kb.thr = Math.min(1, kb.thr + dt * 0.9); if (keys.KeyS) kb.thr = Math.max(0, kb.thr - dt * 1.4);
   if (keys.ShiftLeft || keys.ShiftRight) kb.thr = Math.min(1, kb.thr + dt * 2.5);
-  if (keys.KeyX) kb.thr = 0;
+  if (keys.KeyX) kb.thr = tune.flightMode === '3d' ? 0.5 : 0;   // throttle cut (3D: back to the middle)
   return { thr: kb.thr, yaw: kb.yaw, pitch: kb.pitch, roll: kb.roll };
 }
 function radioLabel() { const d = describePad(readPad('radio')); return d ? d.name : null; }
@@ -94,6 +101,7 @@ function onKey(e) {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
   if (e.code === 'Escape') { if (mode === 'fly') pause(); else if (mode === 'paused') resume(); }
   if (mode !== 'fly') return;
+  if (e.code === 'Digit1') setFlightMode('acro'); if (e.code === 'Digit2') setFlightMode('angle'); if (e.code === 'Digit3') setFlightMode('3d');
   if (e.code === 'Space') { e.preventDefault(); setArmed(!drone.armed); }
   if (e.code === 'KeyR') respawn();
   if (e.code === 'KeyT') flipOver();
@@ -130,7 +138,7 @@ function stickHud(rc) {
 }
 function setArmed(on) {
   if (on) {
-    if (lastRC.thr > ARM_THR_MAX) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
+    if (!thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
     if (drone.crashed) { flipOver(); }
     drone.crashed = false; drone.armed = true; detector.onArmChange(drone, true);
     if (session && !session.started) session.started = true;

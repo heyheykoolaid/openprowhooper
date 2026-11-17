@@ -164,7 +164,7 @@ function renderControls() {
       ${cur ? `<h3>${isR ? 'Channel monitor' : 'Raw axes'}</h3><div class="chmon">${cur.axes.map((_, i) => `<div><span>${isR ? 'CH' + (i + 1) : 'A' + i}</span><div class="bar"><i id="raw_${i}"></i></div></div>`).join('')}</div>` : ''}`;
   }
   $('#cBody').innerHTML = `<div class="tabs">${tabs}</div>${body}
-    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
+    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · 1 / 2 / 3 acro, angle, 3D mode · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
 }
 let calib = null, detecting = null;
 function liveControls() {
@@ -174,7 +174,7 @@ function liveControls() {
   for (const k of ['arm', 'reset']) { const el = $('#lv_' + k); if (el) el.style.left = switchOn(pad, P[k]) ? '100%' : '0%'; }
   const pf = $('#preflight'); if (pf) {
     const tv = axisVal(pad, P.axes.thr), thr = P.thrCentered ? Math.max(0, tv) : (tv + 1) / 2, armOn = switchOn(pad, P.arm);
-    const ok = thr <= ARM_THR_MAX;
+    const ok = thrArmOk(thr);
     pf.innerHTML = `<b>Pre-flight</b> Throttle <span class="${ok ? 'ok' : 'bad'}">${Math.round(thr * 100)}%</span> ${ok ? '✓ low enough to arm' : '✗ must be ≤ ' + Math.round(ARM_THR_MAX * 100) + '% to arm — lower it, or tick Invert / Calibrate if it reads high at the bottom'}
       · Arm ${P.arm.toggle ? 'button' : 'switch'} <span class="${armOn ? 'ok' : ''}">${armOn ? 'ON' : 'OFF'}</span>${!P.arm.toggle ? ' — flip it to check it moves the bar' : ''}`;
   }

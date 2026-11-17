@@ -231,6 +231,8 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
 .lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
 #lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
+.rcTile { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; } .rcChip { background: #1d5fa8; color: #fff; font: 11px var(--mono); padding: 2px 4px 2px 6px; border-radius: 3px; white-space: nowrap; } .rcChip button { all: unset; cursor: pointer; margin-left: 5px; opacity: .8; } .rcTile select { max-width: 170px; }
+#osdMode.alt { color: #ffd34d; }
 #recapBar .rcRuler { position: absolute; left: 0; right: 0; top: 0; height: 15px; background: #181a22; border-bottom: 1px solid #2c2f3a; cursor: ew-resize; }
 #recapBar .rcRuler i { position: absolute; top: 0; height: 15px; border-left: 1px solid #ffffff38; padding-left: 3px; font: normal 9px/15px var(--mono); color: #ffffff80; pointer-events: none; }
 #recapBar .rcLoopBand { position: absolute; top: 15px; bottom: 0; background: #ff4d2e1f; border-left: 1px dashed #ff4d2e; border-right: 1px dashed #ff4d2e; pointer-events: none; }
@@ -244,6 +246,13 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapBar .rcM .rcH { position: absolute; top: -2px; bottom: -2px; width: 9px; cursor: ew-resize; background: #ffd34d; border: 1px solid #111; border-radius: 3px; box-sizing: border-box; opacity: .55; z-index: 4; touch-action: none; }
 #recapBar .rcM .rcH::after { content: ''; position: absolute; left: 3px; top: 3px; bottom: 3px; width: 1px; background: #111; box-shadow: 2px 0 0 #111; }
 #recapBar .rcM .rcH.l { left: -6px; } #recapBar .rcM .rcH.r { right: -6px; }
+#recapBar .rcM .rcH { background: #9aa0ad; opacity: .95; }                       /* grey handles: not reviewed yet */
+#recapBar .rcM.unsure .rcH { background: #9aa0ad; box-shadow: 0 0 0 2px #ffd34d; }   /* not reviewed, and the game was unsure or you flagged it */
+#recapBar .rcM.ok .rcH { background: #35d07f; }                                   /* green: approved */
+#recapBar .rcM.bad .rcH { background: #ff9a3d; }                                  /* orange: you corrected it */
+#recapBar .rcM.gone .rcH { background: #ff5a4d; }                                 /* red: not a trick */
+#recapBar .rcM.add .rcH { background: #5ab0ff; } #recapBar .rcM.add.ok .rcH { background: #35d07f; box-shadow: 0 0 0 2px #5ab0ff; }   /* blue: you added it (green once named) */
+.rcLegend { display: flex; gap: 12px; flex-wrap: wrap; font: 10px var(--mono); opacity: .85; margin: 3px 0 0; } .rcLegend i { display: inline-block; width: 8px; height: 11px; border-radius: 2px; margin-right: 4px; vertical-align: -2px; border: 1px solid #111; }
 #recapBar .rcM:hover .rcH, #recapBar .rcM.on .rcH { opacity: 1; } #recapBar .rcM.on { z-index: 5; }
 body.rcWide #recapBar .rcM .rcH { display: none; }
 #recapBar .rcClips { position: absolute; left: 0; right: 0; bottom: 2px; height: 15px; }
@@ -306,7 +315,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="combo" class="hide"></div><div id="comboBank"></div>
   <div id="raceHud" class="hide"><div id="rhLap"></div><div id="rhSub"></div><div id="rhMsg"></div><div id="rhCount"></div><div id="rhBox"></div></div>
   <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
-  <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
+  <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdMode" title="Flight mode: 1 acro · 2 angle · 3 3D"></span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
     <span class="o" id="osdThr"></span><span class="o" id="osdSpd"></span><span class="o" id="osdAlt"></span><span class="o" id="osdTimer"></span><span class="o" id="osdState"></span><span class="o" id="washMeter">≋ PROPWASH ≋</span></div>
   <div id="breakdown" class="hide"><b>Score breakdown (TPW calculator rules)</b><table><thead><tr><th>Trick</th><th>Base</th><th>Exec</th><th>×Ex</th><th>×Rep</th><th>×B2B</th><th>×Obs</th><th>×TotW</th><th>×Streak</th><th>Net</th></tr></thead><tbody></tbody></table></div>
 </div>

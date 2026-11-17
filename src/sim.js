@@ -47,6 +47,9 @@ const PARTS = {
     meteor65:   { name: 'Meteor65 Pro frame', size: 65, mass: 3.4, propMax: 31, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.32 },
     air75:      { name: 'Air75 frame', size: 75, mass: 3.0, propMax: 40, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.36 },
     meteor75:   { name: 'Meteor75 Pro frame', size: 75, mass: 3.9, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
+    // 2S whoops (estimates from typical builds: Mobula7-style 75 mm and Mobula8 / Beta85X-style 85 mm; tune from a Blackbox log when one arrives)
+    whoop75_2s: { name: '75mm 2S frame (Mobula7 style)', size: 75, mass: 4.6, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
+    whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
   },
   motors: { // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
     m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.55, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
@@ -60,6 +63,10 @@ const PARTS = {
     evo_33k:     { name: 'RCinPower EVO 0702 33800KV', kv: 33800, mass: 1.45, rm: 0.27, i0: 0.18, bellJ: 2.4e-9, bearing: 0.9 },
     m0802_19k:   { name: '0802SE 19500KV', kv: 19500, mass: 2.3, rm: 0.52, i0: 0.12, bellJ: 3.6e-9, bearing: 1.15 },
     m1002_19k:   { name: '1002 19000KV', kv: 19000, mass: 2.9, rm: 0.40, i0: 0.15, bellJ: 5.0e-9, bearing: 1.0 },
+    // 2S motors: about half the KV of their 1S cousins, more copper
+    m0802_16k:   { name: '0802 16000KV (2S)', kv: 16000, mass: 2.4, rm: 1.05, i0: 0.11, bellJ: 3.6e-9, bearing: 1.1 },
+    m1102_13k:   { name: '1102 13500KV (2S)', kv: 13500, mass: 3.2, rm: 0.85, i0: 0.13, bellJ: 6.0e-9, bearing: 1.0 },
+    m1103_11k:   { name: '1103 11000KV (2S)', kv: 11000, mass: 3.9, rm: 0.66, i0: 0.14, bellJ: 8.5e-9, bearing: 1.0 },
   },
   props: { // Ct/Cq: static coefficients, jmax: advance ratio where thrust ~0, mass per prop (g)
     gf1219s: { name: 'Gemfan 1219S 3-blade 31mm', d: 31, blades: 3, ct: 0.120, cq: 0.0125, jmax: 0.95, mass: 0.23 },
@@ -67,16 +74,25 @@ const PARTS = {
     gf1207:  { name: 'Gemfan 1207 3-blade 31mm', d: 31, blades: 3, ct: 0.097, cq: 0.0090, jmax: 0.75, mass: 0.20 },
     p40_2b:  { name: '40mm 2-blade', d: 40, blades: 2, ct: 0.095, cq: 0.0085, jmax: 0.85, mass: 0.32 },
     p40_3b:  { name: '40mm 3-blade', d: 40, blades: 3, ct: 0.112, cq: 0.0110, jmax: 0.85, mass: 0.40 },
+    p51_3b:  { name: '2 inch (51mm) 3-blade', d: 51, blades: 3, ct: 0.105, cq: 0.0100, jmax: 0.9, mass: 0.62 },
+    p51_4b:  { name: '2 inch (51mm) 4-blade', d: 51, blades: 4, ct: 0.118, cq: 0.0122, jmax: 0.88, mass: 0.75 },
+    // 3D props: symmetrical blades push the same both ways (rev = share of normal thrust when spun backward; ordinary props ~0.55)
+    p31_3d:  { name: '31mm 3D (symmetrical) 3-blade', d: 31, blades: 3, ct: 0.092, cq: 0.0118, jmax: 0.8, mass: 0.22, rev: 0.95 },
+    p40_3d:  { name: '40mm 3D (symmetrical) 3-blade', d: 40, blades: 3, ct: 0.094, cq: 0.0112, jmax: 0.8, mass: 0.40, rev: 0.95 },
   },
   batteries: { // r: internal resistance incl. connector (ohm) when fresh
     b260:   { name: '1S 260mAh LiHV', cap: 260, mass: 6.3, r: 0.075, hv: true },
     b300:   { name: '1S 300mAh LiHV', cap: 300, mass: 7.4, r: 0.065, hv: true },
     b380:   { name: '1S 380mAh LiHV', cap: 380, mass: 9.4, r: 0.058, hv: true },
     b450:   { name: '1S 450mAh LiPo', cap: 450, mass: 11.6, r: 0.050, hv: false },
+    b2s300: { name: '2S 300mAh LiHV', cap: 300, mass: 16.5, r: 0.135, hv: true, cells: 2 },
+    b2s450: { name: '2S 450mAh LiHV', cap: 450, mass: 24.5, r: 0.105, hv: true, cells: 2 },
+    b2s550: { name: '2S 550mAh LiHV', cap: 550, mass: 30.0, r: 0.090, hv: true, cells: 2 },
   },
   electronics: { // AIO + VTX + RX + canopy + camera
     air:    { name: 'Air AIO 5-in-1 + C03 cam + Air canopy', mass: 5.9 },
     std:    { name: 'Standard AIO + micro cam + canopy', mass: 6.9 },
+    aio2s:  { name: '2S 12A AIO + micro cam + canopy', mass: 8.6 },
   },
 };
 
@@ -87,6 +103,11 @@ const PRESETS = {
   'Air65 II Champion': { frame: 'air65champ', motor: 'm0702ii_36k', prop: 'gf1207', battery: 'b260', electronics: 'air' },
   'Air65 + RCinPower EVO': { frame: 'air65', motor: 'evo_31k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
   '75mm build':      { frame: 'air75', motor: 'm1002_19k', prop: 'p40_2b', battery: 'b450', electronics: 'air' },
+  '75mm 2S (Mobula7 style)': { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3b', battery: 'b2s300', electronics: 'aio2s' },
+  '75mm 2S light (0802)':    { frame: 'whoop75_2s', motor: 'm0802_16k', prop: 'p40_2b', battery: 'b2s300', electronics: 'aio2s' },
+  '85mm 2S (Mobula8 style)': { frame: 'whoop85_2s', motor: 'm1103_11k', prop: 'p51_4b', battery: 'b2s450', electronics: 'aio2s' },
+  'Air65 3D':        { frame: 'air65', motor: 'm0702ii_30k', prop: 'p31_3d', battery: 'b300', electronics: 'air' },
+  '75mm 2S 3D':      { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3d', battery: 'b2s300', electronics: 'aio2s' },
 };
 
 // Betaflight-like default tune (whoop-ish). User can paste their own `diff`.
@@ -143,7 +164,7 @@ function buildDrone(spec) {
     warnings, mass, I: v3(Ixx, Iyy, Izz), arm, D, A, rDuct, motors,
     ct: pr.ct * fr.ductThrust, cq: pr.cq, jmax: pr.jmax,
     kvRad, kt: 1 / kvRad, rm: mo.rm, i0: mo.i0 * mo.bearing, rotorJ: mo.bellJ + propJ,
-    bat: { cap: ba.cap, r: ba.r, hv: ba.hv },
+    bat: { cap: ba.cap, r: ba.r, hv: ba.hv, cells: ba.cells || 1 }, revEff: pr.rev ?? 0.55,
     restitution: fr.restitution, friction: 0.45,
     // body drag areas (Cd*A, m^2) — ducted whoops are draggy edge-on and very draggy flat
     cdA: v3(0.0022 * fr.ductDrag * (fr.size / 65), 0.0058 * fr.ductDrag * Math.pow(fr.size / 65, 2), 0.0022 * fr.ductDrag * (fr.size / 65)),
@@ -159,7 +180,8 @@ function buildDrone(spec) {
   return p;
 }
 
-function ocv(soc, hv) {
+function ocv(soc, hv, cells = 1) { return cells === 1 ? ocv1(soc, hv) : ocv1(soc, hv) * cells; }
+function ocv1(soc, hv) {
   const tbl = [3.30, 3.50, 3.62, 3.68, 3.72, 3.76, 3.80, 3.85, 3.92, 4.02, 4.20];
   const x = clamp(soc, 0, 1) * 10, i = Math.min(9, Math.floor(x)), f = x - i;
   let v = tbl[i] + (tbl[i + 1] - tbl[i]) * f;
@@ -183,12 +205,12 @@ function motorSteady(p, V) {
   return { rpm: w * 60 / (2 * Math.PI), thrust: T, current: I };
 }
 function staticStats(p) {
-  const V = ocv(1, p.bat.hv) - 0.4; // rough loaded voltage at full throttle
+  const V = ocv(1, p.bat.hv, p.bat.cells) - 0.4 * p.bat.cells; // rough loaded voltage at full throttle
   const s = motorSteady(p, V);
   const thrustG = 4 * s.thrust / G * 1000, auwG = p.mass * 1000;
   // hover duty: bisection on duty
   let lo = 0, hi = 1;
-  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, (ocv(0.8, p.bat.hv) - 0.15) * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
+  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, (ocv(0.8, p.bat.hv, p.bat.cells) - 0.15 * p.bat.cells) * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
   return { auw: auwG, thrust: thrustG, twr: thrustG / auwG, rpmMax: s.rpm, ampsMax: s.current * 4, hoverThrottle: hi,
            I: p.I, staticPerMotorG: s.thrust / G * 1000 };
 }
@@ -227,10 +249,17 @@ class FlightController {
     this.i = [0, 0, 0]; this.gf = [0, 0, 0]; this.dPrev = [0, 0, 0]; this.dF = [0, 0, 0];
     this.spPrev = [0, 0, 0]; this.spF = [0, 0, 0]; this.spLp = [0, 0, 0]; this.ffF = [0, 0, 0];
     this.out = [0, 0, 0, 0]; this.sp = [0, 0, 0]; this.pidSum = [0, 0, 0];
+    this.dir3d = 1; this.wait3d = true;   // 3D mode: no reverse until the throttle stick has been to the middle
   }
   // rc: {thr 0..1, roll,pitch,yaw -1..1}; gyro: pilot-axis rates deg/s
-  update(rc, gyro, dt, armed) {
-    const t = this.tune, axes = ['roll', 'pitch', 'yaw'];
+  // Flight modes (tune.flightMode): 'acro' (rate, the default), 'angle' (self-levelling: the sticks ask for a lean of up
+  // to angleLimit degrees and letting go levels the quad; yaw stays rate) and '3d' (rate, with reversible motors: the
+  // throttle stick's middle is zero thrust, above it pushes up through the props as normal and below it spins them
+  // backward to push the other way, so the quad can hover and fly upside-down. Betaflight's 3D feature: a small
+  // deadband round the middle keeps the motors idling in the direction last used).
+  update(rc, gyro, dt, armed, att) {
+    const t = this.tune, axes = ['roll', 'pitch', 'yaw'], fm = t.flightMode || 'acro';
+    this.reversible = fm === '3d';
     const stick = [rc.roll, rc.pitch, rc.yaw];
     const lpa = (fc) => 1 - Math.exp(-2 * Math.PI * fc * dt);
     for (let k = 0; k < 3; k++) {
@@ -238,6 +267,7 @@ class FlightController {
       // pitch stick forward = nose down => setpoint pitch-back negative
       let sp = applyRate(stick[k], t.rates[name], t.ratesType);
       if (k === 1) sp = -sp;
+      if (fm === 'angle' && att && k < 2) { const lim = t.angleLimit ?? 55, want = (k === 1 ? -stick[k] : stick[k]) * lim; sp = clamp((want - att[k]) * (t.angleStrength ?? 6), -600, 600); }
       this.spF[k] += (sp - this.spF[k]) * lpa(40);            // RC smoothing
       this.sp[k] = this.spF[k];
       this.gf[k] += (gyro[k] - this.gf[k]) * lpa(180);          // gyro LPF
@@ -259,9 +289,20 @@ class FlightController {
       this.pidSum[k] = clamp(P + this.i[k] + D + F, -lim, lim);
     }
     let thr = throttleCurve(clamp(rc.thr, 0, 1), t.thrMid, t.thrExpo);
-    if (!armed) { this.out = [0, 0, 0, 0]; return this.out; }
+    if (!armed) { this.out = [0, 0, 0, 0]; this.dir3d = 1; this.wait3d = fm === '3d'; return this.out; }
+    let dir = 1;
+    if (fm === '3d') {
+      const x = clamp(rc.thr, 0, 1) * 2 - 1, db = t.deadband3d ?? 0.05;
+      // switched to 3D in the air with the stick low (or just armed): nothing reverses until the stick has been to the middle once
+      if (this.was3d === false) this.wait3d = true;
+      if (this.wait3d && Math.abs(x) <= db * 2) this.wait3d = false;
+      if (this.wait3d) { dir = 1; thr = 0; }
+      else { if (x > db) this.dir3d = 1; else if (x < -db) this.dir3d = -1; dir = this.dir3d || 1; thr = clamp((Math.abs(x) - db) / (1 - db), 0, 1); }
+    }
+    this.was3d = fm === '3d';
     const u = this.pidSum.map(s => s / 1000);
-    const raw = this.mix.map(m => m.roll * u[0] + m.pitch * u[1] - m.yaw * u[2] * -1);
+    // with the props turning backward every motor's push (and its drag torque) is reversed, so the corrections swap sign too
+    const raw = this.mix.map(m => (m.roll * u[0] + m.pitch * u[1] - m.yaw * u[2] * -1) * dir);
     let mn = Math.min(...raw), mx = Math.max(...raw), range = mx - mn;
     let mixS = 1;
     if (range > 1) mixS = 1 / range;
@@ -273,7 +314,7 @@ class FlightController {
     }
     for (let i = 0; i < 4; i++) {
       const m = clamp(thr + raw[i] * mixS, 0, 1);
-      this.out[i] = t.idle + (1 - t.idle) * m;
+      this.out[i] = (t.idle + (1 - t.idle) * m) * dir;
     }
     return this.out;
   }
@@ -571,7 +612,7 @@ class Drone {
     this.q = qaxis(v3(0, 1, 0), sp.yaw || 0); this.w = v3(); // body rates rad/s
     this.motorW = [0, 0, 0, 0]; this.motorI = [0, 0, 0, 0]; this.thrust = [0, 0, 0, 0];
     if (!keepBattery) { this.soc = 1; this.mAh = 0; }
-    this.vbat = ocv(this.soc, this.p.bat.hv); this.ibat = 0;
+    this.vbat = ocv(this.soc, this.p.bat.hv, this.p.bat.cells); this.ibat = 0;
     this.armed = false; this.crashed = false; this.contacts = []; this.contactThisStep = false;
     this.noise = [0, 0, 0, 0]; this.washLevel = 0; this.wake = []; this.wakeTimer = 0; this.time = this.time || 0;
     this.fc.reset(); this.restOnGround = 0; this.lastImpact = 0; this.lowSpeedContact = 0;
@@ -585,12 +626,14 @@ class Drone {
     const p = this.p; this.time += dt;
     this.contactThisStep = false;
     // ---- flight controller
-    const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed);
+    // attitude for Angle mode, in the pilot's axes: roll right +, pitch back (nose up) +
+    const att = this.fc.tune.flightMode === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
+    const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
     // ---- motors + battery
     const up = this.up(), wWorld = qrot(this.q, this.w);
     const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
-    const Vocv = ocv(this.soc, p.bat.hv);
-    const Vbus = Math.max(2.5, Vocv - this.ibat * Rint);
+    const Vocv = ocv(this.soc, p.bat.hv, p.bat.cells);
+    const Vbus = Math.max(2.5 * p.bat.cells, Vocv - this.ibat * Rint);
     let Itot = 0.35; // electronics/VTX
     const Fb = v3(), Tb = v3();
     let rotorAccelYaw = 0;
@@ -604,22 +647,22 @@ class Drone {
     const hGround = this.heightAbove();
     for (let i = 0; i < 4; i++) {
       const m = p.motors[i];
-      const duty = out[i] || 0;
+      const duty = out[i] || 0;   // signed in 3D mode: a negative duty drives the motor backward
       let w = this.motorW[i];
       const Vm = duty * Vbus;
       let I = (Vm - w / p.kvRad) / p.rm;
-      I = clamp(I, -4, 12);
-      const n = w / (2 * Math.PI);
-      const Q = p.cq * RHO * n * n * Math.pow(p.D, 5) + p.i0 * p.kt * Math.sign(w);
+      I = clamp(I, this.fc.reversible ? -12 : -4, 12);
+      const n = Math.abs(w) / (2 * Math.PI), sW = w < 0 ? -1 : 1;   // n is the speed; sW the way it turns (−1 only in 3D mode)
+      const Q = sW * p.cq * RHO * n * n * Math.pow(p.D, 5) + p.i0 * p.kt * Math.sign(w);
       const tau = p.kt * I;
       const dw = (tau - Q) / p.rotorJ;
-      w = Math.max(0, w + dw * dt);
+      w = this.fc.reversible ? w + dw * dt : Math.max(0, w + dw * dt);
       this.motorW[i] = w; this.motorI[i] = I;
       Itot += Math.max(0, I * duty);
       rotorAccelYaw += -m.spin * p.rotorJ * dw; // reaction of spinning-up rotor on frame (about body Y)
       // prop velocity (body) at motor location
       const vp = add(vRelB, cross(this.w, m.pos));
-      const vAx = vp.y; // + means moving along thrust direction (climbing)
+      const vAx = vp.y * sW; // + means moving along thrust direction (climbing; reversed thrust points the other way)
       const nn = Math.max(n, 1);
       const J = vAx / (nn * p.D);
       let ctF = J >= 0 ? clamp(1 - J / p.jmax, 0, 1) : clamp(1 - 0.35 * J, 1, 1.25);
@@ -640,14 +683,14 @@ class Drone {
       this.noise[i] += (this.rng() * 1.7 - this.noise[i]) * (1 - Math.exp(-2 * Math.PI * 25 * dt));
       T *= (1 - 0.22 * vrs) * (1 + 0.38 * turb * this.noise[i]);
       // ground effect (Cheeseman-Bennett), only when roughly upright over a surface
-      if (hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6); T *= clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); }
-      T = Math.max(0, T);
+      if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6); T *= clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); }
+      T = Math.max(0, T); if (sW < 0) T *= -p.revEff;   // spun backward the prop pushes the other way, and (unless it is a 3D prop) not as hard
       this.thrust[i] = T;
-      sumW += w;
+      sumW += Math.abs(w);
       Fb.y += T;
       const tq = cross(m.pos, v3(0, T, 0));
       Tb.x += tq.x; Tb.y += tq.y; Tb.z += tq.z;
-      Tb.y += -m.spin * (p.cq * RHO * n * n * Math.pow(p.D, 5));
+      Tb.y += -m.spin * sW * (p.cq * RHO * n * n * Math.pow(p.D, 5));
     }
     Tb.y += rotorAccelYaw;
     this.ibat = Itot; this.vbat = Vbus;
@@ -771,7 +814,7 @@ class Drone {
       if (maxImpact > (this.crashImpact || 7.5)) this.crash('impact');
       const up = this.up();
       const speed = len(this.vel);
-      if (hit && up.y < -0.35 && speed < 0.6) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }
+      if (hit && up.y < -0.35 && speed < 0.6 && !this.fc.reversible) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }   // in 3D mode upside-down on the ground is just a place to take off from
       else if (hit && speed < 0.25 && Math.abs(up.y) < 0.6) { this.restOnGround += dt; if (this.restOnGround > 0.9) this.crash('stuck'); }
       else this.restOnGround = Math.max(0, this.restOnGround - dt);
     }
@@ -2392,9 +2435,9 @@ const DETECTABLE = [...new Set([...OBSTACLE_TRICKS.map(t => t.name), ...OPEN_TRI
   'Wall Tap', 'Wall Ride', 'Dive', 'Stall Rewind', 'Slide Disarm', 'Perch', 'Segmented Flips/Rolls', 'Facepunch'])];
 const DRAFT = new Set([...OBSTACLE_TRICKS.filter(t => t.draft).map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT]);
 function hoverInfo(p) {
-  let lo = 0, hi = 1;
-  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, 3.75 * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
-  const s = motorSteady(p, 3.75 * hi); const amps = 4 * s.current * hi + 0.35;
+  let lo = 0, hi = 1; const V = 3.75 * (p.bat.cells || 1);   // mid-pack voltage
+  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, V * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
+  const s = motorSteady(p, V * hi); const amps = 4 * s.current * hi + 0.35;
   return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
 }
 // ---- Replay: recorded rows (TRACE_COLS) through a fresh detector at 1 kHz. Shared by the Node tools and the game.

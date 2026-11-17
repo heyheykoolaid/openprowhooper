@@ -35,8 +35,8 @@ function crashFart() {
 function updateAudio() {
   if (!actx) return;
   if (drone.crashed && !audioWasCrashed) { try { isRidgeRipper() ? crashFart() : crashThud(); } catch {} } audioWasCrashed = drone.crashed; const t = actx.currentTime; const blades = S.PARTS.props[spec.prop].blades;
-  for (let i = 0; i < 4; i++) { const rpm = drone.motorW[i] * 60 / (2 * Math.PI); osc[i].frequency.setTargetAtTime(Math.max(24, rpm / 60 * blades * 0.2 * (1 + (i - 1.5) * 0.012)), t, 0.015); gains[i].gain.setTargetAtTime(drone.armed ? 0.03 + 0.08 * Math.min(1, rpm / params.stats.rpmMax) : 0, t, 0.02); }
-  { const m = (drone.motorW[0] + drone.motorW[1] + drone.motorW[2] + drone.motorW[3]) / 4 * 60 / (2 * Math.PI), k = Math.min(1, m / params.stats.rpmMax); airBp.frequency.setTargetAtTime(350 + 900 * k, t, 0.04); airG.gain.setTargetAtTime(drone.armed ? 0.02 + 0.2 * k * k : 0, t, 0.04); }
+  for (let i = 0; i < 4; i++) { const rpm = Math.abs(drone.motorW[i]) * 60 / (2 * Math.PI); osc[i].frequency.setTargetAtTime(Math.max(24, rpm / 60 * blades * 0.2 * (1 + (i - 1.5) * 0.012)), t, 0.015); gains[i].gain.setTargetAtTime(drone.armed ? 0.03 + 0.08 * Math.min(1, rpm / params.stats.rpmMax) : 0, t, 0.02); }
+  { const m = (Math.abs(drone.motorW[0]) + Math.abs(drone.motorW[1]) + Math.abs(drone.motorW[2]) + Math.abs(drone.motorW[3])) / 4 * 60 / (2 * Math.PI), k = Math.min(1, m / params.stats.rpmMax); airBp.frequency.setTargetAtTime(350 + 900 * k, t, 0.04); airG.gain.setTargetAtTime(drone.armed ? 0.02 + 0.2 * k * k : 0, t, 0.04); }
   noiseG.gain.setTargetAtTime(Math.min(0.25, S.len(drone.vel) * 0.012 + drone.washLevel * 0.15), t, 0.05);
 }
 
@@ -106,7 +106,7 @@ function hud() {
   $('#switch').textContent = score.uniqueObs.size ? `${score.uniqueObs.size} obstacle${score.uniqueObs.size > 1 ? 's' : ''} · switch ×${score.switchMult()}` : '';
   for (const L of ['K', 'W', 'A', 'D']) $('#kw' + L).classList.toggle('on', !!score.kwad[L]);
   // OSD
-  const v = drone.vbat; $('#osdV').textContent = v.toFixed(2) + 'V'; $('#osdV').classList.toggle('blink', v < 3.35 && drone.armed);
+  const v = drone.vbat; $('#osdV').textContent = v.toFixed(2) + 'V'; $('#osdV').classList.toggle('blink', v / (params.bat.cells || 1) < 3.35 && drone.armed);
   $('#osdA').textContent = drone.ibat.toFixed(1) + 'A'; $('#osdMah').textContent = Math.round(drone.mAh) + 'mAh';
   $('#osdThr').textContent = 'THR ' + Math.round(lastRC.thr * 100);
   $('#osdSpd').textContent = Math.round(S.len(drone.vel) * 3.6) + 'kph';
@@ -115,9 +115,10 @@ function hud() {
   const noDev = inputCfg.mode !== 'keyboard' && !readPad();
   $('#osdState').textContent = noDev ? `${inputCfg.mode.toUpperCase()} NOT DETECTED · MOVE A STICK` : drone.armed ? '' :
     usingSwitch ? (armBlock || 'DISARMED') :
-    drone.crashed ? (crashLock ? 'CRASH · THROTTLE TO ZERO TO GO AGAIN' : drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
-    (lastRC.thr > ARM_THR_MAX ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
+    drone.crashed ? (crashLock ? (tune.flightMode === '3d' ? 'CRASH · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASH · THROTTLE TO ZERO TO GO AGAIN') : drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
+    (!thrArmOk(lastRC.thr) ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
   $('#osdTimer').textContent = fmtT(flightTime);
+  { const m = tune.flightMode || 'acro', el = $('#osdMode'); if (el) { el.textContent = m === '3d' ? '3D' : m.toUpperCase(); el.classList.toggle('alt', m !== 'acro'); } }
   $('#sessionT').textContent = train.on ? 'TRAINING' : session ? fmtT(Math.max(0, session.timeLeft)) : 'FREE FLY';
   $('#washMeter').style.opacity = Math.min(1, drone.washLevel * 2);
 }
@@ -145,7 +146,7 @@ function frame(now) {
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
     // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).
-    if (drone.crashed) { if (crashAt == null) { crashAt = now; crashLock = wasArmed; } else if (crashLock && now - crashAt > 350 && lastRC.thr <= ARM_THR_MAX && mode !== 'judge' && !race.on) { crashLock = false; setArmed(true); } }
+    if (drone.crashed) { if (crashAt == null) { crashAt = now; crashLock = wasArmed; } else if (crashLock && now - crashAt > 350 && thrArmOk(lastRC.thr) && mode !== 'judge' && !race.on) { crashLock = false; setArmed(true); } }
     else { crashAt = null; wasArmed = drone.armed; }
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
@@ -161,7 +162,7 @@ function frame(now) {
   // drone visual
   droneMesh.position.set(drone.pos.x, drone.pos.y, drone.pos.z);
   droneMesh.quaternion.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w);
-  for (let i = 0; i < 4; i++) { const w = drone.motorW[i]; propGroups[i].rotation.y += params.motors[i].spin * Math.min(w * dt, 0.9); propDiscs[i].material.opacity = Math.min(0.35, w / params.stats.rpmMax * 2.4); propGroups[i].visible = w < 2500; }
+  for (let i = 0; i < 4; i++) { const w = drone.motorW[i]; propGroups[i].rotation.y += params.motors[i].spin * Math.max(-0.9, Math.min(w * dt, 0.9)); propDiscs[i].material.opacity = Math.min(0.35, Math.abs(w) / params.stats.rpmMax * 2.4); propGroups[i].visible = w < 2500; }
   // cameras
   let cam;
   if (mode === 'menu') {
