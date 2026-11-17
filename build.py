@@ -2,8 +2,10 @@ import pathlib
 root = pathlib.Path(__file__).parent
 t = (root / 'src/index.template.html').read_text()
 # the game module is game.js followed by the track editor / race UI (editor.js shares its scope)
-t = t.replace('/*GAME*/', '/*GAME*//*EDITOR*//*BBREPLAY*//*RECAP*//*DROPOFF*/')
-for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('RECAP', 'recap.js'), ('DROPOFF', 'dropoff.js'), ('BBL', 'bbl.js'), ('FLIGHTLOG', 'flightlog.js')]:
+# The game module is ONE script made of these files in this order (they share a scope): the core and its parts,
+# then the track editor / race UI, Blackbox Replay, run review and the drop-offs.
+t = t.replace('/*GAME*/', '/*GAME*//*G_WORLDVIEW*//*G_INPUT*//*G_PLAY*//*G_MENUS*//*G_JUDGE*//*G_VIDEOREVIEW*//*G_SHELL*//*G_TRAINING*//*G_GHSYNC*//*G_BBLAB*//*G_PAUSEASK*//*EDITOR*//*BBREPLAY*//*RECAP*//*DROPOFF*/')
+for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('G_WORLDVIEW', 'worldview.js'), ('G_INPUT', 'input.js'), ('G_PLAY', 'play.js'), ('G_MENUS', 'menus.js'), ('G_JUDGE', 'judge.js'), ('G_VIDEOREVIEW', 'videoreview.js'), ('G_SHELL', 'shell.js'), ('G_TRAINING', 'training.js'), ('G_GHSYNC', 'ghsync.js'), ('G_BBLAB', 'bblab.js'), ('G_PAUSEASK', 'pauseask.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('RECAP', 'recap.js'), ('DROPOFF', 'dropoff.js'), ('BBL', 'bbl.js'), ('FLIGHTLOG', 'flightlog.js')]:
     t = t.replace('/*%s*/' % key, (root / 'src' / f).read_text().replace('</script', '<\\/script'))
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it
