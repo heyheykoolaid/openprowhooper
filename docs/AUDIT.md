@@ -38,3 +38,46 @@ the full test suite, three stress seeds and the benchmark.
 ## Suggested order
 1 → collect real labels (already possible), then 2 and 3 with that data; 5 with one real RaceGOW build; 8 when a
 second developer joins.
+
+
+## 2026-11-17 (second pass): telemetry, the relay, structure, speed
+
+**Structure.** `src/game.js` (1,774 lines) is now twelve files in the same order (`game.js`, `worldview.js`, `input.js`,
+`play.js`, `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`);
+`build.py` joins them into the one game module, and the built game was byte-identical before and after. `src/sim.js`
+(2,270 lines) was left whole: every Node test loads it directly as one file, and splitting it needs a loader for the tests
+as well as the build. Natural seams when that is worth doing: parts and drone physics / world and collision / detector /
+Watcher / ScoreKeeper.
+
+**Speed.** Profiling one simulated second (physics 1 kHz + detector): collision was the largest single cost because
+every step tested all 238 world shapes against every collider. A broad phase now keeps the shapes within 2 m and reuses
+the list for 1 m of travel. A 6-minute scripted flight with 125,000 contact steps and 185 crashes gives the identical
+state hash before and after; physics went from about 50 to 21 ms per simulated second, physics + detector from 86 to 62.
+Rendering was not profiled (no GPU here).
+
+**What is collected** (only with "Share my flights" on, except feedback, which is sent when the player presses Send):
+flight path, attitude, sticks and throttle; the game's trick calls and how sure it was; F/Q flags and review answers;
+the whoop as configured (part ids and names, weight, thrust-to-weight, hover throttle); rates, rates type, PIDs, throttle
+curve, camera tilt and FOV; input type (keyboard / gamepad / radio); the pilot name the player typed and a random id;
+feedback text and, if ticked, what screen they were on and their last few calls. Not collected: e-mail, IP address,
+browser or device details, anything from outside the game. (Found and fixed in this pass: the feedback context used to
+include the browser's user-agent string, which contradicted the promise on the first-start screen.) Cloudflare and
+GitHub, as the carriers, see what any website's host sees (the sender's IP address in transit); the relay uses it only to
+count uploads per address in memory and does not store it.
+
+**Staying inside the free Cloudflare plan** (100,000 requests a day, 1,000 KV writes a day, 10 ms CPU per request):
+- one upload is one request and, only if it passes every check, one KV read and one write; refused uploads cost no KV;
+- the relay's own cap (800 a day) is below the KV write allowance, so the counter cannot run out first;
+- the game sends at most 40 flights a day per browser, skips runs under 20 s, and packs a flight to about 50 KB a minute;
+- the game no longer retries blindly: a refused upload is never resent, "busy" / errors back off 1, 2, 5, 15 then 60
+  minutes, and a copy the relay will not accept from stops trying;
+- if a limit is ever hit, Cloudflare returns errors until midnight UTC and the game keeps the data in the browser. Nothing
+  is billed on the free plan.
+- Not yet seen on the real service: a flight near the 8-minute maximum (about 400-600 KB) against the 10 ms CPU limit.
+
+**Security.** The repo key exists only as a Cloudflare secret and can write only to the private data repo. The relay
+accepts only the game's formats from the game's address, stores only known fields under names it makes up, never
+overwrites or reads, and rate-limits. What it cannot prevent: someone faking the game's address from their own machine
+and sending well-formed junk within the limits. That is bounded (800 files a day, 1 MB each), lands in a private repo,
+and is only ever parsed as data. The "GitHub menus only for heyheykoolaid" rule is tidiness, not protection. Pilot names
+are whatever people type, so a name in the data proves nothing about who flew.

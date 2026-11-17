@@ -199,4 +199,26 @@ function uPass(P, off, far) { const vOut = 3, vBack = 2, y = Math.min(P.y1 - 0.5
   for (const nm of ['Flagpole', 'Lamp Post', 'the pilot']) { const Pl = poles.find(p => p.name === nm);
     for (const [off, far] of [[0.8, 5], [1.2, 5], [1.0, 8]]) { const got = M.detect(uPass(Pl, off, far), W, 30).map(e => e.name), ok = !got.includes('Orbit x2'); total++; if (ok) pass++;
       console.log(`${ok ? '✓' : '✗'} ${`past the ${nm} and back down the other side (${off} m, ${far} m)`.padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want no Orbit'}`); } } }
+// Pilot (2026-11-17): inverted yaw spins need to work at other camera angles. With a steep camera the half roll in
+// carries a nose-down tip (and the half flip in stops short of 180); the spin may be about the world vertical (A) or the
+// quad's own yaw axis (C); and it is never a plain Yaw Spin. Each is flown with the detector set to that camera tilt.
+function iys(o) { const { style = 'A', tilt = 30, bodyOff = 0, entry = 'roll', exit = entry, rate = 400, spin = 360, pause = 0, entryDeg = 180, wob = 0, half = 360 } = o;
+  const p0 = v3(0, 6, 1), bt = style === 'B' ? 0 : tilt + bodyOff, rT = entryDeg / half, sT = spin / rate, sg = entry === 'roll' ? 1 : -1;
+  const hq = (ax, deg) => ax === 'roll' ? rollQ(deg * D) : pitchQ(deg * D);
+  const inv = qmul(hq(entry, entryDeg), pitchQ(-bt * D * sg));
+  const w = t => wob ? qmul(rollQ(wob * D * Math.sin(t * 7)), pitchQ(wob * D * Math.sin(t * 5.3 + 1))) : H.ID;
+  const spinQ = a => style === 'C' ? qmul(inv, yawQ(a)) : qmul(qaxis(v3(0, 1, 0), a), inv);
+  const end = spinQ(spin * D), outDeg = 360 - entryDeg;
+  const segs = [hold(p0, H.ID, 0.6), { T: rT, f: t => ({ pos: p0, q: qmul(hq(entry, entryDeg * t / rT), pitchQ(-bt * D * (t / rT) * sg)) }) }];
+  if (pause) segs.push(hold(p0, inv, pause));
+  segs.push({ T: sT, f: t => ({ pos: p0, q: qmul(spinQ(spin * D * t / sT), w(t)) }) });
+  if (pause) segs.push(hold(p0, end, pause));
+  const oT = (exit === entry ? outDeg : 180) / half;
+  segs.push({ T: oT, f: t => ({ pos: p0, q: qmul(end, qmul(pitchQ(bt * D * (t / oT) * sg), hq(exit, (exit === entry ? outDeg : 180) * t / oT))) }) });
+  segs.push(hold(p0, qmul(end, qmul(pitchQ(bt * D * sg), hq(exit, exit === entry ? outDeg : 180))), 1.6));
+  return at(segs); }
+for (const c of [{ style: 'A', tilt: 50, entry: 'flip' }, { style: 'C', tilt: 50, entry: 'flip', rate: 500 }, { style: 'A', tilt: 45, bodyOff: 15 }, { style: 'C', tilt: 45, bodyOff: 15 },
+  { style: 'C', tilt: 30, wob: 12 }, { style: 'C', tilt: 45, wob: 12 }, { style: 'A', tilt: 40, spin: 330 }, { style: 'A', tilt: 10, entry: 'roll', exit: 'flip' }, { style: 'B', tilt: 40, rate: 220 }]) {
+  const got = M.detect(iys(c), W, c.tilt).map(e => e.name), ok = JSON.stringify(got) === '["Inverted Yaw Spin"]'; total++; if (ok) pass++;
+  console.log(`${ok ? '✓' : '✗'} ${('inverted yaw spin ' + JSON.stringify(c).replace(/"/g, '')).padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want Inverted Yaw Spin'}`); }
 console.log(`\n${pass}/${total} pilot-feedback flights`);

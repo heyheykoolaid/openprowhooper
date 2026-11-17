@@ -500,6 +500,7 @@ function buildPlayground() {
 }
 
 // ================================================================= DRONE PHYSICS
+const NEAR_M = 1.0, NEAR_M2 = 2 * NEAR_M;   // collision broad phase: list everything within 2 m, trust the list for 1 m of travel
 class Drone {
   constructor(params, tune, world) {
     this.world = world; this.rng = makeRng(1234);
@@ -659,7 +660,15 @@ class Drone {
         const cw = add(this.pos, qrot(this.q, c.c));
         const contacts = [];
         if (cw.y < c.r) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true });
-        for (const pr of this.world.prims) {
+        // Broad phase: the world has a few hundred shapes and this runs 1000 times a second, but the quad is only ever
+        // near a handful. Keep the list of shapes within NEAR_M of where it was last built (same order as the world's
+        // list, so results are identical) and rebuild it once the quad has moved far enough that one could be missed.
+        const NC = this._nearC, WP = this.world.prims;
+        if (!NC || this._nearW !== WP || this._nearN !== WP.length || Math.max(Math.abs(cw.x - NC.x), Math.abs(cw.y - NC.y), Math.abs(cw.z - NC.z)) + c.r > NEAR_M) {
+          const near = []; for (const pr of WP) { const a = pr.aabb; if (!(cw.x + NEAR_M2 < a.min.x || cw.x - NEAR_M2 > a.max.x || cw.y + NEAR_M2 < a.min.y || cw.y - NEAR_M2 > a.max.y || cw.z + NEAR_M2 < a.min.z || cw.z - NEAR_M2 > a.max.z)) near.push(pr); }
+          this._near = near; this._nearC = { x: cw.x, y: cw.y, z: cw.z }; this._nearW = WP; this._nearN = WP.length;
+        }
+        for (const pr of this._near) {
           const a = pr.aabb;
           if (cw.x + c.r < a.min.x || cw.x - c.r > a.max.x || cw.y + c.r < a.min.y || cw.y - c.r > a.max.y || cw.z + c.r < a.min.z || cw.z - c.r > a.max.z) continue;
           const r = sphereVs(pr, cw, c.r); if (r) { r.owner = pr.owner; contacts.push(r); }
@@ -806,7 +815,8 @@ const OPEN_TRICKS = [
   { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180'] },
   { name: "Cubik's Rube", pats: ['Ra180 P*360 Ra180'] },
   // pilot feedback: sloppy reps (~300-330 of spin) are normal and should count; the grade reflects the error
-  { name: 'Inverted Yaw Spin', pats: ['Pa180 Y*~360i Pa180', 'Ra180 Y*~360i Ra180', 'Pa180 Y*~360i R*180', 'Ra180 Y*~360i P*180'] },
+  // (the half flip in/out is loose: with the camera tilted the nose ends up short of, or past, a clean 180)
+  { name: 'Inverted Yaw Spin', pats: ['Pa~180 Y*~360i Pa~180', 'Ra180 Y*~360i Ra180', 'Pa~180 Y*~360i R*180', 'Ra180 Y*~360i P*~180'] },
   { name: 'Vanny Roll', pats: ['Ya180 R*360 Ya180'] },
   { name: 'Double Flip', pats: ['P*720'] },
   { name: 'Double Roll', pats: ['R*720'] },
@@ -1684,6 +1694,10 @@ class StreamDetector extends TrickDetector {
       B.off += Math.max(0, during) * 0;
     }
     L = L.filter(a => a.raw >= 60);
+    // A half roll (or half flip) flown with some of the other axis mixed in is still one move: with a steep camera the
+    // pilot rolls inverted AND tips the nose to keep the view level, which shows up as a small pitch (roll) rotation
+    // inside the big one. Fold it in (pilot: inverted yaw spins weren't found at other camera angles).
+    L = L.filter(a => !(a.raw < 100 && L.some(b => b !== a && b.ax !== 'Y' && b.ax !== a.ax && b.raw >= 140 && Math.min(a.t1, b.t1) - Math.max(a.t0, b.t0) >= 0.7 * (a.t1 - a.t0))));
     if (opts.splitAt) {                             // cut at loop boundaries (upright pass under an obstacle mid-rotation)
       for (const tc of opts.splitAt) { const i = L.findIndex(a => a.ax === 'P' && tc > a.t0 + 0.15 && tc < a.t1 - 0.15); if (i >= 0) { const A = L[i]; L.splice(i, 1, sliceTok(A, A.t0, tc), sliceTok(A, tc, A.t1)); } }
     }
@@ -1720,7 +1734,7 @@ class StreamDetector extends TrickDetector {
         const fast = suf.every(x => x.rateSum / x.n >= this.minRate(x.ax, x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
         const orbit = this.orbiting();
         const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
-        if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
+        if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (tr.name === 'Yaw Spin' && suf[0].inv) continue;   /* a yaw spin flown upside-down is the Inverted Yaw Spin's middle, never the beginner trick */ if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
         if (!orbit) { const ol = this.matchOpenLoop(suf); if (ol) out.push(ol); }
         if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
           const m = matchTokens(pp, suf); if (!m) continue;

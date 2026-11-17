@@ -2,8 +2,11 @@
 
 ## What this is
 Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's Pro Whooper (TPW) trick library.
-No framework: `src/sim.js` (pure JS, runs in Node for tests) + `src/game.js` (Three.js, browser). `python3 build.py`
-inlines them into `dist/index.html` and a single-file `dist/standalone.html`.
+No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
+built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
+`menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `editor.js`,
+`bbreplay.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
+`dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
 - Keep `npm test` green. Every behaviour change to trick detection must keep all suites passing and should add a
@@ -134,6 +137,8 @@ feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRip
 ## Confirmed by the pilot
 - Matty Flip: over the object → ~360° forward flip → finish upright, facing the object, flying backward under it.
 - Powerloops go inverted over the top; Maverick loops stay upright and forward-looking the whole way.
+- Inverted Yaw Spin at any camera angle: the half roll in may carry a nose tip (folded into the roll in `normalized`),
+  a half flip in may stop short of or pass 180, and an upside-down yaw spin is never the plain Yaw Spin.
 - Trippy Spin / Orbit laps: whole laps completed before a crash or disarm still score (`finishLive`); only the lap in
   progress is lost.
 - Slide Disarm (TPW, 200): disarm on the move, slide across the ground or any object's surface (at least 0.75 m),

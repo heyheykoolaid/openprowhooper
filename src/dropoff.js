@@ -16,7 +16,7 @@ const telState = { busy: false, last: '', mem: [], route: null };
 const saveTel = () => store.set('telemetry', { on: tel.on, asked: tel.asked, pilot: tel.pilot });
 function telPilot() { if (!tel.pilot) { tel.pilot = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3); saveTel(); } return tel.pilot; }
 const telStamp = r => `${r.started.replace(/[:.]/g, '-')}-${r.id}`;
-function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { telPilot(); telPump(); } telRenderStatus(); }
+function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { telPilot(); telPump(true); } telRenderStatus(); }
 
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
@@ -27,7 +27,10 @@ function telCapture(reason) {
   if (cnt.n >= TEL.perDay) return; cnt.n++; store.set('telDay', cnt);
   recap.telDone = recap.id;
   const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), name: pilotName() || null, map: 'playground',
-    mode: recap.mode || 'free', camTilt: tune.camTilt, craft: { ...spec }, tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
+    mode: recap.mode || 'free', camTilt: tune.camTilt, camFov: tune.camFov,
+    // the whoop as configured in the Garage: part ids and names, and what they add up to
+    craft: { ...spec, names: params.names || null, stats: params.stats ? { auw: +params.stats.auw.toFixed(2), twr: +params.stats.twr.toFixed(2), hoverThrottle: +params.stats.hoverThrottle.toFixed(3) } : null },
+    tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
     score: score ? { total: score.total, maxStreak: +score.maxStreak.toFixed(2) } : null,
     events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined })),
     missed: recap.flags.map(f => ({ t: f.t })) };
@@ -41,7 +44,7 @@ async function telStore(item) { const ok = await idb.ok(); if (ok) await idb.put
 async function telQueue(kind, name, payload) {
   await telStore({ id: `${kind}/${name}`, kind, name, at: new Date().toISOString(), body: JSON.stringify(payload), sent: null });
   const all = await telList(); for (const old of all.slice(0, Math.max(0, all.length - TEL.keep))) { await idb.del('telemetry', old.id); telState.mem = telState.mem.filter(x => x.id !== old.id); }
-  telRenderStatus(); return telPump();
+  telRenderStatus(); return telPump(true);   // a new item gets one immediate try
 }
 
 // ---- drop-off 1: the project database behind the Claude link
@@ -61,9 +64,8 @@ async function telToDb(it) {
   } catch (err) { telState.dbWhy = 'write refused' + (err && err.code ? ' (' + err.code + ')' : ''); return false; }
 }
 // ---- drop-off 2: the relay (a plain-text POST keeps it a simple cross-site request)
-async function telToRelay(it) {
-  if (!TEL.relay) return false;
-  try { const r = await fetch(TEL.relay, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: it.kind, name: it.name, payload: JSON.parse(it.body) }) }); return r.ok; } catch { return false; }
+async function telToRelay(it) {   // -> HTTP status (0: could not reach it)
+  try { const r = await fetch(TEL.relay, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: it.kind, name: it.name, payload: JSON.parse(it.body) }) }); return r.status; } catch { return 0; }
 }
 // ---- drop-off 3: GitHub with the player's own token
 async function telToGitHub(it) {
@@ -71,13 +73,25 @@ async function telToGitHub(it) {
   try { const r = await ghFetch(`/contents/${['telemetry', it.kind, telPilot(), it.name + '.json'].map(encodeURIComponent).join('/')}`, { method: 'PUT', body: JSON.stringify({ message: `telemetry: ${it.kind} ${it.name}`, content: b64(it.body), branch: gh.branch }) });
     return r.ok || r.status === 422; } catch { return false; }   // 422: already there
 }
-async function telPump() {
-  if (telState.busy) return; telState.busy = true;
+// One upload = one request to the relay. To stay well inside the relay's free allowance and not hammer it when it is
+// busy or closed: a refused item (not valid, too big) is never retried; "slow down" / errors back off 1, 2, 5, 15, 60
+// minutes; a copy the relay will not accept from (the downloaded file) stops trying for the session.
+const TEL_BACKOFF = [60, 120, 300, 900, 3600];
+async function telPump(force) {
+  if (telState.busy) return; if (!force && telState.retryAt && Date.now() < telState.retryAt) return; telState.busy = true;
   try {
     for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && !tel.on) continue;
-      const route = (await telToDb(it)) ? 'project database' : (await telToRelay(it)) ? 'project drop-off' : (await telToGitHub(it)) ? 'GitHub' : null;
-      if (!route) { telState.last = 'no drop-off reachable — kept here'; break; }
-      telState.route = route; telState.last = `sent ${it.kind} → ${route}`;
+      let route = (await telToDb(it)) ? 'project database' : null, refused = false;
+      if (!route && TEL.relay && !telState.relayOff) { const st = await telToRelay(it);
+        if (st >= 200 && st < 300) route = 'project drop-off';
+        else if (st === 400 || st === 413) { route = 'refused'; refused = true; }                     // the relay will never take this one
+        else if (st === 403) telState.relayOff = true;                                                   // not from the hosted game
+        else { telState.failN = (telState.failN || 0) + 1; const wait = TEL_BACKOFF[Math.min(telState.failN, TEL_BACKOFF.length) - 1]; telState.retryAt = Date.now() + wait * 1000;
+          telState.last = `${st === 429 ? 'the drop-off is busy' : 'could not reach the drop-off'} — trying again in ${wait >= 120 ? Math.round(wait / 60) + ' min' : '1 min'}`; break; } }
+      if (!route) route = (await telToGitHub(it)) ? 'GitHub' : null;
+      if (!route) { telState.last = telState.relayOff ? 'this copy cannot upload — play the hosted game to share, or save a file' : 'no drop-off reachable — kept here'; break; }
+      if (!refused) { telState.failN = 0; telState.retryAt = 0; telState.route = route; }
+      telState.last = refused ? `the drop-off would not take one ${it.kind} (kept off the retry list)` : `sent ${it.kind} → ${route}`;
       await telStore({ id: it.id, kind: it.kind, name: it.name, at: it.at, sent: route, chars: it.body.length });   // keep a receipt, drop the body
     }
   } finally { telState.busy = false; telRenderStatus(); }
@@ -97,8 +111,8 @@ function telOptionsHtml() {
 }
 async function telRenderStatus() {
   const el = $('#telStatus'); if (!el) return;
-  const all = await telList(), wait = all.filter(x => !x.sent).length, sent = all.filter(x => x.sent && x.sent !== 'file').length, c = await telDb();
-  const where = c ? 'the project database (through this Claude page)' : TEL.relay ? 'the project drop-off' : gh.token ? `GitHub (${gh.owner}/${gh.repo}/telemetry/)` : null;
+  const all = await telList(), wait = all.filter(x => !x.sent).length, sent = all.filter(x => x.sent && x.sent !== 'file' && x.sent !== 'refused').length, c = await telDb();
+  const where = c ? 'the project database (through this Claude page)' : TEL.relay && !telState.relayOff ? 'the project drop-off' : gh.token ? `GitHub (${gh.owner}/${gh.repo}/telemetry/)` : null;
   el.textContent = (!tel.on ? 'Off. ' : where ? `On — this copy sends to ${where}. ` : 'On, but this copy has nowhere to send yet: flights are kept in this browser. Save them as a file and pass it to the project. ') +
     `${wait} waiting · ${sent} sent from this browser${telState.last ? ' · ' + telState.last : ''}${window.claude && telState.dbWhy ? ' · project database: ' + telState.dbWhy : ''}`;
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
@@ -156,12 +170,9 @@ async function telCollect() {
 }
 // a run still in the air when the tab is closed: pack what there is (best effort)
 addEventListener('pagehide', () => telCapture('closed'));
-// comments written before there was a drop-off are still in this browser: queue the ones that never went anywhere
-async function telOldFeedback() { const all = store.get('feedback', []); let n = 0;
-  for (const p of all) { if (p.queued || !p.text) continue; p.queued = true; n++; await telStore({ id: `feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, kind: 'feedback', name: `${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, at: p.at, body: JSON.stringify({ ...p, queued: undefined }), sent: null }); }
-  if (n) store.set('feedback', all); }
-setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 20000);
+// anything still waiting is tried again now and then (telPump keeps to its back-off)
+setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { if (!pilotName()) pilotAsk(); else pilotWarmAsk(); await telOldFeedback(); telPump(); }, 1200);
+setTimeout(async () => { if (!pilotName()) pilotAsk(); else pilotWarmAsk(); telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
