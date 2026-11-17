@@ -71,7 +71,7 @@ function recapSave(force) {
   try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
   // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
-  if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), labels: pl.run.labels }); }
+  if (tel.on) { telCapture('review'); telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels }); }
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-rc]'); if (b && mode === 'recap') { const a = b.dataset.rc, i = +b.dataset.i;
@@ -155,7 +155,7 @@ function fbOpen() {
   el.innerHTML = `<div class="fbPanel"><h3>Send feedback</h3>
     <label>About <select id="fbCat">${FB_CATS.map(c => `<option ${c === g ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     <label>What happened, or what would make it better?<textarea id="fbText" rows="6" maxlength="4000" placeholder="e.g. my trippy round the flagpole didn't count when…"></textarea></label>
-    <label>Your name or handle (optional)<input id="fbName" maxlength="60" value="${esc(store.get('fb.name', ''))}"></label>
+    <label>Your name or handle (optional)<input id="fbName" maxlength="60" value="${esc(store.get('fb.name', '') || pilotName())}"></label>
     <label class="chk"><input type="checkbox" id="fbCtx" checked> Include what I was doing (screen, craft, rates, camera tilt, last few trick calls)</label>
     <div class="row"><button data-fb="send" class="primary">${gh.enabled && gh.token ? 'Send' : 'Save'}</button><button data-fb="file">Save as file</button><button data-fb="copy">Copy</button><button data-fb="issue" title="Opens GitHub in a new tab with your comment filled in">Open a GitHub issue</button><button data-fb="close" class="ghost">Cancel</button></div>
     <p class="note" id="fbMsg">${gh.enabled && gh.token ? `Goes to ${esc(gh.owner)}/${esc(gh.repo)}/feedback/.` : 'Uploads are off in this browser, so "Save" keeps it here; use the file, Copy or the GitHub issue button to pass it on.'}</p></div>`;

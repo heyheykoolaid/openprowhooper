@@ -103,7 +103,7 @@ deliberate rotations, more air between segments). The roadmap doc lists what is 
 ## Flight telemetry and the drop-offs (src/flightlog.js, src/dropoff.js) — docs/DATA.md
 Opt-in ("Share flight telemetry" in Options, asked once on the main menu, off by default). When a Free Fly / Session run
 ends it is packed (`pro-whooper-flight/1`: the 100 Hz trace delta-coded and deflated, the calls with Watcher confidence,
-F/Q flags, craft/tune, a random pilot id) and sent to the first drop-off that copy can reach: the artifact database
+F/Q flags, craft/tune, the pilot's chosen name and a random pilot id) and sent to the first drop-off that copy can reach: the artifact database
 (`telemetry/<viewer>/flight/<stamp>` + `parts/`, only the owner and org Contributors can write there), the relay
 (`tools/dropoff-worker.mjs`, URL in `dropoff.txt` → `window.PW_DROPOFF`; commits to `telemetry/inbox/`), or GitHub with
 the player's token (`telemetry/flight/<pilot>/`). Otherwise it waits in IndexedDB and Options saves a bundle file.
@@ -113,6 +113,11 @@ every flight through the current detector and lists calls that changed, unsure c
 artifact database, read the index documents (summary, events) with db_query; ask the owner to press "Download everything
 in the project database" in Options for the traces (they are too big to read through tools). Telemetry is unlabelled:
 it does not count in `npm run bench` unless labels came with it.
+
+## First start (src/dropoff.js `pilotAsk`, `pilotWarmAsk`)
+Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing; then
+the Pilot Warm-up is recommended once to anyone without a profile. The name goes with shared flights, labels and
+feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.

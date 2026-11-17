@@ -68,9 +68,9 @@ can read decode identically (3.3 M values in the longest), and the one it can't 
 | Format | `pro-whooper-flight/1` — one finished Free Fly / Session run |
 | Made by | `telCapture()` in `src/dropoff.js` when a run ends (restart, menu, session over, review saved) |
 | Skipped | runs under 20 s recorded or 10 s armed, RaceGOW, more than 40 runs a day from one browser |
-| Contents | `id`, `started`, `pilot` (random, per browser), `mode`, `camTilt`, `craft`, `tune`, `profile` (Pilot Warm-up), `input`, `score`, `events` (each call: `t`, `t0`, `name`, `exec`, `clean`, `obstacle`, `conf`, `fails`, `flagged`), `missed` (Q presses), `summary`, `trace` |
+| Contents | `id`, `started`, `pilot` (random, per browser), `name` (the pilot name chosen on first start), `mode`, `camTilt`, `craft`, `tune`, `profile` (Pilot Warm-up), `input`, `score`, `events` (each call: `t`, `t0`, `name`, `exec`, `clean`, `obstacle`, `conf`, `fails`, `flagged`), `missed` (Q presses), `summary`, `trace` |
 | Trace | `{ enc: 'cols-delta-varint/1+deflate', hz, cols, rows, data }` — `FlightLog.unpack()` in `src/flightlog.js` gives back the usual rows (positions to 0.1 mm, attitude to 1e-4, velocity to 1 cm/s); about 30–80 KB a minute |
-| Never in it | GitHub token, name, e-mail, device ids, file names |
+| Never in it | GitHub token, e-mail, device ids, file names |
 
 Related: `pro-whooper-flight-labels/1` (`flight` id + the review labels, sent when a review is saved with telemetry on),
 `pro-whooper-telemetry-bundle/1` (`items: [{ kind, name, at, payload }]`, what Options saves as a file).

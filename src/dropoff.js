@@ -5,14 +5,18 @@
 //   2. the project relay (window.PW_DROPOFF, set at build time; tools/dropoff-worker.mjs), for players with no token;
 //   3. GitHub, with the token the player put in Options (telemetry/ in the repo).
 // With none of those, runs wait in this browser (IndexedDB) and Options can export them as one file.
-// Never sent: the GitHub token, names, e-mail, device ids. The pilot id is a random string made in this browser.
+// Never sent: the GitHub token, e-mail, device ids. Sent: the pilot name the player chose and a random id made in this browser.
 const tel = Object.assign({ on: false, asked: false, pilot: '' }, store.get('telemetry', {}));
+// The pilot's name: asked for on the first start, shown on the menu, sent with shared flights and feedback.
+const cleanName = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+const pilotName = () => cleanName(store.get('pilotName', ''));
+const isRidgeRipper = () => pilotName().toLowerCase().replace(/[^a-z0-9]/g, '') === 'ridgeripperfpv';
 const TEL = { relay: (window.PW_DROPOFF || '').trim(), minSeconds: 20, minArmed: 10, perDay: 40, keep: 40, part: 120000 };
 const telState = { busy: false, last: '', mem: [], route: null };
 const saveTel = () => store.set('telemetry', { on: tel.on, asked: tel.asked, pilot: tel.pilot });
 function telPilot() { if (!tel.pilot) { tel.pilot = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3); saveTel(); } return tel.pilot; }
 const telStamp = r => `${r.started.replace(/[:.]/g, '-')}-${r.id}`;
-function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); $('#telAsk') && $('#telAsk').classList.add('hide'); if (tel.on) { telPilot(); telPump(); } telRenderStatus(); }
+function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { telPilot(); telPump(); } telRenderStatus(); }
 
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
@@ -22,7 +26,7 @@ function telCapture(reason) {
   const day = new Date().toISOString().slice(0, 10), cnt = store.get('telDay', { day, n: 0 }); if (cnt.day !== day) { cnt.day = day; cnt.n = 0; }
   if (cnt.n >= TEL.perDay) return; cnt.n++; store.set('telDay', cnt);
   recap.telDone = recap.id;
-  const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), map: 'playground',
+  const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), name: pilotName() || null, map: 'playground',
     mode: recap.mode || 'free', camTilt: tune.camTilt, craft: { ...spec }, tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
     score: score ? { total: score.total, maxStreak: +score.maxStreak.toFixed(2) } : null,
     events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined })),
@@ -81,11 +85,12 @@ async function telPump() {
 
 // ---- Options and the one-time question on the main menu
 function telOptionsHtml() {
-  return `<label class="chk big"><input type="checkbox" id="telOn" ${tel.on ? 'checked' : ''}> Share flight telemetry</label>
+  return `<label>Pilot name<input id="optPilotName" maxlength="24" value="${esc(pilotName())}" onkeydown="event.stopPropagation()"></label>
+    <label class="chk big"><input type="checkbox" id="telOn" ${tel.on ? 'checked' : ''}> Share flight telemetry</label>
     <div class="optExplain">
       <p><b>What it does:</b> when a Free Fly or Session run ends, the game sends that run to the project: the flight path and attitude, your stick and throttle movements, every trick the game called (with how sure it was), your F / Q flags, and your craft, rates and camera tilt. About 30–80 KB a minute; runs under ${TEL.minSeconds} seconds and RaceGOW laps are skipped.</p>
       <p><b>Why:</b> real flying is what the trick rules are tuned against. Each flight can be re-flown through new versions of the detector to see which calls change, and the unsure calls show which rules need work.</p>
-      <p><b>What's not sent:</b> no name, e-mail or device details — only a random pilot id made in this browser (<code>${esc(tel.pilot || 'made when you turn this on')}</code>) so your runs can be grouped. Never any access token. Off by default.</p>
+      <p><b>What's not sent:</b> no e-mail or device details. Your runs carry the pilot name you chose and a random id made in this browser (<code>${esc(tel.pilot || 'made when you turn this on')}</code>) so they can be grouped. Never any access token.</p>
       <p class="note" id="telStatus"></p>
       <div class="row"><button id="telExport" class="ghost">Save waiting flights as a file</button><button id="telForget" class="ghost">Delete flights kept here</button><button id="telCollect" class="ghost hide">Download everything in the project database</button></div>
     </div>`;
@@ -98,8 +103,36 @@ async function telRenderStatus() {
     `${wait} waiting · ${sent} sent from this browser${telState.last ? ' · ' + telState.last : ''}${window.claude && telState.dbWhy ? ' · project database: ' + telState.dbWhy : ''}`;
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
 }
+// ---- first start: every pilot picks a name, and says yes or no to sharing, before the menu
+function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; }
+function pilotAsk() {
+  const el = $('#pilotModal'); el.classList.remove('hide');
+  el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
+    <input type="text" id="pilotNameIn" maxlength="24" placeholder="your pilot name or handle" value="${esc(pilotName())}" onkeydown="event.stopPropagation()" autocomplete="off">
+    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. You can change it any time in Options.</p>`}
+    <p class="note" id="pilotMsg"></p>
+    <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div></div>`;
+  setTimeout(() => $('#pilotNameIn') && $('#pilotNameIn').focus(), 30);
+}
+// then recommend the Pilot Warm-up to anyone who has no profile yet (once; it stays on the main menu)
+function pilotWarmAsk() {
+  if (store.get('pilot', null) || store.get('warmAsked', false)) return;
+  const el = $('#pilotModal'); el.classList.remove('hide');
+  el.innerHTML = `<div class="fbPanel"><h3>Recommended first: Pilot Warm-up</h3>
+    <input type="hidden" id="pilotNameIn" value="${esc(pilotName())}">
+    <p>About a minute of simple moves. The game measures how fast you flip, roll and spin and how much air you leave between moves, then judges your tricks at <b>your</b> pace instead of a default one. It only ever makes the trick detection more forgiving.</p>
+    <p class="note">You can do it later from the main menu (Pilot Warm-up).</p>
+    <div class="row"><button data-pilot="warm" class="primary">Do the warm-up now</button><button data-pilot="later">Later</button></div></div>`;
+}
+document.addEventListener('change', e => { if (e.target.id === 'optPilotName') { const n = cleanName(e.target.value); if (n.length >= 2) { store.set('pilotName', n); pilotShowName(); } e.target.value = pilotName(); } });
+document.addEventListener('keydown', e => { if (e.target.id === 'pilotNameIn' && e.code === 'Enter') { const b = $('#pilotModal [data-pilot].primary'); if (b) b.click(); } }, true);
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-tel]'); if (t) { telSet(t.dataset.tel === 'yes'); if (tel.on) flashNote('Flight telemetry is on — thank you! (Options to change)'); return; }
+  const pb = e.target.closest('[data-pilot]'); if (pb) { const n = cleanName($('#pilotNameIn').value);
+    if (n.length < 2) { $('#pilotMsg').textContent = 'Pick a name with at least 2 characters.'; $('#pilotNameIn').focus(); return; }
+    store.set('pilotName', n); pilotShowName(); $('#pilotModal').classList.add('hide');
+    if (pb.dataset.pilot === 'warm') { startWarmup(); return; } if (pb.dataset.pilot === 'later') { store.set('warmAsked', true); return; }
+    if (pb.dataset.pilot !== 'go') { telSet(pb.dataset.pilot === 'yes'); if (tel.on) flashNote('Sharing is on — thank you! (Options to change)'); }
+    if (!store.get('fb.name', '')) store.set('fb.name', n); pilotWarmAsk(); return; }
   if (e.target.id === 'telExport') { const items = (await telList()).filter(x => x.body); if (!items.length) { telState.last = 'nothing waiting'; telRenderStatus(); return; }
     const ok = await saveFile(`pro-whooper-telemetry-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify({ format: 'pro-whooper-telemetry-bundle/1', exported: new Date().toISOString(), items: items.map(x => ({ kind: x.kind, name: x.name, at: x.at, payload: JSON.parse(x.body) })) }));
     if (ok === true) { for (const x of items) if (!x.sent) await telStore({ id: x.id, kind: x.kind, name: x.name, at: x.at, sent: 'file', chars: x.body.length }); telState.last = `saved ${items.length} to a file`; } telRenderStatus(); }
@@ -128,5 +161,7 @@ async function telOldFeedback() { const all = store.get('feedback', []); let n =
   for (const p of all) { if (p.queued || !p.text) continue; p.queued = true; n++; await telStore({ id: `feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, kind: 'feedback', name: `${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, at: p.at, body: JSON.stringify({ ...p, queued: undefined }), sent: null }); }
   if (n) store.set('feedback', all); }
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 20000);
-setTimeout(async () => { if (!tel.asked && $('#telAsk')) $('#telAsk').classList.remove('hide'); await telOldFeedback(); telPump(); }, 1500);
+pilotShowName();
+setTimeout(async () => { if (!pilotName()) pilotAsk(); else pilotWarmAsk(); await telOldFeedback(); telPump(); }, 1200);
+window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };

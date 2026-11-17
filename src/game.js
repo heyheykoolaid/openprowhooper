@@ -446,8 +446,28 @@ function initAudio() {
   const ns = actx.createBufferSource(); ns.buffer = buf; ns.loop = true; const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
   noiseG = actx.createGain(); noiseG.gain.value = 0; ns.connect(bp); bp.connect(noiseG); noiseG.connect(master); ns.start();
 }
+// Crash sounds: a dull thud for everyone... except one pilot.
+let audioWasCrashed = false;
+function crashThud() {
+  const t = actx.currentTime, n = Math.floor(actx.sampleRate * 0.22), buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 2;
+  const src = actx.createBufferSource(); src.buffer = buf; const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; const g = actx.createGain(); g.gain.value = 1.4; src.connect(lp); lp.connect(g); g.connect(window._master); src.start(t);
+  const o = actx.createOscillator(), og = actx.createGain(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.16); og.gain.setValueAtTime(0.7, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.connect(og); og.connect(window._master); o.start(t); o.stop(t + 0.22);
+}
+function crashFart() {
+  const t = actx.currentTime, dur = 0.35 + Math.random() * 0.75, f0 = 68 + Math.random() * 55;
+  const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f0 * (0.55 + Math.random() * 0.3), t + dur);
+  if (Math.random() < 0.35) o.frequency.linearRampToValueAtTime(f0 * 1.5, t + dur + 0.08);   // the occasional squeak at the end
+  const wob = actx.createOscillator(), wobG = actx.createGain(); wob.frequency.value = 14 + Math.random() * 16; wobG.gain.value = 9 + Math.random() * 10; wob.connect(wobG); wobG.connect(o.frequency);
+  const flut = actx.createOscillator(), flutG = actx.createGain(); flut.type = 'square'; flut.frequency.value = 24 + Math.random() * 26; flutG.gain.value = 0.45;
+  const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.55, t + 0.03); g.gain.setValueAtTime(0.55, t + dur * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.1);
+  flut.connect(flutG); flutG.connect(g.gain);
+  const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520 + Math.random() * 300; lp.Q.value = 3;
+  const out = actx.createGain(); out.gain.value = 1.6; o.connect(g); g.connect(lp); lp.connect(out); out.connect(window._master);
+  for (const x of [o, wob, flut]) { x.start(t); x.stop(t + dur + 0.15); }
+}
 function updateAudio() {
-  if (!actx) return; const t = actx.currentTime; const blades = S.PARTS.props[spec.prop].blades;
+  if (!actx) return;
+  if (drone.crashed && !audioWasCrashed) { try { isRidgeRipper() ? crashFart() : crashThud(); } catch {} } audioWasCrashed = drone.crashed; const t = actx.currentTime; const blades = S.PARTS.props[spec.prop].blades;
   for (let i = 0; i < 4; i++) { const rpm = drone.motorW[i] * 60 / (2 * Math.PI); osc[i].frequency.setTargetAtTime(Math.max(30, rpm / 60 * blades * 0.5 + i * 3), t, 0.01); gains[i].gain.setTargetAtTime(drone.armed ? 0.02 + 0.06 * Math.min(1, rpm / params.stats.rpmMax) : 0, t, 0.02); }
   noiseG.gain.setTargetAtTime(Math.min(0.25, S.len(drone.vel) * 0.012 + drone.washLevel * 0.15), t, 0.05);
 }
