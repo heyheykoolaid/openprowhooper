@@ -21,6 +21,23 @@ for (const [gap, spd, roll] of [[0.30, 2.2, 90], [0.45, 1.6, 75], [0.18, 2.4, 10
     { T: 0.3, f: t => ({ pos: v3(x + 0.5 * t, 1.9 - 0.12 * T, 16 - spd * (0.75 + T) - spd * t), q: qmul(f, rollQ(roll * D * (1 - t / 0.3))) }) },
     hold(v3(x + 0.6, 1.6, 16 - spd * (1.05 + T)), f, 1.5)]), ['Wall Ride']);
 }
+// 1b. wall rides with a 30 deg camera (pilot feedback): pitched forward to see ahead, roll short of 90, frame well off the
+// wall. And a banked turn away from the wall must NOT count.
+for (const [gap, spd, roll, pf] of [[0.8, 1.8, 60, 35], [1.0, 2.2, 70, 30], [0.6, 1.5, 50, 40]]) {
+  const x = -18.8 + gap, f = faceQ(v3(0, 0, -1)), att = r => qmul(f, qmul(pitchQ(-pf * D * Math.min(1, r * 1.5)), rollQ(roll * D * r))), T = 3.0 / spd;
+  run(`wall ride @30 cam (${gap} m off, roll ${roll}, pitch ${pf})`, at([line(v3(x + 1.2, 1.9, 16), v3(-1.2 / 0.5, 0, -spd), 0.5, f),
+    { T: 0.25, f: t => ({ pos: v3(x, 1.9, 16 - spd * 0.5 - spd * t), q: att(t / 0.25) }) },
+    { T, f: t => ({ pos: v3(x + 0.12 * Math.sin(t * 7), 1.9 - 0.12 * t, 16 - spd * 0.75 - spd * t), q: qmul(att(1), rollQ(8 * D * Math.sin(t * 9))) }) },
+    { T: 0.3, f: t => ({ pos: v3(x + 0.5 * t, 1.9 - 0.12 * T, 16 - spd * (0.75 + T) - spd * t), q: att(1 - t / 0.3) }) },
+    hold(v3(x + 0.6, 1.6, 16 - spd * (1.05 + T)), f, 1.5)]), ['Wall Ride']);
+}
+{ // banked turn away from the wall, starting 0.8 m off it
+  const x0 = -18.0, R = 2.5, w = 2.0 / R, T = 1.6;
+  run('banked turn away from the wall (no ride)', at([line(v3(x0, 1.9, 18), v3(0, 0, -2.0), 0.6, faceQ(v3(0, 0, -1))),
+    { T, f: t => { const a = w * t, pos = v3(x0 + R - R * Math.cos(a), 1.9, 18 - 1.2 - R * Math.sin(a)), dir = v3(Math.sin(a), 0, -Math.cos(a));
+      return { pos, q: qmul(faceQ(dir), rollQ(40 * D * Math.min(1, t * 4))) }; } },
+    hold(v3(x0 + R - R * Math.cos(w * T), 1.9, 18 - 1.2 - R * Math.sin(w * T)), faceQ(v3(1, 0, 0)), 1.0)]), []);
+}
 // 2. inverted yaw spin: roll 180, spin 360 about the WORLD vertical with the body held tilted (30 deg camera: the pilot keeps
 // the view on the horizon), roll 180 out. Also a sloppy one: only ~330 deg of spin.
 for (const [tilt, spin, rate] of [[0, 360, 380], [30, 360, 380], [30, 330, 350], [35, 345, 300]]) {

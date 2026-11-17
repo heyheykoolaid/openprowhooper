@@ -71,8 +71,11 @@
     return (world, r, o = {}) => {
       const scale = range(r, 0.85, 1.2), wob = wobble(r, o.wobble ?? range(r, 0, 35)), drift = mul(norm(v3(range(r, -1, 1), 0, range(r, -1, 1))), range(r, 0, 2.5));
       const parts = []; let q = TILT_Q; const base = TILT_Q; const lead = 0.6;
-      for (const s of steps) {
-        if (s[0] === 'pause') { const T = s[1] * range(r, 0.85, 1.2); parts.push({ T, q0: q, ax: null }); continue; }
+      // o.air: pilots leave some air between the segments of a trick (pilot feedback): hold the attitude for a random
+      // 0..air seconds between rotations (not inside a deliberate pause)
+      const steps2 = []; steps.forEach((s, i) => { if (i && o.air && s[0] !== 'pause' && steps[i - 1][0] !== 'pause') steps2.push(['pause', range(r, 0.1, 1) * o.air, true]); steps2.push(s); });
+      for (const s of steps2) {
+        if (s[0] === 'pause') { const T = s[2] ? s[1] : s[1] * range(r, 0.85, 1.2); parts.push({ T, q0: q, ax: null }); continue; }
         const [ax, deg, rate] = s, T = Math.abs(deg) / (rate * scale), axis = ax === 'P' ? X : ax === 'R' ? ROLL : YAW;
         parts.push({ T, q0: q, ax: axis, deg }); q = qmul(q, qaxis(axis, deg * D));
       }
@@ -185,6 +188,36 @@
       return { T: seq.T, object: F.name, params: { roll: +rollT.toFixed(2), half: +Th.toFixed(2) }, at: t => { const s = seq.at(t); return { pos: s.pos, q: qmul(s.q, wob(t)) }; } };
     };
   }
+  // smooth stick-like rate profile: 0 -> peak -> 0 (peak ≈ 1.6 × average)
+  const ease = x => { x = clamp(x, 0, 1); return x - 0.6 * Math.sin(2 * P * x) / (2 * P); };
+  // Juicy Flick as pilots really fly it: a forward flick with a throttle punch, over/under-rotated a little, the roll often
+  // starting before the flick is done (blend), at anything from demo speed down to the pilot's 300-500°/s
+  function juicyFlick(world, r, o = {}) {
+    const a0 = range(r, 0, 2 * P), h = v3(Math.sin(a0), 0, Math.cos(a0)), face = faceQ(h), v = range(r, 1.5, 4), wob = wobble(r, o.wobble ?? range(r, 0, 25));
+    const pd = range(r, 155, 205), rd = range(r, 160, 200) * (r() < 0.5 ? 1 : -1), rp = range(r, 320, 650), rr = range(r, 320, 650), blend = range(r, 0, o.blend ?? 0.45);
+    const Tp = pd / rp, Tr = Math.abs(rd) / rr, tr0 = Tp * (1 - blend), lead = 0.8, Tm = Math.max(Tp, tr0 + Tr), T = lead + Tm + 1.6, p0 = add(OPEN, mul(h, -v * lead));
+    return { T, object: 'open air', params: { pitch: Math.round(pd), roll: Math.round(rd), blend: +blend.toFixed(2), pitchRate: Math.round(rp), rollRate: Math.round(rr) }, at: t => {
+      const u = t - lead, th = pd * ease(u / Tp), ph = rd * ease((u - tr0) / Tr);
+      const surge = 0.9 * clamp(u / 0.35, 0, 1) * (u > 0 ? 1 : 0), x = v * t + surge * Math.max(0, u) * 0.5;   // punch: speeds up through the flick
+      const pos = add(p0, add(mul(h, x), v3(0, 0.5 * clamp(u / (Tm + 0.2), 0, 1), 0)));
+      return { pos, q: qmul(qmul(face, qmul(pitchQ(-th * D), rollQ(ph * D))), wob(t)) };
+    } };
+  }
+  // Snapback: fly under the object, then straight away pitch back to inverted (a little throttle) and roll 180, ending upright
+  // looking back at it while still drifting the way you came in
+  function snapback(world, r, o = {}) {
+    const F = frame(world, o.object || pick(r, o.objects || ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Tree']), r);
+    const v = range(r, 2.5, 4.5), wob = wobble(r, o.wobble ?? range(r, 0, 25)), face = faceQ(F.h), h = F.h;
+    const y = clamp(F.under - range(r, 0.3, 0.7), 0.35, F.under - 0.15), pass = v3(F.C.x, y, F.C.z), Ta = 1.2;
+    const delay = range(r, 0.02, 0.2), pd = range(r, 170, 195), rd = range(r, 170, 195) * (r() < 0.5 ? 1 : -1), rp = range(r, 350, 650), rr = range(r, 380, 700), blend = range(r, 0, 0.25);
+    const Tp = pd / rp, Tr = Math.abs(rd) / rr, tr0 = Tp * (1 - blend), Tm = delay + Math.max(Tp, tr0 + Tr), k = range(r, 1.6, 2.6), rise = range(r, 0.2, 0.7), T = Ta + Tm + 1.6;
+    return { T, object: F.name, params: { speed: +v.toFixed(1), pitchRate: Math.round(rp), rollRate: Math.round(rr) }, at: t => {
+      if (t < Ta) return { pos: sub(pass, mul(h, v * (Ta - t))), q: qmul(face, wob(t)) };
+      const u = t - Ta, w = u - delay, th = pd * ease(w / Tp), ph = rd * ease((w - tr0) / Tr);
+      const pos = add(pass, add(mul(h, v * (1 - Math.exp(-k * u)) / k), v3(0, rise * clamp(u / Tm, 0, 1), 0)));
+      return { pos, q: qmul(qmul(face, qmul(pitchQ(th * D), rollQ(ph * D))), wob(t)) };
+    } };
+  }
   const pk = (axis, deg, a, b) => r => ({ axis, deg, rate: range(r, a, b) });
   const R1 = r => (r() < 0.5 ? 1 : -1);
   // trick name -> generator. Rates/pauses span the demo envelopes with margin.
@@ -199,7 +232,8 @@
     'Vanny Roll': (w, r, o) => { const y = R1(r); return openAir([['Y', 180 * y, range(r, 280, 450)], ['R', 360 * R1(r), range(r, 600, 900)], ['Y', 180 * y, range(r, 280, 450)]])(w, r, o); },
     "Rubik's Cube": (w, r, o) => { const p = R1(r); return openAir([['P', 180 * p, range(r, 500, 900)], ['R', 360 * R1(r), range(r, 600, 1000)], ['P', 180 * p, range(r, 450, 900)]])(w, r, o); },
     "Cubik's Rube": (w, r, o) => { const s = R1(r); return openAir([['R', 180 * s, range(r, 600, 1000)], ['P', 360 * R1(r), range(r, 500, 900)], ['R', 180 * s, range(r, 450, 900)]])(w, r, o); },
-    'Juicy Flick': (w, r, o) => openAir([['P', -180, range(r, 600, 900)], ['R', 180 * R1(r), range(r, 500, 900)]])(w, r, o),
+    'Juicy Flick': juicyFlick,
+    'Snapback': snapback,
     'Inverted Yaw Spin': (w, r, o) => { const s = R1(r); return openAir([['R', 180 * s, range(r, 600, 900)], ['Y', 360 * R1(r), range(r, 500, 750)], ['R', 180 * s, range(r, 550, 900)]])(w, r, o); },
     'Powerloop': loopTrick(null),
     'Power Flip': loopTrick(pk(X, 360, 600, 900)),
@@ -231,20 +265,52 @@
       const tr = w.objs.find(o => o.name === 'Tree'), c = tr.round.c, h = v3(1, 0, 0), face = faceQ(h), p0 = add(c, v3(-6, 3, 4)), rate = range(r, 700, 1000), T = 360 / rate;
       return { T: 4, object: 'beside a Tree', params: {}, at: t => ({ pos: add(p0, mul(h, 3 * t)), q: qmul(face, t > 0.8 && t < 0.8 + T ? pitchQ(2 * P * (t - 0.8) / T) : ID) }) }; } },
   };
+  // cradle into a trippy round a swing-set leg, passing under the swing bar on the way in: pitch back to inverted, then the
+  // orbit's coordinated roll/yaw. Pilot feedback: this kind of thing was being called a Snapback.
+  CONFUSERS['trippy started under the swing bar'] = { ok: ['Trippy Spin x2', 'Orbit x2', 'Cradle'], make: (w, r) => {
+    const sw = w.objs.find(o => o.name === 'Swing Set'), { a, b, under } = sw.obstacle, leg = v3(a.x, 0, a.z), u = norm(v3(b.x - a.x, 0, b.z - a.z)), n = v3(-u.z, 0, u.x);
+    const R = range(r, 1.3, 1.9), y = Math.min(under - 0.4, 1.6), wv = range(r, 150, 200) * D, laps = range(r, 1.6, 2.2), Tin = 1.0, Tc = range(r, 0.4, 0.6), To = laps * 2 * P / wv;
+    const start = add(add(leg, mul(u, R)), mul(n, -2.5)), entry = add(leg, mul(u, R));
+    return { T: Tin + Tc + To + 1.4, object: 'swing-set leg', params: { laps: +laps.toFixed(1) }, at: t => {
+      if (t < Tin) { const f = t / Tin; return { pos: v3(start.x + (entry.x - start.x) * f, y, start.z + (entry.z - start.z) * f), q: faceQ(n) }; }
+      if (t < Tin + Tc) { const f = (t - Tin) / Tc, pos = add(v3(entry.x, y, entry.z), mul(n, 0.6 * f)); return { pos, q: qmul(faceQ(n), pitchQ(P * ease(f))) }; }   // cradle: pitch back to inverted, looking back at the leg
+      const tt = Math.min(t - Tin - Tc, To), ang = wv * tt, c0 = Math.atan2(u.z, u.x), A = c0 + ang;
+      const pos = v3(leg.x + R * Math.cos(A), y, leg.z + R * Math.sin(A)), toP = norm(v3(leg.x - pos.x, 0, leg.z - pos.z)), tang = v3(-Math.sin(A), 0, Math.cos(A));
+      // inverted, facing along the orbit, leaning the pole into the top of the screen
+      return { pos, q: qmul(faceQ(mul(tang, -1)), qmul(pitchQ(P), rollQ(-0.5 * Math.sign(toP.x * tang.z - toP.z * tang.x)))) };
+    } };
+  } };
+  CONFUSERS['back-flip and roll long after passing under'] = { ok: [], make: (w, r) => {
+    const F = frame(w, 'Monkey Bars', r), h = F.h, face = faceQ(h), y = F.under - 0.4, pass = v3(F.C.x, y, F.C.z), v = 3, Ta = 1.0, gap = range(r, 1.4, 2.0);
+    const rp = range(r, 400, 600), rr = range(r, 400, 600), Tp = 180 / rp, Tr = 180 / rr, rs = r() < 0.5 ? 1 : -1;
+    return { T: Ta + gap + Tp + Tr + 1.5, object: 'away from the Monkey Bars', params: {}, at: t => {
+      const pos = add(pass, add(mul(h, v * Math.min(t - Ta, gap + 0.3) ), v3(0, 0.6 * clamp((t - Ta) / gap, 0, 1), 0))), u = t - Ta - gap;
+      return { pos: t < Ta ? sub(pass, mul(h, v * (Ta - t))) : pos, q: qmul(face, qmul(pitchQ(P * ease(u / Tp)), rollQ(rs * P * ease((u - Tp) / Tr)))) };
+    } };
+  } };
   // fly a scripted maneuver through a fresh detector (500 Hz, body rates from attitude differences) -> detected events
   function detect(m, world, camTilt) {
     const det = new S.TrickDetector(world); if (camTilt != null) det.camTilt = camTilt;
     const d = Object.create(S.Drone.prototype); Object.assign(d, { pos: v3(), vel: v3(), q: ID, w: v3(), armed: true, crashed: false, contactThisStep: false });
     const dt = 0.002; let prev = m.at(0); const got = [];
+    // the sticks a pilot would have needed for this flight (inverse of the default rates; throttle from the thrust the path
+    // needs along the body's up axis), so the Watcher's sticks witness sees the same kind of input as in the game
+    const R = S.defaultTune().rates, inv = (rate, r) => { const a = Math.abs(rate); if (a < 1) return 0; let lo = 0, hi = 1;
+      for (let i = 0; i < 22; i++) { const m = (lo + hi) / 2; if (S.applyRate(m, r, 'ACTUAL') < a) lo = m; else hi = m; } return Math.sign(rate) * hi; };
+    let vPrev = null, acc = v3(), thr = 0.35;
     for (let t = dt; t < m.T; t += dt) {
       const s = m.at(t); let q = s.q; if (q.w * prev.q.w + q.x * prev.q.x + q.y * prev.q.y + q.z * prev.q.z < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
       let r = qmul({ w: prev.q.w, x: -prev.q.x, y: -prev.q.y, z: -prev.q.z }, q); if (r.w < 0) r = { w: -r.w, x: -r.x, y: -r.y, z: -r.z };
       const sn = Math.hypot(r.x, r.y, r.z), ang = 2 * Math.atan2(sn, r.w) / dt;
       d.w = sn < 1e-9 ? v3() : v3(r.x / sn * ang, r.y / sn * ang, r.z / sn * ang);
       d.vel = mul(sub(s.pos, prev.pos), 1 / dt); d.pos = s.pos; d.q = q; prev = { pos: s.pos, q };
-      det.update(d, dt, { thr: 0.5, roll: 0, pitch: 0, yaw: 0 });
-      for (const e of det.drain()) if (e.name !== 'near' && e.name !== 'Crash') got.push({ name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, t });
+      if (vPrev) { const a = mul(sub(d.vel, vPrev), 1 / dt); acc = add(mul(acc, 0.96), mul(a, 0.04)); } vPrev = d.vel;
+      { const up = d.up(), need = (acc.x * up.x + (acc.y + 9.81) * up.y + acc.z * up.z) / 9.81; thr += (Math.max(0, Math.min(1, 0.35 * need)) - thr) * 0.08; }
+      const pr = d.pilotRates();
+      det.update(d, dt, { thr, roll: inv(pr[0], R.roll), pitch: -inv(pr[1], R.pitch), yaw: inv(pr[2], R.yaw) });
+      for (const e of det.drain()) if (e.name !== 'near' && e.name !== 'Crash') got.push({ name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, t, watch: e.watch });
     }
+    Object.defineProperty(got, 'det', { value: det });   // for inspecting the Watcher's reviews
     return got;
   }
   root.Maneuvers = { _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { return LIB[name](world, rng(seed), opts); } finally { TILT_Q = ID; } }, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };

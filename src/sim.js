@@ -763,7 +763,7 @@ const OBSTACLE_TRICKS = [
   { name: '540 Half Matty', pats: ['Ra540 P*~180'], cross: 'U', end: 'back' },
   { name: 'Forani', pats: ['P-180 Ya180i P*180'], cross: 'U', end: 'back' },
   // pilot feedback: far too many false Snapbacks. TPW: pass UNDER first, then pitch back to inverted and roll 180, tracking the object
-  { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U', snap: true },
+  { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U', passFirst: true },   // the Watcher checks the rest (under first, tracking, no loop)
   { name: 'Blindflip', pats: ['Ya180 P+360'], cross: 'OU' },
   // ---- phase 2 (rules from the TPW descriptions; marked draft until confirmed with pilot examples)
   // demo GIF: the loop comes all the way round to level on the start side, hovers ~1.3 s, then Split-S back over and under
@@ -999,7 +999,7 @@ class TrickDetector {
         if (!tr.lateral && part.every(c => c.latDot > 0.7)) continue;            // sideways passes = jump-rope family
         if (need === 'UOU' && this.stayedUpright && this.stayedUpright(part[0].t, part[2].t) && toks.some(x => x.ax === 'P' && x.dir > 0)) continue; // a loop that stayed upright (body or view) is a maverick, not a powerloop
         if (tr.tap && !(this.tapIn && this.tapIn(tr.tap, +id, toks.length ? toks[0].t0 - 0.4 : part[0].t, part[part.length - 1].t + 0.15))) continue;
-        if (tr.snap && !(toks.length && part[0].t <= toks[0].t0 + 0.25 && part[0].t >= toks[0].t0 - 1.0 && this.keptInView(part[0].p, toks[0].t0, toks[toks.length - 1].t1, 0.45))) continue;
+        if (this.watcher && (this.vetoedFor(tr.name, toks.length ? toks[0].t0 : part[0].t) || !this.watcher.pre(tr.name, { toks, part, obj: +id, t0: toks.length ? toks[0].t0 : part[0].t }))) continue;   // the Watcher's hard checks
         // match against big tokens (ignore trailing/leading 90s if needed)
         const variants = [toks, trimNinety(toks), dropSmall(toks)];
         for (const tv of variants) for (const pp of tr.parsed) {
@@ -1121,21 +1121,30 @@ class TrickDetector {
       }
     }
     // Wall ride: travel along a wall, close, rolled so that thrust axis points away from wall
-    const w = this.nearWall(d);
-    // pilot feedback: none registered. Real wall rides glide 0.1-0.6 m off the wall at 1.2-3 m/s with the roll anywhere near 90°
-    if (w && w.dist < 0.6 && dot(up, w.n) > 0.5 && speed > 1.2 && d.armed && !d.crashed) {
-      if (!this.wallRide) this.wallRide = { t0: t, p0: v3(d.pos.x, d.pos.y, d.pos.z), name: w.name, contact: false, fd: 0, n: 0 };
-      if (d.contactThisStep) this.wallRide.contact = true;
-      const f = d.fwd(); this.wallRide.fd += speed > 0.5 ? dot(f, d.vel) / speed : 0; this.wallRide.n++;
-      const WR = this.wallRide;
-      if (!WR.emitted && t - WR.t0 > 0.35 && len(sub(d.pos, WR.p0)) > 1.2) {   // live: scores the moment it qualifies
+    // pilot feedback (x2): with a steep camera you can't get flat against the wall, so the frame doesn't need to be close:
+    // start within ~0.9 m with the belly turned toward the wall (roll ≥ ~35° even when pitched forward), then hold the ride
+    // out to 1.3 m and through short wobbles (0.25 s). Must be travelling along the wall, not turning away from it.
+    const w = this.nearWall(d), WR0 = this.wallRide;
+    const along = w && speed > 0.5 && Math.abs(dot(d.vel, w.n)) / speed < 0.6, tiltW = w ? dot(up, w.n) : 0;
+    const riding = w && along && speed > 1.0 && d.armed && !d.crashed && (WR0 ? (w.dist < 1.3 && tiltW > 0.25) : (w.dist < 0.9 && tiltW > 0.4));
+    if (riding) {
+      if (!this.wallRide) { const f0 = d.fwd(); this.wallRide = { t0: t, p0: v3(d.pos.x, d.pos.y, d.pos.z), n0: w.n, h0: Math.atan2(f0.x, f0.z), name: w.name, contact: false, fd: 0, n: 0 }; }
+      const WR = this.wallRide; WR.lastIn = t;
+      // a banked turn away from the wall isn't a ride: the heading swings round and the quad drifts off the wall
+      { const fh = d.fwd(); let dh = Math.atan2(fh.x, fh.z) - WR.h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        WR.ok = Math.abs(dh) * R2D < 20 && dot(sub(d.pos, WR.p0), WR.n0) < 0.35; }
+      if (d.contactThisStep) WR.contact = true;
+      const f = d.fwd(); WR.fd += speed > 0.5 ? dot(f, d.vel) / speed : 0; WR.n++;
+      if (!WR.emitted && WR.ok && t - WR.t0 > 0.35 && len(sub(d.pos, WR.p0)) > 1.2) {   // live: scores the moment it qualifies
         WR.emitted = true; WR.name2 = WR.fd / Math.max(1, WR.n) < -0.4 ? 'Reverse Wall Ride' : 'Wall Ride';
         this.emit({ name: WR.name2, exec: WR.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: WR.name, continuous: true, live: true });
       }
+    } else if (this.wallRide && !d.crashed && t - this.wallRide.lastIn < 0.25) {
+      // brief wobble off the wall: still the same ride
     } else if (this.wallRide) {
       const L = len(sub(d.pos, this.wallRide.p0));
       const backward = this.wallRide.fd / Math.max(1, this.wallRide.n) < -0.4;
-      if (!this.wallRide.emitted && t - this.wallRide.t0 > 0.35 && L > 1.2 && !d.crashed) this.emit({ name: backward ? 'Reverse Wall Ride' : 'Wall Ride', exec: this.wallRide.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: this.wallRide.name, continuous: true });
+      if (!this.wallRide.emitted && this.wallRide.ok && this.wallRide.lastIn - this.wallRide.t0 > 0.35 && L > 1.2 && !d.crashed) this.emit({ name: backward ? 'Reverse Wall Ride' : 'Wall Ride', exec: this.wallRide.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: this.wallRide.name, continuous: true });
       this.wallRide = null;
     }
     // Dive: from high up (>= 10 m), fast descent, pull out low
@@ -1180,8 +1189,8 @@ class TrickDetector {
       if (!(o.kind === 'wall' || o.kind === 'building' || o.kind === 'fence')) continue;
       for (const pr of o.prims) {
         if (pr.type !== 'box') continue;
-        const r = sphereVs(pr, d.pos, 0.75); if (!r) continue;
-        const dist = 0.75 - r.d; if (Math.abs(r.n.y) > 0.3) continue;
+        const r = sphereVs(pr, d.pos, 1.4); if (!r) continue;
+        const dist = 1.4 - r.d; if (Math.abs(r.n.y) > 0.3) continue;
         if (!best || dist < best.dist) best = { dist, n: r.n, name: o.name };
       }
     }
@@ -1216,6 +1225,10 @@ class TrickDetector {
 const SEG_GAP = 0.18;
 const SLOW_TH = 30, SLOW_MAX = 2.5;   // slow-pitch continuation inside loops near an obstacle
 const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
+// "air" between the segments of a trick (pilot feedback): whoop tricks are built from basic segments, and real pilots
+// leave some space between them (to set up for an object, or just float). Up to AIR_OPEN s between two rotations still
+// makes one trick; a pending smaller trick waits that long (while the quad holds steady) for the next segment.
+const AIR_OPEN = 1.0;
 function rawAt(tok, tt) { const tl = tok.tl; if (!tl || !tl.length) return tt <= tok.t0 ? 0 : tok.raw; if (tt <= tl[0][0]) return 0; if (tt >= tok.t1) return tok.raw;
   let i = 0; while (i < tl.length - 1 && tl[i + 1][0] < tt) i++; const p = tl[i], q = tl[i + 1] || [tok.t1, tok.raw]; return q[0] > p[0] ? p[1] + (q[1] - p[1]) * (tt - p[0]) / (q[0] - p[0]) : p[1]; }
 function clipSpans(spans, a, b) { return spans.map(s => ({ tok: s.tok, a: Math.max(s.a, a), b: Math.min(s.b, b) })).filter(s => s.b - s.a > 0.005); }
@@ -1231,6 +1244,7 @@ class StreamDetector extends TrickDetector {
     super.reset();
     this.cur = [null, null, null]; this.toks = []; this.pend = []; this.crashSeen = false; this.nCross = 0; this.lastD = null;
     this.liveTaps = true; this.camTilt = this.camTilt ?? 20; this.live = null; this.lastTrippy = null;
+    this.watcher = new Watcher(this); this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
     this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
     this.orb = {}; this.passTr = {}; this.vst = {}; this.hst = {}; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
     // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
@@ -1257,7 +1271,7 @@ class StreamDetector extends TrickDetector {
   }
   sense(d, dt, t, rates, up) {
     let ev = false; const f = d.fwd(), vh = Math.hypot(d.vel.x, d.vel.z);
-    if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) { this.fb.push({ t, p: v3(d.pos.x, d.pos.y, d.pos.z), v: v3(d.vel.x, d.vel.y, d.vel.z), up, f }); if (this.fb.length > 900) this.fb.shift(); }
+    if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) { this.fb.push({ t, p: v3(d.pos.x, d.pos.y, d.pos.z), v: v3(d.vel.x, d.vel.y, d.vel.z), up, f, rc: this.lastRc }); if (this.fb.length > 900) this.fb.shift(); }
     // deliberate taps: soft contact with anything but the ground, remembering which side of the quad touched
     if (d.contactThisStep && d.armed && !d.crashed && !d.contactGround && d.contactNormal) {
       const o = this.world.objs[d.contactOwner];
@@ -1444,7 +1458,7 @@ class StreamDetector extends TrickDetector {
     if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
     if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
     if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
-    if (req.track && this.trackFrac(t0, t1) < req.track) return null;
+    if (req.track) { const yk = toks.find(k => k.ax === 'Y'); if (this.trackFrac(yk ? yk.t0 : t0, yk ? yk.t1 : t1) < req.track) return null; }   // the yaw segment itself keeps it centred (not the air around it)
     if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2) && !(toks.length >= 2 && toks[1].t0 - toks[0].t1 >= 0.2)) return null;
     return out;
   }
@@ -1488,7 +1502,7 @@ class StreamDetector extends TrickDetector {
     return out;
   }
   update(d, dt, rc) {
-    this.time += dt; this.lastD = d;
+    this.time += dt; this.lastD = d; this.lastRc = rc ? { thr: rc.thr ?? 0, roll: rc.roll ?? 0, pitch: rc.pitch ?? 0, yaw: rc.yaw ?? 0 } : null;
     const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates);
     this.trackCrossings(d, t);
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
@@ -1529,7 +1543,9 @@ class StreamDetector extends TrickDetector {
     for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
       if (t < p.deadline) continue;
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
-      if (t - p.tDone < HOLD_MAX && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
+      // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
+      const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < AIR_OPEN) ? HOLD_MAX + 1.4 : HOLD_MAX;
+      if (t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
       this.commit(p, t);
@@ -1595,19 +1611,22 @@ class StreamDetector extends TrickDetector {
           const gap = suf[1].t0 - suf[0].t1; if (gap >= SEG_GAP && gap < 1.6 && this.sweptBetween(suf[0].t1, suf[1].t0) / gap < 55) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
         }
         // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
-        const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? 220 : 180));   // demo yaws (Vanny) measured down to ~266°/s
+        // demo yaws (Vanny) measured down to ~266°/s; at the pilot's own rates a yaw inside a sequence can be slower (a lone slow yaw is just a turn)
+        const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
         const orbit = this.orbiting();
-        if (fast && !orbit) for (const tr of OPEN_TRICKS) for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } }
+        const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
+        if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
         if (!orbit) { const ol = this.matchOpenLoop(suf); if (ol) out.push(ol); }
         if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
           const m = matchTokens(pp, suf); if (!m) continue;
           const ok = this.reqOK(tr.req, suf); if (!ok) continue;
+          if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf, obj: ok.obj })) continue;
           out.push({ name: tr.name, toks: suf, err: m.err, clen: 1, claims: ok.claims, tapRef: ok.tapRef, obstacle: ok.obstacle, draft: tr.draft }); break;
         }
       }
       const ob = this.matchObstacle(suf, this.crossWindow(suf[0].t0));
-      if (ob && ob.ct1 >= suf[0].t0 - 0.15) {
-        const def = OBSTACLE_TRICKS.find(x => x.name === ob.name);
+      const def = ob && OBSTACLE_TRICKS.find(x => x.name === ob.name);
+      if (ob && (ob.ct1 >= suf[0].t0 - 0.15 || (def && def.passFirst && ob.ct1 >= suf[0].t0 - 1.0))) {   // passFirst: the pass, some air, then the rotation
         if (def && def.draft) ob.draft = true;
         if (ob.part) ob.claims = ob.part.map(c => 'x' + c.t.toFixed(3));
         if (def && def.tap) { const tp = this.tapIn(def.tap, ob.obj, suf[0].t0 - 0.4, ob.ct1 + 0.15); if (tp) { ob.claims = [tp.id]; ob.tapRef = tp; } }
@@ -1672,11 +1691,26 @@ class StreamDetector extends TrickDetector {
     if (p.t0 > last.t - 0.4 && t - last.t < 2.6) return true;     // Matty family: rotation after going over, the pass back under follows
     return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
   }
+  // in the air between two segments: nothing rotating yet, but the rotations so far are the start of a longer open-air
+  // trick and the quad is holding steady (not tumbling) — give the next segment up to AIR_OPEN to begin
+  // how much air a gap may have: hanging upside down (or on edge) mid-trick means another segment has to come, so more
+  airAllowed(a, b) { const W = this.fbIn(a, b); return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? AIR_OPEN * 1.5 : AIR_OPEN; }
+  awaitingSegment(p) {
+    const t = this.time, gap = t - p.tDone; if (!p.toks.length || p.part || (p.clen || 0) > 0 || gap > this.airAllowed(p.tDone, t)) return false;   // an open-air extension never beats a context/obstacle trick
+    if (gap > 0.15 && this.sweptBetween(p.tDone, t) / gap > 150) return false;
+    const N0 = this.normalized();
+    for (const tr of OPEN_TRICKS) for (const pp of tr.parsed) for (let j = 1; j < pp.length; j++) {
+      const before = N0.slice(-j); if (before.length !== j || !spansOverlap(before.flatMap(x => x.spans), p.spans)) continue;
+      if (before[before.length - 1].t1 < p.tDone - 0.05) continue;
+      if (matchTokens(pp.slice(0, j), before)) return true;
+    }
+    return false;
+  }
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?
     if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
     const pLast = p.toks[p.toks.length - 1]; if (!pLast) return false;
-    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < 0.45);
-    if (!live.length) return false;
+    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < AIR_OPEN);
+    if (!live.length) return this.awaitingSegment(p);
     const near = this.crossWindow(p.t0).some(c => c.kind !== 'G');   // obstacle tricks only once a pass has happened
     const N0 = this.normalized(), pool = near ? [...OPEN_TRICKS, ...OBSTACLE_TRICKS.filter(x => !x.tap)] : OPEN_TRICKS;
     for (const c of live) {
@@ -1693,8 +1727,16 @@ class StreamDetector extends TrickDetector {
     }
     return false;
   }
+  vetoedFor(name, t0) { return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35); }
   commit(p, t) {
     this.pend = this.pend.filter(x => x !== p);
+    const rv = this.watcher.review(p);
+    if (rv.veto) {   // the Watcher says no: remember it, tell the game why, and let the detector find the next-best reading
+      this.vetoes.push({ name: p.name, t0: p.t0, t }); this.vetoes = this.vetoes.filter(v => t - v.t < 8);
+      this.pushReview(rv); this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['watcher: not ' + p.name + ' (' + rv.why + ')'], near: null });
+      if (!this.crashSeen) { this.trigger(t, false); if (p.part) this.trigger(t, true); }
+      return;
+    }
     for (const s of p.spans) s.tok.usedUntil = Math.max(s.tok.usedUntil, s.b);
     for (const k of p.claims || []) this.claimUsed.add(k);
     if ((p.claims || []).some(k => k.startsWith('orb'))) for (const sg of this.orbSegs) if (sg.t1 > p.t0 - 0.3 && sg.t0 < p.tDone + 0.3) this.claimUsed.add(sg.id);
@@ -1713,11 +1755,241 @@ class StreamDetector extends TrickDetector {
     this.pushDebug({ t: +t.toFixed(2), toks: p.toks.map(tk => tk.ax + (tk.dir > 0 ? '+' : '-') + Math.round(tk.raw) + (tk.inv ? 'i' : '') + (tk.maxGap > 0.15 ? `(stall ${tk.maxGap.toFixed(2)}s)` : '')).join(' '),
       cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - p.t0).toFixed(1)}s`).join(' '), result: [p.name], near, latency });
     if (near) this.emit({ name: 'near', near });
-    this.emit({ name: p.name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft });
+    this.pushReview(rv); this.watcher.learn(p, rv);
+    this.emit({ name: p.name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft, watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id) } });
   }
+  pushReview(rv) { this.reviews.push(rv); if (this.reviews.length > 20) this.reviews.shift(); }
+  drainReviews() { const r = this.reviews; this.reviews = []; return r; }
   pushDebug(x) { (this.debug = this.debug || []).push(x); if (this.debug.length > 12) this.debug.shift(); }
   provisional() { return this.pend.map(p => p.name); }
   busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted); }
+}
+
+// ================================================================= THE WATCHER (second, live judge)
+// The detector proposes a trick from the rotation pattern and the obstacle passes. The Watcher cross-checks the proposal
+// against the other live sources of the same moment, each one an independent witness:
+//   path    where the quad went relative to the object (sim truth: passes, loops, rise, travel direction)
+//   view    what the FPV camera saw (object kept in view, inverted, looking at the sky / ground), camera tilt included
+//   sticks  what the pilot actually commanded (deliberate stick on the rotating axis, throttle punches and cuts)
+//   timing  how long each phase took compared with the prowhooper.com demo GIFs, scaled to this pilot's own speed
+// and against each trick's TPW library description (the hard checks: things the trick cannot do without).
+// A hard check that fails vetoes the call (the detector then takes its next-best reading). Otherwise every source that has
+// something to say votes; the votes are averaged per source (one source, one vote) into a confidence. Two candidates that
+// tie on the rotation pattern are settled by that confidence, and a call that most witnesses contradict is dropped.
+// Video Review never runs it (no world, no sticks): det.watcherOn = false.
+//
+// demo timing (seconds per phase, measured from the GIFs: docs/tricktionary-reference.md) and the demo pilot's rates
+const DEMO_TIMING = {
+  'Flip': [['P', 0.4]], 'Double Flip': [['P', 0.85]], 'Roll': [['R', 0.36]], 'Double Roll': [['R', 0.8]], 'Yaw Spin': [['Y', 1.0]],
+  'Invert Rewind': [['*', 0.3], ['*', 0.3]], 'Vanny Roll': [['Y', 0.56], ['R', 0.5], ['Y', 0.64]],
+  "Rubik's Cube": [['P', 0.3], ['R', 0.53], ['P', 0.4]], "Cubik's Rube": [['R', 0.26], ['P', 0.7], ['R', 0.42]],
+  'Juicy Flick': [['P', 0.27], ['R', 0.34]], 'Snapback': [['P', 0.3], ['R', 0.37]],
+  'Inverted Yaw Spin': [['R', 0.26], ['Y', 0.56], ['R', 0.3]], 'Half Matty': [['R', 0.25], ['P', 0.6]], '540 Half Matty': [['R', 0.6], ['P', 0.6]],
+  'Immelmann Turn': [['P', 0.6], ['R', 0.4]],
+};
+const DEMO_RATE = { R: 950, P: 850, Y: 600 };   // typical demo rotation speed per axis (°/s), same source
+const WATCH_GENERIC = [
+  { id: 'landed', src: 'path', label: 'landed upright', fn: W => W.endsUpright() },
+  { id: 'sticks', src: 'sticks', label: 'rotation came from the sticks (not a bump)', fn: W => W.commanded() },
+  { id: 'timing', src: 'timing', label: 'timed like the demo (at your speed)', fn: W => W.demoTiming() },
+  { id: 'air', src: 'path', label: 'held steady in the air between segments', fn: W => W.heldBetween() },
+];
+const WATCH = {
+  'Snapback': [
+    { id: 'under', src: 'path', label: 'passed under the object first, upright and flying forward', hard: 'pre', fn: W => W.underFirst() },
+    { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
+    { id: 'orbit2', src: 'path', label: 'not part of an orbit/trippy', hard: 'post', fn: W => W.notOrbit() },
+    { id: 'noloop', src: 'path', label: 'snapped back right there (no half loop up and over)', hard: 'post', fn: W => W.noLoopOver(1.6) },
+    { id: 'track', src: 'view', label: 'kept the object in view', hard: 'post', fn: W => W.tracked(0.35) },
+    { id: 'sky', src: 'view', label: 'looked up past the object', fn: W => W.looked('up') },
+    { id: 'face', src: 'view', label: 'finished looking back at it', fn: W => W.endsFacing() },
+    { id: 'quick', src: 'timing', label: 'quick pitch back to inverted', fn: W => W.quick('P', 0.7) },
+    { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() },
+  ],
+  'Juicy Flick': [
+    { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
+    { id: 'down', src: 'view', label: 'flicked nose-down through the ground view', fn: W => W.looked('down') },
+    { id: 'inv', src: 'view', label: 'reached inverted', fn: W => W.inverted() },
+    { id: 'quick', src: 'timing', label: 'quick flick', fn: W => W.quick('P', 0.75) },
+    { id: 'punch', src: 'sticks', label: 'throttle on through the flick', fn: W => W.throttle('punch', W.t0 - 0.15, W.t0 + 0.4) },
+    { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() },
+    { id: 'back', src: 'path', label: 'carried on flying backward', fn: W => W.endsBackward() },
+  ],
+  'Matty Flip': [
+    { id: 'track', src: 'view', label: 'kept the object in view on the way down', fn: W => W.trackedBetween('O', 'U', 0.4) },
+    { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
+    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
+    { id: 'cut', src: 'sticks', label: 'throttle cut over the top', fn: W => W.throttle('cut', W.t0 - 0.4, W.t1) },
+  ],
+  'Beginner Matty': [
+    { id: 'noflip', src: 'path', label: 'no flip, just the backward swing', fn: W => ({ ok: !W.toks.some(k => k.ax === 'P' && k.raw > 150) }) },
+    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
+    { id: 'track', src: 'view', label: 'kept the object in view', fn: W => W.tracked(0.4) },
+  ],
+  'Half Matty': [
+    { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
+    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
+  ],
+  'Matty Stall Rewind': [
+    { id: 'seg', src: 'path', label: 'segmented front flip (stall in the middle)', fn: W => ({ ok: W.toks.some(k => (k.maxGap || 0) >= 0.2) || (W.toks.length >= 2 && W.toks[1].t0 - W.toks[0].t1 >= 0.2) }) },
+    { id: 'back', src: 'path', label: 'rewound backward past the object', fn: W => W.endsBackward() },
+    { id: 'cut', src: 'sticks', label: 'throttle cut before the stall', fn: W => W.throttle('cut', W.t0 - 0.5, W.t1) },
+  ],
+  'Split-S': [
+    { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
+    { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() },
+  ],
+  '540 Split S': [
+    { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
+    { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() },
+  ],
+  'Powerloop': [
+    { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
+    { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
+    { id: 'punch', src: 'sticks', label: 'throttle up the side', fn: W => W.throttle('punch', W.t0 - 0.5, W.t1) },
+  ],
+  'Immelmann Turn': [
+    { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
+    { id: 'roll', src: 'sticks', label: 'clean 180 roll at the peak', fn: W => W.cleanRoll() },
+  ],
+  'Maverick Loop': [
+    { id: 'uptop', src: 'view', label: 'upright and looking forward over the top', fn: W => W.uprightAt('O') },
+    { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
+  ],
+  'Jump Rope': [
+    { id: 'side', src: 'path', label: 'sideways over/under the object', fn: W => ({ ok: (W.part || []).every(c => c.latDot > 0.6), val: Math.round(Math.min(...(W.part || [{ latDot: 0 }]).map(c => c.latDot)) * 100) + '%' }) },
+  ],
+  'Inverted Yaw Spin': [
+    { id: 'inv', src: 'view', label: 'stayed inverted through the spin', fn: W => W.invertedDuring('Y', 0.7) },
+  ],
+};
+class Watcher {
+  constructor(det) { this.det = det; this.style = { R: null, P: null, Y: null }; }
+  get on() { return this.det.watcherOn !== false; }
+  ctx(name, c) {
+    const det = this.det, toks = c.toks || [], part = c.part || null;
+    const t0 = c.t0 ?? (toks.length ? toks[0].t0 : part ? part[0].t : det.time);
+    const t1 = c.tDone ?? Math.max(toks.length ? toks[toks.length - 1].t1 : -1e9, part ? part[part.length - 1].t : -1e9, t0);
+    const objId = c.obj ?? (part && part.length ? part[0].obj : null);
+    return new WatchCtx(det, this, name, toks, part, t0, t1, objId, c.err);
+  }
+  pre(name, c) {
+    if (!this.on) return true;
+    const L = WATCH[name]; if (!L) return true;
+    const W = this.ctx(name, c);
+    for (const k of L) if (k.hard === 'pre') { const r = k.fn(W); if (!r.ok) return false; }
+    return true;
+  }
+  judge(p, hardOnly) {
+    const W = this.ctx(p.name, p), L = [...(WATCH[p.name] || []), ...(p.toks && p.toks.length ? WATCH_GENERIC : [])];
+    const checks = [];
+    for (const k of L) { if (hardOnly && !k.hard) continue; let r; try { r = k.fn(W); } catch (e) { r = null; }
+      if (!r || r.na) continue;   // this witness has nothing to say here (no sticks recorded, no object, no demo timing)
+      checks.push({ id: k.id, src: k.src, label: k.label, ok: !!r.ok, val: r.val, hard: !!k.hard, w: r.w ?? 1 }); }
+    const fail = checks.find(k => k.hard && !k.ok);
+    const by = {}; for (const k of checks) if (!k.hard) { const b = by[k.src] || (by[k.src] = { n: 0, ok: 0 }); b.n += k.w; b.ok += k.ok ? k.w : 0; }
+    if (p.toks && p.toks.length && p.err != null) by.rotation = { n: 1, ok: clamp(1 - p.err * 2, 0, 1) };   // the pattern matcher is a witness too
+    const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]);
+    const conf = votes.length ? votes.reduce((a, v) => a + v[1], 0) / votes.length : 1;
+    return { name: p.name, veto: !!fail || (votes.length >= 3 && conf < 0.3), why: fail ? fail.label : (votes.length >= 3 && conf < 0.3 ? 'most witnesses disagree' : null),
+      checks, votes: Object.fromEntries(votes.map(([k, v]) => [k, +v.toFixed(2)])), conf: +conf.toFixed(2), t0: +W.t0.toFixed(3), t1: +W.t1.toFixed(3) };
+  }
+  review(p) { if (!this.on) return { name: p.name, veto: false, checks: [], votes: {}, conf: 1 }; return this.judge(p, false); }
+  // this pilot's own rotation speed per axis, learned live from tricks every witness agreed on (feeds the timing witness)
+  learn(p, rv) {
+    if (!this.on || rv.conf < 0.6) return;
+    for (const k of p.toks || []) { const dur = k.t1 - k.t0; if (dur < 0.08 || k.raw < 150) continue; const r = k.raw / dur, o = this.style[k.ax];
+      this.style[k.ax] = o == null ? r : o * 0.85 + r * 0.15; }
+  }
+  speedFactor(ax) { const r = this.style[ax] ?? this.det.pilotRate?.[ax] ?? null; return r ? clamp(DEMO_RATE[ax] / r, 0.6, 3) : 1.4; }
+}
+class WatchCtx {
+  constructor(det, wa, name, toks, part, t0, t1, objId, err) { Object.assign(this, { det, wa, name, toks, part, t0, t1, objId, err }); }
+  get obj() { if (this._o === undefined) this._o = this.objId != null ? this.det.world.objs.find(o => o.id === this.objId) || null : null; return this._o; }
+  // the point of the object the pilot is looking at from position p (bar/branch line at mid height; tree canopy centre)
+  objPt(p) {
+    const o = this.obj; if (!o || !o.obstacle) return null;
+    const { a, b, under, over } = o.obstacle, y = (under + over) / 2;
+    if (o.round) return v3(o.round.c.x, y, o.round.c.z);
+    const ab = v3(b.x - a.x, 0, b.z - a.z), L2 = ab.x * ab.x + ab.z * ab.z || 1, f = clamp(((p.x - a.x) * ab.x + (p.z - a.z) * ab.z) / L2, 0, 1);
+    return v3(a.x + ab.x * f, y, a.z + ab.z * f);
+  }
+  fr(a, b) { return this.det.fbIn(a, b); }
+  view(x) { const pt = this.objPt(x.p); return pt ? this.det.viewOf(x.p, x.up, x.f, pt).ang : 180; }
+  cam(x) { const c = Math.cos(this.det.camTilt * D2R), s = Math.sin(this.det.camTilt * D2R); return norm(add(mul(x.f, c), mul(x.up, s))); }
+  cross(kind) { return (this.part || []).find(c => c.kind === kind) || this.det.crossLog.find(c => c.kind === kind && (this.objId == null || c.obj === this.objId) && c.t >= this.t0 - 1.2 && c.t <= this.t1 + 0.6) || null; }
+  // ---- checks: each returns { ok, val }
+  underFirst() {
+    const c = this.part && this.part[0]; if (!c || c.kind !== 'U') return { ok: false, val: 'no pass under' };
+    const okT = c.t <= this.t0 + 0.25 && c.t >= this.t0 - 1.0;
+    return { ok: okT && c.upY > 0.5 && c.fwdDot > 0.2, val: `${(c.t - this.t0).toFixed(2)} s, fwd ${c.fwdDot.toFixed(1)}` };
+  }
+  notOrbit() {
+    const d = this.det, a = this.t0 - 0.4, b = this.t1 + 0.4;
+    // flying straight past a pole sweeps < 180° round it (≈160° inside the orbit radius), so only more than that is an orbit
+    const seg = d.orbSegs.some(s => s.t1 > a && s.t0 < b && s.acc > 200) || Object.values(d.orb).some(o => o && o.acc > 200 && o.t1 > a);
+    return { ok: !seg };
+  }
+  noLoopOver(maxRise) {
+    const over = this.det.crossLog.some(c => c.kind === 'O' && c.obj === this.objId && c.t > this.t0 - 0.1 && c.t < this.t1 + 0.6);
+    const ys = this.fr(this.t0, this.t1).map(x => x.p.y), rise = ys.length ? Math.max(...ys) - ys[0] : 0;
+    return { ok: !over && rise < maxRise, val: over ? 'went over it' : `rose ${rise.toFixed(1)} m` };
+  }
+  tracked(frac) { const F = this.fr(this.t0, this.t1); if (!F.length || this.objId == null) return { ok: this.objId == null, val: 'n/a' };
+    const f = F.filter(x => this.view(x) < 70).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
+  trackedBetween(k1, k2, frac) { const a = this.cross(k1), b = this.cross(k2); if (!a || !b || b.t <= a.t) return { ok: true, val: 'n/a' };
+    const F = this.fr(a.t, b.t); if (!F.length) return { ok: true, val: 'n/a' }; const f = F.filter(x => this.view(x) < 70).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
+  facingAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; const F = this.fr(c.t - 0.35, c.t - 0.05);
+    const ok = F.some(x => this.view(x) < 75); return { ok }; }
+  quick(ax, maxT) { const T = this.toks.filter(k => k.ax === ax).reduce((s, k) => s + (k.t1 - k.t0), 0); return { ok: T > 0 && T <= maxT, val: T.toFixed(2) + ' s' }; }
+  looked(dir) { const F = this.fr(this.t0, this.t1); const ok = F.some(x => { const c = this.cam(x); return dir === 'up' ? c.y > 0.55 : c.y < -0.55; }); return { ok }; }
+  inverted() { return { ok: this.fr(this.t0, this.t1 + 0.1).some(x => x.up.y < -0.4) }; }
+  invertedAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; return { ok: c.upY < -0.2, val: 'up ' + c.upY.toFixed(2) }; }
+  invertedNear(kind, a, b) { const c = this.cross(kind); if (!c) return { na: true }; return { ok: this.fr(c.t + a, c.t + b).some(x => x.up.y < -0.3) }; }
+  uprightAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; return { ok: c.upY > 0.3, val: 'up ' + c.upY.toFixed(2) }; }
+  invertedDuring(ax, frac) { const k = this.toks.find(x => x.ax === ax); if (!k) return { ok: true, val: 'n/a' }; const F = this.fr(k.t0, k.t1); if (!F.length) return { ok: true };
+    const f = F.filter(x => x.up.y < -0.2).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
+  cleanRoll() { const R = this.toks.filter(k => k.ax === 'R'); if (!R.length) return { ok: false, val: 'no roll' };
+    const k = R[R.length - 1], rate = k.rateSum / k.n, off = k.off / Math.max(1, k.raw); return { ok: rate >= 220 && off < 0.8, val: `${Math.round(rate)}°/s` }; }
+  endsUpright() { return { ok: this.fr(this.t1, this.t1 + 0.6).some(x => x.up.y > 0.5) }; }
+  endsFacing() { if (this.objId == null) return { ok: true, val: 'n/a' }; return { ok: this.fr(this.t1 - 0.05, this.t1 + 0.4).some(x => this.view(x) < 75) }; }
+  endsBackward() { const F = this.fr(this.t1 - 0.1, this.t1 + 0.5).filter(x => Math.hypot(x.v.x, x.v.z) > 0.7); if (!F.length) return { ok: true, val: 'slow' };
+    const b = F.filter(x => (x.v.x * x.f.x + x.v.z * x.f.z) / (Math.hypot(x.v.x, x.v.z) * (Math.hypot(x.f.x, x.f.z) || 1)) < -0.2).length / F.length; return { ok: b >= 0.5, val: Math.round(b * 100) + '%' }; }
+  heldBetween() {   // the space between two segments: the quad keeps the attitude the last segment left it in
+    const G = []; for (let i = 1; i < this.toks.length; i++) { const a = this.toks[i - 1].t1, b = this.toks[i].t0; if (b - a > 0.12) G.push([a, b]); }
+    if (!G.length) return { na: true };
+    const worst = Math.max(...G.map(([a, b]) => this.det.sweptBetween(a, b) / (b - a)));
+    return { ok: worst < 120, val: G.map(([a, b]) => (b - a).toFixed(2)).join('/') + ' s air' };
+  }
+  loopSweep(min) { const ps = this.det.pathSweep(this.t0 - 0.3, this.t1 + 0.3); return { ok: Math.abs(ps.sweep) >= min, val: Math.round(Math.abs(ps.sweep)) + '°' }; }
+  // ---- sticks witness. Frames carry the pilot's sticks; no stick movement anywhere near = nothing recorded (n/a)
+  sticks(a, b) { const F = this.fr(a, b).filter(x => x.rc); if (F.length < 3) return null;
+    const live = F.some(x => Math.abs(x.rc.roll) > 0.05 || Math.abs(x.rc.pitch) > 0.05 || Math.abs(x.rc.yaw) > 0.05) && Math.max(...F.map(x => x.rc.thr)) - Math.min(...F.map(x => x.rc.thr)) > 0.005;
+    return live ? F : null; }
+  commanded() {
+    if (!this.toks.length) return { na: true }; const F = this.sticks(this.t0 - 0.1, this.t1); if (!F) return { na: true };
+    const key = { R: 'roll', P: 'pitch', Y: 'yaw' }; let good = 0;
+    for (const k of this.toks) { const G = F.filter(x => x.t >= k.t0 && x.t <= k.t1); if (!G.length) { good++; continue; }
+      // stick on that axis, pushed the way the quad turned (pitch stick back = nose up = P+; roll right = R+; yaw stick sign is the sim's)
+      const sg = k.ax === 'P' ? -1 : 1, f = G.filter(x => Math.abs(x.rc[key[k.ax]]) > 0.2 && Math.sign(x.rc[key[k.ax]]) * sg === k.dir).length / G.length;
+      if (f >= 0.3) good++; }
+    return { ok: good === this.toks.length, val: `${good}/${this.toks.length} rotations` };
+  }
+  throttle(kind, a, b) { const F = this.sticks(a - 0.6, b + 0.2); if (!F) return { na: true };
+    const base = F.filter(x => x.t < a).map(x => x.rc.thr), hov = base.length ? base.reduce((s, x) => s + x, 0) / base.length : 0.35, G = F.filter(x => x.t >= a && x.t <= b);
+    if (!G.length) return { na: true };
+    if (kind === 'punch') { const m = Math.max(...G.map(x => x.rc.thr)); return { ok: m > hov + 0.08 || m > 0.55, val: Math.round(m * 100) + '%' }; }
+    const m = Math.min(...G.map(x => x.rc.thr)); return { ok: m < Math.min(0.2, hov - 0.1), val: Math.round(m * 100) + '%' }; }
+  // ---- timing witness: phase lengths vs the demo GIFs, scaled to this pilot's speed on each axis (learned live)
+  demoTiming() {
+    const D = DEMO_TIMING[this.name]; if (!D || !this.toks.length) return { na: true };
+    const T = this.toks.filter(k => k.raw >= 100); if (T.length < D.length) return { na: true };
+    let ok = 0; const vals = [];
+    for (let i = 0; i < D.length; i++) { const [ax, sec] = D[i], k = T[i]; if (ax !== '*' && k.ax !== ax) return { na: true };
+      const want = sec * this.wa.speedFactor(k.ax), dur = k.t1 - k.t0; vals.push(dur.toFixed(2)); if (dur >= want * 0.3 && dur <= want * 2.6) ok++; }
+    return { ok: ok === D.length, val: vals.join('/') + ' s' };
+  }
+  dove() { const c = this.cross('O'), u = this.cross('U'); if (!c || !u) return { ok: true, val: 'n/a' }; return { ok: this.fr(c.t, u.t).some(x => x.v.y < -1.0) }; }
 }
 
 function better(c, b) {
