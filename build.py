@@ -25,6 +25,8 @@ drop = next((x.split('=', 1)[1] for x in sys.argv[1:] if x.startswith('--dropoff
 if drop is None and (root / 'dropoff.txt').exists():
     drop = (root / 'dropoff.txt').read_text().strip()
 drop = drop if drop and drop.startswith('https://') else ''
+(root / 'dist').mkdir(exist_ok=True)
+(root / 'dist' / 'dropoff-check.html').write_text((root / 'tools' / 'dropoff-check.html').read_text().replace('/*DROPOFF*/""', json.dumps(drop)))
 t = t.replace('<script>/*DROPOFF_URL*/</script>', '<script>window.PW_DROPOFF=' + json.dumps(drop) + ';</script>')
 tracks = [{'title': 'Ghostrider', 'artist': 'awesometexture2251', 'src': 'music/ghostrider.mp3', 'art': 'music/ghostrider.jpg', 'theme': True}]
 # the pilot's graffiti pieces (assets/graffiti/*.webp), embedded as data URLs in both builds

@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Drop-off check</title>
+<style>body{font:16px system-ui;margin:40px;max-width:640px}button{font-size:18px;padding:8px 16px}pre{background:#eee;padding:12px;white-space:pre-wrap}</style>
+<h1>Drop-off check</h1>
+<p>Sends one small test comment to the project's drop-off relay and shows exactly what it answered. For the project owner, to check the relay after setting it up or changing it.</p>
+<p>Relay: <code id="url"></code></p>
+<button id="go">Send a test</button>
+<pre id="out">not sent yet</pre>
+<script>
+const URL_ = /*DROPOFF*/"";
+document.getElementById('url').textContent = URL_ || '(none built in)';
+document.getElementById('go').onclick = async () => {
+  const out = document.getElementById('out'); out.textContent = 'sending…';
+  try {
+    const r = await fetch(URL_, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: 'feedback', name: 'check', payload: { format: 'pro-whooper-feedback/1', at: new Date().toISOString(), build: '0.1', category: 'Relay check', text: 'Test upload from the drop-off check page.', name: 'relay check' } }) });
+    out.textContent = 'RESULT status ' + r.status + ' — ' + (await r.text());
+  } catch (e) { out.textContent = 'RESULT could not reach the relay: ' + e.message; }
+};
+</script>
