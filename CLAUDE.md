@@ -80,6 +80,8 @@ Tricks are built from segments; pilots leave air between them. `AIR_OPEN` (1.0 s
 allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad holds steady. `stress.js --air=0.6`.
 
 ## RaceGOW racing (src/race.js, src/editor.js)
+**Switched off in the interface for now** (pilot's request): `RACEGOW_ON = false` in menus.js hides the Tools & labs
+button and keeps the menu closed; the code, tracks and test/race.js stay. Set it to true (and unhide `data-act="race"`) to bring it back.
 Pure rules/geometry in race.js (tested by test/race.js); the editor and race HUD in editor.js (same module as game.js,
 concatenated by build.py). Tracks: `pro-whooper-track/1`; race results/ghosts: `pro-whooper-race/1` (`races/…`).
 A RaceGOW track is usually ONE connected PVC structure whose openings are the gates, flown many times from different

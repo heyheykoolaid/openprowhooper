@@ -450,7 +450,7 @@ window.__pw.warm = { start: () => startWarmup(), get state() { return warm; }, t
 // A small tab that is always there. Pick a category, write a comment; the game adds where you were and your setup (never
 // the GitHub token). It uploads to feedback/ in the repo when uploads are on; otherwise save it as a file, copy it, or
 // open a GitHub issue with it filled in.
-const FB_CATS = ['Flight feel / physics', 'Trick detection', 'Scoring / combos', 'RaceGOW track builder', 'Racing', 'Video Review', 'Blackbox (Lab / Replay)', 'Controls / radio', 'Map / graphics', 'Menus / UI', 'Bug', 'Idea', 'Other'];
+const FB_CATS = ['Flight feel / physics', 'Trick detection', 'Scoring / combos', 'Video Review', 'Blackbox (Lab / Replay)', 'Controls / radio', 'Map / graphics', 'Menus / UI', 'Bug', 'Idea', 'Other'];
 const fbGuess = () => mode === 'editor' ? 'RaceGOW track builder' : race.on ? 'Racing' : mode === 'review' ? 'Video Review' : mode === 'bbreplay' ? 'Blackbox (Lab / Replay)' : mode === 'recap' || mode === 'judge' ? 'Trick detection' : mode === 'fly' || mode === 'paused' ? 'Flight feel / physics' : 'Other';
 function fbOpen() {
   if (mode === 'fly') pause();

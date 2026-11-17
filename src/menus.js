@@ -1,3 +1,6 @@
+// RaceGOW (track builder and racing) is switched off in the interface for now, at the pilot's request: its button in
+// Tools & labs is hidden and its menu will not open. The code, tracks and tests stay; set this to true to bring it back.
+const RACEGOW_ON = false;
 // physics feel sliders (Garage → Advanced): [tune key, name, what it does]
 const FEEL = [['weightFeel', 'Weight', 'Lighter accelerates and stops quicker and floats more; heavier carries more momentum and drops harder'],
   ['dragFeel', 'Air drag', 'More slows the whoop down sooner and it coasts less; less lets it carry speed'],
@@ -54,7 +57,7 @@ document.addEventListener('click', e => {
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
   if (a === 'map') openMaps(); if (a === 'tools') { show('#toolsScreen'); $('#deskBtn').classList.toggle('hide', !ghMenus()); }
-  if (a === 'race') openRaceMenu();
+  if (a === 'race' && RACEGOW_ON) openRaceMenu();
 });
 
 // ---------------- garage
