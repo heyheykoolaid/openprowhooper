@@ -83,4 +83,47 @@ for (const ang of [35, 55]) {
     line(v3(c.x, botY, c.z), mul(h, -3), 1.6, qmul(face, qmul(R1, pitchQ(P)))), hold(add(v3(c.x, botY, c.z), mul(h, -4.8)), qmul(face, qmul(R1, pitchQ(P))), 1.2)]), ['Split-S']);
   void F; void base;
 }
+
+// 6. trippies round the 9 m flagpole (0, -14.5): wider radius, higher up, looking up the pole
+const FP = v3(0, 0, -14.5);
+function flagTrippy(R, y, pitchDeg, rate) { const w = rate * D, T = 2.1 * 2 * P / w;
+  return { T: T + 1.5, at: t => { const a = Math.min(t, T) * w, pos = v3(FP.x + R * Math.cos(a), y, FP.z + R * Math.sin(a)), toP = v3(-Math.cos(a), 0, -Math.sin(a));
+    return { pos, q: qmul(faceQ(toP), qmul(rollQ(P), pitchQ(-pitchDeg * D))) }; } }; }
+run('flagpole trippy (r 2.0 m, 3 m up, 150/s)', flagTrippy(2.0, 3, 45, 150), ['Trippy Spin x2']);
+run('flagpole trippy (r 3.5 m, 5 m up, 110/s)', flagTrippy(3.5, 5, 50, 110), ['Trippy Spin x2']);
+run('flagpole trippy (r 5.0 m, 6 m up, 80/s)', flagTrippy(5.0, 6, 55, 80), ['Trippy Spin x2']);
+run('flagpole trippy (r 1.5 m, 8 m up, 200/s)', flagTrippy(1.5, 8, 30, 200), ['Trippy Spin x2']);
+// 7. half matty at the pilot's rates: toward the swing bar, roll ~160-180 (optionally a short stall), then the second half
+// of a Matty (pitch ~150-200, the end floaty), passing under the bar flying backward
+function halfMatty(rollDeg, stall, pitchDeg, slowTail) {
+  // approach in front of the bar (never over it), roll inverted, then swoop down and under it: the path keeps going
+  // forward while the second half of a Matty swings the nose round, so it passes under flying backward
+  const h = v3(0, 0, -1), face = faceQ(h), y0 = 3.0, y1 = 1.25, z0 = -2.6, L = 4.4, rT = rollDeg / 330, inv = qmul(face, rollQ(rollDeg * D));
+  const fast = pitchDeg - slowTail, T1 = fast / 300, T2 = slowTail / 70, Tt = Math.max(1.1, T1 + T2);
+  const ang = t => t < T1 ? fast * t / T1 : Math.min(pitchDeg, fast + slowTail * (t - T1) / Math.max(T2, 1e-3));
+  const sc = u => v3(0, y0 - (y0 - y1) * (0.5 - 0.5 * Math.cos(P * Math.min(1, u * 1.35))), z0 - L * u);
+  return at([line(v3(0, y0, z0 + 3.0), v3(0, 0, -2.6), 0.75, face),
+    { T: rT, f: t => ({ pos: v3(0, y0, z0 + 3.0 - 1.95 - 1.05 * t / rT), q: qmul(face, rollQ(rollDeg * D * t / rT)) }) },
+    hold(v3(0, y0, z0), inv, stall),
+    { T: Tt, f: t => ({ pos: sc(t / Tt), q: qmul(inv, pitchQ(ang(t) * D)) }) },
+    line(sc(1), v3(0, 0, -2.5), 1.2, qmul(inv, pitchQ(pitchDeg * D))), hold(add(sc(1), v3(0, 0, -3)), qmul(inv, pitchQ(pitchDeg * D)), 1.4)]);
+}
+run('half matty (roll 180, pitch 180)', halfMatty(180, 0.01, 180, 0), ['Half Matty']);
+run('half matty (roll 160, 0.5 s stall, pitch 170)', halfMatty(160, 0.5, 170, 0), ['Half Matty']);
+run('half matty (roll 170, pitch 200 floaty end)', halfMatty(170, 0.2, 200, 60), ['Half Matty']);
+run('half matty (roll 150, pitch 140 floaty end)', halfMatty(150, 0.3, 140, 50), ['Half Matty']);
+// 8. open-air loops (no object): a powerloop is a backflip whose path loops round; a Matty ends flying backward
+function openLoop(dir, R, rate, ends) {
+  const C = v3(-2, 5.5, 8), h = v3(0, 0, -1), face = faceQ(h), at_ = th => add(C, add(mul(h, R * Math.sin(th)), v3(0, -R * Math.cos(th), 0)));
+  const T = 360 / rate;
+  if (dir > 0) return at([line(add(at_(0), mul(h, -3)), mul(h, 3), 1.0, face), { T, f: t => ({ pos: at_(2 * P * t / T), q: qmul(face, pitchQ(2 * P * t / T)) }) }, line(at_(2 * P), mul(h, 3), 1.6, face)]);
+  // open-air Matty: forward and up, front flip, fall back and fly backward (path forward -> down -> backward)
+  const m = ph => add(C, add(mul(h, -R * Math.sin(ph)), v3(0, -R * Math.cos(ph), 0)));
+  return at([line(add(m(P), mul(h, -3)), mul(h, 3), 1.0, face), { T, f: t => ({ pos: m(P + P * t / T), q: qmul(face, pitchQ(-2 * P * t / T)) }) },
+    line(m(2 * P), mul(h, -3), 1.0, qmul(face, pitchQ(-2 * P))), hold(add(m(2 * P), mul(h, -3)), face, 1.4)]);
+}
+run('open-air powerloop (r 1.5 m, 300/s)', openLoop(1, 1.5, 300), ['Powerloop']);
+run('open-air powerloop (r 2.2 m, 250/s)', openLoop(1, 2.2, 250), ['Powerloop']);
+run('open-air matty (r 1.4 m, 280/s)', openLoop(-1, 1.4, 280), ['Matty Flip']);
+run('flip in place is still a flip', at([hold(v3(-2, 5.5, 8), H.ID, 0.6), { T: 360 / 500, f: t => ({ pos: v3(-2, 5.5, 8), q: pitchQ(2 * P * t / (360 / 500)) }) }, hold(v3(-2, 5.5, 8), H.ID, 1.6)]), ['Flip']);
 console.log(`\n${pass}/${total} pilot-feedback flights`);

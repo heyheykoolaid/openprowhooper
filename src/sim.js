@@ -88,9 +88,10 @@ function defaultTune() {
   return {
     ratesType: 'ACTUAL',
     rates: { // ACTUAL: center (deg/s), max (deg/s), expo (0-1). BETAFLIGHT: rcRate, superRate, expo
-      roll:  { center: 200, max: 900, expo: 0.40, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
-      pitch: { center: 200, max: 900, expo: 0.40, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
-      yaw:   { center: 180, max: 700, expo: 0.30, rcRate: 1.0, superRate: 0.65, rcExpo: 0.0 },
+      // pilot's request: 150 centre, 680 max, 0.5 expo on all three
+      roll:  { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
+      pitch: { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
+      yaw:   { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.65, rcExpo: 0.0 },
     },
     pid: {
       roll:  { p: 60, i: 80, d: 42, f: 120 },
@@ -757,10 +758,12 @@ const OBSTACLE_TRICKS = [
   { name: '540 Split S', pats: ['Ra540 P+180'], cross: 'OU', end: 'fwd' },
   { name: 'Split-Back', pats: ['Ra180 P+~540'], cross: 'OU', end: 'fwd' },
   { name: 'Split Yaw', pats: ['Ra180 P+~90 Yb180', 'Ra180 Yb180 P+~90'], cross: 'OU', end: 'back' },
-  { name: 'Half Matty', pats: ['Ra180 P*180'], cross: 'U', end: 'back' },
-  { name: '540 Half Matty', pats: ['Ra540 P*180'], cross: 'U', end: 'back' },
+  // pilot feedback: needs to be detected better. The second half of a Matty is anything from ~100 to ~250 of pitch, the end often floaty
+  { name: 'Half Matty', pats: ['Ra180 P*~180'], cross: 'U', end: 'back' },
+  { name: '540 Half Matty', pats: ['Ra540 P*~180'], cross: 'U', end: 'back' },
   { name: 'Forani', pats: ['P-180 Ya180i P*180'], cross: 'U', end: 'back' },
-  { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U' },
+  // pilot feedback: far too many false Snapbacks. TPW: pass UNDER first, then pitch back to inverted and roll 180, tracking the object
+  { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U', snap: true },
   { name: 'Blindflip', pats: ['Ya180 P+360'], cross: 'OU' },
   // ---- phase 2 (rules from the TPW descriptions; marked draft until confirmed with pilot examples)
   // demo GIF: the loop comes all the way round to level on the start side, hovers ~1.3 s, then Split-S back over and under
@@ -789,7 +792,8 @@ const OPEN_TRICKS = [
   { name: 'Vanny Roll', pats: ['Ya180 R*360 Ya180'] },
   { name: 'Double Flip', pats: ['P*720'] },
   { name: 'Double Roll', pats: ['R*720'] },
-  { name: 'Juicy Flick', pats: ['P-180 R*180'] },
+  // pilot: needs better detection. The roll often blends into the end of the flick (the roll splits the pitch token)
+  { name: 'Juicy Flick', pats: ['P-180 R*180', 'P-~135 R*180 P-~45'] },
   { name: 'Invert Rewind', pats: ['Ra180 R-a180', 'Pa180 P-a180'] },
   { name: 'Flip', pats: ['P*360'] },
   { name: 'Roll', pats: ['R*360'] },
@@ -807,7 +811,8 @@ const CONTEXT_TRICKS = [
   // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
   { name: 'Flip Stall Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
   { name: '360 Stall Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
-  { name: 'Matty Stall Rewind', pats: ['P-~360'], req: { stallIn: true, endBack: true }, draft: true },
+  // TPW: a SEGMENTED front flip at the stall beside an object. A continuous Matty (pilot: Mattys were read as this) is a Matty.
+  { name: 'Matty Stall Rewind', pats: ['P-~360'], req: { stallIn: true, endBack: true, segmented: true, nearTall: true }, draft: true },
   { name: 'Half Matty Stall Rewind', pats: ['Y*~180 Ra180 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
   { name: '540 Half Matty Stall Rewind', pats: ['Y*~180 Ra540 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
   { name: 'Inverted Yaw Tracking', pats: ['Ra180 Y-a~180i Ra180', 'Ra180 Y-a~360i Ra180', 'Ra180 Y-a~270i Ra180'], req: { track: 0.7 }, draft: true },
@@ -874,7 +879,7 @@ class TrickDetector {
             const fwdDot = (fh > 0.2 && vh > 0.8) ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;
             const rr = d.right(), rh = Math.hypot(rr.x, rr.z);
             const latDot = (rh > 0.2 && vh > 0.8) ? Math.abs(rr.x * d.vel.x + rr.z * d.vel.z) / (rh * vh) : 0; // 1 = flying sideways
-            this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, upY: d.up().y, spd: vh });
+            this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
           }
         }
       }
@@ -994,6 +999,7 @@ class TrickDetector {
         if (!tr.lateral && part.every(c => c.latDot > 0.7)) continue;            // sideways passes = jump-rope family
         if (need === 'UOU' && this.stayedUpright && this.stayedUpright(part[0].t, part[2].t) && toks.some(x => x.ax === 'P' && x.dir > 0)) continue; // a loop that stayed upright (body or view) is a maverick, not a powerloop
         if (tr.tap && !(this.tapIn && this.tapIn(tr.tap, +id, toks.length ? toks[0].t0 - 0.4 : part[0].t, part[part.length - 1].t + 0.15))) continue;
+        if (tr.snap && !(toks.length && part[0].t <= toks[0].t0 + 0.25 && part[0].t >= toks[0].t0 - 1.0 && this.keptInView(part[0].p, toks[0].t0, toks[toks.length - 1].t1, 0.45))) continue;
         // match against big tokens (ignore trailing/leading 90s if needed)
         const variants = [toks, trimNinety(toks), dropSmall(toks)];
         for (const tv of variants) for (const pp of tr.parsed) {
@@ -1290,7 +1296,8 @@ class StreamDetector extends TrickDetector {
       else { if (dist < pt.dmin) { pt.dmin = dist; pt.tc = t; }
         if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = dist; this.newEv.push('pass'); ev = true; } }
       let ob = this.orb[P.id]; const ang = Math.atan2(dz, dx);
-      if (dist < 0.25 || dist > 4.5 || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
+      const rMax = Math.max(4.5, Math.min(7, 2 + (P.y1 - P.y0) * 0.5));   // tall poles (flagpole, trees) get wider trippies
+      if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
       if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0 }; continue; }
       let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
       if (Math.abs(da) / dt < 25 * D2R) { ob.still += dt; if (ob.still > 0.6 && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
@@ -1368,6 +1375,39 @@ class StreamDetector extends TrickDetector {
     const px = w.x - h * g.x, pz = w.z - h * g.z;
     return [-pz * R2D, px * R2D, -h * Math.sign(g.y) * R2D];
   }
+  // Angle swept by the direction of travel in the vertical plane of the move (degrees, + = up/over the top the way a
+  // powerloop goes). A real loop's path turns ~360 with the pitch; a flip in place barely moves; a Matty's path turns
+  // ~180 the other way (forward, down, then backward).
+  pathSweep(a, b) {
+    const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.y, x.v.z) > 0.6); if (W.length < 6) return { sweep: 0, speed: 0, rise: 0 };
+    const v0 = W[0].v, hl = Math.hypot(v0.x, v0.z) || 1, hx = v0.x / hl, hz = v0.z / hl;
+    let prev = null, acc = 0, sp = 0;
+    for (const x of W) { const g = Math.atan2(x.v.y, x.v.x * hx + x.v.z * hz); if (prev != null) { let d = g - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; acc += d; } prev = g; sp += Math.hypot(x.v.x, x.v.y, x.v.z); }
+    const ys = W.map(x => x.p.y); return { sweep: acc * R2D, speed: sp / W.length, rise: Math.max(...ys) - Math.min(...ys) };
+  }
+  // Loops and Mattys flown in open air (pilot request): the powerloop family when the path loops round with the pitch,
+  // the Matty family when the path goes forward -> down -> backward and the quad ends flying backward.
+  matchOpenLoop(toks) {
+    if (!toks.length || !toks.some(k => k.ax === 'P' && k.raw >= 250)) return null;
+    const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1;
+    if (this.crossLog.some(c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3)) return null;   // passed an obstacle (not just high above one): the obstacle version decides
+    const ps = this.pathSweep(t0 - 0.25, t1 + 0.25);
+    if (ps.speed < 1.6 || ps.rise < 0.8) return null;
+    let best = null;
+    for (const tr of OBSTACLE_TRICKS) {
+      const loopFam = tr.cross === 'UOU' && !tr.tap && !/Mav|Donkey|Half Mavvy|Power Swap|Power Switch|Barani|Rollani|Flipani/.test(tr.name);
+      const mattyFam = tr.cross === 'OU' && tr.end === 'back';
+      if (!loopFam && !mattyFam) continue;
+      if (loopFam && !(ps.sweep >= 270)) continue;
+      if (mattyFam && !(ps.sweep <= -120 && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
+      for (const pp of tr.parsed) { const m = matchTokens(pp, toks); if (!m) continue;
+        const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
+        if (!best || better(cand, best)) best = cand; }
+    }
+    return best;
+  }
+  keptInView(pt, a, b, frac) { if (!pt) return true; const W = this.fbIn(a, b); if (!W.length) return false;
+    return W.filter(x => this.viewOf(x.p, x.up, x.f, pt).ang < 75).length / W.length >= frac; }
   orbiting() { return Object.values(this.orb).some(o => o && o.acc > 150); }
   tapIn(spec, obj, a, b) {
     return this.taps.find(x => !this.claimUsed.has(x.id) && x.t >= a && x.t <= b && (obj == null || x.obj === obj) &&
@@ -1405,6 +1445,7 @@ class StreamDetector extends TrickDetector {
     if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
     if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
     if (req.track && this.trackFrac(t0, t1) < req.track) return null;
+    if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2) && !(toks.length >= 2 && toks[1].t0 - toks[0].t1 >= 0.2)) return null;
     return out;
   }
   reqPre(req, toks) {  // could this situation still complete? (used to hold a simpler trick a little longer)
@@ -1413,6 +1454,7 @@ class StreamDetector extends TrickDetector {
       if (!((w && w.dist < 0.7) || ceil)) return false; }
     if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return false;
     if (req.stallIn && !(this.vst.climb || this.stalls.some(x => x.tApex >= t0 - 0.45))) return false;
+    if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2)) return false;   // a continuous flip can't become a segmented one
     if (req.rewindIn && !(this.hst.slowT != null || this.rewinds.some(x => x.t1 >= t0 - 0.3))) return false;
     if (req.endBack && Math.hypot(d.vel.x, d.vel.z) > 2.5 && this.backFrac(this.time - 0.2, this.time) < 0.2) return false;
     if (req.track && !this.poles.some(P => Math.hypot(d.pos.x - P.x, d.pos.z - P.z) < 6)) return false;
@@ -1556,6 +1598,7 @@ class StreamDetector extends TrickDetector {
         const fast = suf.every(x => x.rateSum / x.n >= (x.ax === 'Y' ? 220 : 180));   // demo yaws (Vanny) measured down to ~266°/s
         const orbit = this.orbiting();
         if (fast && !orbit) for (const tr of OPEN_TRICKS) for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } }
+        if (!orbit) { const ol = this.matchOpenLoop(suf); if (ol) out.push(ol); }
         if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
           const m = matchTokens(pp, suf); if (!m) continue;
           const ok = this.reqOK(tr.req, suf); if (!ok) continue;

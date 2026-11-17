@@ -221,7 +221,7 @@
   };
   // near-miss flights: only the listed reading (or nothing) is acceptable
   const CONFUSERS = {
-    'loop beside the object (no pass under)': { ok: ['Flip'], make: (w, r, o) => {
+    'loop beside the object (no pass under)': { ok: ['Flip', 'Powerloop@open air'], make: (w, r, o) => {
       const m = loopTrick(null)(w, r, { ...o, object: 'Swing Set' }); const off = v3(0, 0, 0); void off;
       const side = v3(7.5, 0, 0); return { ...m, object: 'beside the Swing Set', at: t => { const s = m.at(t); return { pos: add(s.pos, side), q: s.q }; } }; } },
     'flip while passing over the bar': { ok: ['Flip'], make: (w, r) => {

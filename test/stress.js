@@ -34,7 +34,7 @@ const conf = [];
 for (const [label, c] of Object.entries(M.CONFUSERS)) {
   if (ONLY && !label.includes(ONLY)) continue;
   let bad = 0, runs = 0; const seen = {};
-  for (let i = 0; i < N; i++) { const m = M.withTilt(TILT, () => c.make(world, M.rng(++seed))); const names = fly(m).map(e => e.name); runs++; const k = names.join(' + ') || 'nothing'; seen[k] = (seen[k] || 0) + 1; if (names.some(n => !c.ok.includes(n))) bad++; }
+  for (let i = 0; i < N; i++) { const m = M.withTilt(TILT, () => c.make(world, M.rng(++seed))); const evs = fly(m), names = evs.map(e => e.name); runs++; const k = names.join(' + ') || 'nothing'; seen[k] = (seen[k] || 0) + 1; if (evs.some(e => !c.ok.includes(e.name) && !c.ok.includes(e.name + '@' + e.obstacle))) bad++; /* an open-air Powerloop beside the swing set is fine; crediting the swing set isn't */ }
   conf.push({ label, runs, fooled: bad, seen });
 }
 rows.sort((a, b) => a.exact / a.runs - b.exact / b.runs);
@@ -46,7 +46,7 @@ for (const r of rows) {
   for (const [k, v] of Object.entries(r.other)) console.log(`      ${v}× read as: ${k}`);
   for (const f of r.fails.slice(0, 2)) console.log(`      e.g. seed ${f.seed} on ${f.object} ${JSON.stringify(f.params)} -> ${f.got}`);
 }
-console.log('\nNear-miss flights (only the plain open-air reading, or nothing, is acceptable):');
+console.log('\nNear-miss flights (only the open-air reading, or nothing, is acceptable — never the object):');
 for (const c of conf) console.log(`${c.fooled ? '✗' : '✓'} ${c.label.padEnd(40)} fooled ${c.fooled}/${c.runs}   saw: ${Object.entries(c.seen).map(([k, v]) => `${k}×${v}`).join(', ')}`);
 const tot = rows.reduce((s, r) => s + r.exact, 0), all = rows.reduce((s, r) => s + r.runs, 0), fooled = conf.reduce((s, c) => s + c.fooled, 0);
 console.log(`\nOverall: ${tot}/${all} exact (${pct(tot, all).trim()}), near-misses fooled ${fooled}/${conf.reduce((s, c) => s + c.runs, 0)}`);

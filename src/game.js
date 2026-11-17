@@ -7,6 +7,11 @@ const store = { get(k, d) { try { const v = localStorage.getItem('pw.' + k); ret
 // ============================================================ state
 let spec = store.get('spec', { ...S.PRESETS['Air65 Racing'] });
 let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
+// rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
+(() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
+  if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];
+    if (r && r.center === o[0] && r.max === o[1] && Math.abs(r.expo - o[2]) < 1e-6) Object.assign(r, { center: d[ax].center, max: d[ax].max, expo: d[ax].expo }); }
+  tune.ratesV2 = true; store.set('tune', tune); })();
 const world = S.buildPlayground();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
