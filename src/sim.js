@@ -1311,9 +1311,10 @@ class StreamDetector extends TrickDetector {
       const at = P.point(d.pos.y), dx = d.pos.x - at.x, dz = d.pos.z - at.z, dist = Math.hypot(dx, dz);
       const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
       const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
-      if (dist > 6 || !inY) pt.dmin = 99;
+      if (dist > 6 || !inY) { pt.dmin = 99; pt.lock = false; pt.far = 0; }
+      else if (pt.lock) { pt.far = Math.max(pt.far || 0, dist); if (dist < pt.far - 0.3) { pt.lock = false; pt.far = 0; pt.dmin = dist; pt.tc = t; } }   // one pass per approach: wait until it heads back in
       else { if (dist < pt.dmin) { pt.dmin = dist; pt.tc = t; }
-        if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = dist; this.newEv.push('pass'); ev = true; } }
+        if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = 99; pt.lock = true; pt.far = dist; this.newEv.push('pass'); ev = true; } }
       let ob = this.orb[P.id]; const ang = Math.atan2(dz, dx);
       const rMax = Math.max(4.5, Math.min(7, 2 + (P.y1 - P.y0) * 0.5));   // tall poles (flagpole, trees) get wider trippies
       if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
@@ -1427,6 +1428,13 @@ class StreamDetector extends TrickDetector {
   }
   keptInView(pt, a, b, frac) { if (!pt) return true; const W = this.fbIn(a, b); if (!W.length) return false;
     return W.filter(x => this.viewOf(x.p, x.up, x.f, pt).ang < 75).length / W.length >= frac; }
+  // fraction of frames with some part of the pole (from 1.5 m below you to 3 m above, within its length) near the middle of the picture
+  poleView(P, a, b, ang) { const W = this.fbIn(a, b); if (!W.length || !P) return 0;
+    return W.filter(x => [-1.5, -0.75, 0, 0.75, 1.5, 3].some(dy => { const y = x.p.y + dy; if (y < P.y0 - 0.2 || y > P.y1 + 0.2) return false; return this.viewOf(x.p, x.up, x.f, P.point(y)).ang < ang; })).length / W.length; }
+  headingTurn(a, b) { const W = this.fbIn(a, b); if (W.length < 2) return 0; const hd = x => { const v = Math.abs(x.up.y) > 0.3 ? x.f : x.up; return Math.atan2(v.x * Math.sign(x.up.y || 1), v.z * Math.sign(x.up.y || 1)); };
+    const h0 = hd(W[0]), h1 = hd(W[W.length - 1]); let d = Math.abs(h1 - h0) * R2D; if (d > 180) d = 360 - d; return d; }
+  maxTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => Math.acos(clamp(x.up.y, -1, 1)) * R2D)) : 0; }
+  maxSideTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => { const r = cross(x.f, x.up); return Math.asin(clamp(Math.abs(r.y), 0, 1)) * R2D; })) : 0; }
   orbiting() { return Object.values(this.orb).some(o => o && o.acc > 150); }
   tapIn(spec, obj, a, b) {
     return this.taps.find(x => !this.claimUsed.has(x.id) && x.t >= a && x.t <= b && (obj == null || x.obj === obj) &&
@@ -1487,23 +1495,34 @@ class StreamDetector extends TrickDetector {
       mk({ name: 'Wall Tap', clen: 0.5, draft: false, t0: tp.t, tDone: tp.t, claims: [tp.id], tapRef: tp, obstacle: tp.name, holdIfSpin: true });
     for (const fc of this.faces) if (!this.claimUsed.has(fc.id)) mk({ name: 'Facepunch', clen: 0.5, t0: fc.t, tDone: fc.t, claims: [fc.id], tapRef: fc, obstacle: 'the pilot', draft: false });
     if (fresh.includes('pass')) for (const ps of this.passes.filter(x => x.t === t && !this.claimUsed.has(x.id))) {
-      const P = this.poles.find(p => p.id === ps.obj), W = this.fbIn(ps.tc - 0.3, t);
-      const vf = W.length ? W.filter(x => this.viewOf(x.p, x.up, x.f, P.point(x.p.y)).ang < 60).length / W.length : 0;
-      const toks = this.toksIn(ps.tc - 1.5, t);
-      const pPlus = toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 60), pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 45);
-      const rAny = toks.some(x => x.ax === 'R' && x.raw >= 60), bigR = toks.some(x => x.ax === 'R' && x.raw >= 150), back = this.backFrac(t - 0.35, t) > 0.6;
-      if (vf >= 0.7 && rAny && pMinus) {
+      const P = this.poles.find(p => p.id === ps.obj);
+      // pilot feedback: pole tricks were hard to get. Passing close beside a pole puts the bit at your own height out at the
+      // side of the picture, but you're still looking at the pole (above/below you): any part of it in view counts. And a
+      // whip round the pole often reads as a heading swing (yaw) rather than roll, with a 30° camera.
+      const vf = this.poleView(P, ps.tc - 0.3, t, 60);
+      // heading from before the move began to now (this whip's own rotations; a slow cradle's can start up to 3 s back)
+      const toks = this.toksIn(ps.tc - 1.5, t), turn = this.headingTurn(Math.min(ps.tc - 0.8, ...toks.map(k => k.t0 - 0.2)), t), tilt = this.maxTilt(ps.tc - 0.8, t);
+      const turnC = this.headingTurn(Math.min(ps.tc - 0.8, ...this.toksIn(ps.tc - 3.0, t).map(k => k.t0 - 0.2)), t);
+      const pPlus = this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 60), pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 45);   // a slow cradle's pitch back can start well before the pass back
+      const rAny = toks.some(x => x.ax === 'R' && x.raw >= 60) || (turn >= 100 && tilt >= 50), bigR = toks.some(x => x.ax === 'R' && x.raw >= 150), back = this.backFrac(t - 0.35, t) > 0.6;
+      // an over/under pass in the same moment belongs to an obstacle trick (Split-S, loops, Mattys), not a pole trick
+      const obst = this.crossLog.some(c => c.kind === 'O' && c.t > ps.tc - 3.5 && c.t < t + 0.1);   // (passing under a canopy or bar is fine)
+      const bumped = this.contacts.some(c => c.t > ps.tc - 1.2 && c.t < t + 0.05);   // knocked round by hitting something isn't a whip
+      const pBack = toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 120) || this.cur.some(c => c && c.ax === 'P' && c.dir > 0 && c.raw >= 90);   // a big pitch back (even one still going: a loop) is a snap/cradle/loop, not a whip
+      if (!obst && !pBack && !bumped && (vf >= 0.7 || (vf >= 0.55 && turn >= 100)) && rAny && (pMinus || turn >= 120)) {
         const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
         if (prev) mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
         else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj });
-      } else if (vf >= 0.7 && pPlus && pMinus && !bigR && back) mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] });
+      } else if (!obst && vf >= 0.4 && pPlus && pMinus && !bigR && back && turnC < 60) mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] });
     }
     if (fresh.includes('rewind')) { const rw = this.rewinds[this.rewinds.length - 1];
       if (rw && !this.claimUsed.has(rw.id)) { const P = this.poles.find(p => Math.hypot(rw.p.x - p.x, rw.p.z - p.z) < 3);
-        if (P) { const W = this.fbIn(rw.t0 - 1.2, rw.t1), vf = W.length ? W.filter(x => this.viewOf(x.p, x.up, x.f, P.point(x.p.y)).ang < 60).length / W.length : 0;
-          const toks = this.toksIn(rw.t0 - 1.5, rw.t1 + 0.2);
-          const passed = this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > rw.t0 - 1.5 && c.t < rw.t1 + 0.1);   // Split-S etc. turn back too
-          if (!passed && vf >= 0.6 && toks.some(x => x.ax === 'R' && x.raw >= 60)) mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] }); } } }
+        if (P) { const vf = this.poleView(P, rw.t0 - 1.2, rw.t1, 60);
+          const toks = this.toksIn(rw.t0 - 1.5, rw.t1 + 0.2), side = this.maxSideTilt(rw.t0 - 1.2, rw.t1);
+          const passed = this.crossLog.some(c => (c.kind === 'O' || (c.kind === 'U' && c.upY < 0.3)) && c.t > rw.t0 - 1.5 && c.t < rw.t1 + 0.1);   // Split-S etc. turn back too (upright under a tree canopy is fine)
+          // flown flat: past it and back the way you came (a climb-and-fall-back is a stall rewind), with a quarter roll, not a full one
+          const climbed = this.fbIn(rw.t0 - 2.5, rw.t1).some(x => x.v.y > 1.2), fullRoll = toks.some(x => x.ax === 'R' && x.raw >= 250);
+          if (!passed && !climbed && !fullRoll && vf >= 0.45 && (toks.some(x => x.ax === 'R' && x.raw >= 60) || side >= 55)) mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] }); } } }
     return out;
   }
   update(d, dt, rc) {
@@ -1553,6 +1572,7 @@ class StreamDetector extends TrickDetector {
       if (t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
+      if (p.name === 'Whiplash' && t - p.tDone < 3.5 && this.lastD && !this.lastD.crashed && (() => { const P = this.poles.find(q => q.id === p.poleObj); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })()) continue;   // the second whip of a Pole Dance may follow
       this.commit(p, t);
     }
     this.toks = this.toks.filter(k => t - k.t1 < 6);
@@ -1667,7 +1687,9 @@ class StreamDetector extends TrickDetector {
     const spin = best.holdIfSpin && (this.cur.some(c => c && c.raw > 45) || this.toks.some(k => t - k.t1 < 0.3 && k.raw > 60));
     const pole = best.holdNearPole != null && this.lastD && (() => { const P = this.poles.find(p => p.id === best.holdNearPole); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })();
     const sw = best.holdSwitch && (() => { const o = this.orb[best.holdSwitch.obj]; return o && o.acc > 20 && o.dir !== best.holdSwitch.dir; })();
-    best.hold = (this.obstaclePrefix(best) || ctxPre || spin || pole || sw) ? HOLD_OBST : HOLD;
+    // right beside a pole with the pass not finished yet: a pole trick (Cradle, Whiplash) may claim these rotations
+    const passing = !best.clen && best.toks.length && this.lastD && this.poles.some(P => { const pt = this.passTr[P.id]; return pt && !pt.lock && pt.dmin < 2.5 && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 2.6; });
+    best.hold = (this.obstaclePrefix(best) || ctxPre || spin || pole || sw || passing) ? HOLD_OBST : HOLD;
     best.deadline = t + best.hold;
     this.pend.push(best);
   }
@@ -1861,6 +1883,13 @@ const WATCH = {
     { id: 'uptop', src: 'view', label: 'upright and looking forward over the top', fn: W => W.uprightAt('O') },
     { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
   ],
+  'Whiplash': [
+    { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
+    { id: 'track', src: 'view', label: 'kept the pole in view', fn: W => ({ ok: true }) },
+  ],
+  'Cradle': [
+    { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
+  ],
   'Jump Rope': [
     { id: 'side', src: 'path', label: 'sideways over/under the object', fn: W => ({ ok: (W.part || []).every(c => c.latDot > 0.6), val: Math.round(Math.min(...(W.part || [{ latDot: 0 }]).map(c => c.latDot)) * 100) + '%' }) },
   ],
@@ -1932,7 +1961,7 @@ class WatchCtx {
   notOrbit() {
     const d = this.det, a = this.t0 - 0.4, b = this.t1 + 0.4;
     // flying straight past a pole sweeps < 180° round it (≈160° inside the orbit radius), so only more than that is an orbit
-    const seg = d.orbSegs.some(s => s.t1 > a && s.t0 < b && s.acc > 200) || Object.values(d.orb).some(o => o && o.acc > 200 && o.t1 > a);
+    const seg = d.orbSegs.some(s => s.t1 > a && s.t0 < b && s.acc > 300) || Object.values(d.orb).some(o => o && o.acc > 300 && o.t1 > a);
     return { ok: !seg };
   }
   noLoopOver(maxRise) {
@@ -1966,6 +1995,7 @@ class WatchCtx {
     const worst = Math.max(...G.map(([a, b]) => this.det.sweptBetween(a, b) / (b - a)));
     return { ok: worst < 120, val: G.map(([a, b]) => (b - a).toFixed(2)).join('/') + ' s air' };
   }
+  noOverNear(after) { const o = this.det.crossLog.some(c => c.kind === 'O' && c.t > this.t0 - 0.5 && c.t < this.t1 + after); return { ok: !o }; }
   loopSweep(min) { const ps = this.det.pathSweep(this.t0 - 0.3, this.t1 + 0.3); return { ok: Math.abs(ps.sweep) >= min, val: Math.round(Math.abs(ps.sweep)) + '°' }; }
   // ---- sticks witness. Frames carry the pilot's sticks; no stick movement anywhere near = nothing recorded (n/a)
   sticks(a, b) { const F = this.fr(a, b).filter(x => x.rc); if (F.length < 3) return null;

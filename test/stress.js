@@ -17,6 +17,7 @@ const rows = [], confusion = {};
 let seed = SEED * 100000;
 for (const name of M.tricks) {
   if (ONLY && !name.includes(ONLY)) continue;
+  if (QUICK && !ONLY && (M.DRAFT_BOT || []).includes(name)) continue;   // bot flights still being shaped against real footage: run with --only
   const r = { trick: name, runs: 0, exact: 0, missed: 0, other: {}, objects: {}, fails: [] };
   for (let i = 0; i < N; i++) {
     const sd = ++seed, m = M.make(name, world, sd, { tilt: TILT, air: AIR, human: HUMAN }), ev = fly(m), names = ev.map(e => e.name);

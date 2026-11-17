@@ -218,6 +218,72 @@
       return { pos, q: qmul(qmul(face, qmul(pitchQ(th * D), rollQ(ph * D))), wob(t)) };
     } };
   }
+  // ---- pole dancing (TPW descriptions; flown at the pilot's speeds: 150-400°/s, smooth stick, keeping the pole in view)
+  function poleOf(world, name, r) {
+    const cands = [];
+    for (const o of world.objs) { if (o.name !== name) continue;
+      if (o.kind === 'pilot') { const c = o.prims.find(p => p.type === 'sphere').c; cands.push({ x: c.x, z: c.z, y1: 1.8, name }); continue; }
+      for (const p of o.prims) { if (p.type !== 'capsule' || p.r > 0.25 || p.r < 0.012) continue; const L = Math.hypot(p.b.x - p.a.x, p.b.y - p.a.y, p.b.z - p.a.z); if (L < 1.2 || Math.abs(p.b.y - p.a.y) / L < 0.8) continue;
+        cands.push({ x: (p.a.x + p.b.x) / 2, z: (p.a.z + p.b.z) / 2, y1: Math.max(p.a.y, p.b.y), name }); } }
+    return cands.length ? pick(r, cands) : null;
+  }
+  const POLES = ['Lamp Post', 'Flagpole', 'Tree', 'Pilot'];
+  // a pass beside the pole along heading h at lateral offset; returns the geometry helpers
+  function poleSetup(world, r, o) {
+    const P = poleOf(world, o.object || pick(r, POLES), r); const a = range(r, 0, 2 * P_), h = v3(Math.sin(a), 0, Math.cos(a)), side = r() < 0.5 ? 1 : -1;
+    const lat = v3(h.z * side, 0, -h.x * side), d = (o.close ? range(r, 0.35, 0.75) : range(r, 0.6, 1.2)) * (P.name === 'Pilot' ? 1.1 : 1), y = P.name === 'Pilot' ? range(r, 1.0, 1.4) : range(r, 1.1, Math.min(2.2, P.y1 - 0.5));
+    const C = v3(P.x + lat.x * d, y, P.z + lat.z * d);   // closest point of the pass
+    return { P, h, side, lat, d, y, C, v: range(r, 2.0, 3.4) };
+  }
+  const P_ = Math.PI;
+  // Cradle: pass the pole, pitch back to keep it in view (up and over), the momentum swings you back, pitch forward to
+  // level out and fly backward past it, looking at it the whole way
+  function cradle(world, r, o = {}) {
+    const g = poleSetup(world, r, { ...o, close: true }), face = faceQ(g.h), wob = wobble(r, o.wobble ?? range(r, 0, 15));
+    const Ta = 1.4, pb = range(r, 120, 175), Tp = pb / range(r, 160, 320), Th = range(r, 0.15, 0.4), Tf = pb / range(r, 160, 320), back = range(r, 1.6, 2.4);
+    const x = t => t < Ta ? -g.v * (Ta - t) : (() => { const u = t - Ta, T = Tp + Th + Tf, k = Math.min(u, T) / T; const out = g.v * T * 0.35 * Math.sin(Math.PI * k); return u <= T ? out : -back * (u - T); })();
+    const ang = t => { const u = t - Ta; if (u < 0) return 0; if (u < Tp) return pb * ease(u / Tp); if (u < Tp + Th) return pb; return pb * (1 - ease((u - Tp - Th) / Tf)); };
+    const T = Ta + Tp + Th + Tf + 1.6;
+    return { T, object: g.P.name, params: { pitch: Math.round(pb), offset: +g.d.toFixed(2) }, at: t => ({ pos: add(g.C, mul(g.h, x(t))), q: qmul(qmul(face, pitchQ(ang(t) * D)), wob(t)) }) };
+  }
+  // Whiplash: pass the pole and whip round it — roll toward it while pitching forward, level out facing it, carried on
+  // backward by the momentum, keeping it in view
+  function whiplash(world, r, o = {}, g0) {
+    // the camera stays on the pole the whole way: as you pass it you bank toward it and swing round (heading turns ~180°),
+    // pitching forward to level out, then carry on backward away from it, still looking at it
+    const g = g0 || poleSetup(world, r, o), wob = wobble(r, o.wobble ?? range(r, 0, 12)), tiltC = TILT_Q;
+    const Ta = g.lead || 1.5, bank = range(r, 50, 80), Tw = range(r, 0.6, 1.1), T = Ta + Tw + (g.lead ? 1.8 : 3.4), vOut = range(r, 1.2, 2.0);
+    const x = t => t < Ta ? -g.v * (Ta - t) : t < Ta + Tw ? g.v * (t - Ta) * (1 - 0.5 * (t - Ta) / Tw) : g.v * Tw * 0.5 + vOut * (t - Ta - Tw) * Math.min(1, (t - Ta - Tw) / 0.4 + 0.3);
+    const pos = t => add(g.C, mul(g.h, x(t)));
+    const att = t => { const p = pos(t), toP = norm(v3(g.P.x - p.x, 0, g.P.z - p.z)), k = Math.max(0, Math.min(1, (t - Ta + 0.5) / (Tw + 0.5)));
+      // heading: forward before the pass, then turning to look at the pole; bank toward it in the middle of the whip
+      const fwdH = norm(add(mul(g.h, 1 - ease(k)), mul(toP, ease(k) + 1e-3))), b = bank * Math.sin(Math.PI * k) * D, sd = (g.h.x * toP.z - g.h.z * toP.x) > 0 ? 1 : -1;
+      return qmul(qmul(qaxis(UP, Math.atan2(-fwdH.x, -fwdH.z)), tiltC), qmul(rollQ(sd * b), pitchQ(-0.25 * Math.sin(Math.PI * k)))); };
+    return { T, object: g.P.name, params: { bank: Math.round(bank), time: +Tw.toFixed(2) }, at: t => ({ pos: pos(t), q: qmul(att(t), wob(t)) }), g, Ta, Tw };
+  }
+  // Pole Dance: two whiplashes back to back — whip round, fly straight back at the pole past its other side, whip again
+  function poleDance(world, r, o = {}) {
+    const w1 = whiplash(world, r, o), g = w1.g, mid = w1.Ta + w1.Tw + 0.25;
+    const g2 = { ...g, h: mul(g.h, -1), side: -g.side, C: add(g.C, mul(g.lat, -2 * g.d)), v: g.v * 0.9, lead: 0.9 }, w2 = whiplash(world, r, o, g2);
+    const Tlink = 0.35, T = mid + Tlink + w2.T;
+    return { T, object: g.P.name, params: { ...w1.params }, at: t => {
+      if (t < mid) return w1.at(t);
+      if (t < mid + Tlink) { const k = ease((t - mid) / Tlink); const a = w1.at(mid), b = w2.at(0); return { pos: add(a.pos, mul(sub(b.pos, a.pos), k)), q: k < 0.5 ? a.q : b.q }; }
+      return w2.at(t - mid - Tlink); } };
+  }
+  // Side-Lock Rewind: pass the pole, roll 90 toward it and pitch back (knife-edge, pole in view) until you stall, blip the
+  // throttle and rewind back the way you came, roll away to level out and carry on backward
+  function sideLock(world, r, o = {}) {
+    const g = poleSetup(world, r, o), face = faceQ(g.h), wob = wobble(r, o.wobble ?? range(r, 0, 15));
+    // roll so the belly turns away from the pole and the camera (tilted up) faces it: pick the sign that does that
+    const want = mul(g.lat, -1), upAfter = sg => S.qrot(qmul(face, rollQ(sg * 90 * D)), v3(0, 1, 0)), sgn = (upAfter(1).x * want.x + upAfter(1).z * want.z) > 0 ? 1 : -1;
+    const Ta = 1.4, rd = range(r, 75, 100) * sgn, Tr = Math.abs(rd) / range(r, 200, 350), pd = range(r, 70, 120), Ts = range(r, 0.6, 1.0), Tb = range(r, 0.8, 1.2), T = Ta + Ts + Tb + 1.6;
+    const x = t => { if (t < Ta) return -g.v * (Ta - t); const u = t - Ta; if (u < Ts) return g.v * Ts * (1 - (1 - u / Ts) ** 2) / 2; return g.v * Ts / 2 - range0 * (u - Ts) ** 1.2; };
+    const range0 = g.v * 0.8;
+    const att = t => { const u = t - Ta; if (u < 0) return face; const kr = ease(u / Tr), kp = ease(u / Ts), ko = ease((u - Ts - 0.3) / Tb);
+      return qmul(face, qmul(rollQ(rd * (kr - ko) * D), pitchQ(pd * (kp - ko) * D))); };
+    return { T, object: g.P.name, params: { roll: Math.round(rd), stall: +Ts.toFixed(2) }, at: t => ({ pos: add(g.C, mul(g.h, x(t))), q: qmul(att(t), wob(t)) }) };
+  }
   const pk = (axis, deg, a, b) => r => ({ axis, deg, rate: range(r, a, b) });
   const R1 = r => (r() < 0.5 ? 1 : -1);
   // trick name -> generator. Rates/pauses span the demo envelopes with margin.
@@ -252,6 +318,10 @@
     'Split-S': splitS(180, 0),
     '540 Split S': splitS(540, 0),
     'Split-Back': splitS(180, 360),
+    'Cradle': cradle,
+    'Whiplash': whiplash,
+    'Pole Dance': poleDance,
+    'Side-Lock Rewind': sideLock,
   };
   // near-miss flights: only the listed reading (or nothing) is acceptable
   const CONFUSERS = {
@@ -326,5 +396,7 @@
     Object.defineProperty(got, 'det', { value: det });   // for inspecting the Watcher's reviews
     return got;
   }
-  root.Maneuvers = { _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = LIB[name](world, rng(seed), opts); return opts.human ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; } finally { TILT_Q = ID; } }, humanize, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
+  // pole-dance flights built from the TPW text only (no demo measurement yet): left out of the quick suites until real reps confirm them
+  const DRAFT_BOT = ['Pole Dance'];
+  root.Maneuvers = { DRAFT_BOT, _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = LIB[name](world, rng(seed), opts); return opts.human ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; } finally { TILT_Q = ID; } }, humanize, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
 })(typeof window !== 'undefined' ? window : globalThis);
