@@ -60,7 +60,7 @@ function openOptions() {
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
     <h3>Graphics</h3>
     <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
-    <label class="chk big" title="The trick library's guesses (never scored) always wait for you in Review; this also shows them on screen while you fly"><input type="checkbox" id="optMaybe" ${store.get('maybeFlash', false) ? 'checked' : ''}> Show "maybe" guesses while flying</label>
+    <label class="chk big" title="The trick library's guesses (never scored) always wait for you in SKITTLES mode; this also shows them on screen while you fly"><input type="checkbox" id="optMaybe" ${store.get('maybeFlash', false) ? 'checked' : ''}> Show "maybe" guesses while flying</label>
     <p class="note">Turn it off if the game runs slowly on that map.</p>
     <label class="chk big"><input type="checkbox" id="optPass" ${passUI.on ? 'checked' : ''}> Show what counted while flying (over / under / gap / pole) — Z</label>
     <h3>Sharing data with the project</h3>

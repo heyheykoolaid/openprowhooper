@@ -96,7 +96,9 @@ bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox
 `pro-whooper-labelled/1`. `npm run bench` scores the current detector on every labelled source at once — see
 docs/DATA.md (formats, trust weights, workflow). Run it before and after any rule change.
 
-## Flag keys, run review, pilot warm-up (src/recap.js) — docs/RECOGNITION-ROADMAP.md
+## Flag keys, run review, pilot warm-up (src/recap.js)
+The run review is called **SKITTLES mode** in the game (pause menu, results, the toggle and title in the player, the
+F/Q hints); code and data keep the names recap / review. — docs/RECOGNITION-ROADMAP.md
 While flying, `F` flags the last call as wrong and `Q` flags a missed trick. "Review my tricks" (pause menu / results)
 replays each call for ✓ / ✗ / "it was actually…", flagged and low-confidence (Watcher < 70%) calls first; saved as
 `pro-whooper-session/2` with `via: "review"` to `calibration/review/` (the benchmark reads it). The review screen is a full player

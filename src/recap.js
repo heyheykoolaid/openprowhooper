@@ -22,8 +22,8 @@ function recapMaybe(m) {
 function recapFlag(kind) {
   if (mode !== 'fly' || race.on) return;
   if (kind === 'wrong') { const e = recap.events[recap.events.length - 1]; if (!e || drone.time - e.t > 12) { flash('<b>NOTHING TO FLAG</b><small>no call in the last few seconds</small>', 'near'); return; }
-    e.flag = true; e.verdict = 'no'; recap.dirty = true; flash(`<b>FLAGGED</b><small>"${e.name}" marked wrong — fix it in Review after the run</small>`, 'near'); }
-  else { recap.flags.push({ t: +drone.time.toFixed(3), actual: null }); recap.dirty = true; flash('<b>MISSED TRICK NOTED</b><small>say what it was in Review after the run</small>', 'near'); }
+    e.flag = true; e.verdict = 'no'; recap.dirty = true; flash(`<b>FLAGGED</b><small>"${e.name}" marked wrong — fix it in SKITTLES mode after the run</small>`, 'near'); }
+  else { recap.flags.push({ t: +drone.time.toFixed(3), actual: null }); recap.dirty = true; flash('<b>MISSED TRICK NOTED</b><small>say what it was in SKITTLES mode after the run</small>', 'near'); }
 }
 addEventListener('keydown', e => {
   if (mode !== 'fly' || race.on || train.on || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
@@ -163,7 +163,7 @@ function renderRecapBar() {
     <div class="rcRow"><b>Clips</b><button data-rc="split" title="Cut the replay in two at the red line (S)">✂ Split here</button><button data-rc="in" title="Trim the start of the clip to the red line (I)">[ In</button><button data-rc="out" title="Trim the end of the clip to the red line (O)">Out ]</button>
       <span class="note">${C ? `clip ${recap.clipSel + 1} of ${recap.clips.length} · ${fmtT(C.a - T0)} → ${fmtT(C.b - T0)} · ${(C.b - C.a).toFixed(1)} s · drag its ends to trim` : recap.clips.length > 1 ? 'click a clip on the bottom strip to select it' : sel ? 'no clip picked: export uses the selected trick' : 'move the red line and Split, then pick a clip'}</span>
       ${C ? '<button data-rc="clipdel" title="Throw this clip away (the rest stay)">🗑 Clip</button>' : ''}${recap.clips.length > 1 || C ? '<button data-rc="clipclear" title="Back to one uncut run">Reset</button>' : ''}<button data-rc="exportclip" class="primary" title="Record the clip from this camera, at this speed, as a video file">⬇ Export video</button><span id="rcRecMsg" class="note"></span>
-      <label class="chk" style="margin-left:auto"><input type="checkbox" id="rcReview" ${recap.review ? 'checked' : ''}> Review tricks</label><button data-rc="close">${recap.review ? 'Done' : 'Close'}</button></div>
+      <label class="chk" style="margin-left:auto"><input type="checkbox" id="rcReview" ${recap.review ? 'checked' : ''}> SKITTLES mode</label><button data-rc="close">${recap.review ? 'Done' : 'Close'}</button></div>
     ${recap.review ? `<div class="rcRow rcSel">${selBox}</div>` : ''}`;
   recapBarState();
 }
@@ -174,7 +174,7 @@ function renderRecap() {
   const el = $('#recapSide'), names = recapNames(), items = recapItems(), [T0] = recapSpan();
   el.classList.toggle('hide', !recap.review); if (!recap.review) { renderRecapBar(); return; }
   const done = recap.events.filter(e => e.verdict === 'yes' || (e.verdict === 'no' && e.actual)).length + recap.flags.filter(f => f.actual).length;
-  el.innerHTML = `<h3>${recap.guest ? 'REVIEWING ' + esc(String((recap.guestOf || {}).name || 'A PILOT').toUpperCase()) + "'S RUN" : 'REVIEW YOUR RUN'}</h3>${recap.guest ? '<p class="note" style="color:#ffd34d">You are a reviewer here: your verdicts are sent as reviewer labels for this pilot\'s flight. Nothing changes in their run or in your own learning.</p>' : ''}
+  el.innerHTML = `<h3>${recap.guest ? 'REVIEWING ' + esc(String((recap.guestOf || {}).name || 'A PILOT').toUpperCase()) + "'S RUN" : 'SKITTLES MODE'}</h3>${recap.guest ? '<p class="note" style="color:#ffd34d">You are a reviewer here: your verdicts are sent as reviewer labels for this pilot\'s flight. Nothing changes in their run or in your own learning.</p>' : ''}
     <p class="note">${recap.events.length} calls${recap.flags.length ? `, ${recap.flags.length} added / missed` : ''} · ${done} decided, ${Math.max(0, recapItems().length - done)} not yet. In the order they happened; flagged and unsure calls are marked. Only tricks you have decided on (✓, a correction, or a named trick you added) are learned from: anything left undecided is ignored.</p>
     ${recap.multi && recap.multi.size >= 2 ? `<div class="row rvMulti"><b>${recap.multi.size} picked</b><button data-rc="group" class="primary" title="These tricks were one combo">Combo</button><button data-rc="remove" title="Delete the picked tricks from the timeline">🗑 Delete</button><button data-rc="unpick" class="ghost">clear</button></div>` : '<p class="note">Click a trick to pick it; Ctrl-click or Shift-click to pick several, then press Combo to say they were one combo.</p>'}
     ${items.slice().sort((a, b) => recapSpanOf(a)[0] - recapSpanOf(b)[0]).map(it => { const on = recap.play && recap.play.key === it.kind + it.i, pk = recap.multi && recap.multi.has(it.kind + it.i) ? 'pick' : '', gid = recapObj(it).grp, gr = gid != null ? 'grp' : '', gTag = gid != null ? `<span class="grpTag" title="Part of combo ${gid}">combo ${gid} <button data-rc="ungroup" data-k="${it.kind}" data-i="${it.i}" title="Take it out of the combo">✕</button></span>` : '', thenB = `<button data-rc="thenrow" data-k="${it.kind}" data-i="${it.i}" title="Add the next trick of this combo, starting where this one ends">＋ then</button>`; if (it.kind === 'miss') { const f = it.f;
