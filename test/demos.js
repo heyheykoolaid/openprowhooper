@@ -107,4 +107,16 @@ const mavArc = (a, b) => { const sw = sweep(a, b, 160, 260); return { T: sw.T, f
 const mavTop = (deg, rate) => { const T = deg / rate; return { T, f: t => { const th = P - 0.1 + 0.2 * t / T; return { pos: ell(th), q: S.qmul(S.qmul(pitchQ(th), mavAtt(th)), S.qaxis(FWD_ROLL, rate * D * t)) }; } }; };
 run('demo maverick loop', chain([approach, mavArc(0, 2 * P), exitFwd(), tail]), 9, ['Maverick Loop']);
 run('demo mavvy roll (slow 1.1 s roll)', chain([approach, mavArc(0, P - 0.1), mavTop(360, 330), mavArc(P + 0.1, 2 * P), exitFwd(), tail]), 10, ['Mavvy Roll']);
+
+// ---- batch 5 ----
+// Matty Twister demo: over the bar, pitch down ~70° first, roll 360 (~0.6 s), then the rest of the Matty (≈290°)
+// forward, down the far side and backward under the bar.
+{ const top = mattyPos(P); const T = 2.0;
+  const inSeg = straight(S.add(top, S.v3(0, 0, 3)), S.v3(0, 0, -4), 0.75, level);
+  const tw = { T, f: t => { const u = t / T, ph = P + P * u; const pos = mattyPos(ph);
+    const lead = Math.min(1, t / 0.25), rollU = Math.max(0, Math.min(1, (t - 0.3) / 0.6)), rest = Math.max(0, (t - 0.95) / (T - 0.95));
+    const q = S.qmul(S.qmul(pitchQ(-70 * D * lead), S.qaxis(FWD_ROLL, 2 * P * rollU)), pitchQ(-290 * D * rest));
+    return { pos, q }; } };
+  const qEnd = S.qmul(S.qmul(pitchQ(-70 * D), S.qaxis(FWD_ROLL, 2 * P)), pitchQ(-290 * D));
+  run('demo matty twister (lead-in pitch)', chain([inSeg, tw, straight(mattyPos(2 * P), S.v3(0, 0, 3), 1.0, qEnd)]), 6, ['Matty Twister']); }
 console.log(`\n${pass}/${total} demo loops`);

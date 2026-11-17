@@ -96,3 +96,19 @@ timing comes from frame counting. GIFs give no obstacle positions or stick input
 - Maverick family: the Mavvy Roll's roll is excluded from the stay-upright check, and the over-pass speed check is
   relaxed for it (it nearly stops over the top to roll).
 
+## Batch 5: Mattys, Mavani, Donkey Loop
+
+| Trick | What the clip shows | Verdict |
+|---|---|---|
+| Mavani (draft) | maverick nose-up → pitch down to inverted → inverted yaw 180 (~0.7 s) → Matty backward under the tree | matches draft |
+| Donkey Loop (draft) | maverick nose-up → pitch down to inverted → inverted yaw 360 (~1 s) → pitch back to upright, forward under the tree | matches draft |
+| Beginner Matty | over a chair, backward under it, almost no rotation | matches |
+| Matty Flip | forward flip over the gap between two cars, then backward flight facing the house | matches |
+| Matty Twister | pitch down ~45–90° **before** the 360 roll (~0.6 s), then the rest of the Matty, backward under a branch | rule extended |
+| Half Matty | roll 180 (~0.25 s) → pitch (~0.6 s) → backward through the pilot's legs | matches |
+| 540 Half Matty | roll 540 (~0.6 s, ~900°/s) → pitch → backward under the tree | matches |
+| Matty 360 | indoor, white ceiling: too blurred to measure; visible sequence fits the rule | — |
+
+**Changes made from batch 5:** Matty Twister also accepts a lead-in pitch before the roll (`P-~90 Ra360 P-~270`), and a
+demo-shaped flight was added to `test/demos.js`.
+

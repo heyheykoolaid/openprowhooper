@@ -737,7 +737,8 @@ const OBSTACLE_TRICKS = [
   { name: 'Matty Flip', pats: ['P-~360'], end: 'back', cross: 'OU' },
   { name: 'Anti Matty', pats: ['P+~360'], cross: 'OU', end: 'back' },
   { name: 'Power Matty', pats: ['P-~720'], cross: 'OU', end: 'back' },
-  { name: 'Matty Twister', pats: ['Ra360 P-~360'], cross: 'OU', end: 'back' },
+  // demo GIF pitches down ~45–90° before the roll, leaving ~270–315° for the Matty after it
+  { name: 'Matty Twister', pats: ['Ra360 P-~360', 'P-~90 Ra360 P-~270'], cross: 'OU', end: 'back' },
   { name: 'Matty Roll', pats: ['P-270 Ra360 P-90', 'P-270 Ra360'], cross: 'OU', end: 'back' },
   { name: 'Matty 360', pats: ['P-~180 Ya360 P-~180', 'P-~270 Ya360'], cross: 'OU', end: 'back' },
   { name: 'Split-S', pats: ['Ra180 P+~180'], cross: 'OU', end: 'fwd' },
