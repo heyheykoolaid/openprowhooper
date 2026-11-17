@@ -53,6 +53,11 @@ const PARTS = {
     m0702se_27k: { name: '0702SE 27000KV', kv: 27000, mass: 1.9, rm: 0.42, i0: 0.15, bellJ: 2.6e-9, bearing: 1.15 },
     m0702ii_30k: { name: '0702 II 30000KV', kv: 30000, mass: 1.9, rm: 0.33, i0: 0.16, bellJ: 2.6e-9, bearing: 1.0 },
     m0702ii_36k: { name: '0702 II 36000KV', kv: 36000, mass: 1.9, rm: 0.24, i0: 0.19, bellJ: 2.6e-9, bearing: 1.0 },
+    // RCinPower EVO 0702 (pilot's build): 1.15 g without wires, dual NMB ball bearings, 9N12P 0.1 mm laminations; published
+    // 41 g (31800KV) / 43 g (33800KV) at 4.2 V on HQ 1.2x1x3 at ~5.3-5.6 A, 135 mΩ (rotorama.com). Scaled like the other
+    // motors here (the sim reads ~0.8× published static thrust), so it's spicier than the stock Air65 motors
+    evo_31k:     { name: 'RCinPower EVO 0702 31800KV', kv: 31800, mass: 1.45, rm: 0.28, i0: 0.17, bellJ: 2.4e-9, bearing: 0.9 },
+    evo_33k:     { name: 'RCinPower EVO 0702 33800KV', kv: 33800, mass: 1.45, rm: 0.27, i0: 0.18, bellJ: 2.4e-9, bearing: 0.9 },
     m0802_19k:   { name: '0802SE 19500KV', kv: 19500, mass: 2.3, rm: 0.52, i0: 0.12, bellJ: 3.6e-9, bearing: 1.15 },
     m1002_19k:   { name: '1002 19000KV', kv: 19000, mass: 2.9, rm: 0.40, i0: 0.15, bellJ: 5.0e-9, bearing: 1.0 },
   },
@@ -80,6 +85,7 @@ const PRESETS = {
   'Air65 Freestyle': { frame: 'air65', motor: 'm0702se_23k', prop: 'hq31ul', battery: 'b300', electronics: 'air' },
   'Air65 Champion':  { frame: 'air65champ', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b260', electronics: 'air' },
   'Air65 II Champion': { frame: 'air65champ', motor: 'm0702ii_36k', prop: 'gf1207', battery: 'b260', electronics: 'air' },
+  'Air65 + RCinPower EVO': { frame: 'air65', motor: 'evo_31k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
   '75mm build':      { frame: 'air75', motor: 'm1002_19k', prop: 'p40_2b', battery: 'b450', electronics: 'air' },
 };
 
