@@ -41,8 +41,9 @@ async function telQueue(kind, name, payload) {
 }
 
 // ---- drop-off 1: the project database behind the Claude link
-let telDbP = null;
-function telDb() { return telDbP || (telDbP = (async () => { try { if (!(window.claude && window.claude.use)) return null; const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); const uid = user ? await user.id() : null; return db && uid ? { db, uid, owner: !!(await user.isOwner()) } : null; } catch { return null; } })()); }
+let telDbOk = null, telDbTry = null;
+// The page's Claude capabilities arrive some time after the script starts, so a miss is never remembered: ask again.
+function telDb() { if (telDbOk) return Promise.resolve(telDbOk); return telDbTry || (telDbTry = (async () => { await null; try { if (!(window.claude && window.claude.use)) return null; const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); const uid = user ? await user.id() : null; if (db && uid) telDbOk = { db, uid, owner: !!(await user.isOwner()) }; telState.dbWhy = !db ? 'no database in this view' : !uid ? 'not signed in' : ''; return telDbOk; } catch (err) { telState.dbWhy = 'database error'; return null; } finally { telDbTry = null; } })()); }
 async function telToDb(it) {
   const c = await telDb(); if (!c) return false;
   try {
@@ -53,7 +54,7 @@ async function telToDb(it) {
       summary: p.summary || null, events: p.events || null, missed: p.missed || null, labels: p.labels || null, flight: p.flight || null, category: p.category || null, text: p.text || null });
     await c.db.doc(`telemetry/${c.uid}`).set({ pilot: p.pilot || null, last: it.at });   // lets the owner find every pilot's folder
     return true;
-  } catch { return false; }
+  } catch (err) { telState.dbWhy = 'write refused' + (err && err.code ? ' (' + err.code + ')' : ''); return false; }
 }
 // ---- drop-off 2: the relay (a plain-text POST keeps it a simple cross-site request)
 async function telToRelay(it) {
@@ -94,7 +95,7 @@ async function telRenderStatus() {
   const all = await telList(), wait = all.filter(x => !x.sent).length, sent = all.filter(x => x.sent && x.sent !== 'file').length, c = await telDb();
   const where = c ? 'the project database (through this Claude page)' : TEL.relay ? 'the project drop-off' : gh.token ? `GitHub (${gh.owner}/${gh.repo}/telemetry/)` : null;
   el.textContent = (!tel.on ? 'Off. ' : where ? `On — this copy sends to ${where}. ` : 'On, but this copy has nowhere to send yet: flights are kept in this browser. Save them as a file and pass it to the project. ') +
-    `${wait} waiting · ${sent} sent from this browser${telState.last ? ' · ' + telState.last : ''}`;
+    `${wait} waiting · ${sent} sent from this browser${telState.last ? ' · ' + telState.last : ''}${window.claude && telState.dbWhy ? ' · project database: ' + telState.dbWhy : ''}`;
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
 }
 document.addEventListener('click', async e => {
@@ -126,5 +127,6 @@ addEventListener('pagehide', () => telCapture('closed'));
 async function telOldFeedback() { const all = store.get('feedback', []); let n = 0;
   for (const p of all) { if (p.queued || !p.text) continue; p.queued = true; n++; await telStore({ id: `feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, kind: 'feedback', name: `${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, at: p.at, body: JSON.stringify({ ...p, queued: undefined }), sent: null }); }
   if (n) store.set('feedback', all); }
+setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 20000);
 setTimeout(async () => { if (!tel.asked && $('#telAsk')) $('#telAsk').classList.remove('hide'); await telOldFeedback(); telPump(); }, 1500);
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
