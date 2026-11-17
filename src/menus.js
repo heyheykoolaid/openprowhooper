@@ -2,7 +2,7 @@
 // Maps: the choice is remembered and the page reloads into it. Trick Calibration and Judge the Bot name specific
 // playground objects, so they stay on the playground.
 function needPlayground(what) { if (MAP_ID === 'playground') return false; flash(`<b>${what.toUpperCase()} RUNS ON THE PLAYGROUND</b><small>press Map on the main menu to switch</small>`, 'warn'); return true; }
-function menuMapLabels() { const m = $('#menuMap'), b = $('#mapBtn'), ids = Object.keys(S.MAPS); if (m) m.textContent = world.title; if (b) b.textContent = 'Map: ' + S.MAPS[MAP_ID].title + ' ▸ ' + S.MAPS[ids[(ids.indexOf(MAP_ID) + 1) % ids.length]].title; }
+function menuMapLabels() { const m = $('#menuMap'), ids = Object.keys(S.MAPS), next = S.MAPS[ids[(ids.indexOf(MAP_ID) + 1) % ids.length]].title; if (m) m.textContent = world.title; for (const b of document.querySelectorAll('.mapBtn')) b.textContent = b.closest('#mainMenu') ? `Map: ${S.MAPS[MAP_ID].title} ▸ ${next}` : `Change map ▸ ${next}`; }
 setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
 function startFly(withSession) {

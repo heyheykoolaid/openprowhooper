@@ -4,8 +4,8 @@
 // kind 'wall' / 'building' for wall rides, kind 'pilot'. Nothing here is special-cased by name in the detector.
 (function (root) {
   const S = root.Sim, { v3, makeBox, makeCapsule, makeSphere } = S;
-  function kit() {
-    const objs = []; let nid = 0;
+  function kit(base) {   // base: an existing map to add to (its objects keep their ids)
+    const objs = base ? base.objs : []; let nid = objs.reduce((m, o) => Math.max(m, o.id + 1), 0);
     const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; objs.push(o); return o; };
     const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
     const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) o.prims.push(makeCapsule(a, b, r)); o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
@@ -191,9 +191,73 @@
     return K.done({ id: 'school', title: 'the vaporwave school', theme: 'vapor', zones, spawn: { pos: v3(0, 0.03, 29.4), yaw: 0 }, bounds: { x: [-34, 34], z: [-36, 34] } });
   }
 
+  // =============================================================== The Playground, filled out
+  // The original map is left exactly as it was (the tests and the bot fly it); the game adds these on top. Same idea as
+  // the school — more height layers, more lines through the same space, gaps, ledges, a pole run — in the playground's
+  // own materials: plywood, scaffold tube, concrete, brick, painted steel. Safety-yellow edges mark what is meant to be
+  // tricked. Placed in the empty corners so the flagpole, lamp posts and trees keep their room.
+  function addPlaygroundExtras(w) {
+    const K = kit(w), { O, box, pipe } = K;
+    const stripe = (o, c, h, ry = 0) => box(o, c, h, 'plasticYellow', ry, 0, 0, { noCollide: true });
+    const bar = (name, a, b, r, mat) => { const o = O(name, 'overunder', { obstacle: { a: v3(a.x, 0, a.z), b: v3(b.x, 0, b.z), under: Math.min(a.y, b.y) - r, over: Math.max(a.y, b.y) + r } }); pipe(o, a, b, r, mat); return o; };
+    // ---- skate corner (south-east): ledges, a manual pad, kickers with a gap, a flat rail, stairs up to a platform
+    for (const [cx, cz, L, ry, n] of [[7.5, 18.2, 2.6, Math.PI / 2, v3(0, 0, -1)], [11.9, 15.0, 2.2, 0, v3(1, 0, 0)]]) { const o = O('Concrete Ledge', 'wall', { wallNormal: n }); box(o, v3(cx, 0.28, cz), v3(0.14, 0.28, L), 'concrete', ry); stripe(o, v3(cx, 0.565, cz), v3(0.14, 0.006, L), ry); }
+    { const o = O('Manual Pad', 'deco'); box(o, v3(9.4, 0.14, 15.6), v3(1.6, 0.14, 0.8), 'concrete'); stripe(o, v3(9.4, 0.284, 14.82), v3(1.6, 0.005, 0.03)); stripe(o, v3(9.4, 0.284, 16.38), v3(1.6, 0.005, 0.03)); }
+    { const o = O('Kicker Gap', 'deco'), A = Math.atan2(0.55, 1.5), L = Math.hypot(0.55, 1.5) / 2;
+      box(o, v3(5.6, 0.27, 12.6), v3(L, 0.025, 0.7), 'wood', 0, 0, A); box(o, v3(9.4, 0.27, 12.6), v3(L, 0.025, 0.7), 'wood', 0, 0, -A);   // facing each other, 2.3 m of air between the lips
+      for (const [x, s] of [[6.33, 1], [8.67, -1]]) { box(o, v3(x, 0.27, 12.6), v3(0.02, 0.27, 0.7), 'wood'); stripe(o, v3(x - s * 0.03, 0.548, 12.6), v3(0.03, 0.006, 0.7)); } }
+    { const o = bar('Flat Rail', v3(11.2, 0.5, 17.6), v3(15.2, 0.5, 17.6), 0.03, 'galv'); for (const x of [11.4, 13.2, 15.0]) box(o, v3(x, 0.235, 17.6), v3(0.03, 0.235, 0.03), 'galv'); }
+    { const o = O('Stair Platform', 'deco'); box(o, v3(15.6, 0.5, 11.4), v3(1.4, 0.5, 1.5), 'concrete');
+      for (let i = 0; i < 4; i++) box(o, v3(13.95 - i * 0.3, 0.1 + (3 - i) * 0.1, 11.4), v3(0.15, 0.1 + (3 - i) * 0.1, 1.5), 'concrete');
+      for (let i = 0; i < 4; i++) stripe(o, v3(13.82 - i * 0.3, 0.205 + (3 - i) * 0.2, 11.4), v3(0.02, 0.005, 1.5));
+      stripe(o, v3(14.22, 1.005, 11.4), v3(0.03, 0.005, 1.5));
+      const r = bar('Stair Handrail', v3(12.9, 0.95, 12.8), v3(14.2, 1.75, 12.8), 0.025, 'paintRed'); box(r, v3(12.9, 0.5, 12.8), v3(0.025, 0.45, 0.025), 'paintRed'); box(r, v3(14.2, 1.375, 12.8), v3(0.025, 0.375, 0.025), 'paintRed'); }
+    // a plywood trick wall with a window and a doorway to thread
+    { const o = O('Plywood Wall', 'wall', { wallNormal: v3(-1, 0, 0) }), x = 4.6, T = 0.03;
+      for (const [z0, z1, y0, y1] of [[14.0, 14.6, 0, 2.4], [15.5, 16.2, 0, 2.4], [14.6, 15.5, 1.7, 2.4], [16.2, 16.9, 0, 1.0], [16.2, 16.9, 1.6, 2.4], [16.9, 17.4, 0, 2.4]]) box(o, v3(x, (y0 + y1) / 2, (z0 + z1) / 2), v3(T, (y1 - y0) / 2, (z1 - z0) / 2), 'wood');
+      for (const z of [14.0, 17.4]) box(o, v3(x + 0.35, 0.6, z), v3(0.35, 0.03, 0.03), 'wood', 0, 0, 0.9);
+      stripe(o, v3(x - T - 0.004, 1.7, 15.05), v3(0.004, 0.03, 0.45)); stripe(o, v3(x - T - 0.004, 1.0, 16.55), v3(0.004, 0.03, 0.35)); stripe(o, v3(x - T - 0.004, 1.6, 16.55), v3(0.004, 0.03, 0.35));
+      O('Plywood Doorway', 'gap', { gap: { c: v3(x, 0.85, 15.05), n: v3(1, 0, 0), hu: 0.45, hv: 0.85, u: v3(0, 0, 1) } }); O('Plywood Window', 'gap', { gap: { c: v3(x, 1.3, 16.55), n: v3(1, 0, 0), hu: 0.35, hv: 0.3, u: v3(0, 0, 1) } }); }
+    // ---- scaffold tower (west): three plank decks to go over, under and between, on a cluster of standards
+    { const X0 = -15.4, X1 = -12.2, Z0 = 0.6, Z1 = 4.6, sc = O('Scaffold', 'pole');
+      for (const x of [X0, (X0 + X1) / 2, X1]) for (const z of [Z0, Z1]) pipe(sc, v3(x, 0, z), v3(x, 5.6, z), 0.03, 'galv');
+      for (const y of [1.4, 3.1, 4.8]) { for (const z of [Z0, Z1]) pipe(sc, v3(X0, y - 0.06, z), v3(X1, y - 0.06, z), 0.022, 'galv', { noCollide: true }); for (const x of [X0, X1]) pipe(sc, v3(x, y - 0.06, Z0), v3(x, y - 0.06, Z1), 0.022, 'galv', { noCollide: true }); }
+      pipe(sc, v3(X0, 0.1, Z0), v3(X0, 3.0, Z1), 0.02, 'galv', { noCollide: true }); pipe(sc, v3(X1, 1.5, Z1), v3(X1, 4.7, Z0), 0.02, 'galv', { noCollide: true });   // braces
+      // decks: the low one spans the bay, the middle one leaves a gap at one end, the top one is two planks with a slot between
+      for (const [y, z0, z1, x0, x1] of [[1.4, Z0, Z1, X0, X1], [3.1, Z0 + 1.3, Z1, X0, X1], [4.8, Z0, Z1, X0, X0 + 1.2], [4.8, Z0, Z1, X1 - 1.2, X1]]) {
+        const o = O('Scaffold Deck', 'overunder', { obstacle: { a: v3((x0 + x1) / 2, 0, z0), b: v3((x0 + x1) / 2, 0, z1), under: y - 0.03, over: y + 0.03 } }); box(o, v3((x0 + x1) / 2, y, (z0 + z1) / 2), v3((x1 - x0) / 2, 0.025, (z1 - z0) / 2), 'wood'); for (const x of [x0, x1]) stripe(o, v3(x, y + 0.027, (z0 + z1) / 2), v3(0.025, 0.003, (z1 - z0) / 2)); }
+      for (let i = 1; i <= 16; i++) pipe(sc, v3(X1 + 0.05, i * 0.3, Z0 - 0.02), v3(X1 + 0.05, i * 0.3, Z0 + 0.38), 0.012, 'galv', { noCollide: true });     // ladder rungs
+    }
+    // a plywood tunnel on the ground beside it
+    { const o = O('Plywood Tunnel', 'overunder'), x0 = -10.6, x1 = -7.6, z = 7.4, hw = 0.5, hh = 0.9;
+      for (const s of [-1, 1]) box(o, v3((x0 + x1) / 2, hh / 2, z + s * hw), v3((x1 - x0) / 2, hh / 2, 0.02), 'wood'); box(o, v3((x0 + x1) / 2, hh + 0.02, z), v3((x1 - x0) / 2, 0.02, hw + 0.04), 'wood');
+      for (const x of [x0, x1]) stripe(o, v3(x, hh + 0.02, z), v3(0.02, 0.022, hw + 0.04));
+      o.obstacle = { a: v3(x0, 0, z), b: v3(x1, 0, z), under: hh, over: hh + 0.04 };
+      for (const x of [x0, x1]) O('Tunnel Mouth', 'gap', { gap: { c: v3(x, hh / 2, z), n: v3(1, 0, 0), hu: hw, hv: hh / 2, u: v3(0, 0, 1) } }); }
+    // ---- bollard run (east): painted steel posts of different heights to weave and figure-8
+    { const o = O('Bollard', 'pole'), cols = ['paintRed', 'paintBlue', 'paintGreen', 'paintOrange', 'plasticYellow'];
+      [[14.6, -6.4, 1.6], [13.5, -4.4, 2.4], [15.4, -2.6, 1.3], [14.0, 0.6, 2.8], [15.6, 2.4, 1.9], [13.8, 4.2, 1.5]].forEach(([x, z, h], i) => { pipe(o, v3(x, 0, z), v3(x, h, z), 0.07, cols[i % 5]); pipe(o, v3(x, h, z), v3(x, h + 0.02, z), 0.09, 'plasticYellow', { noCollide: true }); }); }
+    // ---- sign gantry (south of the cones): two posts and a truss, with two planks hanging at different heights
+    { const o = O('Sign Gantry', 'overunder', { obstacle: { a: v3(-7.2, 0, 7.2), b: v3(-3.2, 0, 7.2), under: 3.05, over: 3.45 } }), z = 7.2;
+      for (const x of [-7.2, -3.2]) { pipe(o, v3(x, 0, z), v3(x, 3.4, z), 0.05, 'galv'); box(o, v3(x, 0.03, z), v3(0.18, 0.03, 0.18), 'metalPlate'); }
+      pipe(o, v3(-7.2, 3.4, z), v3(-3.2, 3.4, z), 0.04, 'galv'); pipe(o, v3(-7.2, 3.1, z), v3(-3.2, 3.1, z), 0.03, 'galv');
+      for (let i = 0; i < 8; i++) pipe(o, v3(-7.2 + i * 0.5, 3.1 + (i % 2) * 0.3, z), v3(-6.7 + i * 0.5, 3.4 - (i % 2) * 0.3, z), 0.012, 'galv', { noCollide: true });
+      box(o, v3(-5.2, 2.72, z), v3(1.1, 0.3, 0.015), 'paintOrange', 0, 0, 0, { noCollide: true });
+      for (const [x, y] of [[-6.3, 1.25], [-4.2, 1.95]]) { const h = O('Hanging Plank', 'overunder', { obstacle: { a: v3(x - 0.45, 0, z), b: v3(x + 0.45, 0, z), under: y - 0.025, over: y + 0.025 } }); box(h, v3(x, y, z), v3(0.45, 0.02, 0.12), 'wood'); for (const s of [-1, 1]) pipe(h, v3(x + s * 0.4, y, z), v3(x + s * 0.4, 3.07, z), 0.006, 'chain'); } }
+    // ---- up high: fire-escape landings on the building's east end, and things to play with on the roof
+    for (const [y, x0, x1] of [[4.6, 13.7, 15.8], [9.4, 13.7, 15.8]]) { const z = -21.45, o = O('Fire Escape', 'overunder', { obstacle: { a: v3(x0, 0, z), b: v3(x1, 0, z), under: y - 0.03, over: y + 0.03 } });
+      box(o, v3((x0 + x1) / 2, y, z), v3((x1 - x0) / 2, 0.025, 0.55), 'metalPlate'); stripe(o, v3((x0 + x1) / 2, y + 0.027, z + 0.53), v3((x1 - x0) / 2, 0.003, 0.02));
+      pipe(o, v3(x0, y + 0.9, z + 0.53), v3(x1, y + 0.9, z + 0.53), 0.02, 'rust'); for (const x of [x0, x1]) box(o, v3(x, y + 0.45, z + 0.53), v3(0.02, 0.45, 0.02), 'rust'); }
+    { const mast = O('Roof Antenna', 'pole'); pipe(mast, v3(10, 14.8, -27), v3(10, 19.6, -27), 0.035, 'galv'); box(mast, v3(10, 14.86, -27), v3(0.25, 0.06, 0.25), 'metalPlate'); for (const y of [17.2, 18.4]) pipe(mast, v3(9.5, y, -27), v3(10.5, y, -27), 0.012, 'galv', { noCollide: true });
+      const tank = O('Water Tank', 'overunder', { obstacle: { a: v3(3.2, 0, -27.5), b: v3(4.8, 0, -27.5), under: 15.75, over: 17.3 } }); box(tank, v3(4, 16.5, -27.5), v3(0.8, 0.75, 0.8), 'rust'); for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(tank, v3(4 + sx * 0.7, 15.3, -27.5 + sz * 0.7), v3(0.04, 0.48, 0.04), 'galv');
+      const r = bar('Roof Pipe Run', v3(-14, 15.3, -24.6), v3(-8.5, 15.3, -24.6), 0.04, 'rust'); for (const x of [-13.8, -11.2, -8.7]) box(r, v3(x, 15.03, -24.6), v3(0.03, 0.23, 0.03), 'galv'); }
+    w.zones.push({ shape: 'zone', mat: 'concrete', c: v3(10.6, 0.011, 15.2), h: v3(6.6, 0, 4.4) });
+    const all = []; for (const o of w.objs) for (const p of o.prims) { p.owner = o.id; all.push(p); } w.prims = all; return w;
+  }
+
   S.MAPS = {
     school: { id: 'school', title: 'Vaporwave School', build: buildSchool },
-    playground: { id: 'playground', title: 'The Playground', build: () => Object.assign(S.buildPlayground(), { id: 'playground', title: 'the playground', theme: 'playground' }) },
+    playground: { id: 'playground', title: 'The Playground', build: () => Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' }) },
   };
   S.buildSchool = buildSchool;
 })(typeof window !== 'undefined' ? window : globalThis);

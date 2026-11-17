@@ -308,6 +308,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="race">RaceGOW Tracks</button>
+    <button data-act="map" class="mapBtn">Map</button>
     <button data-act="garage">Garage &amp; Tune</button>
     <button data-act="controls">Controls / Radio</button>
     <button data-act="options">Options</button>
@@ -315,7 +316,6 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="blackbox">Blackbox Lab</button>
     <button data-act="bbreplay">Blackbox Replay</button>
     <button data-act="warmup">Pilot Warm-up</button>
-    <button data-act="map" id="mapBtn">Map</button>
     <button data-act="train" class="ghost">Trick Calibration (dev)</button>
     <button data-act="judge" class="ghost">Judge the Bot (dev)</button>
     <button data-act="review" class="ghost">Video Review (dev)</button>
@@ -325,7 +325,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 </div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
-  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
+  <button class="primary" data-act="resume">Resume</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap">Replay &amp; review</button><button data-act="map" class="mapBtn">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="fbToast"></div>

@@ -30,4 +30,11 @@ const H = M._h, { faceQ } = H, D = Math.PI / 180;
     if (t - 1 > Tl) { const u = t - 1 - Tl; return { pos: v3(mx + along.x * u * 3, y0, mz + along.z * u * 3), q: faceQ(along) }; }
     return { pos, q: S.qmul(faceQ(along), H.pitchQ(a)) }; };
   const got = M.detect({ T: 1 + Tl + 1.5, at }, W, 30).map(e => e.name); check('a loop round a hall beam is read as a loop trick', got.some(g => /Powerloop|Maverick|Matty|Loop/.test(g)), got.join(' | ') || 'nothing'); }
+// the playground as the game builds it: the original, untouched, plus the extras layer
+{ const base = S.buildPlayground(), G = S.MAPS.playground.build(), n0 = base.objs.length; let cut = 0;
+  for (const o of G.objs.slice(n0)) for (const p of o.prims) for (const q of base.prims) { const a = p.aabb, b = q.aabb; if (Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x) > 0.02 && Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y) > 0.02 && Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z) > 0.02) cut++; }
+  check('playground extras: original objects unchanged, nothing new cuts into them', G.objs.slice(0, n0).every((o, i) => o.name === base.objs[i].name && o.prims.length === base.objs[i].prims.length) && cut === 0 && G.objs.length > n0 + 20, `${n0} → ${G.objs.length} objects`);
+  const o = G.objs.find(x => x.name === 'Sign Gantry'), ob = o.obstacle, yb = 3.4, R = 0.9, w = 300 * D, Tl = 2 * Math.PI / w, mx = (ob.a.x + ob.b.x) / 2 + 1.2, mz = ob.a.z, y0 = yb - R, al = v3(0, 0, -1);
+  const at = t => { if (t < 1) return { pos: v3(mx, y0, mz + 3 - 3 * t), q: faceQ(al) }; const a = Math.min(t - 1, Tl) * w; if (t - 1 > Tl) return { pos: v3(mx, y0, mz - (t - 1 - Tl) * 3), q: faceQ(al) }; return { pos: v3(mx, y0 + R * (1 - Math.cos(a)), mz - R * Math.sin(a)), q: S.qmul(faceQ(al), H.pitchQ(a)) }; };
+  const got = M.detect({ T: 1 + Tl + 1.5, at }, G, 30).map(e => e.name); check('playground extras: a loop over the sign gantry is read as a loop trick', got.some(g => /Powerloop|Maverick|Matty|Loop/.test(g)), got.join(' | ') || 'nothing'); }
 console.log(`\n${ok}/${n} school map checks`); process.exitCode = ok === n ? 0 : 1;
