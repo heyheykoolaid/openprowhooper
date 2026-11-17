@@ -499,6 +499,45 @@ function buildPlayground() {
   return { objs, prims: all, zones, spawn: { pos: v3(0, 0.03, 12), yaw: 0 }, bounds: { x: [-19, 18], z: [-22, 20] } };
 }
 
+// ================================================================= THE SURVEYOR
+// Reads a map's collision shapes and works out for itself what can be flown over and under, so over/under tricks do not
+// depend on somebody remembering to tag every object, or on which way the pilot happens to approach it. Run once on a
+// map after it is built (maps.js does). Two jobs:
+//   1. Tagged objects that are really slabs (a platform, a table, a deck) become direction-free: the over/under line is
+//      aimed across whatever approach the pilot takes, as wide as the slab is that way. Bars and rails keep their line.
+//   2. Untagged shapes with air beneath them (a lintel, a shelf, a bench top, a raised pipe) get an over/under of their own.
+// Not surveyed: the ground, anything sitting on something, walls and roofs too big to loop, ramps, the pilot, poles.
+function surveyObstacles(world, opts = {}) {
+  if (world._surveyed) return world; world._surveyed = true;
+  const minGap = opts.minGap ?? 0.35, maxThick = opts.maxThick ?? 1.6, maxSpan = opts.maxSpan ?? 5;
+  const flatBox = p => p.type === 'box' && Math.abs(p.m[4]) > 0.94;
+  // the highest surface under a point, below height y (0 = the ground)
+  const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
+  let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0); const made = [], report = { slabs: 0, found: 0 };
+  for (const o of world.objs.slice()) {
+    if (o.kind === 'pilot' || o.kind === 'gap' || o.auto) continue;
+    if (o.obstacle && !o.round) {                                             // job 1
+      const { under, over } = o.obstacle; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
+      for (const p of o.prims) { const a = p.aabb; if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue; if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); n++; }
+      if (n && Math.min(x1 - x0, z1 - z0) >= 0.6 && Math.max(x1 - x0, z1 - z0) <= 12) { o.round = { c: v3((x0 + x1) / 2, 0, (z0 + z1) / 2), r: Math.max(x1 - x0, z1 - z0) / 2, box: { hx: (x1 - x0) / 2, hz: (z1 - z0) / 2 }, under, over }; report.slabs++; }
+      continue;
+    }
+    if (o.obstacle || o.round) continue;
+    const autos = [];                                                         // job 2
+    for (const p of o.prims) {
+      const a = p.aabb, bot = a.min.y, top = a.max.y, cx = (a.min.x + a.max.x) / 2, cz = (a.min.z + a.max.z) / 2, sx = a.max.x - a.min.x, sz = a.max.z - a.min.z;
+      if (p.type === 'box' ? !flatBox(p) : p.type === 'capsule' ? Math.abs(p.b.y - p.a.y) > 0.3 * len(sub(p.b, p.a)) : true) continue;
+      if (top - bot > maxThick || Math.max(sx, sz) < 0.4 || Math.min(sx, sz) > maxSpan || bot - supportUnder(cx, cz, bot, p) < minGap) continue;
+      const long = Math.max(sx, sz), short = Math.min(sx, sz), alongX = sx >= sz;
+      const ob = { a: v3(alongX ? a.min.x : cx, 0, alongX ? cz : a.min.z), b: v3(alongX ? a.max.x : cx, 0, alongX ? cz : a.max.z), under: bot, over: top };
+      autos.push({ size: long * short, ob, round: short >= 0.6 && long <= 12 ? { c: v3(cx, 0, cz), r: long / 2, box: { hx: sx / 2, hz: sz / 2 }, under: bot, over: top } : null });
+    }
+    autos.sort((x, y) => y.size - x.size);
+    for (const A of autos.slice(0, 6)) { const v = { id: nid++, name: o.name, kind: 'overunder', prims: [], vis: [], obstacle: A.ob, auto: true, parent: o.id }; if (A.round) v.round = A.round; made.push(v); report.found++; }
+  }
+  world.objs.push(...made); world.survey = report; return world;
+}
+
 // ================================================================= DRONE PHYSICS
 const NEAR_M = 1.0, NEAR_M2 = 2 * NEAR_M;   // collision broad phase: list everything within 2 m, trust the list for 1 m of travel
 class Drone {
@@ -883,12 +922,13 @@ class TrickDetector {
         const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
         const recent = this.crossLog.some(c => c.obj === o.id && t - c.t < 5);   // never re-aim mid-trick (big Split-Back: ~3 s over→under)
         const closing = vh > 1.0 && dh > 0.8 && ((R.c.x - d.pos.x) * d.vel.x + (R.c.z - d.pos.z) * d.vel.z) / (dh * vh) > 0.6;
-        if (dh < R.r + 3) st.tNear = t;
+        if (dh < (R.box ? Math.max(R.box.hx, R.box.hz) : R.r) + 3) st.tNear = t;
         if (vh > 0.5 && !recent && (t - (st.tNear ?? -9) > 2.5 || closing)) {   // far away, or heading in at it: aim across the approach
           const ax = d.vel.x / vh, az = d.vel.z / vh;
           if (!st.ax || ax * st.ax + az * st.az < 0.97) {
             st.ax = ax; st.az = az; delete this.prevSide[o.id];
-            o.obstacle = { a: v3(R.c.x + az * R.r, 0, R.c.z - ax * R.r), b: v3(R.c.x - az * R.r, 0, R.c.z + ax * R.r), under: R.under, over: R.over };
+            const rr = R.box ? Math.min(R.box.hx / Math.max(0.05, Math.abs(az)), R.box.hz / Math.max(0.05, Math.abs(ax))) : R.r;   // a rectangle is as wide as it is across this approach
+            o.obstacle = { a: v3(R.c.x + az * rr, 0, R.c.z - ax * rr), b: v3(R.c.x - az * rr, 0, R.c.z + ax * rr), under: R.under, over: R.over };
           }
         }
       }
@@ -2278,6 +2318,6 @@ function hoverInfo(p) {
   const s = motorSteady(p, 3.75 * hi); const amps = 4 * s.current * hi + 0.35;
   return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
 }
-root.Sim = { trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

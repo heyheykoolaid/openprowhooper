@@ -265,8 +265,8 @@
   }
 
   S.MAPS = {
-    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing.', build: buildSchool },
-    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold and more.', build: () => Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' }) },
+    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing.', build: () => S.surveyObstacles(buildSchool()) },
+    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold and more.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
   };
   S.buildSchool = buildSchool;
 })(typeof window !== 'undefined' ? window : globalThis);

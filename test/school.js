@@ -30,6 +30,16 @@ const H = M._h, { faceQ } = H, D = Math.PI / 180;
     if (t - 1 > Tl) { const u = t - 1 - Tl; return { pos: v3(mx + along.x * u * 3, y0, mz + along.z * u * 3), q: faceQ(along) }; }
     return { pos, q: S.qmul(faceQ(along), H.pitchQ(a)) }; };
   const got = M.detect({ T: 1 + Tl + 1.5, at }, W, 30).map(e => e.name); check('a loop round a hall beam is read as a loop trick', got.some(g => /Powerloop|Maverick|Matty|Loop/.test(g)), got.join(' | ') || 'nothing'); }
+// the Surveyor: slabs are direction-free, and untagged shapes with air under them are found
+{ const loopOn = (ob, al, R = 0.7) => { const mx = (ob.a.x + ob.b.x) / 2, mz = (ob.a.z + ob.b.z) / 2, w = 300 * D, Tl = 2 * Math.PI / w, y0 = ob.under - 0.12 - 0.0, top = ob.over + 0.25, k = (top - y0) / (2 * R);
+    return { T: 1 + Tl + 1.5, at: t => { if (t < 1) return { pos: v3(mx - al.x * (3 - 3 * t), y0, mz - al.z * (3 - 3 * t)), q: faceQ(al) }; const a = Math.min(t - 1, Tl) * w; if (t - 1 > Tl) { const u = t - 1 - Tl; return { pos: v3(mx + al.x * u * 3, y0, mz + al.z * u * 3), q: faceQ(al) }; }
+      return { pos: v3(mx + al.x * R * Math.sin(a), y0 + k * R * (1 - Math.cos(a)), mz + al.z * R * Math.sin(a)), q: S.qmul(faceQ(al), H.pitchQ(a)) }; } }; };
+  const plat = W.objs.find(o => o.name === 'Acrylic Platform'), res = {};
+  for (const [nm, al] of [['across it', v3(0, 0, -1)], ['along it', v3(1, 0, 0)], ['diagonally', S.norm(v3(1, 0, -1))]]) { const W2 = S.MAPS.school.build(), p2 = W2.objs.find(o => o.id === plat.id); res[nm] = M.detect(loopOn({ a: p2.obstacle.a, b: p2.obstacle.b, under: p2.round.under, over: p2.round.over }, al), W2, 30).filter(e => e.obstacle === 'Acrylic Platform').map(e => e.name).join('+') || 'nothing'; }
+  check('a loop round an acrylic platform counts from any direction', Object.values(res).every(v => v !== 'nothing'), JSON.stringify(res));
+  const au = W.objs.filter(o => o.auto); check('untagged shapes with air under them were found and tagged', au.length >= 5 && W.survey.slabs >= 10, `${au.length} found (${[...new Set(au.map(o => o.name))].join(', ')}), ${W.survey.slabs} slabs made direction-free`);
+  const W3 = S.MAPS.school.build(), lin = W3.objs.find(o => o.auto && o.name === 'Classroom Shell' && o.obstacle.under > 2), ev = M.detect(loopOn(lin.obstacle, v3(1, 0, 0), 0.8), W3, 30);
+  check('a loop through a classroom doorway and over its lintel counts (nobody tagged it)', ev.some(e => e.obstacle === 'Classroom Shell'), ev.map(e => e.name + (e.obstacle ? ' on ' + e.obstacle : '')).join(' | ') || 'nothing'); }
 // the playground as the game builds it: the original, untouched, plus the extras layer
 { const base = S.buildPlayground(), G = S.MAPS.playground.build(), n0 = base.objs.length; let cut = 0;
   for (const o of G.objs.slice(n0)) for (const p of o.prims) for (const q of base.prims) { const a = p.aabb, b = q.aabb; if (Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x) > 0.02 && Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y) > 0.02 && Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z) > 0.02) cut++; }

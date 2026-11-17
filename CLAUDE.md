@@ -147,6 +147,15 @@ never flicker against it. Menus: Maps (a list) and Tools & labs are their own sc
 from the pilot's design doc: the
 bowl is ringed by a raised deck because the ground plane cannot be dug into, and rubber feels the same as concrete.
 
+## The Surveyor (src/sim.js `surveyObstacles`)
+Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of
+approach direction: (1) a tagged object that is really a slab (at least 0.6 m both ways within its over/under band) gets
+`round.box`, so `trackCrossings` aims the over/under line across whatever approach is flown, as wide as the slab is that
+way; (2) untagged flat boxes and level capsules with at least 0.35 m of air beneath, no thicker than 1.6 m and no wider
+than 5 m, become over/unders of their own (virtual objects with `auto: true`, `parent`, no shapes). New maps need no
+`obstacle` tags for ordinary things; tag by hand only what the rules skip (sloped things, very thick or very wide ones).
+The base `buildPlayground()` used by the tests is not surveyed. `world.survey` reports the counts.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).
