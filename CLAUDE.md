@@ -129,6 +129,18 @@ Every pilot picks a name before the menu (`store 'pilotName'`, editable in Optio
 the Pilot Warm-up is recommended once to anyone without a profile. The name goes with shared flights, labels and
 feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
+## Maps (src/maps.js) and their look (src/worldview.js)
+`Sim.MAPS` lists the maps: `school` (the Abandoned Vaporwave School, the default) and `playground` (the original;
+`buildPlayground()` in sim.js). The game builds one at start-up from `store 'map'`; the Map button on the main menu
+switches and reloads. A map is `{ objs, prims, zones, spawn, id, title, theme }`; the detector reads only tags
+(`obstacle`, `round`, `gap`, kind 'pole' capsules up to 0.25 m radius, kind 'wall'/'building', kind 'pilot'), so any
+map built with the kit in maps.js gets trick detection. `theme: 'vapor'` selects the sunset sky, grid floor, chrome
+reflections and neon in worldview.js (`vaporMats`, `vaporBackdrop`); neon strips are `glow` pieces with no collision.
+Trick Calibration and Judge the Bot stay on the playground (they name its objects), and so do the Node tests and the
+bot's stress flights; `test/school.js` covers the school. Shared flights record their map and `tools/flights.js`
+re-flies each on the right one. The school is a first build from the pilot's design doc: no bloom (emissive only), the
+bowl is ringed by a raised deck because the ground plane cannot be dug into, and rubber feels the same as concrete.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

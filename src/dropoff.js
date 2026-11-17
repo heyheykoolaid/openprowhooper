@@ -26,7 +26,7 @@ function telCapture(reason) {
   const day = new Date().toISOString().slice(0, 10), cnt = store.get('telDay', { day, n: 0 }); if (cnt.day !== day) { cnt.day = day; cnt.n = 0; }
   if (cnt.n >= TEL.perDay) return; cnt.n++; store.set('telDay', cnt);
   recap.telDone = recap.id;
-  const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), name: pilotName() || null, map: 'playground',
+  const head = { format: 'pro-whooper-flight/1', build: '0.1', id: recap.id, started: recap.started, ended: reason, pilot: telPilot(), name: pilotName() || null, map: MAP_ID,
     mode: recap.mode || 'free', camTilt: tune.camTilt, camFov: tune.camFov,
     // the whoop as configured in the Garage: part ids and names, and what they add up to
     craft: { ...spec, names: params.names || null, stats: params.stats ? { auw: +params.stats.auw.toFixed(2), twr: +params.stats.twr.toFixed(2), hoverThrottle: +params.stats.hoverThrottle.toFixed(3) } : null },

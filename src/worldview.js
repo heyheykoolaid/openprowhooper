@@ -118,6 +118,59 @@ function graffitiTexture(wM, hM, density = 1, opts = {}) {
 
 // ============================================================ materials & geometry helpers
 const MAT = {};
+// ---- the vaporwave school's look: pastel concrete, chrome that mirrors the sunset, glowing acrylic and neon, CRT static
+function vaporMats() {
+  let c, g;
+  // the infinite grid floor (one 2 m cell per tile) and its glow
+  for (const glow of [false, true]) { [c, g] = cnv(256, 256); g.fillStyle = glow ? '#000' : '#160a36'; g.fillRect(0, 0, 256, 256);
+    if (!glow) { const rg = g.createRadialGradient(128, 128, 20, 128, 128, 180); rg.addColorStop(0, 'rgba(90,40,150,0.35)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, 256, 256); }
+    g.shadowBlur = glow ? 10 : 6; for (const [col, w] of [['#ff4fd8', 5], ['#7df9ff', 2]]) { g.strokeStyle = col; g.shadowColor = col; g.lineWidth = w; g.strokeRect(0, 0, 256, 256); }
+    TX[glow ? 'vGridE' : 'vGrid'] = tex(c); }
+  [c, g] = cnv(256, 256); g.fillStyle = '#d9cdf2'; g.fillRect(0, 0, 256, 256); speckle(g, 256, 256, 5000, ['#c7b8ea', '#eadcff', '#bfaee0']); g.strokeStyle = 'rgba(255,120,220,0.5)'; g.lineWidth = 3; g.strokeRect(0, 0, 256, 256); TX.vTile = tex(c);
+  [c, g] = cnv(256, 256); for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = (x + y) % 2 ? '#9fe9d2' : '#f2b6dc'; g.fillRect(x * 128, y * 128, 128, 128); } speckle(g, 256, 256, 6000, ['rgba(255,255,255,0.25)', 'rgba(60,30,90,0.12)']); TX.vChecker = tex(c);
+  [c, g] = cnv(128, 128); const id = g.createImageData(128, 128); for (let i = 0; i < id.data.length; i += 4) { const v = 40 + Math.floor(rnd() * 200), row = (i / 4 / 128 | 0) % 3 === 0 ? 0.55 : 1; id.data[i] = v * 0.75 * row; id.data[i + 1] = v * row; id.data[i + 2] = Math.min(255, v * 1.15) * row; id.data[i + 3] = 255; } g.putImageData(id, 0, 0); TX.crt = tex(c);
+  [c, g] = cnv(256, 256); g.fillStyle = '#f4f0fa'; g.fillRect(0, 0, 256, 256); speckle(g, 256, 256, 7000, ['#ffffff', '#e6dff2', '#ded4ee']); TX.vPlaster = tex(c);   // smooth painted concrete: clean, so the pastels stay pastel
+  const P = (hex, o = {}) => new THREE.MeshStandardMaterial({ color: hex, map: TX.vPlaster, roughness: 0.78, metalness: 0.02, ...o });
+  MAT.vConcrete = P(0xd8cdf0); MAT.vLav = P(0xb9a2f5); MAT.vPink = P(0xf7a8d2); MAT.vMint = P(0xa4f0d4);
+  MAT.vRubber = new THREE.MeshStandardMaterial({ color: 0x86ecd0, roughness: 1 });
+  MAT.marble = new THREE.MeshStandardMaterial({ color: 0xf7f1ff, roughness: 0.32, metalness: 0.04 });
+  MAT.chrome = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.06, envMapIntensity: 1.3 });
+  MAT.acrylic = new THREE.MeshStandardMaterial({ color: 0xa6f4ff, transparent: true, opacity: 0.4, roughness: 0.08, metalness: 0.25, emissive: 0x39d2ff, emissiveIntensity: 0.3, side: THREE.DoubleSide, depthWrite: false });
+  for (const [k, hex] of [['neonPink', 0xff3fd0], ['neonCyan', 0x55f6ff], ['neonPurple', 0xb26bff], ['neonYellow', 0xfff36a]]) MAT[k] = new THREE.MeshBasicMaterial({ color: hex, toneMapped: false });
+  MAT.crt = new THREE.MeshBasicMaterial({ map: TX.crt, toneMapped: false });
+  MAT.vPlaza = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xb9a9e8, roughness: 0.7, metalness: 0.05 });
+  MAT.vRubberFloor = new THREE.MeshStandardMaterial({ map: TX.vChecker, roughness: 1 });
+  MAT.vChromeFloor = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xcfc2ff, roughness: 0.12, metalness: 0.92, envMapIntensity: 1.1 });
+  MAT.vGrid = new THREE.MeshStandardMaterial({ map: TX.vGrid, emissiveMap: TX.vGridE, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.25 });
+}
+function vaporBackdrop() {
+  // sky: indigo overhead, magenta, then a hot pink-orange band at the horizon
+  const stops = [[0, '#0d0530'], [0.3, '#35107a'], [0.44, '#a4288f'], [0.5, '#ff5fa2'], [0.535, '#ffb07a'], [0.56, '#5a1f7a'], [1, '#12063a']];
+  const [sc, sg] = cnv(16, 512), gr = sg.createLinearGradient(0, 0, 0, 512); for (const [o, c] of stops) gr.addColorStop(o, c); sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512);
+  const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
+  playRoot.add(new THREE.Mesh(new THREE.SphereGeometry(320, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false })));
+  // what the chrome reflects: the same sky with the sun in it
+  const [ec, eg] = cnv(256, 128), eg2 = eg.createLinearGradient(0, 0, 0, 128); for (const [o, c] of stops) eg2.addColorStop(o, c); eg.fillStyle = eg2; eg.fillRect(0, 0, 256, 128);
+  const sunG = eg.createRadialGradient(150, 60, 2, 150, 60, 34); sunG.addColorStop(0, '#fff6b0'); sunG.addColorStop(0.4, '#ff8fc0'); sunG.addColorStop(1, 'rgba(255,80,170,0)'); eg.fillStyle = sunG; eg.fillRect(0, 0, 256, 128);
+  const envT = new THREE.CanvasTexture(ec); envT.colorSpace = THREE.SRGBColorSpace; envT.mapping = THREE.EquirectangularReflectionMapping; scene.environment = envT;
+  scene.fog = new THREE.Fog(0x6b2a90, 45, 230);
+  // the sun: a striped disc sitting on the horizon behind the hall
+  const [uc, ug] = cnv(256, 256), ugr = ug.createLinearGradient(0, 0, 0, 256); ugr.addColorStop(0, '#fff47c'); ugr.addColorStop(0.55, '#ff8a5c'); ugr.addColorStop(1, '#ff2fa6'); ug.fillStyle = ugr; ug.beginPath(); ug.arc(128, 128, 126, 0, 7); ug.fill();
+  ug.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 7; i++) { const y = 138 + i * 17; ug.fillRect(0, y, 256, 3 + i * 1.6); }
+  const sunDir = new THREE.Vector3(-0.5, 0.115, -0.86).normalize(), sunM = new THREE.Mesh(new THREE.CircleGeometry(62, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(uc), transparent: true, fog: false, toneMapped: false, depthWrite: false }));
+  sunM.material.map.colorSpace = THREE.SRGBColorSpace; sunM.position.copy(sunDir).multiplyScalar(290); sunM.lookAt(0, 20, 0); playRoot.add(sunM);
+  // low, permanent sunset light with long shadows; a cool rim light from the other side keeps silhouettes readable
+  playRoot.add(new THREE.HemisphereLight(0xffb0e0, 0x6a4fb8, 1.35));
+  const sun = new THREE.DirectionalLight(0xffa6cf, 2.5); sun.position.copy(sunDir).multiplyScalar(70); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  const sh = sun.shadow.camera; sh.left = -46; sh.right = 46; sh.top = 46; sh.bottom = -46; sh.near = 1; sh.far = 190; sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; playRoot.add(sun); playRoot.add(sun.target);
+  const rim = new THREE.DirectionalLight(0x66e6ff, 0.75); rim.position.set(30, 18, 40); playRoot.add(rim);
+  // the grid floor, out to the fog
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), MAT.vGrid); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 350, guv.getY(i) * 350); playRoot.add(gnd);
+  // wireframe mountains on the horizon
+  const fill = new THREE.MeshBasicMaterial({ color: 0x1a0b3f, fog: false }), edge = [new THREE.LineBasicMaterial({ color: 0xff4fd8, fog: false }), new THREE.LineBasicMaterial({ color: 0x66f0ff, fog: false })];
+  for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + rnd() * 0.1, R = 205 + rnd() * 60, h = 10 + rnd() * 30, r = 20 + rnd() * 26, geo = new THREE.ConeGeometry(r, h, 4, 1), m = new THREE.Mesh(geo, fill);
+    m.position.set(Math.cos(a) * R, h / 2 - 0.5, Math.sin(a) * R); m.rotation.y = rnd() * 1.5; m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edge[i % 2])); playRoot.add(m); }
+}
 function mats() {
   const std = (map, o = {}) => new THREE.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0.0, ...o });
   MAT.asphalt = std(TX.asphalt); MAT.concrete = std(TX.concrete); MAT.brick = std(TX.brick); MAT.rubberMat = std(TX.rubberMat); MAT.sand = std(TX.sand); MAT.court = std(TX.court);
@@ -133,6 +186,7 @@ function mats() {
   MAT.skin = new THREE.MeshStandardMaterial({ color: 0xc89272, roughness: 0.7 }); MAT.radio = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.3 });
   MAT.goggles = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.4, emissive: 0x220000 });
   MAT.backboard = std(TX.backboard); MAT.rimOrange = new THREE.MeshStandardMaterial({ color: 0xd2521f, metalness: 0.5, roughness: 0.4 });
+  vaporMats();
 }
 function boxGeo(h, density = 0.5) {
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
@@ -155,6 +209,8 @@ function pipeMesh(a, b, r, mat, cone) {
 
 // ============================================================ build world meshes
 function buildScene() {
+  const VAPOR = world.theme === 'vapor';
+  if (VAPOR) vaporBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
   gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a');
@@ -170,6 +226,7 @@ function buildScene() {
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true;
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 60, guv.getY(i) * 60);
   playRoot.add(gnd);
+  }
   for (const z of world.zones) {
     const g = new THREE.PlaneGeometry(z.h.x * 2, z.h.z * 2); const uv = g.attributes.uv; const d = z.mat === 'court' ? 1 : 0.5;
     if (z.mat !== 'court') for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * z.h.x * 2 * d, uv.getY(i) * z.h.z * 2 * d);
@@ -185,10 +242,12 @@ function buildScene() {
       m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
       if (v.graffiti) addGraffiti(v);
     } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
+    else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
     else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
     if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink'; m.receiveShadow = true; playRoot.add(m);
+    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; playRoot.add(m);
   }
+  if (VAPOR) return;
   // lamp lights
   for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(0xffc98a, 6, 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
   // skyline beyond the fence (no collision)
@@ -214,7 +273,8 @@ function addGraffiti(v) {
   if (w < 3) opts.big = (opts.big || 1) * 0.5;
   // the pilot's pieces: a big wall of all three on the building, one per graffiti-wall section, small ones on props
   const turn = () => ['heyhey', 'clappy', 'rwdc'][artTurn++ % 3];
-  if (hh > 10) opts.art = [{ name: 'clappy', x: 0.17, y: 6.2, h: 6.4, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 6.6, h: 4.6, rot: 0.02 }, { name: 'rwdc', x: 0.83, y: 6.0, h: 5.2, rot: 0.05 }];
+  if (v.art) opts.art = v.art;   // a map can say exactly which pieces go where
+  else if (hh > 10) opts.art = [{ name: 'clappy', x: 0.17, y: 6.2, h: 6.4, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 6.6, h: 4.6, rot: 0.02 }, { name: 'rwdc', x: 0.83, y: 6.0, h: 5.2, rot: 0.05 }];
   else if (v.graffiti === 'east' && w > 4) opts.art = [{ name: turn(), x: 0.25 + rnd() * 0.5, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];
   else if (v.graffiti === 'south' && w > 2.5 && hh < 2) opts.art = [{ name: 'clappy', x: 0.5, y: hh * 0.5, h: hh * 0.86, rot: 0.06 }];
   else if (v.graffiti === 'south' && w < 2.5 && hh < 1.5) opts.art = [{ name: 'rwdc', x: 0.5, y: hh * 0.52, h: hh * 0.85 }];

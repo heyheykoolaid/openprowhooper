@@ -1,4 +1,9 @@
 // ============================================================ menus
+// Maps: the choice is remembered and the page reloads into it. Trick Calibration and Judge the Bot name specific
+// playground objects, so they stay on the playground.
+function needPlayground(what) { if (MAP_ID === 'playground') return false; flash(`<b>${what.toUpperCase()} RUNS ON THE PLAYGROUND</b><small>press Map on the main menu to switch</small>`, 'warn'); return true; }
+function menuMapLabels() { const m = $('#menuMap'), b = $('#mapBtn'), ids = Object.keys(S.MAPS); if (m) m.textContent = world.title; if (b) b.textContent = 'Map: ' + S.MAPS[MAP_ID].title + ' ▸ ' + S.MAPS[ids[(ids.indexOf(MAP_ID) + 1) % ids.length]].title; }
+setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
 function startFly(withSession) {
   telCapture('restart');
@@ -32,7 +37,8 @@ document.addEventListener('click', e => {
   if (a === 'resume') resume(); if (a === 'menu') { telCapture('menu'); if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
-  if (a === 'judge') startJudge();
+  if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
+  if (a === 'map') { const ids = Object.keys(S.MAPS), next = ids[(ids.indexOf(MAP_ID) + 1) % ids.length]; store.set('map', next); telCapture('map'); $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }
   if (a === 'race') openRaceMenu();
 });
 

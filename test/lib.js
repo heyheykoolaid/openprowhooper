@@ -3,7 +3,7 @@ require('../src/tricks.js'); require('../src/sim.js');
 const S = globalThis.Sim;
 const world = S.buildPlayground();
 function replayTrace(rows, opts = {}) {
-  const det = new S.TrickDetector(world); det.camTilt = opts.camTilt ?? 20;
+  const det = new S.TrickDetector(opts.world || world); det.camTilt = opts.camTilt ?? 20;
   if (opts.hook) opts.hook(det);
   const d = Object.create(S.Drone.prototype); d.armed = true; d.crashed = false; d.contactThisStep = false;
   const dt = 0.001, out = [], dbg = [], hasV = rows[0].length >= 24;

@@ -109,7 +109,7 @@ function recapPayload() {
   for (const e of recap.events) if (e.verdict) labels.push({ target: e.name, verdict: e.verdict, actual: e.verdict === 'no' ? (e.actual || null) : e.name, repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, flagged: !!e.flag, via: 'review' });
   for (const f of recap.flags) if (f.actual) labels.push({ target: f.actual, verdict: 'yes', actual: f.actual, repStart: +(f.t - (f.added ? 2.5 : 5)).toFixed(3), t: +(f.t + (f.added ? 2.5 : 0.5)).toFixed(3), detected: [], via: f.added ? 'review-added' : 'flag-missed' });
     else labels.push({ target: 'unknown', verdict: 'unlabelled', actual: null, repStart: +(f.t - 5).toFixed(3), t: f.t, detected: [], via: 'flag-missed', undone: true });
-  return { format: 'pro-whooper-session/2', source: 'review', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, pilot: store.get('pilot', null),
+  return { format: 'pro-whooper-session/2', source: 'review', build: '0.1', map: MAP_ID, camTilt: tune.camTilt, craft: { ...spec }, tune, pilot: store.get('pilot', null),
     run: { id: recap.id, started: recap.started, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, events: recap.events.map(e => ({ t: e.t, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf })), labels } };
 }
 function recapSave(force) {

@@ -12,7 +12,9 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];
     if (r && r.center === o[0] && r.max === o[1] && Math.abs(r.expo - o[2]) < 1e-6) Object.assign(r, { center: d[ax].center, max: d[ax].max, expo: d[ax].expo }); }
   tune.ratesV2 = true; store.set('tune', tune); })();
-const world = S.buildPlayground();
+// the map: chosen on the main menu, remembered, built once at start-up (changing it reloads the page)
+const MAP_ID = S.MAPS[store.get('map', 'school')] ? store.get('map', 'school') : 'school';
+const world = S.MAPS[MAP_ID].build();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
 const detector = new S.TrickDetector(world);

@@ -12,6 +12,7 @@ const checks = [
   ['demo GIF motion replay', () => { const o = run('demo-replay.js'); const m = o.match(/(\d+)\/(\d+) demo replays/); return m && m[1] === m[2] ? null : o; }],
   ['race rules (gates, laps, best 3 consecutive, validation)', () => { const o = run('race.js', []); return /(\d+)\/\1 race checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['blackbox decoder matches orangebox on a real flight', () => { const o = run('bbl.js', []); return /(\d+)\/\1 blackbox decoder checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
+  ['vaporwave school map (builds, spawn clear, transitions, orbit and loop on its objects)', () => { const o = run('school.js', []); return /(\d+)\/\1 school map checks/.test(o) ? null : o; }],
   ['flight telemetry packing (round trip, size, same trick calls)', () => { const o = run('flightlog.js', []); return /(\d+)\/\1 flight log checks/.test(o) ? null : o; }],
   ['slide disarm with the real physics (slide, re-arm, fly away)', () => { const o = run('slide.js', []); return /(\d+)\/\1 slide checks/.test(o) ? null : o; }],
   ['telemetry drop-off relay (formats, paths, no tokens)', () => { const o = run('dropoff.js', []); return /(\d+)\/\1 drop-off checks/.test(o) ? null : o; }],

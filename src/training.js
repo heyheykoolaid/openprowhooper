@@ -150,10 +150,10 @@ async function exportData(kind) {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   let payload, filename;
   if (kind === 'session') {
-    payload = { format: 'pro-whooper-session/2', build: '0.1', map: 'playground', camTilt: tune.camTilt, craft: { ...spec }, tune, cal, run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } };
+    payload = { format: 'pro-whooper-session/2', build: '0.1', map: MAP_ID, camTilt: tune.camTilt, craft: { ...spec }, tune, cal, run: { id: run.id, started: run.started, round: run.round, hz: TRACE_HZ, cols: TRACE_COLS, trace: run.trace, events: run.events, labels: run.labels } };
     filename = `pro-whooper-session-r${cal.round}-${stamp}.json`;
   } else {
-    const ex = await idb.all('examples'); payload = { format: 'pro-whooper-training/3', build: '0.1', map: 'playground', camTilt: tune.camTilt, tune, cal, examples: ex };
+    const ex = await idb.all('examples'); payload = { format: 'pro-whooper-training/3', build: '0.1', map: MAP_ID, camTilt: tune.camTilt, tune, cal, examples: ex };
     filename = `pro-whooper-all-reps-${stamp}.json`;
   }
   const data = JSON.stringify(payload);
@@ -175,7 +175,7 @@ document.addEventListener('click', e => {
     if (a === 'nextRound') { cal.round++; cal.reps = {}; cal.agree = {}; cal.misses = {}; saveCalib(); newRun(); setTarget(nextUnfinished()); flash(`<b>ROUND ${cal.round}</b><small>new round — same checklist, fresh reps</small>`); }
   }
   const pk = e.target.closest('[data-pick]'); if (pk) { const t = ALL_TRICKS().find(x => nameOf(x) === decodeURIComponent(pk.dataset.pick)); if (t) { setTarget(t); closeChecklist(); } }
-  if (e.target.closest('[data-act="train"]')) startTraining();
+  if (e.target.closest('[data-act="train"]')) { if (needPlayground('Trick Calibration')) return; startTraining(); }
   if (e.target.closest('[data-act="clclose"]')) closeChecklist();
 });
 document.addEventListener('change', e => {
