@@ -174,7 +174,7 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('[data-fb]'); if (!b) return; const a = b.dataset.fb, msg = t => { $('#fbMsg').textContent = t; };
   if (a === 'close') { $('#fbModal').classList.add('hide'); return; }
   const p = fbPayload(); if (!p.text) { msg('Write a comment first.'); return; }
-  const all = store.get('feedback', []); if (!all.some(x => x.at === p.at)) { all.push(p); store.set('feedback', all.slice(-50)); }
+  const all = store.get('feedback', []); if (!all.some(x => x.at === p.at)) { all.push({ ...p, queued: true }); store.set('feedback', all.slice(-50)); }
   if (a === 'send') { const sent = ghEnqueue(`feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}.json`, p, `feedback: ${p.category}`); if (!sent) telQueue('feedback', `${p.at.replace(/[:.]/g, '-')}-${slug(p.category)}`, p); $('#fbModal').classList.add('hide'); flashNote(sent ? 'Feedback sent — thank you!' : 'Feedback saved in this browser — thank you!'); }
   if (a === 'file') { await saveFile(`feedback-${p.at.slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(p, null, 1)); msg('Saved. Send that file to the project.'); }
   if (a === 'copy') { try { await navigator.clipboard.writeText(fbText(p)); msg('Copied — paste it anywhere.'); } catch { msg('Could not copy here; use Save as file.'); } }

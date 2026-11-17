@@ -122,5 +122,9 @@ async function telCollect() {
 }
 // a run still in the air when the tab is closed: pack what there is (best effort)
 addEventListener('pagehide', () => telCapture('closed'));
-setTimeout(() => { if (!tel.asked && $('#telAsk')) $('#telAsk').classList.remove('hide'); if (tel.on) telPump(); }, 1500);
+// comments written before there was a drop-off are still in this browser: queue the ones that never went anywhere
+async function telOldFeedback() { const all = store.get('feedback', []); let n = 0;
+  for (const p of all) { if (p.queued || !p.text) continue; p.queued = true; n++; await telStore({ id: `feedback/${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, kind: 'feedback', name: `${p.at.replace(/[:.]/g, '-')}-${slug(p.category || 'other')}`, at: p.at, body: JSON.stringify({ ...p, queued: undefined }), sent: null }); }
+  if (n) store.set('feedback', all); }
+setTimeout(async () => { if (!tel.asked && $('#telAsk')) $('#telAsk').classList.remove('hide'); await telOldFeedback(); telPump(); }, 1500);
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
