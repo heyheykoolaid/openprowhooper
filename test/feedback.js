@@ -141,6 +141,12 @@ runX('trippy: big 6.3 m orbit of the flagpole, drifting out to 6.9', trip({ R: 6
 runX('trippy: egg-shaped orbit, uneven speed (sloppy)', trip({ R: 3.5, ecc: 0.4, wig: 0.6 }), ['Trippy Spin x2 (sloppy)']);
 runX('flip straight into a trippy (combo)', trip({ flip: 520, R: 2.5, rate: 80, y: 5 }), ['Flip', 'Trippy Spin x2']);
 runX('one upright lap, half a lap rolled over (no trippy)', trip({ pre: 1.0, laps: 0.5, post: 0.6 }), []);
+// 6e. pilot: Matty flips inside combos were called Beginner Matty (the flip slow and broken up mid-way, no big pitch token)
+{ const m0 = M.make('Matty Flip', W, 5100002, { tilt: 30 }), a = 1.1, b = 2.2, k = 0.35, ext = (b - a) * (1 / k - 1), warp = t => t < a ? t : t < a + (b - a) / k ? a + (t - a) * k : t - ext;
+  run('matty flip, flip slow and broken up mid-way (not a beginner matty)', { T: m0.T + ext, at: t => m0.at(warp(t)) }, ['Matty Flip']); }
+// 6f. pilot: ordinary movement round a pole was called a Whiplash
+runX('banked half lap past a lamp post, flying on (no whiplash)', trip({ pre: 0.5, laps: 0, c: LP, R: 1.5, rate: 120, y: 2 }), []);
+runX('banked 3/4 lap round the flagpole, flying on (no whiplash)', trip({ pre: 0.75, laps: 0, R: 2, rate: 90, y: 2.5 }), []);
 // 6c. jump ropes only on real over/under bars (pilot: they triggered on other objects): sideways over a bench and back,
 // and sideways over the swing bar twice (no pass under), are not jump ropes
 { const side = (x0, z0, y, dz, T) => at([{ T, f: t => ({ pos: v3(x0, y, z0 + dz * Math.cos(2 * Math.PI * t / T)), q: faceQ(v3(1, 0, 0)) }) }, hold(v3(x0, y, z0 + dz), faceQ(v3(1, 0, 0)), 1.5)]);

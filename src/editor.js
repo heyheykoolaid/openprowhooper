@@ -587,6 +587,8 @@ function edPanels() {
   $('#edCount').textContent = `(${RC.required(T).length} gates)`; $('#edNext').checked = !!T.nextOnly;
   const stt = RC.trackStats(T, ed.W.geoms), hasLoose = T.gates.some(g => RC.GATE_TYPES[g.type].loose);
   $('#edStats').innerHTML = hasLoose ? `PVC: <b>${stt.sections}</b> / 20 sections of ${stt.sectionIn}″ ${stt.sections > 20.05 ? '<span class="warn">(over the RaceGOW 20)</span>' : ''}<br>Footprint: ${stt.footprint[0]} × ${stt.footprint[1]} sections ${stt.fits ? '<span class="ok">fits 4′ × 6′ at 24″</span>' : '<span class="warn">bigger than RaceGOW\'s 2 × 3</span>'}` : `Gate size ${stt.sectionIn}″`;
+  { const rq = RC.required(T).map(i => ed.W.geoms[i].centre); let L = 0; for (let i = 1; i < rq.length; i++) L += S.len(S.sub(rq[i], rq[i - 1])); if (rq.length > 1 && T.startFinish !== false) L += S.len(S.sub(rq[0], rq[rq.length - 1]));
+    $('#edStats').innerHTML += `<br>Lap: ${rq.length} gates, about <b>${L.toFixed(1)} m</b> gate to gate`; }
   if (document.activeElement !== $('#edSec')) $('#edSec').value = stt.sectionIn;
   const v = ed.valid; $('#edValid').innerHTML = (v.errors.map(x => `<div class="err">✗ ${x}</div>`).join('') + v.warnings.map(x => `<div class="warn">! ${x}</div>`).join('')) || '<div class="ok">✓ Ready to race</div>';
   edPropsPanel();

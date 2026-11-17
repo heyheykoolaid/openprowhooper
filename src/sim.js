@@ -466,6 +466,17 @@ function buildPlayground() {
     pipe(tr, v3(x, 0, z), v3(x, 3.2 * s, z), 0.16 * s, 'bark');
     ball(tr, v3(x, 4.2 * s, z), 1.5 * s, 'leaves'); ball(tr, v3(x + 0.9 * s, 3.7 * s, z + 0.3), 1.0 * s, 'leaves'); ball(tr, v3(x - 0.7 * s, 3.8 * s, z - 0.6), 1.1 * s, 'leaves');
   }
+  // ---- Covered walkway (pilot's photo): yellow posts on concrete footings, curved yellow beams, a corrugated roof that
+  // overhangs both sides, over a concrete path. Fly down the tunnel, slalom the posts, or loop the roof edge (over/under).
+  { const wk = O('Covered Walkway', 'overunder', { obstacle: { a: v3(-13, 0, 17.5), b: v3(-3, 0, 17.5), under: 2.45, over: 3.25 } });
+    const ZC = 17.5, HW = 1.2, EAVE = 2.6, RISE = 0.45, W2 = 1.65, R = (W2 * W2 + RISE * RISE) / (2 * RISE), Y0 = EAVE + RISE - R, F0 = Math.asin(W2 / R);
+    const arc = f => v3(0, Y0 + R * Math.cos(f), ZC + R * Math.sin(f));
+    for (let i = 0; i < 5; i++) { const x = -13 + i * 2.5;
+      for (const sg of [-1, 1]) { const z = ZC + sg * HW; box(wk, v3(x, 0.18, z), v3(0.17, 0.18, 0.17), 'concrete'); pipe(wk, v3(x, 0.36, z), v3(x, arc(sg * Math.asin(HW / R)).y, z), 0.045, 'plasticYellow'); }
+      for (let k = 0; k < 6; k++) { const a = arc(-F0 + 2 * F0 * k / 6), b = arc(-F0 + 2 * F0 * (k + 1) / 6); pipe(wk, v3(x, a.y - 0.05, a.z), v3(x, b.y - 0.05, b.z), 0.04, 'plasticYellow'); } }
+    for (const f of [-F0 * 0.6, 0, F0 * 0.6]) { const a = arc(f); pipe(wk, v3(-13.3, a.y - 0.02, a.z), v3(-2.7, a.y - 0.02, a.z), 0.02, 'galv'); }
+    for (let k = 0; k < 6; k++) { const f = -F0 + 2 * F0 * (k + 0.5) / 6, c = arc(f); box(wk, v3(-8, c.y + 0.02, c.z), v3(5.4, 0.012, R * Math.sin(F0 / 6) + 0.01), 'metalPlate', 0, f, 0, { roof: true }); }
+    const lf = O('Walkway Lamp', 'deco'); ball(lf, v3(-8, EAVE + RISE - 0.3, ZC), 0.07, 'lampHead', { noCollide: true }); }
   // ---- the pilot (you), standing by the spawn with goggles on — fly into the face for a Facepunch
   const pl = O('Pilot', 'pilot'); const PX = 2.6, PZ = 14.2;
   // wide stance (as in the demos): fly between the legs (Immelmann, Power Swap demos) or over the head
@@ -482,6 +493,7 @@ function buildPlayground() {
     { shape: 'zone', mat: 'rubberMat', c: v3(0, 0.006, -1), h: v3(11, 0, 9) },
     { shape: 'zone', mat: 'sand', c: v3(8, 0.012, 2), h: v3(1.6, 0, 2.6) },
     { shape: 'zone', mat: 'court', c: v3(-11, 0.009, -11), h: v3(6, 0, 5) },
+    { shape: 'zone', mat: 'concrete', c: v3(-8, 0.01, 17.5), h: v3(5.6, 0, 1.0) },
   ];
   const all = []; for (const o of objs) for (const p of o.prims) { p.owner = o.id; all.push(p); }
   return { objs, prims: all, zones, spawn: { pos: v3(0, 0.03, 12), yaw: 0 }, bounds: { x: [-19, 18], z: [-22, 20] } };
@@ -1065,7 +1077,12 @@ class TrickDetector {
         const big = toks.filter(x => x.raw > 200);
         // over flying forward, under flying backward, both at speed, no flip (the braking nod is too small to be a token)
         const brisk = p2.every(c => (c.spd ?? 9) >= 1.5) && (p2[0].fwdDot > 0.3 || toks.some(x => x.ax === 'P' && x.raw >= 60));
-        if (!big.length && brisk && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1])) best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 2, part: p2, ct1: p2[1].t };
+        // pilot: Matty flips inside combos were still called Beginner Matty. Mid-combo the flip is often slow, broken up or
+        // partly claimed by the trick before, so no single big pitch token is left. Go by how far the quad actually tumbled
+        // between going over and coming back under: a beginner matty only nods (well under a half turn), a Matty goes round.
+        const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0;
+        const flipped = tumble >= 230 && !(this.cur && this.cur[1] && this.cur[1].raw > 45) && !toks.some(x => x.ax === 'R' && x.raw > 120) && !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) && !toks.some(x => x.ax === 'Y' && x.raw > 120);
+        if (!big.length && brisk && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1])) best = { name: flipped ? 'Matty Flip' : 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 2, part: p2, ct1: p2[1].t };
       }
       if (/OUO/.test(kinds) && !best) {
         const big = toks.filter(x => x.raw > 200);
@@ -1538,7 +1555,12 @@ class StreamDetector extends TrickDetector {
       const obst = this.crossLog.some(c => c.kind === 'O' && c.t > ps.tc - 3.5 && c.t < t + 0.1);   // (passing under a canopy or bar is fine)
       const bumped = this.contacts.some(c => c.t > ps.tc - 1.2 && c.t < t + 0.05);   // knocked round by hitting something isn't a whip
       const pBack = toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 120) || this.cur.some(c => c && c.ax === 'P' && c.dir > 0 && c.raw >= 90);   // a big pitch back (even one still going: a loop) is a snap/cradle/loop, not a whip
-      if (!obst && !pBack && !bumped && (vf >= 0.7 || (vf >= 0.55 && turn >= 100)) && rAny && (pMinus || turn >= 120)) {
+      // pilot: lots of ordinary movement round a pole was being called a Whiplash. It has to be the real thing: a close pass,
+      // whipped right round (heading turns ~180) with the pole kept in view, coming out level and travelling backward away
+      // from it — and the game now waits to see that it holds (the Watcher's check, 0.7 s later) before confirming.
+      const levelOut = !!this.lastD && this.lastD.up().y > 0.55;
+      const rewound = this.rewinds.some(r => r.t1 > ps.tc - 1.5 && r.t0 < t);   // stopping and going back the way you came is a rewind, not a whip
+      if (!obst && !pBack && !bumped && !rewound && ps.dmin < 2.0 && vf >= 0.65 && turn >= 135 && back && levelOut && rAny) {
         const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
         if (prev) mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
         else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj });
@@ -1719,6 +1741,7 @@ class StreamDetector extends TrickDetector {
     // right beside a pole with the pass not finished yet: a pole trick (Cradle, Whiplash) may claim these rotations
     const passing = !best.clen && best.toks.length && this.lastD && this.poles.some(P => { const pt = this.passTr[P.id]; return pt && !pt.lock && pt.dmin < 2.5 && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 2.6; });
     best.hold = (this.obstaclePrefix(best) || ctxPre || spin || pole || sw || passing) ? HOLD_OBST : HOLD;
+    if (best.name === 'Whiplash') best.hold = Math.max(best.hold, 0.7);   // wait a hair longer before confirming
     best.deadline = t + best.hold;
     this.pend.push(best);
   }
@@ -1914,6 +1937,8 @@ const WATCH = {
   ],
   'Whiplash': [
     { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
+    { id: 'holds', src: 'view', label: 'still level, still looking at the pole, still backing away after the whip', hard: 'post', fn: W => W.whipHolds() },
+    { id: 'noorbit', src: 'path', label: 'not just circling the pole', hard: 'post', fn: W => W.notOrbit() },
     { id: 'track', src: 'view', label: 'kept the pole in view', fn: W => ({ ok: true }) },
   ],
   'Cradle': [
@@ -1934,7 +1959,7 @@ class Watcher {
     const t0 = c.t0 ?? (toks.length ? toks[0].t0 : part ? part[0].t : det.time);
     const t1 = c.tDone ?? Math.max(toks.length ? toks[toks.length - 1].t1 : -1e9, part ? part[part.length - 1].t : -1e9, t0);
     const objId = c.obj ?? (part && part.length ? part[0].obj : null);
-    return new WatchCtx(det, this, name, toks, part, t0, t1, objId, c.err);
+    const W = new WatchCtx(det, this, name, toks, part, t0, t1, objId, c.err); W.poleId = c.poleObj; return W;
   }
   pre(name, c) {
     if (!this.on) return true;
@@ -2024,6 +2049,9 @@ class WatchCtx {
     const worst = Math.max(...G.map(([a, b]) => this.det.sweptBetween(a, b) / (b - a)));
     return { ok: worst < 120, val: G.map(([a, b]) => (b - a).toFixed(2)).join('/') + ' s air' };
   }
+  whipHolds() { const P = this.det.poles.find(p => p.id === this.poleId); if (!P) return { na: true }; const F = this.fr(this.t1, this.t1 + 0.6); if (F.length < 10) return { na: true };
+    const lvl = F.filter(x => x.up.y > 0.5).length / F.length, see = this.det.poleView(P, this.t1, this.t1 + 0.6, 65), bk = this.det.backFrac(this.t1, this.t1 + 0.6), slow = F.every(x => Math.hypot(x.v.x, x.v.z) < 0.8);
+    return { ok: lvl >= 0.7 && see >= 0.6 && (bk >= 0.5 || slow), val: `level ${Math.round(lvl * 100)}% view ${Math.round(see * 100)}%` }; }
   noOverNear(after) { const o = this.det.crossLog.some(c => c.kind === 'O' && c.t > this.t0 - 0.5 && c.t < this.t1 + after); return { ok: !o }; }
   loopSweep(min) { const ps = this.det.pathSweep(this.t0 - 0.3, this.t1 + 0.3); return { ok: Math.abs(ps.sweep) >= min, val: Math.round(Math.abs(ps.sweep)) + '°' }; }
   // ---- sticks witness. Frames carry the pilot's sticks; no stick movement anywhere near = nothing recorded (n/a)
@@ -2158,7 +2186,7 @@ function importDiff(text, tune) {
 const EVENT_TRICKS_DRAFT = ['Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
 // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
-const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'the pilot'];
+const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];
 const SPOT_BY_CAT = {
   'Open Air Tricks': ['open air'], 'Powerloops': OVER_UNDER, 'Maverick Loops': OVER_UNDER, 'Matty Flips': [...OVER_UNDER, 'Picnic Table'],
   'SplitS': OVER_UNDER, 'Pole Dancing': ['Flagpole', 'Tree', 'Lamp Post', 'Hoop Pole', 'the pilot'], 'Jump Roping': ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower'],
