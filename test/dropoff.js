@@ -37,5 +37,22 @@
   const st = []; for (let i = 0; i < 5; i++) st.push((await post({ kind: 'flight', payload: flight() }, { ip: '8.8.8.' + i, env: capEnv })).status);
   check('everyone together is cut off at the daily cap', st.join() === '200,200,200,429,429', st.join());
   r = await post({ kind: 'flight', payload: flight() }, { ip: '7.7.7.7', env: { ...env(), LIMITS: { get: async () => { throw new Error('down'); }, put: async () => {} } } }); check('if the counter is unreachable, nothing is accepted', r.status === 429);
+  // ---- daily leaderboard
+  { const { boardFrom, scoreFile } = await import('../tools/dropoff-worker.mjs');
+    const sc = (extra = {}) => ({ format: 'pro-whooper-score/1', name: 'Tester One', pilot: 'abc123xyz', score: 12345, map: 'school', mode: 'session', sheet: [{ name: 'Flip', exec: 'CLEAN', net: 50 }], ...extra });
+    const n0 = calls.length; r = await post({ kind: 'score', payload: sc({ evil: 1 }) }, { ip: '7.7.7.1' });
+    const url = calls[calls.length - 1].url.split('/contents/')[1];
+    check('a posted score is filed under leaderboard/<day>/ with the board entry in its name', r.status === 200 && calls.length === n0 + 1 && /^leaderboard\/\d{4}-\d\d-\d\d\/00012345-school-[A-Za-z0-9_-]+-abc123xyz-\d+\.json$/.test(url), url);
+    for (const [why, bad] of [['a free-fly score', { mode: 'free' }], ['a silly score', { score: 99999999 }], ['a fractional score', { score: 1.5 }], ['a name with markup', { name: '<img src=x>' }], ['a path as the map', { map: '../x' }], ['an odd pilot id', { pilot: '../../x' }]]) { r = await post({ kind: 'score', payload: sc(bad) }, { ip: '7.7.7.2' }); check(`${why} is refused`, r.status === 400); }
+    const names = [scoreFile(sc(), 1794930000000), scoreFile(sc({ score: 20000 }), 1794930001000), scoreFile(sc({ name: 'Other', pilot: 'zzzzzz1', score: 15000 }), 1794930002000), scoreFile(sc({ map: 'playground', score: 7 }), 1794930003000), '../../secret.json', 'README.md', '00000001-school-PGI-!!!-1.json'];
+    const B = boardFrom(names); check('the board is each pilot\'s best per map, highest first, junk ignored', B.length === 3 && B[0].score === 20000 && B[0].name === 'Tester One' && B[1].name === 'Other' && B[2].map === 'playground', JSON.stringify(B.map(e => [e.name, e.score, e.map])));
+    const ghList = async (url, init) => { calls.push({ url, init }); if (/contents\/leaderboard\/\d{4}-\d\d-\d\d\?/.test(url)) return { ok: true, status: 200, json: async () => names.map(n => ({ type: 'file', name: n, download_url: 'https://secret', sha: 'x' })) };
+      if (url.includes('/contents/leaderboard/')) return { ok: true, status: 200, text: async () => JSON.stringify({ ...sc(), secretField: 'nope' }) }; return { ok: false, status: 404 }; };
+    const get = (path, o = {}) => handle(new Request('https://drop' + path, { method: 'GET', headers: { Origin: GAME, 'CF-Connecting-IP': o.ip || '9.9.9.' + (n + 1) } }), env(), ghList);
+    r = await get('/board'); const jb = await r.json(); check('GET /board answers with names and scores only', r.status === 200 && jb.runs.length === 3 && !JSON.stringify(jb).includes('secret') && Object.keys(jb.runs[0]).sort().join() === 'at,id,map,name,score');
+    r = await get('/board?day=../../x'); check('a bad day is refused', r.status === 400);
+    r = await get('/run?day=2026-11-17&id=' + B[0].id); const jr = await r.json(); check('GET /run returns one posted run, known fields only', r.status === 200 && jr.score === 12345 && !('secretField' in jr));
+    for (const bad of ['../../telemetry/inbox/flight/x', 'README', '00012345-school-VGVzdGVy-abc123xyz-1794930000000/../../x']) { const m = calls.length; r = await get('/run?day=2026-11-17&id=' + encodeURIComponent(bad)); check(`GET /run cannot be pointed at "${bad.slice(0, 24)}…"`, r.status === 400 && calls.length === m); }
+    r = await get('/'); check('any other GET is refused', r.status === 405); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

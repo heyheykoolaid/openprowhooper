@@ -227,12 +227,21 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapNow { position: absolute; left: 16px; top: 12px; font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; pointer-events: none !important; }
 #recapNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
 #recapBar { position: absolute; left: 12px; right: 362px; bottom: 10px; background: #12141aee; border: 1px solid #2c2f3a; padding: 8px 10px; color: #eee; font: 13px system-ui, sans-serif; }
+.lbT { width: 100%; border-collapse: collapse; font: 13px var(--mono); } .lbT td, .lbT th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #ffffff18; } .lbT td:nth-child(3) { text-align: right; font-weight: 700; }
+.lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
+.lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
+#lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
 #recapBar .rcTrack { position: relative; height: 62px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
 #recapBar .rcSpan { position: absolute; bottom: 0; height: 4px; background: #ffffff40; pointer-events: none; }
-#recapBar .rcM { position: absolute; min-width: 9px; box-sizing: border-box; cursor: grab; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
+#recapBar .rcM { position: absolute; min-width: 14px; box-sizing: border-box; cursor: grab; overflow: visible; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
 #recapBar .rcM.ok { background: #1f7a44; } #recapBar .rcM.bad { background: #a8521c; } #recapBar .rcM.unsure { background: #8a6d10; } #recapBar .rcM.add { background: #1d5fa8; } #recapBar .rcM.gone { background: #4a2020; text-decoration: line-through; color: #c99; }
 #recapBar .rcM.on { outline: 2px solid #ffd34d; z-index: 2; }
-#recapBar .rcM .rcH { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; } #recapBar .rcM .rcH.l { left: 0; border-left: 2px solid #ffffff90; } #recapBar .rcM .rcH.r { right: 0; border-right: 2px solid #ffffff90; }
+#recapBar .rcM .rcT { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+#recapBar .rcM .rcH { position: absolute; top: -2px; bottom: -2px; width: 9px; cursor: ew-resize; background: #ffd34d; border: 1px solid #111; border-radius: 3px; box-sizing: border-box; opacity: .55; z-index: 4; touch-action: none; }
+#recapBar .rcM .rcH::after { content: ''; position: absolute; left: 3px; top: 3px; bottom: 3px; width: 1px; background: #111; box-shadow: 2px 0 0 #111; }
+#recapBar .rcM .rcH.l { left: -6px; } #recapBar .rcM .rcH.r { right: -6px; }
+#recapBar .rcM:hover .rcH, #recapBar .rcM.on .rcH { opacity: 1; } #recapBar .rcM.on { z-index: 5; }
+body.rcWide #recapBar .rcM .rcH { display: none; }
 #recapBar .rcClip { position: absolute; top: 0; bottom: 0; background: #ffd34d2b; border-left: 2px solid #ffd34d; border-right: 2px solid #ffd34d; pointer-events: none; }
 body.rcWide #recapBar { right: 12px; }
 .rcExec { display: inline-flex; gap: 2px; margin-left: 2px; } .rcExec button { font: 10px var(--mono) !important; padding: 2px 5px !important; text-transform: lowercase; background: #22252e; color: #9aa; border: 1px solid #3a3f4d; transform: none; box-shadow: none; } .rcExec button.was { border-color: #ffd34d; color: #ffd34d; } .rcExec button.on { background: #ffd34d; color: #111; border-color: #ffd34d; }
@@ -316,6 +325,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
+    <button data-act="board">Daily leaderboard</button>
     <button data-act="race">RaceGOW Tracks</button>
     <button data-act="map">Maps</button>
     <button data-act="garage">Garage &amp; Tune</button>
@@ -412,6 +422,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="optionsScreen" class="screen hide"><div class="panel" style="max-width:860px">
   <div class="topbar"><h2>Options</h2><button data-act="optclose">Back</button></div><div id="optBody"></div></div></div>
 
+<div id="lbScreen" class="screen hide"><div class="panel" style="max-width:980px" id="lbPanel"></div></div>
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>
 
 <div id="reviewScreen" class="screen hide"><div class="rvWrap">

@@ -66,3 +66,11 @@ If abuse ever shows up despite this, the next step is Cloudflare Turnstile (an i
 - Uploads from the downloaded single-file game are refused by default, because a file opened from disk has no web
   address to check. Adding `null` to `ALLOW_ORIGINS` allows them, at the cost of accepting any local file.
 - The per-address limit is best effort (kept in memory on each Cloudflare machine); the daily cap is the hard stop.
+
+## Updating the relay (needed for the daily leaderboard)
+The relay's code lives in `tools/dropoff-worker.mjs`. When it changes, Cloudflare keeps running the old copy until you
+paste the new one: Cloudflare dashboard → Workers & Pages → `prowhooper-dropoff` → Edit code → select everything, paste
+the new file, Deploy. Variables and the secret stay as they are. The leaderboard adds two read-only addresses
+(`/board`, `/run`) that only ever look inside the `leaderboard/` folder of the data repo; the token needs nothing new
+(Contents: read and write already covers it). Until the new code is deployed the game says the leaderboard cannot be
+reached, and everything else works as before.

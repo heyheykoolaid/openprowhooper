@@ -92,3 +92,10 @@ Using it: `node tools/flights.js telemetry/ some-bundle.json` re-flies every fli
 prints, per flight and per trick, the calls that are no longer made, new calls, unsure calls (Watcher < 70 %) and flagged
 calls. Run it before and after a rule change, next to `npm run bench`. Telemetry has no pilot verdicts of its own, so it
 shows what a change does to real flying, not whether the change is right; F/Q flags and review labels are the verdicts.
+
+## Daily leaderboard (`pro-whooper-score/1`, `leaderboard/<UTC day>/` in the data repo)
+Posted by the player's own click after a 2:00 Session: `name`, random `pilot` id, `score`, `map`, `mode: "session"`,
+`totals`, `sheet` (the scoring sheet), `events`, `craft`, camera tilt/FOV and the packed `trace` (same packing as a
+flight). Public by design: anyone can read the day's board and open a posted run. Scores are what the game reported;
+to check one, replay its trace through the detector and ScoreKeeper. The file name carries the board entry
+(`<score>-<map>-<name>-<pilot>-<time>.json`), so the relay never opens a file to build the board.

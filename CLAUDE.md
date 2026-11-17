@@ -184,12 +184,23 @@ Orbit x2. **Open powerloops** are only handed to an obstacle when the loop went 
 data: analyse them from the data repo, do not copy them into `test/fixtures/`.
 
 ## Review timeline, crashes, reset
-Review blocks can be dragged and stretched (`recapSpanOf`, `recapSetSpan`; zoom with wheel / + −); labels then carry
+Review blocks can be dragged, and stretched by the yellow handles on each end (`recapSpanOf`, `recapSetSpan`; zoom with wheel / + −); labels then carry
 `repStart..t` = the pilot's span, `gameSpan`, `timed: true`, and `combo` / `comboLen` (tricks within `COMBO_IDLE` of each
 other). "＋ then…" adds the next trick of a combo where the selected one ends; Add starts at the red line. Selecting a
 trick plays on past it unless Loop is on. After a crash, throttle to zero rights the quad and re-arms (play.js
 `crashLock`); the game's drone has `crashImpact = 9.5` (tests keep 7.5). A reset switch never fires together with the
 arm switch (input.js): arming must not send the pilot back to the start. Only R (or a separate reset switch) resets.
+
+## Daily leaderboard (src/dropoff.js `LB`, tools/dropoff-worker.mjs)
+A finished 2:00 Session can be posted from the results screen: the player's own click every time (it publishes pilot
+name, score, scoring sheet and the run's replay; `pro-whooper-score/1`). The relay files it as
+`leaderboard/<UTC day>/<score>-<map>-<name b64url>-<pilot>-<time>.json`; `GET /board?day=` lists that folder's file
+NAMES and returns each pilot's best per map; `GET /run?day=&id=` returns one posted run (id must be a leaderboard file
+name; cleaned again on the way out). Nothing outside `leaderboard/` can be read. Scores are client-reported (not
+verified): the posted replay is how a run can be checked. In the game: main menu "Daily leaderboard", click a run for
+its sheet, "Watch the run" plays it in the replay viewer as a guest (`recap.guest`: never saved, reviewed or shared;
+only on the map it was flown on). Board text is other people's: always `esc()`. The relay must be redeployed in
+Cloudflare when `tools/dropoff-worker.mjs` changes (docs/DROPOFF-SETUP.md).
 
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.

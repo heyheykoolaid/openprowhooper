@@ -176,3 +176,96 @@ pilotShowName();
 setTimeout(async () => { if (!pilotName()) pilotAsk(); else pilotWarmAsk(); telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
+
+// ============================================================ Daily leaderboard (2:00 Sessions)
+// A 2:00 Session can be posted to the day's board. Posting is the player's own click, every time: it publishes their
+// pilot name, the score, the scoring sheet and the replay of that run through the relay (docs/DATA.md). The board is the
+// day's best run per pilot and map; days turn over at 00:00 UTC. Clicking a run shows its scoring sheet and plays it.
+// Everything that comes back from the board is other people's text: always escaped, never run.
+const LB = { last: null, runs: null, day: null, msg: '', mapOnly: true, open: null, posted: {} };
+const lbBase = () => TEL.relay ? TEL.relay.replace(/\/+$/, '') : '';
+const lbToday = () => new Date().toISOString().slice(0, 10);
+const lbNameOk = n => /^[A-Za-z0-9_. -]{2,24}$/.test(n);
+const lbMapTitle = id => (S.MAPS[id] && S.MAPS[id].title) || id;
+function lbSessionOver(r) {   // called by endSession while the run's arrays are still in place
+  const rows = recap.trace; let i0 = rows.findIndex(x => x[13]); i0 = Math.max(0, (i0 < 0 ? 0 : i0) - TRACE_HZ);
+  LB.last = { id: recap.id, total: Math.round(r.total), map: MAP_ID, rows: rows.slice(i0, i0 + 19900),
+    totals: { trick: r.trickScore, switchMult: r.switchMult(), kwad: r.kwadBonus, streak: +r.maxStreak.toFixed(2), obstacles: r.uniqueObs.size },
+    sheet: r.log.filter(x => x.net || x.exec === 'CRASH').slice(0, 400).map(x => ({ name: x.name, exec: x.exec, net: x.net, base: x.base, obstacle: x.obstacle || undefined })),
+    events: recap.events.slice(0, 400).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec })) };
+  lbResultsBox(); lbLoad(lbToday()).then(lbResultsBox);
+}
+async function lbLoad(day) {
+  if (!lbBase()) { LB.msg = 'The leaderboard needs the online version of the game.'; return; }
+  LB.day = day; LB.msg = 'Loading…';
+  try { const r = await fetch(`${lbBase()}/board?day=${day}`); if (!r.ok) throw 0; const j = await r.json(); LB.runs = Array.isArray(j.runs) ? j.runs.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score)).slice(0, 100) : []; LB.msg = ''; }
+  catch { LB.runs = null; LB.msg = 'Could not reach the leaderboard just now.'; }
+}
+const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td><td>${esc(lbMapTitle(e.map))}</td></tr>`).join('');
+function lbResultsBox() {
+  const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
+  const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
+  const can = lbBase() && L.total > 0, why = !lbBase() ? 'The leaderboard needs the online version of the game.' : L.total <= 0 ? 'Score something to post a run.' : !lbNameOk(name) ? 'Leaderboard names use letters, numbers, spaces and _ . - (2 to 24). Change yours in Options.' : '';
+  el.innerHTML = `<h3>TODAY'S LEADERBOARD <small>${esc(lbMapTitle(L.map))} · resets 00:00 UTC</small></h3>
+    ${runs.length ? `<table class="lbT">${lbRows(runs, 5, name)}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted on this map yet today. Yours could be first.')}</p>`}
+    <div class="row">${done ? `<span class="note">✓ ${esc(done)}</span>` : can && !why ? `<button data-lb="post" class="primary">Post this run as ${esc(name)}</button>` : ''}<button data-lb="open">Full leaderboard</button></div>
+    <p class="note">${done ? '' : why || 'Posting puts your pilot name, score, scoring sheet and the replay of this run on the public board for the day.'}</p>`;
+}
+async function lbPost() {
+  const L = LB.last, name = pilotName(); if (!L || LB.posted[L.id] || !lbBase() || !lbNameOk(name) || L.total <= 0 || LB.busy) return; LB.busy = true;
+  const el = document.querySelector('[data-lb="post"]'); if (el) { el.disabled = true; el.textContent = 'Posting…'; }
+  let msg = '';
+  try { const trace = L.rows.length > TRACE_HZ ? await FlightLog.pack(L.rows, TRACE_COLS, TRACE_HZ) : undefined;
+    const payload = { format: 'pro-whooper-score/1', build: '0.1', name, pilot: telPilot(), score: L.total, map: L.map, mode: 'session', flight: L.id, totals: L.totals, sheet: L.sheet, events: L.events, camTilt: tune.camTilt, camFov: tune.camFov, craft: { ...spec }, trace };
+    const r = await fetch(lbBase(), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: 'score', payload }) });
+    if (r.status === 200) { LB.posted[L.id] = `Posted: ${L.total.toLocaleString()} as ${name}`; await lbLoad(lbToday()); }
+    else msg = r.status === 429 ? 'The board is busy: try again in a bit.' : r.status === 403 ? 'Posting only works from the online version of the game.' : 'The board did not take it (' + r.status + ').';
+  } catch { msg = 'Could not reach the leaderboard just now.'; }
+  LB.busy = false; lbResultsBox(); if (msg) { const n = document.querySelector('#lbBox p.note:last-child'); if (n) n.textContent = msg; }
+}
+function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; show('#lbScreen'); lbRender(); lbLoad(LB.day && LB.from !== 'results' ? LB.day : lbToday()).then(lbRender); }
+function lbRender() {
+  const el = $('#lbPanel'); if (!el) return; const day = LB.day || lbToday(), today = lbToday(), runs = (LB.runs || []).filter(e => !LB.mapOnly || e.map === MAP_ID), R = LB.open;
+  const shift = n => { const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  el.innerHTML = `<h2>DAILY LEADERBOARD</h2>
+    <p class="note">Best 2:00 Session per pilot. A new board starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
+    <div class="row"><button data-lb="day" data-d="${shift(-1)}">◂</button><b>${day === today ? 'Today' : esc(day)}</b><button data-lb="day" data-d="${shift(1)}" ${day >= today ? 'disabled' : ''}>▸</button>
+      <label class="chk"><input type="checkbox" id="lbMapOnly" ${LB.mapOnly ? 'checked' : ''}> only ${esc(lbMapTitle(MAP_ID))}</label><button data-lb="refresh">↻</button></div>
+    <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th><th>Map</th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted yet. Fly a 2:00 Session and post it from the results screen.')}</p>`}</div>
+    <div id="lbRun">${R ? lbRunHtml(R) : '<p class="note">Pick a run.</p>'}</div></div>
+    <div class="row"><button data-lb="close" class="primary">Back</button></div>`;
+}
+function lbRunHtml(R) {
+  if (R.loading) return '<p class="note">Loading the run…</p>'; if (R.error) return `<p class="note">${esc(R.error)}</p>`;
+  const p = R.run, T = p.totals || {}, sheet = Array.isArray(p.sheet) ? p.sheet.slice(0, 400) : [], canWatch = p.trace && p.map === MAP_ID, num = v => Number.isFinite(+v) ? (+v).toLocaleString() : '—';
+  return `<h3>${esc(p.name)} · ${num(p.score)}</h3>
+    <p class="note">${esc(lbMapTitle(p.map))}${T.trick != null ? ` · trick score ${num(T.trick)} × switch ${esc(T.switchMult)} + K.W.A.D. ${num(T.kwad)}` : ''}${T.streak != null ? ` · max streak ×${esc(T.streak)}` : ''}${T.obstacles != null ? ` · obstacles ${esc(T.obstacles)}` : ''}</p>
+    <div class="row">${canWatch ? '<button data-lb="watch" class="primary">▶ Watch the run</button>' : `<span class="note">${p.trace ? 'Flown on ' + esc(lbMapTitle(p.map)) + ': switch to that map (Maps) to watch it.' : 'No replay was posted with this run.'}</span>`}</div>
+    <ol class="lbSheet">${sheet.map(x => `<li>${esc(x.name)}${x.obstacle ? ' <small>' + esc(x.obstacle) + '</small>' : ''} <span class="${/^[A-Z]+$/.test(x.exec) ? x.exec : ''}">${esc(x.exec)}</span> +${num(x.net)}</li>`).join('') || '<li>no scoring sheet</li>'}</ol>`;
+}
+async function lbPick(id) {
+  if (!/^[A-Za-z0-9_-]{10,140}$/.test(id) || !lbBase()) return; LB.open = { id, loading: true }; lbRender();
+  try { const r = await fetch(`${lbBase()}/run?day=${LB.day || lbToday()}&id=${encodeURIComponent(id)}`); if (!r.ok) throw 0; const run = await r.json(); if (!run || typeof run.name !== 'string') throw 0; if (LB.open && LB.open.id === id) LB.open = { id, run }; }
+  catch { if (LB.open && LB.open.id === id) LB.open = { id, error: 'Could not load that run.' }; }
+  lbRender();
+}
+// someone else's run in the replay viewer: a guest run is never saved, reviewed or shared from here
+async function lbWatch() {
+  const R = LB.open; if (!R || !R.run || !R.run.trace || R.run.map !== MAP_ID) return;
+  try { const rows = await FlightLog.unpack(R.run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(r => Array.isArray(r) && r.length >= 27 && r.every(Number.isFinite))) throw 0;
+    LB.keep = { trace: recap.trace, events: recap.events, flags: recap.flags, id: recap.id, started: recap.started, mode: recap.mode, dirty: recap.dirty, telDone: recap.telDone };   // the player's own run comes back afterwards
+    recapReset(); recap.guest = true; recap.trace = rows; recap.telDone = recap.id;
+    recap.events = (Array.isArray(R.run.events) ? R.run.events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: e.name.slice(0, 60), exec: String(e.exec || '').slice(0, 12), clean: null, obstacle: null, conf: null, fails: [], verdict: null, actual: null }));
+    store.set('recapReview', store.get('recapReview', true)); openRecap('board'); recap.review = false; renderRecap();
+  } catch { LB.open = { id: R.id, run: R.run, error: 'That replay could not be opened.' }; lbRender(); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-lb]'), row = e.target.closest('[data-lbrun]');
+  if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(LB.day || lbToday()).then(lbRender);
+    if (a === 'day') { LB.open = null; lbLoad(b.dataset.d).then(lbRender); } if (a === 'watch') lbWatch();
+    if (a === 'close') { if (LB.from === 'results' && LB.last) show('#resultsScreen'); else { mode = 'menu'; show('#mainMenu'); } } return; }
+  if (row && row.dataset.lbrun) { if ($('#lbScreen').classList.contains('hide')) { lbOpen('results'); } lbPick(row.dataset.lbrun); }
+  const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu');
+});
+document.addEventListener('change', e => { if (e.target.id === 'lbMapOnly') { LB.mapOnly = e.target.checked; lbRender(); } });
+window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };

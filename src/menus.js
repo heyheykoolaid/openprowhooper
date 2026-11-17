@@ -31,8 +31,8 @@ function endSession() {
     <p>Biggest trick: <b>${r.biggest ? r.biggest.name + ' (' + r.biggest.net + ')' : '—'}</b> · Max streak ×${r.maxStreak.toFixed(2)} · Obstacles ${r.uniqueObs.size}</p>
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
-    <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary">Replay &amp; review</button><button data-act="menu">Menu</button></div>`;
-  show('#resultsScreen'); telCapture('session-over');
+    <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary">Replay &amp; review</button><button data-act="menu">Menu</button></div><div id="lbBox"></div>`;
+  show('#resultsScreen'); telCapture('session-over'); lbSessionOver(r);
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;

@@ -8,18 +8,26 @@
 //   - names every file itself under telemetry/inbox/<kind>/<day>/ and only ever CREATES files (never edits or reads);
 //   - refuses anything that looks like an access token;
 //   - limits each address to PER_IP_HOUR uploads an hour and everyone together to DAILY_CAP a day;
-//   - answers with a bare ok / error, never with anything from the repo;
+//   - answers uploads with a bare ok / error, never with anything from the repo;
+//   - daily leaderboard: a 2:00 Session score a player chooses to post is filed as leaderboard/<day>/<score>-<map>-
+//     <name>-<pilot>-<time>.json (everything the board needs is in the file NAME). GET /board lists that one folder's
+//     file names, and turns them into the day's best score per pilot: no file is ever opened, nothing else in the repo
+//     can be listed, and the answer is cached for 30 s. GET /run?day=&id= returns ONE posted run (its scoring sheet and
+//     replay, which the player chose to publish): the id must be a leaderboard file name, so nothing outside
+//     leaderboard/ can ever be read, and the file is passed through the same field check again on the way out.
+//     Scores are whatever the game reported (see docs/DATA.md);
 //   - ENABLED = "0" switches it off without deleting anything.
 // Variables: GITHUB_TOKEN (secret), GITHUB_REPO "owner/repo", optional GITHUB_BRANCH, ALLOW_ORIGINS (comma separated,
 // default https://heyheykoolaid.github.io), PER_IP_HOUR (30), DAILY_CAP (800), ENABLED. Optional KV binding LIMITS makes
 // the daily cap exact across Cloudflare's machines (one small write per upload); without it, and for the per-address
 // limit, counts are kept in memory on each machine (best effort).
-const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1' };
+const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1' };
 const MAX_BYTES = 1000000;
 const KEYS = {
   flight: ['format', 'build', 'id', 'started', 'ended', 'pilot', 'name', 'map', 'mode', 'camTilt', 'craft', 'tune', 'profile', 'input', 'score', 'events', 'missed', 'summary', 'trace'],
   labels: ['format', 'build', 'flight', 'started', 'pilot', 'name', 'labels'],
   feedback: ['format', 'at', 'build', 'category', 'text', 'name', 'context'],
+  score: ['format', 'build', 'name', 'pilot', 'score', 'map', 'mode', 'flight', 'totals', 'sheet', 'events', 'camTilt', 'camFov', 'craft', 'trace'],
 };
 const str = (v, max) => typeof v === 'string' && v.length <= max;
 const optStr = (v, max) => v == null || str(v, max);
@@ -33,6 +41,8 @@ function sane(v, depth = 0, budget = { n: 0 }) {
   if (typeof v === 'object') return Object.keys(v).length <= 200 && Object.entries(v).every(([k, x]) => k.length <= 60 && sane(x, depth + 1, budget));
   return false;
 }
+const okTrace = t => !!t && typeof t === 'object' && str(t.enc, 40) && t.enc.startsWith('cols-delta-varint/1') && t.hz >= 10 && t.hz <= 1000 && Number.isInteger(t.rows) && t.rows >= 1 && t.rows <= 60000
+  && Array.isArray(t.cols) && t.cols.length <= 40 && t.cols.every(c => str(c, 20)) && str(t.data, 900000) && /^[A-Za-z0-9+/]*={0,2}$/.test(t.data);
 function clean(kind, p) {
   if (!p || typeof p !== 'object' || Array.isArray(p) || p.format !== FORMATS[kind]) return null;
   const out = {}; for (const k of KEYS[kind]) if (p[k] !== undefined) out[k] = p[k];
@@ -44,6 +54,14 @@ function clean(kind, p) {
     if (!Array.isArray(t.cols) || t.cols.length > 40 || !t.cols.every(c => str(c, 20)) || !str(t.data, 900000) || !/^[A-Za-z0-9+/]*={0,2}$/.test(t.data)) return null;
     if (!Array.isArray(out.events) || out.events.length > 3000 || !sane(out)) return null;
     out.trace = { enc: t.enc, hz: t.hz, cols: t.cols, rows: t.rows, data: t.data };
+  } else if (kind === 'score') {
+    // a name the board can show as it is, a pilot id, a whole score in a believable range, the 2:00 Session only
+    if (!str(out.name, 24) || !/^[A-Za-z0-9_. -]{2,24}$/.test(out.name) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot)) return null;
+    if (!Number.isInteger(out.score) || out.score < 1 || out.score > 3000000 || out.mode !== 'session' || !str(out.map, 24) || !/^[a-z0-9-]{1,24}$/.test(out.map)) return null;
+    // the scoring sheet (what the run was made of) and, if the player posts it, the packed replay of the run
+    if (!optStr(out.flight, 40) || (out.sheet != null && (!Array.isArray(out.sheet) || out.sheet.length > 400)) || (out.events != null && (!Array.isArray(out.events) || out.events.length > 400))) return null;
+    const t = out.trace; out.trace = undefined; if (!sane(out) || JSON.stringify(out).length > 60000) return null;
+    if (t != null) { if (!okTrace(t) || t.rows > 20000) return null; out.trace = { enc: t.enc, hz: t.hz, cols: t.cols, rows: t.rows, data: t.data }; }
   } else if (kind === 'labels') {
     if (!str(out.flight, 40) || !Array.isArray(out.labels) || out.labels.length > 3000 || !sane(out)) return null;
   } else {
@@ -59,13 +77,50 @@ async function bump(env, key, ttl, limit, shared) {
   if (c.n >= limit) return false; c.n++; return true;
 }
 
+const b64u = s => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = s => { try { return new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))); } catch { return ''; } };
+const scoreFile = (p, now) => `${String(p.score).padStart(8, '0')}-${p.map}-${b64u(p.name)}-${p.pilot}-${now}.json`;
+// file names of one day's folder -> the board: each pilot's best run per map, highest first
+function boardFrom(names) {
+  const best = new Map();
+  for (const n of names) { const m = /^(\d{8})-([a-z0-9-]{1,24}?)-([A-Za-z0-9_-]{1,40})-([a-z0-9]{6,40})-(\d{10,16})\.json$/.exec(n); if (!m) continue;
+    const name = unb64u(m[3]); if (!/^[A-Za-z0-9_. -]{2,24}$/.test(name)) continue;
+    const e = { name, score: +m[1], map: m[2], at: +m[5], id: n.slice(0, -5) }, k = m[4] + '|' + m[2], b = best.get(k); if (!b || e.score > b.score) best.set(k, e); }
+  return [...best.values()].sort((a, b) => b.score - a.score || a.at - b.at).slice(0, 100);
+}
+const boardCache = new Map();   // day -> { at, body }
+async function board(request, env, fetchImpl, reply) {
+  const u = new URL(request.url), today = new Date().toISOString().slice(0, 10), day = u.searchParams.get('day') || today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return reply(400, 'bad day');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (!(await bump(env, `bip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 240))) return reply(429, 'slow down');
+  const c = boardCache.get(day), json = body => reply(200, body, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' });
+  if (c && Date.now() - c.at < (day === today ? 30000 : 3600000)) return json(c.body);
+  let names = []; try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/leaderboard/${day}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' } });
+    if (r.ok) { const L = await r.json(); if (Array.isArray(L)) names = L.filter(x => x && x.type === 'file' && typeof x.name === 'string').map(x => x.name); } else if (r.status !== 404) return c ? json(c.body) : reply(502, 'could not read the board'); } catch { return c ? json(c.body) : reply(502, 'could not read the board'); }
+  const body = JSON.stringify({ day, runs: boardFrom(names) }); if (boardCache.size > 40) boardCache.clear(); boardCache.set(day, { at: Date.now(), body }); return json(body);
+}
+
+const RUN_ID = /^\d{8}-[a-z0-9-]{1,24}-[A-Za-z0-9_-]{1,40}-[a-z0-9]{6,40}-\d{10,16}$/;
+async function oneRun(request, env, fetchImpl, reply) {
+  const u = new URL(request.url), day = u.searchParams.get('day') || '', id = u.searchParams.get('id') || '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !RUN_ID.test(id)) return reply(400, 'bad run');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (!(await bump(env, `rip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 120))) return reply(429, 'slow down');
+  try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/leaderboard/${day}/${id}.json?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.raw+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' } });
+    if (r.status === 404) return reply(404, 'no such run'); if (!r.ok) return reply(502, 'could not read the run');
+    const p = clean('score', JSON.parse(await r.text())); if (!p) return reply(404, 'no such run');
+    return reply(200, JSON.stringify(p), { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }); } catch { return reply(502, 'could not read the run'); }
+}
+
 async function handle(request, env, fetchImpl = fetch) {
   const allowed = (env.ALLOW_ORIGINS || 'https://heyheykoolaid.github.io').split(',').map(s => s.trim()).filter(Boolean), origin = request.headers.get('Origin') || '';
-  const cors = { 'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0], 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff' };
-  const reply = (status, text) => new Response(text, { status, headers: cors });
+  const cors = { 'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0], 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff' };
+  const reply = (status, text, extra) => new Response(text, { status, headers: { ...cors, ...(extra || {}) } });
   if (request.method === 'OPTIONS') return reply(204, '');
-  if (request.method !== 'POST') return reply(405, 'POST only');
   if (env.ENABLED === '0' || !env.GITHUB_TOKEN || !env.GITHUB_REPO) return reply(503, 'closed');
+  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); return reply(405, 'POST only'); }
+  if (request.method !== 'POST') return reply(405, 'POST only');
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (+(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'too large');
   const text = await request.text(); if (text.length > MAX_BYTES) return reply(413, 'too large');
@@ -77,12 +132,13 @@ async function handle(request, env, fetchImpl = fetch) {
   if (!(await bump(env, `ip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, +(env.PER_IP_HOUR || 30)))) return reply(429, 'slow down');
   if (!(await bump(env, `day:${day}`, 172800, +(env.DAILY_CAP || 800), true))) return reply(429, 'full for today');
   const id = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
-  const path = `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
+  const path = j.kind === 'score' ? `leaderboard/${day}/${scoreFile(payload, Date.now())}` : `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(body); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   let r; try { r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`, { method: 'PUT',
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' },
     body: JSON.stringify({ message: `drop-off: ${j.kind}`, content: btoa(bin), branch: env.GITHUB_BRANCH || 'main' }) }); } catch { return reply(502, 'could not store it'); }
+  if (r.ok && j.kind === 'score') boardCache.delete(day);
   return r.ok ? reply(200, 'ok') : reply(502, 'could not store it');
 }
 export default { fetch: (request, env) => handle(request, env) };
-export { handle, clean };
+export { handle, clean, boardFrom, scoreFile };
