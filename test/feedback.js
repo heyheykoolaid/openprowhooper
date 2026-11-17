@@ -123,6 +123,11 @@ run('flagpole trippy, real: r 4.5 m, 35/s, uneven speed', flagReal(4.5, 4, 0.05,
 run('flagpole trippy, real: r 2 m low, 70/s, watching the top', flagReal(2, 1.5, 0, 70, 95, 0.3), ['Trippy Spin x2']);
 run('flagpole trippy, real: r 6 m, 30/s', flagReal(6, 5, 0.1, 30, 110, 0.4), ['Trippy Spin x2']);
 run('banked lap round the flagpole (upright, not a trippy)', flagReal(3, 3, 0, 90, 50, 0), []);
+// 6c. jump ropes only on real over/under bars (pilot: they triggered on other objects): sideways over a bench and back,
+// and sideways over the swing bar twice (no pass under), are not jump ropes
+{ const side = (x0, z0, y, dz, T) => at([{ T, f: t => ({ pos: v3(x0, y, z0 + dz * Math.cos(2 * Math.PI * t / T)), q: faceQ(v3(1, 0, 0)) }) }, hold(v3(x0, y, z0 + dz), faceQ(v3(1, 0, 0)), 1.5)]);
+  run('sideways over a bench and back (not a jump rope)', side(-3, 9, 1.0, 1.5, 3.0), []);
+  run('sideways over the swing bar twice, never under (not a jump rope)', side(0, -6, 3.0, 1.5, 3.0), []); }
 // 7. half matty at the pilot's rates: toward the swing bar, roll ~160-180 (optionally a short stall), then the second half
 // of a Matty (pitch ~150-200, the end floaty), passing under the bar flying backward
 function halfMatty(rollDeg, stall, pitchDeg, slowTail) {

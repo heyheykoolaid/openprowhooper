@@ -1035,7 +1035,10 @@ class TrickDetector {
         }
       }
       // jump-rope family: passes made flying sideways
-      { const lat = seq.filter(c => c.latDot > 0.6); const lk = lat.map(c => c.kind).join('');
+      // Only on things you really jump-rope: a bar with room to fly under it (pilot: they triggered on benches, the picnic
+      // table and other objects that aren't over/under bars). Not trees, not the pilot, nothing lower than 0.9 m.
+      const jo = this.world.objs.find(o => o.id === +id), jumpable = !jo || (jo.obstacle && !jo.round && jo.kind !== 'pilot' && jo.obstacle.under >= 0.9);
+      if (jumpable) { const lat = seq.filter(c => c.latDot > 0.6); const lk = lat.map(c => c.kind).join('');
         const R = toks.filter(x => x.ax === 'R'), P = toks.filter(x => x.ax === 'P'), Y = toks.filter(x => x.ax === 'Y');
         const pick = (nm, cl, pp) => { const cand = { name: nm, toks, err: 0.12, obstacle: seq[0].name, obj: +id, clen: cl, part: pp, ct1: pp[pp.length - 1].t, draft: true }; if (better(cand, best)) best = cand; };
         if (lat.length >= 2 && !P.some(x => x.raw > 200) && lat.slice(-2).every(c => (c.spd ?? 9) >= 1.5)) {
@@ -1050,7 +1053,7 @@ class TrickDetector {
           else if (Y.some(x => Math.abs(x.raw - 360) < 80)) pick('Cinnamon Roll', 2, lat.slice(-2));
           // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
           // roll or pitch (a Split-S has a 180 roll and a half loop) and both passes really are sideways
-          else if (/O/.test(lk.slice(-2)) && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6)) pick('Jump Rope', 2, lat.slice(-2));
+          else if (/^(OU|UO)$/.test(lk.slice(-2)) && lat[lat.length - 1].t - lat[lat.length - 2].t < 3 && lat[lat.length - 1].dir !== lat[lat.length - 2].dir && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6)) pick('Jump Rope', 2, lat.slice(-2));   // one over + one under, there and back
         }
       }
       // beginner switch: maverick over, stall, rewind back over, back under flying backward — no big rotation
