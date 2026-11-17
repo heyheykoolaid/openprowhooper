@@ -31,6 +31,18 @@ inlines them into `dist/index.html` and a single-file `dist/standalone.html`.
 6. Summarise for the user: per-trick agreement before → after, what changed, which drafts are now confirmed, and
    which tricks need more reps.
 
+## Tricktionary demo data (calibration/demos/)
+Per-frame camera rotation measured from the prowhooper.com demo GIFs (format `pro-whooper-demo/1`; derived numbers
+only — the GIFs are Tyrantt's and other pilots' footage and are not in the repo). `index.json` lists them with real
+ms/frame (from the goggle OSD clock), estimated camera uptilt and the object the demo used.
+- `docs/tricktionary-reference.md`: what each demo shows, timings, and every rule change made from them.
+- `test/demo-replay.js`: replays the measured motion of the clearest open-air demos straight into the detector.
+- `test/demos.js`: flights shaped and timed like the obstacle demos (floaty loops, trees, the pilot's legs).
+- `tools/gif_rotation.py`: how the rotation was measured (SIFT, rotation-only, fisheye). Fast flips blur out; motion near
+  objects biases the yaw/roll split (parallax), so the replay assigns each frame to its dominant axis.
+When new demo GIFs arrive: extract frames, read the OSD clock for real timing, measure, compare against the rule, and
+add a regression case (replay if open-air and well tracked, otherwise a demo-shaped flight).
+
 ## When asked to look at Blackbox logs
 `blackbox/<date>-<craft>/` holds the raw `.bbl` (Betaflight onboard flash dump), `diff-all.txt`, and `build.json`
 (FC info, the game's craft/tune at upload, and the optional pilot build sheet: parts, all-up weight, prop condition,

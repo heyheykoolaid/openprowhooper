@@ -1,0 +1,605 @@
+[
+ {
+  "trick": "Flip",
+  "file": "flip.json",
+  "frames": 36,
+  "tracked": 26,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "garage, open air"
+ },
+ {
+  "trick": "Double Flip",
+  "file": "double-flip.json",
+  "frames": 62,
+  "tracked": 43,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "backyard"
+ },
+ {
+  "trick": "Roll",
+  "file": "roll.json",
+  "frames": 46,
+  "tracked": 45,
+  "msPerFrame": 43,
+  "cameraTiltDeg": 13.9,
+  "object": "at the pilot"
+ },
+ {
+  "trick": "Double Roll",
+  "file": "double-roll.json",
+  "frames": 80,
+  "tracked": 70,
+  "msPerFrame": 33,
+  "cameraTiltDeg": 31.0,
+  "object": "backyard"
+ },
+ {
+  "trick": "Segmented Flips/Rolls",
+  "file": "segmented.json",
+  "frames": 114,
+  "tracked": 109,
+  "msPerFrame": 38,
+  "cameraTiltDeg": 34.6,
+  "object": "street"
+ },
+ {
+  "trick": "Yaw Spin",
+  "file": "yaw-spin.json",
+  "frames": 30,
+  "tracked": 23,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "through an LED cube"
+ },
+ {
+  "trick": "Invert Rewind",
+  "file": "inverted-rewind.json",
+  "frames": 184,
+  "tracked": 149,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 30.1,
+  "object": "backyard"
+ },
+ {
+  "trick": "Vanny Roll",
+  "file": "vanny-roll.json",
+  "frames": 97,
+  "tracked": 97,
+  "msPerFrame": 31,
+  "cameraTiltDeg": 25.2,
+  "object": "street"
+ },
+ {
+  "trick": "Rubik's Cube",
+  "file": "rubiks-cube.json",
+  "frames": 82,
+  "tracked": 80,
+  "msPerFrame": 33,
+  "cameraTiltDeg": 22.8,
+  "object": "street"
+ },
+ {
+  "trick": "Cubik's Rube",
+  "file": "cubiks-rube.json",
+  "frames": 91,
+  "tracked": 86,
+  "msPerFrame": 35,
+  "cameraTiltDeg": 27.0,
+  "object": "street"
+ },
+ {
+  "trick": "Juicy Flick",
+  "file": "juicy-flick.json",
+  "frames": 60,
+  "tracked": 54,
+  "msPerFrame": 34,
+  "cameraTiltDeg": null,
+  "object": "sidewalk"
+ },
+ {
+  "trick": "Snapback",
+  "file": "snapback.json",
+  "frames": 63,
+  "tracked": 58,
+  "msPerFrame": 31,
+  "cameraTiltDeg": 15.3,
+  "object": "under a tree"
+ },
+ {
+  "trick": "Inverted Yaw Spin",
+  "file": "inverted-yaw-spin.json",
+  "frames": 61,
+  "tracked": 59,
+  "msPerFrame": 43,
+  "cameraTiltDeg": 25.1,
+  "object": "street"
+ },
+ {
+  "trick": "Inverted Yaw Tracking",
+  "file": "inverted-yaw-tracking.json",
+  "frames": 52,
+  "tracked": 38,
+  "msPerFrame": 42,
+  "cameraTiltDeg": 25.5,
+  "object": "tree"
+ },
+ {
+  "trick": "Immelmann Turn",
+  "file": "immelmann.json",
+  "frames": 54,
+  "tracked": 51,
+  "msPerFrame": 38,
+  "cameraTiltDeg": 6.7,
+  "object": "through the pilot's legs"
+ },
+ {
+  "trick": "Power Split",
+  "file": "power-split.json",
+  "frames": 173,
+  "tracked": 161,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 32.3,
+  "object": "tree"
+ },
+ {
+  "trick": "Power Flip",
+  "file": "power-flip.json",
+  "frames": 131,
+  "tracked": 112,
+  "msPerFrame": 42,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Reversed Power Flip",
+  "file": "reversed-power-flip.json",
+  "frames": 56,
+  "tracked": 42,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "indoor cube"
+ },
+ {
+  "trick": "Power Swap",
+  "file": "power-swap.json",
+  "frames": 96,
+  "tracked": 93,
+  "msPerFrame": 31,
+  "cameraTiltDeg": null,
+  "object": "through the pilot's legs"
+ },
+ {
+  "trick": "Power Switch",
+  "file": "power-switch.json",
+  "frames": 178,
+  "tracked": 147,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Power Roll",
+  "file": "power-roll.json",
+  "frames": 93,
+  "tracked": 80,
+  "msPerFrame": 38,
+  "cameraTiltDeg": 24.7,
+  "object": "tree"
+ },
+ {
+  "trick": "Loop to Matty",
+  "file": "loop-to-matty.json",
+  "frames": 68,
+  "tracked": 44,
+  "msPerFrame": 27,
+  "cameraTiltDeg": null,
+  "object": "indoor cube (not in spreadsheet)"
+ },
+ {
+  "trick": "Inverted 360 Powerloop",
+  "file": "inverted-360-powerloop.json",
+  "frames": 97,
+  "tracked": 75,
+  "msPerFrame": 38,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Barani",
+  "file": "barani.json",
+  "frames": 120,
+  "tracked": 105,
+  "msPerFrame": 38,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Maverick Loop",
+  "file": "maverick-loop.json",
+  "frames": 138,
+  "tracked": 125,
+  "msPerFrame": 41,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Mavvy Roll",
+  "file": "mavvy-roll.json",
+  "frames": 120,
+  "tracked": 105,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Half Mavvy",
+  "file": "half-mavvy.json",
+  "frames": 69,
+  "tracked": 45,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 15.5,
+  "object": "indoor gate tower"
+ },
+ {
+  "trick": "Mavik's Loop",
+  "file": "maviks-loop.json",
+  "frames": 83,
+  "tracked": 76,
+  "msPerFrame": 33,
+  "cameraTiltDeg": null,
+  "object": "living room"
+ },
+ {
+  "trick": "Powerloop",
+  "file": "powerloop.json",
+  "frames": 127,
+  "tracked": 127,
+  "msPerFrame": null,
+  "cameraTiltDeg": null,
+  "object": "tall statue in a fountain (timing unknown)"
+ },
+ {
+  "trick": "Mavani",
+  "file": "mavani.json",
+  "frames": 117,
+  "tracked": 102,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Donkey Loop",
+  "file": "donkey-loop.json",
+  "frames": 121,
+  "tracked": 108,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Beginner Matty",
+  "file": "beginner-matty.json",
+  "frames": 55,
+  "tracked": 54,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "chair"
+ },
+ {
+  "trick": "Matty Flip",
+  "file": "matty-flip.json",
+  "frames": 75,
+  "tracked": 54,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "gap between two cars"
+ },
+ {
+  "trick": "Matty Twister",
+  "file": "matty-twister.json",
+  "frames": 69,
+  "tracked": 52,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "tree branch"
+ },
+ {
+  "trick": "Half Matty",
+  "file": "half-matty.json",
+  "frames": 63,
+  "tracked": 58,
+  "msPerFrame": 32,
+  "cameraTiltDeg": 29.5,
+  "object": "through the pilot's legs"
+ },
+ {
+  "trick": "540 Half Matty",
+  "file": "540-half-matty.json",
+  "frames": 82,
+  "tracked": 78,
+  "msPerFrame": 32,
+  "cameraTiltDeg": 30.8,
+  "object": "tree"
+ },
+ {
+  "trick": "Matty 360",
+  "file": "matty-360.json",
+  "frames": 66,
+  "tracked": 66,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "indoor gate"
+ },
+ {
+  "trick": "Forani",
+  "file": "forani.json",
+  "frames": 74,
+  "tracked": 57,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "the pilot (park)"
+ },
+ {
+  "trick": "Split-S",
+  "file": "split-s.json",
+  "frames": 93,
+  "tracked": 93,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "540 Split S",
+  "file": "540-split-s.json",
+  "frames": 283,
+  "tracked": 279,
+  "msPerFrame": null,
+  "cameraTiltDeg": null,
+  "object": "tree branch (~3-4x slow-mo GIF)"
+ },
+ {
+  "trick": "Split-Back",
+  "file": "splitback.json",
+  "frames": 89,
+  "tracked": 62,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "gazebo"
+ },
+ {
+  "trick": "Split Yaw",
+  "file": "split-yaw.json",
+  "frames": 96,
+  "tracked": 69,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "gazebo"
+ },
+ {
+  "trick": "Split Stall Matty Rewind",
+  "file": "split-stall-matty-rewind.json",
+  "frames": 58,
+  "tracked": 47,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "gazebo"
+ },
+ {
+  "trick": "Orbit x2",
+  "file": "orbits.json",
+  "frames": 236,
+  "tracked": 206,
+  "msPerFrame": 34,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Cradle",
+  "file": "cradle.json",
+  "frames": 99,
+  "tracked": 99,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "the pilot"
+ },
+ {
+  "trick": "Side-Lock Rewind",
+  "file": "side-lock-rewind.json",
+  "frames": 86,
+  "tracked": 85,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "the pilot"
+ },
+ {
+  "trick": "Whiplash",
+  "file": "whiplash.json",
+  "frames": 54,
+  "tracked": 51,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Pole Dance",
+  "file": "pole-dance.json",
+  "frames": 96,
+  "tracked": 95,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Trippy Spin x2",
+  "file": "trippy-spin.json",
+  "frames": 96,
+  "tracked": 49,
+  "msPerFrame": 32,
+  "cameraTiltDeg": -2.1,
+  "object": "tree"
+ },
+ {
+  "trick": "Trippy Switch",
+  "file": "trippy-switch.json",
+  "frames": 204,
+  "tracked": 203,
+  "msPerFrame": 40,
+  "cameraTiltDeg": -0.7,
+  "object": "tree trunk"
+ },
+ {
+  "trick": "Double Rolling Trippy Spin",
+  "file": "double-rolling-trippy.json",
+  "frames": 137,
+  "tracked": 133,
+  "msPerFrame": 40,
+  "cameraTiltDeg": -4.4,
+  "object": "tree trunk"
+ },
+ {
+  "trick": "Jump Rope",
+  "file": "jump-rope.json",
+  "frames": 45,
+  "tracked": 43,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "indoor striped pole"
+ },
+ {
+  "trick": "Cinnamon Roll",
+  "file": "cinnamon-roll.json",
+  "frames": 42,
+  "tracked": 41,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "indoor striped pole"
+ },
+ {
+  "trick": "Burrito Roll",
+  "file": "burrito-roll.json",
+  "frames": 86,
+  "tracked": 54,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 23.6,
+  "object": "play structure slide"
+ },
+ {
+  "trick": "Side Loop",
+  "file": "side-loop.json",
+  "frames": 83,
+  "tracked": 49,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "play structure slide"
+ },
+ {
+  "trick": "Double Dutch",
+  "file": "double-dutch.json",
+  "frames": 76,
+  "tracked": 60,
+  "msPerFrame": 32,
+  "cameraTiltDeg": 27.1,
+  "object": "indoor cube"
+ },
+ {
+  "trick": "Flip Stall Rewind",
+  "file": "stall-flip-rewind.json",
+  "frames": 96,
+  "tracked": 96,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "indoor staircase"
+ },
+ {
+  "trick": "360 Stall Rewind",
+  "file": "stall-360-rewind.json",
+  "frames": 95,
+  "tracked": 78,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "the pilot"
+ },
+ {
+  "trick": "Matty Stall Rewind",
+  "file": "stall-matty-rewind.json",
+  "frames": 99,
+  "tracked": 97,
+  "msPerFrame": 40,
+  "cameraTiltDeg": null,
+  "object": "tree"
+ },
+ {
+  "trick": "Half Matty Stall Rewind",
+  "file": "stall-half-matty-rewind.json",
+  "frames": 62,
+  "tracked": 48,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 21.4,
+  "object": "the pilot"
+ },
+ {
+  "trick": "Dive",
+  "file": "building-dive.json",
+  "frames": 135,
+  "tracked": 123,
+  "msPerFrame": 40,
+  "cameraTiltDeg": 19.4,
+  "object": "apartment building"
+ },
+ {
+  "trick": "Wall Ride",
+  "file": "wall-ride.json",
+  "frames": 93,
+  "tracked": 93,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "garage door"
+ },
+ {
+  "trick": "Wall Tap",
+  "file": "wall-tap.json",
+  "frames": 74,
+  "tracked": 68,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "garage wall"
+ },
+ {
+  "trick": "Roll Tap",
+  "file": "roll-tap.json",
+  "frames": 84,
+  "tracked": 71,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "fence"
+ },
+ {
+  "trick": "Loop Tap",
+  "file": "loop-tap.json",
+  "frames": 83,
+  "tracked": 69,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "fence"
+ },
+ {
+  "trick": "Ceiling Tap",
+  "file": "ceiling-tap.json",
+  "frames": 46,
+  "tracked": 28,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "hallway ceiling"
+ },
+ {
+  "trick": "Reverse Wall Ride",
+  "file": "reverse-wall-ride.json",
+  "frames": 84,
+  "tracked": 74,
+  "msPerFrame": 32,
+  "cameraTiltDeg": null,
+  "object": "house wall"
+ }
+]
