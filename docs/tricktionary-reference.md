@@ -131,3 +131,36 @@ GIF ↔ trick mapping confirmed from each trick page on prowhooper.com.
 
 No detector changes from batch 6.
 
+## Batch 7: pole dancing, jump roping, rewinds, wall tricks (20 clips)
+
+Mapping checked on the trick pages (Wall Tap's GIF carries a "Blind Flip" caption; Stall Matty Rewind's is captioned
+"Custom Trick #1"; both are the files those pages use).
+
+| Trick | What the clip shows | Verdict |
+|---|---|---|
+| Pole Dance | caption: "Cradle + half roll to half Matty + rewind"; roll, pitch back, long roll, pitch forward, keeping the tree in view | consistent with two whiplashes on one pole |
+| Trippy Spin | inverted orbit of a tree, crown at the top of the screen | consistent |
+| Trippy Switch | looking up a trunk: ~1 lap → switch → ~1.75 laps → switch → ~1.2 laps (≈ 1.9 s/lap) — **two** direction changes | handled (banks on each reversal) |
+| Double Rolling Trippy | ~1540° of combined yaw/roll looking up the trunk over ~5.5 s | consistent |
+| Jump Rope | indoor striped pole: small yaw/roll, over, back | consistent |
+| Cinnamon Roll | ~310–360° slow yaw (~1.35 s) through the jump | consistent |
+| Burrito Roll | gentle jump rope (nothing above 95°/s), then one big roll (≥250°) before crossing, back down, under | **rule changed** |
+| Side Loop | play structure: yaw 90 under, inverted over, back under | consistent |
+| Double Dutch | cube: roll ≥190° (more blurred) at the peak | consistent |
+| Stall Flip Rewind | Tyrantt, indoor staircase: climb, flip at the stall, rewind | consistent |
+| Stall 360 Rewind | next to the pilot: through the legs, climb, 360 roll at the stall, rewind | **rule changed** (height) |
+| Stall Matty Rewind | climb past a tree, segmented front flip, Matty backward | consistent |
+| Stall Half Matty Rewind | next to the pilot: yaw 180 past him, roll ~170, pitch, backward past his legs | consistent |
+| Building Dive | big building: pitch down, ~450° spinning yaw on the way down | consistent |
+| Wall Ride / Wall Tap / Roll Tap / Loop Tap / Ceiling Tap / Reverse Wall Ride | garage, fence and hallway clips | sequences consistent |
+
+**Changes made from batch 7:**
+- Burrito Roll: no longer needs a separate ≥60° roll toward the object first. A big roll (≥150°) with no pass *over*
+  the object near/after it, ending under it, is a Burrito; a roll at the peak over the object is a Double Dutch.
+- Jump Rope waits up to 2 s (while still near the object) before locking in, so a Burrito that starts with one isn't
+  scored twice. Open-air rotation at a jump-rope peak (sideways pass over) waits for the way back down (Double Dutch).
+- Flip / 360 Stall Rewind: the object only needs to be ~1.5 m tall (demos use the pilot and a staircase; only the plain
+  Stall Rewind asks for 10 ft). To keep loops and jump ropes from being read as stall rewinds, a stall rewind must not
+  pass over/under an obstacle.
+- New flights in `test/phase2.js`: Burrito Roll, Double Dutch, 360 Stall Rewind beside the pilot.
+

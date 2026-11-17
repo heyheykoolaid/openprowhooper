@@ -790,8 +790,9 @@ const CONTEXT_TRICKS = [
   { name: 'Downtown Tap', pats: ['R*~180 P-~360', 'R*~180 P+~90 P-~360', 'R*~180 P-~270'], req: { tap: { face: 'any', surface: 'any' } }, draft: true },
   { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: true }, draft: true },
   { name: 'Stellar Eject Roll', pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'], req: { climbBefore: true, endBack: true }, draft: true },
-  { name: 'Flip Stall Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: true }, draft: true },
-  { name: '360 Stall Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: true }, draft: true },
+  // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
+  { name: 'Flip Stall Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
+  { name: '360 Stall Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
   { name: 'Matty Stall Rewind', pats: ['P-~360'], req: { stallIn: true, endBack: true }, draft: true },
   { name: 'Half Matty Stall Rewind', pats: ['Y*~180 Ra180 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
   { name: '540 Half Matty Stall Rewind', pats: ['Y*~180 Ra540 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
@@ -995,7 +996,11 @@ class TrickDetector {
         if (lat.length >= 2 && !P.some(x => x.raw > 200) && lat.slice(-2).every(c => (c.spd ?? 9) >= 1.5)) {
           const pp = lat.slice(-3);
           if (/UOU$/.test(lk) && R.some(x => Math.abs(x.raw - 360) < 80)) pick('Side Loop', 3, pp);
-          else if (R.some(x => x.dir > 0 && x.raw >= 60) && R.some(x => x.dir < 0 && x.raw >= 150) && /U$/.test(lk)) pick('Burrito Roll', 2, lat.slice(-2));
+          else if (/U$/.test(lk) && (() => {   // Burrito: big roll before crossing over, rewind down the same side, finish under
+            const rb = R.filter(x => x.raw >= 150).pop(); if (!rb) return false;
+            const noOver = !lat.some(c => c.kind === 'O' && c.t > rb.t0 - 0.6);       // a Double Dutch rolls at the peak, over the object
+            return noOver && lat.some(c => c.t < rb.t0) && (R.some(x => x !== rb && x.dir !== rb.dir && x.raw >= 60) || rb.raw >= 200);
+          })()) pick('Burrito Roll', 2, lat.slice(-2));
           else if (R.some(x => Math.abs(x.raw - 360) < 80)) pick('Double Dutch', 2, lat.slice(-2));
           else if (Y.some(x => Math.abs(x.raw - 360) < 80)) pick('Cinnamon Roll', 2, lat.slice(-2));
           else if (/O/.test(lk.slice(-2)) && !R.some(x => x.raw > 200)) pick('Jump Rope', 2, lat.slice(-2));
@@ -1335,7 +1340,9 @@ class StreamDetector extends TrickDetector {
     const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1, now = this.time, out = { claims: [] };
     if (req.tap) { const tp = this.tapIn(req.tap, null, t0 - 0.2, t1 + 0.25); if (!tp) return null; out.claims.push(tp.id); out.tapRef = tp; out.obstacle = tp.name; }
     if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return null;
-    if (req.nearTall) { const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0]; const nm = s0 && this.nearTall({ pos: s0.p }, 3); if (!nm) return null; out.obstacle = out.obstacle || nm; }
+    if (req.nearTall) { const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0]; const nm = s0 && this.nearTall({ pos: s0.p }, req.nearTall === true ? 3 : req.nearTall); if (!nm) return null; out.obstacle = out.obstacle || nm;
+      // a stall rewind rises beside the object and comes back down: it never passes over/under one (loops, jump ropes do)
+      if (req.nearTall !== true && this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)) return null; }
     if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
     if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
     if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
@@ -1423,6 +1430,7 @@ class StreamDetector extends TrickDetector {
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
       if (t - p.tDone < HOLD_MAX && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
+      if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
       this.commit(p, t);
     }
     this.toks = this.toks.filter(k => t - k.t1 < 6);
@@ -1557,6 +1565,7 @@ class StreamDetector extends TrickDetector {
     if (p.part || !p.toks.length || t - p.tDone > 3.0) return false;
     const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O'); const last = X[X.length - 1];
     if (!last || last.kind !== 'O' || t - last.t > 3.0) return false;
+    if (last.latDot > 0.6 && last.t > p.t0 - 0.6) return true;   // jump-rope peak (sideways over): wait for the way back down (Double Dutch)
     return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
   }
   extendable(p) {         // could rotation happening right now turn this into a bigger trick?

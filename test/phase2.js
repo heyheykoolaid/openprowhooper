@@ -27,6 +27,24 @@ run('trippy switch (1 each way)', orbit(2.1,true,true), 6, ['Trippy Spin x2','Tr
 // jump rope: fly sideways (facing along the swing bar) over it and back under it
 run('jump rope (sideways over + under)', t=>{ const f=v3(1,0,0); const z=-3.5-Math.min(t,1.2)*4; const back=t>1.6?(t-1.6)*4:0;
   const pos= t<1.6? v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4) : v3(0,1.4,-8.3+back); const tilt= t<1.6?-0.3:0.3; return {pos,q:basisQ(f,norm(v3(0,1,tilt)))}; }, 3.5, ['Jump Rope']);
+// burrito roll (demo: one gentle jump rope, then a big roll before crossing over, rewind down the same side, under)
+run('burrito roll (jump rope, roll 270, rewind, under)', t=>{ const f=v3(1,0,0), FW=f; const lean=a=>basisQ(f,norm(v3(0,1,a)));
+  if(t<1.6) return {pos:v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4), q:lean(-0.3)};          // over the bar (-z), down the far side
+  if(t<2.6) return {pos:v3(0,1.4,-8.3+(t-1.6)*4), q:lean(0.3)};                                         // back under (+z) to the near side
+  if(t<3.1){ const u=(t-2.6)/0.5; return {pos:v3(0,1.4+1.2*u,-4.3-0.7*u), q:qmul(lean(0.3),qaxis(v3(0,0,-1),-1.5*Math.PI*u))}; }   // climb, roll 270 the other way
+  const qe=qmul(lean(0.3),qaxis(v3(0,0,-1),-1.5*Math.PI)), u=Math.min(1,(t-3.1)/0.35);
+  return {pos:t<3.45?v3(0,2.6-1.3*u,-5.0-0.5*u):v3(0,1.3,-5.5-(t-3.45)*4), q:qe}; }, 4.3, ['Burrito Roll']);
+// double dutch: jump rope with a 360 roll at the peak, right over the bar
+run('double dutch (360 roll over the bar)', t=>{ const f=v3(1,0,0); const lean=a=>basisQ(f,norm(v3(0,1,a)));
+  const pos= t<1.6? v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4) : v3(0,1.4,-8.3+(t-1.6)*4);
+  const r = t<0.4?0: t<0.9? (t-0.4)/0.5*2*Math.PI : 2*Math.PI;
+  return {pos, q:qmul(lean(t<1.6?-0.3:0.3), qaxis(v3(0,0,-1), r))}; }, 3.5, ['Double Dutch']);
+// 360 stall rewind beside the pilot (demo: climbs up past the pilot, stalls with a 360 roll, rewinds back down)
+run('360 stall rewind (beside the pilot)', t=>{ const x=2.6, z=15.4; const f=v3(0,0,-1);
+  if(t<1.0) return {pos:v3(x,0.6,z+3-3*t), q:basisQ(f,Y)};                                     // fly in toward the pilot
+  if(t<1.7){ const u=(t-1.0)/0.7; return {pos:v3(x,0.6+1.6*Math.sin(u*Math.PI/2),z-0.2*u), q:basisQ(f,norm(v3(0,1,0.6)))}; }   // climb, nose up
+  if(t<2.3){ const u=(t-1.7)/0.6; return {pos:v3(x,2.2,z-0.2), q:qmul(basisQ(f,norm(v3(0,1,0.6))),qaxis(v3(0,0,-1),2*Math.PI*u))}; }   // stall: 360 roll
+  const u=Math.min(1,(t-2.3)/0.9); return {pos:v3(x,2.2-1.5*u,z-0.2+2.2*u), q:basisQ(f,norm(v3(0,1,0.5)))}; }, 4.2, ['360 Stall Rewind']);   // rewind back down
 // mavani: maverick under→over (facing forward, flying backward over the top), pitch-down 180 to invert, yaw 180 inverted, matty back under
 run('mavani', t=>{ const c={y:2.2,z:-6}, R=1.1;
   if(t<0.6) return {pos:v3(0,1.1,-3-t*5),q:basisQ(FWD,Y)};                                   // under the bar at z=-6 → t=0.6
