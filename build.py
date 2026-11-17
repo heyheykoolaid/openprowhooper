@@ -2,8 +2,8 @@ import pathlib
 root = pathlib.Path(__file__).parent
 t = (root / 'src/index.template.html').read_text()
 # the game module is game.js followed by the track editor / race UI (editor.js shares its scope)
-t = t.replace('/*GAME*/', '/*GAME*//*EDITOR*//*BBREPLAY*/')
-for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('BBL', 'bbl.js')]:
+t = t.replace('/*GAME*/', '/*GAME*//*EDITOR*//*BBREPLAY*//*RECAP*/')
+for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('RACE', 'race.js'), ('MANEUVERS', 'maneuvers.js'), ('VISION', 'vision.js'), ('GAME', 'game.js'), ('EDITOR', 'editor.js'), ('BBREPLAY', 'bbreplay.js'), ('RECAP', 'recap.js'), ('BBL', 'bbl.js')]:
     t = t.replace('/*%s*/' % key, (root / 'src' / f).read_text().replace('</script', '<\\/script'))
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it

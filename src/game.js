@@ -484,7 +484,7 @@ function renderCombo() {
   el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}`;
 }
 function onTrick(ev) {
-  trainOnEvent(ev);
+  trainOnEvent(ev); recapEvent(ev);
   if (ev.name === 'near') { flash(`<b>SO CLOSE</b><small>${ev.near}</small>`, 'near'); return; }
   const r = score.add(ev);
   if (ev.exec === 'CRASH') { comboEnd(true); flash(`<b>CRASH!</b><small>streak lost</small>`, 'crash'); updateBreakdown(); return; }
@@ -551,6 +551,8 @@ function frame(now) {
   if (mode === 'judge') judgeStep(dt);
   if (mode === 'editor') { editorFrame(dt); return; }
   if (mode === 'bbreplay') brStep(dt);
+  if (mode === 'recap') recapStep(dt);
+  if (mode === 'fly' && warm.on) warmTick();
   if (race.on) raceVisuals(dt);
   if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);
   // drone visual
@@ -598,6 +600,7 @@ function startFly(withSession) {
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
   if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;
+  recapReset(); if (warm.on) stopWarmup();
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
   flash(withSession ? '<b>2:00 SESSION</b><small>timer starts when you arm</small>' : '<b>FREE FLY</b><small>Space / arm switch to arm</small>');
 }
@@ -611,7 +614,7 @@ function endSession() {
     <p>Biggest trick: <b>${r.biggest ? r.biggest.name + ' (' + r.biggest.net + ')' : '—'}</b> · Max streak ×${r.maxStreak.toFixed(2)} · Obstacles ${r.uniqueObs.size}</p>
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
-    <div class="row"><button data-act="session">Run it back</button><button data-act="menu">Menu</button></div>`;
+    <div class="row"><button data-act="session">Run it back</button><button data-act="recap" class="primary">Review my tricks</button><button data-act="menu">Menu</button></div>`;
   show('#resultsScreen');
 }
 document.addEventListener('click', e => {
@@ -620,7 +623,7 @@ document.addEventListener('click', e => {
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();
-  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
+  if (a === 'resume') resume(); if (a === 'menu') { if (race.on || activeWorld !== world) raceOff(); if (mode === 'editor') editorClose(); if (warm.on) stopWarmup(); if (mode === 'recap') { recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(world.spawn); } if (mode === 'bbreplay') { $('#bbrUI').classList.add('hide'); document.body.classList.remove('bbr'); br.playing = false; drone.reset(world.spawn); } if (mode === 'review') $('#rvVideo').pause(); if (mode === 'judge') stopJudge(); ghostOff(); train.on = false; renderTrain(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); show('#mainMenu'); }
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') startJudge();
@@ -729,7 +732,7 @@ function renderControls() {
       ${cur ? `<h3>${isR ? 'Channel monitor' : 'Raw axes'}</h3><div class="chmon">${cur.axes.map((_, i) => `<div><span>${isR ? 'CH' + (i + 1) : 'A' + i}</span><div class="bar"><i id="raw_${i}"></i></div></div>`).join('')}</div>` : ''}`;
   }
   $('#cBody').innerHTML = `<div class="tabs">${tabs}</div>${body}
-    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · C chase cam · V stick overlay · Tab score breakdown · G trick debug · Esc pause</div>`;
+    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
 }
 let calib = null, detecting = null;
 function liveControls() {
@@ -1214,6 +1217,7 @@ function recordTrace(rc) {
     c ? +c.n.x.toFixed(3) : 0, c ? +c.n.y.toFixed(3) : 0, c ? +c.n.z.toFixed(3) : 0, c ? c.obj : -1, c ? +c.imp.toFixed(2) : 0, c ? c.g : 0,
     +d.vel.x.toFixed(3), +d.vel.y.toFixed(3), +d.vel.z.toFixed(3), +(rc.roll || 0).toFixed(3), +(rc.pitch || 0).toFixed(3), +(rc.yaw || 0).toFixed(3)];
   trace.push(row); if (trace.length > TRACE_LEN) trace.shift();
+  recapRow(row);
   if (train.on && run.id) run.trace.push(row);
 }
 // ---- tiny IndexedDB wrapper (falls back to nothing if the browser blocks storage)

@@ -93,6 +93,13 @@ bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox
 `pro-whooper-labelled/1`. `npm run bench` scores the current detector on every labelled source at once — see
 docs/DATA.md (formats, trust weights, workflow). Run it before and after any rule change.
 
+## Flag keys, run review, pilot warm-up (src/recap.js) — docs/RECOGNITION-ROADMAP.md
+While flying, `F` flags the last call as wrong and `Q` flags a missed trick. "Review my tricks" (pause menu / results)
+replays each call for ✓ / ✗ / "it was actually…", flagged and low-confidence (Watcher < 70%) calls first; saved as
+`pro-whooper-session/2` with `via: "review"` to `calibration/review/` (the benchmark reads it). Pilot Warm-up measures
+the pilot's rotation speeds and natural gap between moves; `detector.setPilot(profile)` only ever loosens (slower
+deliberate rotations, more air between segments). The roadmap doc lists what is built and what is next.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

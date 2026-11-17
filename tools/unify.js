@@ -13,7 +13,7 @@ function episodes(j, name = '') {
   if (f.startsWith('pro-whooper-training') || f.startsWith('pro-whooper-session')) {
     const { loadLabels } = require('../test/lib.js'); const L = loadLabels(j), byRows = new Map();
     for (const l of L) { const e = byRows.get(l.rows) || { source: 'sim-calibration', trust: TRUST['sim-calibration'], kind: 'trace', name, rows: l.rows, camTilt: l.camTilt ?? j.camTilt ?? 20, labels: [] };
-      e.labels.push(lab(l.repStart, l.t, l.verdict === 'yes' ? l.target : (l.actual || null), l.verdict, l.target)); byRows.set(l.rows, e); }
+      e.labels.push(lab(l.repStart, l.t, l.verdict === 'yes' ? l.target : (l.actual && l.actual !== 'not a trick' ? l.actual : null), l.verdict, l.target)); byRows.set(l.rows, e); }
     return [...byRows.values()];
   }
   if (f === 'pro-whooper-video/1') return [{ source: 'video-review', trust: TRUST['video-review'], kind: 'frames', name, frames: j.frames.map(r => ({ t: r[0], rpy: r.slice(1) })), marks: j.marks || [],
