@@ -345,8 +345,8 @@ for GIFs), and the duration; `libDist` is banded DTW plus a small duration term.
 split by 0.35 s of quiet; 2.5 s later, where no rule call (or earlier maybe) covers the move, a close match (dist < 0.3,
 another trick at least 0.06 further, nearer than any counter-example, the trick has a demo or examples from 2+ pilots,
 an obstacle trick needs a pass) goes out as a **maybe** (`drainMaybes`, `replayTrace(...).maybes`): only tricks the
-rotation defines (OPEN_TRICKS, OBSTACLE_TRICKS, custom names), never scored, shown as "MAYBE: X?", listed first in
-Review (`recapMaybe`, labels `maybe: true`); the pilot's ✓/✗ is the feedback. On every rule call the library votes in
+rotation defines (OPEN_TRICKS, OBSTACLE_TRICKS, custom names), never scored, shown as "MAYBE: X?" while flying only if the pilot turns it on in Options (`store 'maybeFlash'`, off
+by default), always listed first in Review (`recapMaybe`, labels `maybe: true`); the pilot's ✓/✗ is the feedback. On every rule call the library votes in
 the Watcher (`votes.library`, weight 2 in `conf`, but never in the veto). `node tools/library.js <data repo> [--write]
 [--check]` rebuilds it (only derived numbers and an anonymous pilot number: the pilot agreed), `--check` re-flies the
 shared flights and counts the maybes. build.py ships it (`Sim.setLibrary`); Node tests run without it except

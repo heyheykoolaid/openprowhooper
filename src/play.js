@@ -142,7 +142,7 @@ function frame(now) {
     }
     if (n >= 120) acc = 0;
     if (!race.on) for (const ev of detector.drain()) onTrick(ev);
-    if (!race.on && detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (mode === 'fly') flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in Review</small>`, 'near'); }
+    if (!race.on && detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (mode === 'fly' && store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in Review</small>`, 'near'); }
     if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
