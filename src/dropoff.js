@@ -223,13 +223,12 @@ async function lbPost() {
   } catch { msg = 'Could not reach the leaderboard just now.'; }
   LB.busy = false; lbResultsBox(); if (msg) { const n = document.querySelector('#lbBox p.note:last-child'); if (n) n.textContent = msg; }
 }
-function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; show('#lbScreen'); lbRender(); lbLoad(LB.day && LB.from !== 'results' ? LB.day : lbToday()).then(lbRender); }
+function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; show('#lbScreen'); lbRender(); lbLoad(lbToday()).then(lbRender); }
 function lbRender() {
   const el = $('#lbPanel'); if (!el) return; const day = LB.day || lbToday(), today = lbToday(), runs = (LB.runs || []).filter(e => !LB.mapOnly || e.map === MAP_ID), R = LB.open;
-  const shift = n => { const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   el.innerHTML = `<h2>DAILY LEADERBOARD</h2>
-    <p class="note">Best 2:00 Session per pilot. A new board starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
-    <div class="row"><button data-lb="day" data-d="${shift(-1)}">◂</button><b>${day === today ? 'Today' : esc(day)}</b><button data-lb="day" data-d="${shift(1)}" ${day >= today ? 'disabled' : ''}>▸</button>
+    <p class="note">Best 2:00 Session per pilot. Today's board only: a new one starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
+    <div class="row"><b>Today</b>
       <label class="chk"><input type="checkbox" id="lbMapOnly" ${LB.mapOnly ? 'checked' : ''}> only ${esc(lbMapTitle(MAP_ID))}</label><button data-lb="refresh">↻</button></div>
     <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th><th>Map</th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted yet. Fly a 2:00 Session and post it from the results screen.')}</p>`}</div>
     <div id="lbRun">${R ? lbRunHtml(R) : '<p class="note">Pick a run.</p>'}</div></div>
@@ -261,8 +260,8 @@ async function lbWatch() {
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-lb]'), row = e.target.closest('[data-lbrun]');
-  if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(LB.day || lbToday()).then(lbRender);
-    if (a === 'day') { LB.open = null; lbLoad(b.dataset.d).then(lbRender); } if (a === 'watch') lbWatch();
+  if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(lbToday()).then(lbRender);
+    if (a === 'watch') lbWatch();
     if (a === 'close') { if (LB.from === 'results' && LB.last) show('#resultsScreen'); else { mode = 'menu'; show('#mainMenu'); } } return; }
   if (row && row.dataset.lbrun) { if ($('#lbScreen').classList.contains('hide')) { lbOpen('results'); } lbPick(row.dataset.lbrun); }
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu');

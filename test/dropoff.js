@@ -51,8 +51,11 @@
     const get = (path, o = {}) => handle(new Request('https://drop' + path, { method: 'GET', headers: { Origin: GAME, 'CF-Connecting-IP': o.ip || '9.9.9.' + (n + 1) } }), env(), ghList);
     r = await get('/board'); const jb = await r.json(); check('GET /board answers with names and scores only', r.status === 200 && jb.runs.length === 3 && !JSON.stringify(jb).includes('secret') && Object.keys(jb.runs[0]).sort().join() === 'at,id,map,name,score');
     r = await get('/board?day=../../x'); check('a bad day is refused', r.status === 400);
-    r = await get('/run?day=2026-11-17&id=' + B[0].id); const jr = await r.json(); check('GET /run returns one posted run, known fields only', r.status === 200 && jr.score === 12345 && !('secretField' in jr));
-    for (const bad of ['../../telemetry/inbox/flight/x', 'README', '00012345-school-VGVzdGVy-abc123xyz-1794930000000/../../x']) { const m = calls.length; r = await get('/run?day=2026-11-17&id=' + encodeURIComponent(bad)); check(`GET /run cannot be pointed at "${bad.slice(0, 24)}…"`, r.status === 400 && calls.length === m); }
+    r = await get('/board?day=2026-01-01'); check('earlier days cannot be read (no history)', r.status === 400);
+    r = await get('/run?day=2026-01-01&id=' + B[0].id); check('nor can a run from an earlier day', r.status === 400);
+    const TODAY = new Date().toISOString().slice(0, 10);
+    r = await get('/run?day=' + TODAY + '&id=' + B[0].id); const jr = await r.json(); check('GET /run returns one posted run, known fields only', r.status === 200 && jr.score === 12345 && !('secretField' in jr));
+    for (const bad of ['../../telemetry/inbox/flight/x', 'README', '00012345-school-VGVzdGVy-abc123xyz-1794930000000/../../x']) { const m = calls.length; r = await get('/run?day=' + TODAY + '&id=' + encodeURIComponent(bad)); check(`GET /run cannot be pointed at "${bad.slice(0, 24)}…"`, r.status === 400 && calls.length === m); }
     r = await get('/'); check('any other GET is refused', r.status === 405); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

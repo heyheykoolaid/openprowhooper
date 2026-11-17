@@ -231,7 +231,7 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
 .lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
 #lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
-#recapBar .rcTrack { position: relative; height: 62px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
+#recapBar .rcTrack { position: relative; height: 80px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
 #recapBar .rcSpan { position: absolute; bottom: 0; height: 4px; background: #ffffff40; pointer-events: none; }
 #recapBar .rcM { position: absolute; min-width: 14px; box-sizing: border-box; cursor: grab; overflow: visible; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
 #recapBar .rcM.ok { background: #1f7a44; } #recapBar .rcM.bad { background: #a8521c; } #recapBar .rcM.unsure { background: #8a6d10; } #recapBar .rcM.add { background: #1d5fa8; } #recapBar .rcM.gone { background: #4a2020; text-decoration: line-through; color: #c99; }
@@ -242,6 +242,12 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapBar .rcM .rcH.l { left: -6px; } #recapBar .rcM .rcH.r { right: -6px; }
 #recapBar .rcM:hover .rcH, #recapBar .rcM.on .rcH { opacity: 1; } #recapBar .rcM.on { z-index: 5; }
 body.rcWide #recapBar .rcM .rcH { display: none; }
+#recapBar .rcClips { position: absolute; left: 0; right: 0; bottom: 2px; height: 15px; }
+#recapBar .rcCl { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: #2b4a66; border: 1px solid #0b0c10; border-radius: 2px; font: 9px/13px var(--mono); color: #cfe6ff; padding: 0 4px; cursor: pointer; }
+#recapBar .rcCl:nth-child(even) { background: #35597a; } #recapBar .rcCl.on { background: #ffd34d; color: #111; z-index: 5; }
+#recapBar .rcCl .rcT { display: block; overflow: hidden; white-space: nowrap; pointer-events: none; }
+#recapBar .rcCl .rcH { position: absolute; top: -3px; bottom: -3px; width: 10px; cursor: ew-resize; background: #fff; border: 1px solid #111; border-radius: 3px; box-sizing: border-box; z-index: 6; touch-action: none; }
+#recapBar .rcCl .rcH.l { left: -3px; } #recapBar .rcCl .rcH.r { right: -3px; }
 #recapBar .rcClip { position: absolute; top: 0; bottom: 0; background: #ffd34d2b; border-left: 2px solid #ffd34d; border-right: 2px solid #ffd34d; pointer-events: none; }
 body.rcWide #recapBar { right: 12px; }
 .rcExec { display: inline-flex; gap: 2px; margin-left: 2px; } .rcExec button { font: 10px var(--mono) !important; padding: 2px 5px !important; text-transform: lowercase; background: #22252e; color: #9aa; border: 1px solid #3a3f4d; transform: none; box-shadow: none; } .rcExec button.was { border-color: #ffd34d; color: #ffd34d; } .rcExec button.on { background: #ffd34d; color: #111; border-color: #ffd34d; }

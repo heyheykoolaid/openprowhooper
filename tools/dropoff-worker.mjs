@@ -12,7 +12,7 @@
 //   - daily leaderboard: a 2:00 Session score a player chooses to post is filed as leaderboard/<day>/<score>-<map>-
 //     <name>-<pilot>-<time>.json (everything the board needs is in the file NAME). GET /board lists that one folder's
 //     file names, and turns them into the day's best score per pilot: no file is ever opened, nothing else in the repo
-//     can be listed, and the answer is cached for 30 s. GET /run?day=&id= returns ONE posted run (its scoring sheet and
+//     can be listed, the answer is cached for 30 s, and only TODAY's board can be asked for (no history). GET /run?day=&id= returns ONE posted run (its scoring sheet and
 //     replay, which the player chose to publish): the id must be a leaderboard file name, so nothing outside
 //     leaderboard/ can ever be read, and the file is passed through the same field check again on the way out.
 //     Scores are whatever the game reported (see docs/DATA.md);
@@ -91,11 +91,11 @@ function boardFrom(names) {
 const boardCache = new Map();   // day -> { at, body }
 async function board(request, env, fetchImpl, reply) {
   const u = new URL(request.url), today = new Date().toISOString().slice(0, 10), day = u.searchParams.get('day') || today;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return reply(400, 'bad day');
+  if (day !== today) return reply(400, 'today only');   // no history: earlier days stay in the repo for the project, but cannot be read from outside
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   if (!(await bump(env, `bip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 240))) return reply(429, 'slow down');
   const c = boardCache.get(day), json = body => reply(200, body, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' });
-  if (c && Date.now() - c.at < (day === today ? 30000 : 3600000)) return json(c.body);
+  if (c && Date.now() - c.at < 30000) return json(c.body);
   let names = []; try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/leaderboard/${day}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' } });
     if (r.ok) { const L = await r.json(); if (Array.isArray(L)) names = L.filter(x => x && x.type === 'file' && typeof x.name === 'string').map(x => x.name); } else if (r.status !== 404) return c ? json(c.body) : reply(502, 'could not read the board'); } catch { return c ? json(c.body) : reply(502, 'could not read the board'); }
   const body = JSON.stringify({ day, runs: boardFrom(names) }); if (boardCache.size > 40) boardCache.clear(); boardCache.set(day, { at: Date.now(), body }); return json(body);
@@ -104,7 +104,7 @@ async function board(request, env, fetchImpl, reply) {
 const RUN_ID = /^\d{8}-[a-z0-9-]{1,24}-[A-Za-z0-9_-]{1,40}-[a-z0-9]{6,40}-\d{10,16}$/;
 async function oneRun(request, env, fetchImpl, reply) {
   const u = new URL(request.url), day = u.searchParams.get('day') || '', id = u.searchParams.get('id') || '';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !RUN_ID.test(id)) return reply(400, 'bad run');
+  if (day !== new Date().toISOString().slice(0, 10) || !RUN_ID.test(id)) return reply(400, 'bad run');   // today's board only
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   if (!(await bump(env, `rip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 120))) return reply(429, 'slow down');
   try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/leaderboard/${day}/${id}.json?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.raw+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' } });

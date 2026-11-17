@@ -186,7 +186,11 @@ data: analyse them from the data repo, do not copy them into `test/fixtures/`.
 ## Review timeline, crashes, reset
 Review blocks can be dragged, and stretched by the yellow handles on each end (`recapSpanOf`, `recapSetSpan`; zoom with wheel / + −); labels then carry
 `repStart..t` = the pilot's span, `gameSpan`, `timed: true`, and `combo` / `comboLen` (tricks within `COMBO_IDLE` of each
-other). "＋ then…" adds the next trick of a combo where the selected one ends; Add starts at the red line. Selecting a
+other). "＋ then…" adds the next trick of a combo where the selected one ends; Add starts at the red line. The dropdowns
+also offer variants the book has no name for (`RECAP_VARIANTS`: open-air loops/Mattys/trippies, single-lap trippy and
+orbit); the label keeps the book name in `actual` and adds `variant`, `openAir`, `laps`. Clips: the replay starts as one
+piece (`recap.clips`); Split (S) cuts the piece under the red line, a picked piece is trimmed by its handles (or I / O)
+and Export records it (`recap.clip` is the picked piece). Selecting a
 trick plays on past it unless Loop is on. After a crash, throttle to zero rights the quad and re-arms (play.js
 `crashLock`); the game's drone has `crashImpact = 9.5` (tests keep 7.5). A reset switch never fires together with the
 arm switch (input.js): arming must not send the pilot back to the start. Only R (or a separate reset switch) resets.
@@ -194,7 +198,7 @@ arm switch (input.js): arming must not send the pilot back to the start. Only R 
 ## Daily leaderboard (src/dropoff.js `LB`, tools/dropoff-worker.mjs)
 A finished 2:00 Session can be posted from the results screen: the player's own click every time (it publishes pilot
 name, score, scoring sheet and the run's replay; `pro-whooper-score/1`). The relay files it as
-`leaderboard/<UTC day>/<score>-<map>-<name b64url>-<pilot>-<time>.json`; `GET /board?day=` lists that folder's file
+`leaderboard/<UTC day>/<score>-<map>-<name b64url>-<pilot>-<time>.json`; `GET /board` (today only: no history is served; older days stay in the private repo) lists that folder's file
 NAMES and returns each pilot's best per map; `GET /run?day=&id=` returns one posted run (id must be a leaderboard file
 name; cleaned again on the way out). Nothing outside `leaderboard/` can be read. Scores are client-reported (not
 verified): the posted replay is how a run can be checked. In the game: main menu "Daily leaderboard", click a run for
