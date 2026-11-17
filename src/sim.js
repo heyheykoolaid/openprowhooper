@@ -1312,13 +1312,26 @@ class TrickDetector {
       if (!this.wallRide.emitted && this.wallRide.ok && this.wallRide.lastIn - this.wallRide.t0 > 0.35 && L > 1.2 && !d.crashed) this.emit({ name: backward ? 'Reverse Wall Ride' : 'Wall Ride', exec: this.wallRide.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: this.wallRide.name, continuous: true });
       this.wallRide = null;
     }
-    // Dive: from high up (>= 10 m), fast descent, pull out low
-    if (d.pos.y > 10 && d.armed) this.dive = { t0: t, maxY: Math.max(d.pos.y, this.dive ? this.dive.maxY : 0), fast: false };
-    if (this.dive) {
-      if (d.vel.y < -6) this.dive.fast = true;
-      if (d.pos.y < 2.5 && this.dive.fast && d.vel.y > -1.5 && up.y > 0.4) { this.emit({ name: 'Dive', exec: 'CLEAN', clean: 92, obstacle: 'Brick Building', continuous: true }); this.dive = null; }
-      else if (t - this.dive.t0 > 6 || d.crashed) this.dive = null;
-    }
+    // Dive (TPW, and the pilot's definition after it was called far too often: 24 calls in 35 minutes, 3 of 4 judged
+    // wrong). A dive is ONE committed descent: nose down, falling fast, pulled out level near the ground. It counts
+    //   - in the open only from really high up (12 m or more, dropping at least 9 m), or
+    //   - beside a tall structure (a wall or building within 3 m for most of the way down), from 6 m, dropping 4.5 m:
+    //     "almost a wall ride, but not quite, just a diving motion".
+    // Coming down from height in a glide, a spiral or a tumble is just coming down.
+    { const D = this.dive, vy = d.vel.y, f = d.fwd();
+      if (!D) { if (d.armed && !d.crashed && vy < -3 && d.pos.y >= 6) this.dive = { t0: t, y0: d.pos.y, T: 0, nose: 0, near: 0, minVy: vy, hit: false, lvl: 0, name: null, rot: this.totRot || 0 }; }
+      else if (d.crashed || !d.armed) this.dive = null;
+      else {
+        if (vy < -1.5) { D.T += dt; D.lvl = 0; D.minVy = Math.min(D.minVy, vy); if (f.y < -0.42) D.nose += dt;   // nose at least 25 degrees below level
+          if ((Math.round(t * 1000) % 20) === 0) { let best = null; for (const o of this.world.objs) { if (!(o.kind === 'wall' || o.kind === 'building')) continue; for (const pr of o.prims) { if (pr.type !== 'box' || pr.aabb.max.y < d.pos.y - 0.5) continue; const r = sphereVs(pr, d.pos, 3.0); if (r && Math.abs(r.n.y) <= 0.3 && (!best || r.d > best.d)) best = { d: r.d, name: o.name }; } } if (best) { D.near += 0.02; D.name = best.name; } }
+          if (d.contactThisStep && d.lastImpact > 0.6) D.hit = true; }
+        else { D.lvl += dt;   // levelling out: judge it once the descent has clearly ended
+          if (D.lvl > 0.12) { const drop = D.y0 - d.pos.y, beside = D.T > 0 && D.near / D.T >= 0.5, tumble = ((this.totRot || 0) - D.rot) > 420;
+            const committed = D.T >= 0.5 && D.nose / D.T >= 0.4 && D.minVy <= -7 && !D.hit && !tumble && up.y > 0.4 && d.pos.y < 3.5;
+            if (committed && ((beside && D.y0 >= 6 && drop >= 4.5) || (D.y0 >= 12 && drop >= 9))) this.emit({ name: 'Dive', exec: 'CLEAN', clean: beside ? 95 : 90, obstacle: beside ? D.name : 'open air', continuous: true });
+            this.dive = null; } }
+        if (this.dive && t - D.t0 > 8) this.dive = null;
+      } }
     // Stall rewind: climb (>2.5 m/s up) beside something tall, stall, come back down without rotating
     if (d.vel.y > 2.5 && d.armed && !this.climb) this.climb = { t0: t, y0: d.pos.y, p0: v3(d.pos.x, 0, d.pos.z), rot: 0, peak: d.pos.y };
     if (this.climb) {

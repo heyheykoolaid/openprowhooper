@@ -70,8 +70,8 @@ async function procFlight(job, after) {
 // ---- the waiting list (IndexedDB, falling back to memory)
 async function telList() { const a = await idb.all('telemetry'); return (a.length ? a : telState.mem).slice().sort((x, y) => (x.at < y.at ? -1 : 1)); }
 async function telStore(item) { const ok = await idb.ok(); if (ok) await idb.put('telemetry', item); else { const i = telState.mem.findIndex(x => x.id === item.id); if (i >= 0) telState.mem[i] = item; else telState.mem.push(item); } }
-async function telQueue(kind, name, payload) {
-  await telStore({ id: `${kind}/${name}`, kind, name, at: new Date().toISOString(), body: JSON.stringify(payload), sent: null });
+async function telQueue(kind, name, payload, explicit) {
+  await telStore({ id: `${kind}/${name}`, kind, name, at: new Date().toISOString(), body: JSON.stringify(payload), sent: null, explicit: !!explicit });
   const all = await telList(); for (const old of all.slice(0, Math.max(0, all.length - TEL.keep))) { await idb.del('telemetry', old.id); telState.mem = telState.mem.filter(x => x.id !== old.id); }
   telRenderStatus(); return telPump(true);   // a new item gets one immediate try
 }
@@ -109,7 +109,7 @@ const TEL_BACKOFF = [60, 120, 300, 900, 3600];
 async function telPump(force) {
   if (telState.busy) return; if (!force && telState.retryAt && Date.now() < telState.retryAt) return; telState.busy = true;
   try {
-    for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && it.kind !== 'video' && !tel.on) continue;   // feedback and a video review are sent by the player's own click
+    for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && it.kind !== 'video' && !it.explicit && !tel.on) continue;   // feedback and a video review are sent by the player's own click
       let route = (await telToDb(it)) ? 'project database' : null, refused = false;
       if (!route && TEL.relay && !telState.relayOff) { const st = await telToRelay(it);
         if (st >= 200 && st < 300) route = 'project drop-off';
@@ -278,15 +278,76 @@ async function lbPick(id) {
   lbRender();
 }
 // someone else's run in the replay viewer: a guest run is never saved, reviewed or shared from here
+// Someone else's flight in the replay viewer. Nothing of it is kept as the viewer's own run, and it never feeds the
+// viewer's own learning. If the viewer reviews it, their verdicts go out as REVIEWER labels (a second opinion on that
+// pilot's flight, marked with who gave it), by their own action.
+function guestOpen(rows, events, of, review) {
+  if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(r => Array.isArray(r) && r.length >= 27 && r.every(Number.isFinite))) throw new Error('bad trace');
+  if (!recap.guest) LB.keep = { trace: recap.trace, events: recap.events, flags: recap.flags, id: recap.id, started: recap.started, mode: recap.mode, dirty: recap.dirty, telDone: recap.telDone };   // the player's own run comes back afterwards
+  recapReset(); recap.guest = true; recap.guestOf = of; recap.trace = rows; recap.telDone = recap.id;
+  recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: e.name.slice(0, 60), exec: String(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? e.obstacle.slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null }));
+  openRecap(of.source); recap.review = !!review; renderRecap();
+}
+async function reviewerSave() {
+  const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); recap.dirty = false; if (!L.length || !of.flight) return;
+  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null }));
+  procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
+  const stamp = `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}`;
+  const r = await procWait(telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued'), 9000);
+  procShow(procThanks(), (r === 'sent' ? 'Your reviewer labels were sent to the project.' : 'Your reviewer labels are saved and will be sent as soon as the drop-off can be reached.') + ' A second pair of eyes on a flight is worth a lot.', 1);
+  await new Promise(res => setTimeout(res, 1700)); procHide();
+}
 async function lbWatch() {
   const R = LB.open; if (!R || !R.run || !R.run.trace || R.run.map !== MAP_ID) return;
-  try { const rows = await FlightLog.unpack(R.run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(r => Array.isArray(r) && r.length >= 27 && r.every(Number.isFinite))) throw 0;
-    LB.keep = { trace: recap.trace, events: recap.events, flags: recap.flags, id: recap.id, started: recap.started, mode: recap.mode, dirty: recap.dirty, telDone: recap.telDone };   // the player's own run comes back afterwards
-    recapReset(); recap.guest = true; recap.trace = rows; recap.telDone = recap.id;
-    recap.events = (Array.isArray(R.run.events) ? R.run.events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: e.name.slice(0, 60), exec: String(e.exec || '').slice(0, 12), clean: null, obstacle: null, conf: null, fails: [], verdict: null, actual: null }));
-    store.set('recapReview', store.get('recapReview', true)); openRecap('board'); recap.review = false; renderRecap();
-  } catch { LB.open = { id: R.id, run: R.run, error: 'That replay could not be opened.' }; lbRender(); }
+  try { guestOpen(await FlightLog.unpack(R.run.trace), R.run.events, { name: R.run.name, flight: R.run.flight || R.id, source: 'board', ref: R.id }, false); }
+  catch { LB.open = { id: R.id, run: R.run, error: 'That replay could not be opened.' }; lbRender(); }
 }
+
+// ============================================================ Flight desk (the project owner's view of shared flights)
+// Shown only when the pilot name is heyheykoolaid, and it only WORKS with a GitHub token (Options) that can read the
+// project's private data repo: the name opens the door, the token is the key. Flights are read straight from GitHub
+// with that token; nothing here goes through the public relay. Reviewing one sends reviewer labels through the drop-off.
+const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {} };
+const deskGet = async (path, raw) => { const r = await fetch(`https://api.github.com/repos/${desk.repo}/contents/${path}`, { headers: { 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28' } }); if (!r.ok) throw new Error(String(r.status)); return raw ? r.text() : r.json(); };
+function deskOpen() { if (!ghMenus()) return; show('#deskScreen'); deskRender(); if (!desk.list && gh.token) deskLoad(); }
+async function deskLoad() {
+  if (desk.busy) return; desk.busy = true; desk.msg = 'Reading the data repo…'; deskRender();
+  try { const days = (await deskGet('telemetry/inbox/flight')).filter(x => x.type === 'dir' && /^\d{4}-\d\d-\d\d$/.test(x.name)).map(x => x.name).sort().reverse().slice(0, 5), list = [];
+    for (const day of days) for (const f of await deskGet('telemetry/inbox/flight/' + day)) if (f.type === 'file' && /^\d+-[0-9a-f]+\.json$/.test(f.name)) list.push({ day, file: f.name, size: f.size, at: +f.name.split('-')[0] });
+    list.sort((a, b) => b.at - a.at); desk.list = list.slice(0, 120); desk.msg = ''; }
+  catch (err) { desk.list = null; desk.msg = err.message === '401' ? 'GitHub rejected the token (expired or mistyped).' : err.message === '404' ? `That token cannot see ${desk.repo}. It needs "Contents: Read" on that repository.` : 'Could not read the data repo just now.'; }
+  desk.busy = false; deskRender(); deskDetails();
+}
+// fill in who flew what, a few files at a time (each flight file is read once and remembered while the page is open)
+async function deskDetails() { for (const it of (desk.list || []).slice(0, 40)) { if (desk.info[it.file] || $('#deskScreen').classList.contains('hide')) continue;
+    try { const p = JSON.parse(await deskGet(`telemetry/inbox/flight/${it.day}/${it.file}`, true)); if (!p || p.format !== 'pro-whooper-flight/1') throw 0;
+      desk.info[it.file] = { p, name: typeof p.name === 'string' ? p.name.slice(0, 24) : '', map: String(p.map || '').slice(0, 24), calls: Array.isArray(p.events) ? p.events.filter(e => e && e.name !== 'Crash').length : 0, secs: p.summary && Number.isFinite(p.summary.seconds) ? p.summary.seconds : null, craft: p.craft && p.craft.names && typeof p.craft.names.frame === 'string' ? p.craft.names.frame.slice(0, 40) : '', flagged: Array.isArray(p.events) ? p.events.filter(e => e && e.flagged).length : 0 }; }
+    catch { desk.info[it.file] = { bad: true }; } deskRender(); } }
+function deskRender() {
+  const el = $('#deskPanel'); if (!el) return; const L = desk.list || [], done = store.get('deskDone', {});
+  el.innerHTML = `<div class="row" style="justify-content:space-between"><h2>Flight desk</h2><button data-desk="close">Back</button></div>
+    <p class="note">Flights pilots chose to share, read from <b>${esc(desk.repo)}</b> with your GitHub token. Open one to watch it and judge its tricks: your verdicts are sent as reviewer labels, separate from the pilot's own.</p>
+    ${!gh.token ? '<p class="warn">Add a GitHub token in Options first: one that can read that repository ("Contents: Read"). It stays in this browser.</p>' : ''}
+    <div class="row"><button data-desk="refresh" ${gh.token ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.msg || (L.length ? `${L.length} flights, newest first` : ''))}</span></div>
+    <div class="deskList"><table class="lbT"><tr><th>When</th><th>Pilot</th><th>Map</th><th>Whoop</th><th>Length</th><th>Calls</th><th></th></tr>
+    ${L.map(it => { const i = desk.info[it.file], when = new Date(it.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<tr data-deskfile="${esc(it.file)}" class="${done[it.file] ? 'me' : ''}"><td>${esc(when)}</td><td>${i && !i.bad ? esc(i.name || '(no name)') : '…'}</td><td>${i && !i.bad ? esc(lbMapTitle(i.map)) : ''}</td><td>${i && !i.bad ? esc(i.craft) : ''}</td><td>${i && i.secs ? fmtT(i.secs) : ''}</td><td>${i && !i.bad ? i.calls + (i.flagged ? ` · ${i.flagged} flagged` : '') : i && i.bad ? 'unreadable' : ''}</td><td>${done[it.file] ? '✓ reviewed' : ''}</td></tr>`; }).join('')}</table></div>`;
+}
+async function deskPick(file) {
+  const it = (desk.list || []).find(x => x.file === file), i = desk.info[file]; if (!it || !i || i.bad) return; const p = i.p;
+  if (p.map !== MAP_ID) { if (!S.MAPS[p.map]) { desk.msg = 'That flight is on a map this version does not have.'; deskRender(); return; } store.set('deskPending', file); store.set('map', p.map); $('#loading').textContent = 'Loading ' + S.MAPS[p.map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); return; }   // the flight's own map, then straight back here
+  try { guestOpen(await FlightLog.unpack(p.trace), p.events, { name: p.name || '(no name)', flight: p.id, started: p.started, source: 'desk', ref: `${it.day}/${it.file}` }, true); desk.openFile = file; }
+  catch { desk.msg = 'That flight could not be opened.'; deskRender(); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-desk]'), row = e.target.closest('[data-deskfile]');
+  if (b) { const a = b.dataset.desk; if (a === 'close') show('#toolsScreen'); if (a === 'refresh') { desk.list = null; deskLoad(); } return; }
+  if (row) deskPick(row.dataset.deskfile);
+  const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'desk') deskOpen();
+});
+// came back from a map change made to open a flight: carry on to it
+setTimeout(async () => { const f = store.get('deskPending', null); if (!f) return; store.set('deskPending', null); if (!ghMenus() || !gh.token) return; deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); if (desk.info[f]) deskPick(f); }, 1500);
+
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-lb]'), row = e.target.closest('[data-lbrun]');
   if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(lbToday()).then(lbRender);

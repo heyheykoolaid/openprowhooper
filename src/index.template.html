@@ -229,6 +229,7 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapBar { position: absolute; left: 12px; right: 362px; bottom: 10px; background: #12141aee; border: 1px solid #2c2f3a; padding: 8px 10px; color: #eee; font: 13px system-ui, sans-serif; }
 .lbT { width: 100%; border-collapse: collapse; font: 13px var(--mono); } .lbT td, .lbT th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #ffffff18; } .lbT td:nth-child(3) { text-align: right; font-weight: 700; }
 .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
+.deskList { max-height: 58vh; overflow: auto; margin-top: 8px; } .deskList tr[data-deskfile] { cursor: pointer; } .deskList tr[data-deskfile]:hover { background: #ffffff14; }
 .lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
 #lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
 #gPreview { width: 100%; max-width: 560px; aspect-ratio: 560 / 300; display: block; background: radial-gradient(ellipse at 50% 60%, #2a2f3a, #0d0e12 75%); border: 1px solid #2c2f3a; cursor: grab; margin-bottom: 8px; touch-action: none; }
@@ -442,6 +443,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="bbreplay">Blackbox Replay<small>watch a real flight from its Betaflight log</small></button>
     <button data-act="blackbox">Blackbox Lab<small>download logs from your quad over USB</small></button>
     <button data-act="review">Video Review<small>measure tricks in an FPV video</small></button>
+    <button data-act="desk" id="deskBtn" class="hide">Flight desk<small>review flights pilots have shared (project owner)</small></button>
     <button data-act="race">RaceGOW Tracks<small>track builder and racing: an early start, more to come</small></button>
     <button data-act="train" class="ghost">Trick Calibration<small>fly each trick five times (playground)</small></button>
     <button data-act="judge" class="ghost">Judge the Bot<small>say whether the bot's tricks look right (playground)</small></button>
@@ -455,6 +457,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="optionsScreen" class="screen hide"><div class="panel" style="max-width:860px">
   <div class="topbar"><h2>Options</h2><button data-act="optclose">Back</button></div><div id="optBody"></div></div></div>
 
+<div id="deskScreen" class="screen hide"><div class="panel" style="max-width:1000px" id="deskPanel"></div></div>
 <div id="lbScreen" class="screen hide"><div class="panel" style="max-width:980px" id="lbPanel"></div></div>
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>
 

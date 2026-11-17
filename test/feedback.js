@@ -244,4 +244,14 @@ function manyLoops(c, laps, R = 1.6, v = 7, jolt = 0) { const L = 2 * P * R / v,
 run('two open powerloops back to back', manyLoops(v3(6, 10, 6), 2), ['Powerloop', 'Powerloop']);
 run('three open powerloops back to back', manyLoops(v3(6, 10, 6), 3), ['Powerloop', 'Powerloop', 'Powerloop']);
 { const ev = M.detect(manyLoops(v3(6, 10, 6), 1, 1.6, 7, 9), W, 30).map(e => e.name); total++; const ok = !ev.includes('Powerloop'); if (ok) pass++; console.log(`${ok ? '✓' : '✗'} ${'a loop with a hard jolt in the middle is not a clean loop'.padEnd(46)} -> ${ev.join(' | ') || 'nothing'}`); }
+// 2026-11-17, pilot: "dive is for sure over called. A dive in an open area should be from high up; otherwise it should be
+// against a structure: almost a wall ride, but not quite, just a diving motion."
+function descend(from, to, nose, vz = 2) { const T0 = 0.6, drop = from.y - to, Td = drop / 9, Tl = 0.35; return { T: T0 + Td + Tl + 1.6, at: t => {
+  if (t < T0) return { pos: v3(from.x, from.y, from.z + (T0 - t) * 3), q: H.ID };
+  const u = t - T0; if (u < Td) { const k = Math.min(1, u / 0.25); return { pos: v3(from.x, from.y - 9 * u * (u < 0.25 ? u / 0.25 : 1), from.z - vz * u), q: pitchQ(-nose * D * k) }; }
+  const w = u - Td, k = Math.max(0, 1 - w / Tl); return { pos: v3(from.x, to, from.z - vz * Td - 4 * w), q: pitchQ(-nose * D * k) }; } }; }
+run('dive down the face of the Brick Building (from 13 m, 1.5 m off the wall)', descend(v3(5, 13, -20.5), 2, 60, 0), ['Dive']);
+run('open-air dive from really high up (16 m)', descend(v3(8, 16, 6), 2, 65), ['Dive']);
+run('coming down from 9 m in the open is not a dive (not high enough, nothing beside it)', descend(v3(8, 9, 6), 2, 60), []);
+run('sinking from 16 m with the nose level is not a dive (no dive attitude)', descend(v3(8, 16, 6), 2, 5), []);
 console.log(`\n${pass}/${total} pilot-feedback flights`);

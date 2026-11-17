@@ -50,11 +50,12 @@ let armSeen = null, armMovedAt = -1e9, resetAskAt = 0;
 let resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
 const ARM_THR_MAX = 0.08;
 // safe to arm: throttle at the bottom, or (3D mode, where the middle of the stick is zero thrust) in the middle
-// Take off without arming (pilot: "you shouldn't have to arm the drone to take off"): with the quad disarmed and the
+// Take off without arming, an OPTION in Controls (it was the default for an hour; the pilot found it got in the way of
+// Slide Disarms, so arming is required again unless this is switched on): with the quad disarmed and the
 // throttle seen at rest (bottom, or the middle in 3D mode), raising it arms and flies. Disarming still works as before
 // (switch off / Space / arm button), and after a disarm the throttle has to come back to rest before it can arm again,
 // so a Slide Disarm is: disarm, slide, throttle down and up again. Controls has the switch to turn this off.
-const autoArmOn = () => store.get('autoArm', true) !== false;
+const autoArmOn = () => store.get('autoArm', false) === true;   // off by default: you arm to fly (pilot: with it on, Slide Disarms got harder)
 let armSwWas = null, armReady = false;
 function autoArmTick() {
   if (!autoArmOn() || mode !== 'fly' || drone.armed) { if (drone.armed) armReady = false; return; }

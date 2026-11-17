@@ -45,7 +45,7 @@ document.addEventListener('click', e => {
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
-  if (a === 'map') openMaps(); if (a === 'tools') show('#toolsScreen');
+  if (a === 'map') openMaps(); if (a === 'tools') { show('#toolsScreen'); $('#deskBtn').classList.toggle('hide', !ghMenus()); }
   if (a === 'race') openRaceMenu();
 });
 
@@ -205,7 +205,7 @@ function renderControls() {
       <table class="tt"><tr><th>Function</th><th>${isR ? 'Channel' : 'Axis'}</th><th>Invert</th><th>Live</th><th></th></tr>
       ${AX4.map(a => `<tr><td>${a}</td><td><select data-ax="${a}">${chOpt(P.axes[a].i)}</select></td><td><input type=checkbox data-inv="${a}" ${P.axes[a].inv ? 'checked' : ''}></td><td><div class="bar"><i id="lv_${a}"></i></div></td><td><button data-detect="${a}">Detect</button></td></tr>`).join('')}
       ${swRow('arm', P.arm)}${P.reset && P.reset.enabled === true ? swRow('reset', P.reset) : ''}
-      <tr><td colspan="6"><label class="chk"><input type="checkbox" id="autoArmOn" ${autoArmOn() ? 'checked' : ''}> Take off without arming <small>(raise the throttle from rest and it flies; off: arm first, like a real quad)</small></label></td></tr>
+      <tr><td colspan="6"><label class="chk"><input type="checkbox" id="autoArmOn" ${autoArmOn() ? 'checked' : ''}> Take off without arming <small>(off by default: arm first, like a real quad. On: raising the throttle from rest arms it)</small></label></td></tr>
       <tr><td colspan="6"><label class="chk"><input type="checkbox" id="resetSwOn" ${P.reset && P.reset.enabled === true ? 'checked' : ''}> Use a switch to reset to the start <small>(off: only the <kbd>R</kbd> key resets, and disarming just stops the motors)</small></label></td></tr>
       </table>
       ${!isR ? `<label class="chk"><input type=checkbox id="cThrC" ${P.thrCentered ? 'checked' : ''}> Spring-centred throttle (stick up from centre = throttle)</label>` : ''}

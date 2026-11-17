@@ -259,9 +259,22 @@ pitch; battery size by capacity and cells; the canopy that comes with the electr
 the camera out front); `spec.look` = the pilot's frame / canopy / prop colours. The Garage shows it in a small second
 renderer (`garagePreviewRefresh`, one canvas re-homed after each redraw) and saves named builds (`store 'builds'`:
 parts + colours), like rate profiles. Reference photos are the pilot's; no brand marks are drawn.
-Take-off without arming is on by default (`autoArmTick` in input.js, `store 'autoArm'`): disarmed + throttle seen at rest,
-then raised = armed; the arm switch disarms on its falling edge only. The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
+Arming is required to fly. Take-off without arming is an option in Controls, off by default (`autoArmTick` in input.js,
+`store 'autoArm'`; when on: disarmed + throttle seen at rest, then raised = armed, and the arm switch disarms on its falling edge only). The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
 now lives under Tools & labs. The 3D mode call-out reads METALCRAFT MODE (`.popup.metal`).
+
+## Dive, reviewer labels and the Flight desk (2026-11-17)
+**Dive** (was called 41 times in 20 flights, mostly wrongly): one committed descent, nose at least 25° down for 40% of
+it, sinking 7 m/s or more, no hit, no tumble, pulled out upright under 3.5 m; and either beside a wall or building
+(within 3 m for half the descent, from 6 m, dropping 4.5 m; the structure is named) or in the open from 12 m dropping
+9 m. `this.dive` in `continuousDetectors`; tests in test/feedback.js.
+**Reviewer labels**: reviewing someone else's flight (`guestOpen` in dropoff.js: a leaderboard run, or a flight from
+the Flight desk) sends the decided verdicts as `pro-whooper-flight-labels/1` for THAT flight with `reviewer: true`,
+`by`, `byId`, `runOf`, `src`, `ref` on each label (`reviewerSave`; queued `explicit`, so it goes even with automatic
+sharing off). A guest run never feeds the viewer's own learner and is never stored as their run.
+**Flight desk** (Tools & labs, only when the name is heyheykoolaid): lists shared flights straight from the private data
+repo with the GitHub token from Options (it needs Contents: Read there; the name alone opens nothing), newest first,
+and opens one for review on its own map (switching map and coming back if needed: `store 'deskPending'`).
 
 ## Using the data (tools/signatures.js) and the error log
 `node tools/signatures.js <data folder>` is the first thing to run on new shared data: it re-flies every flight and
