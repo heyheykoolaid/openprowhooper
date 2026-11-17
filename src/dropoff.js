@@ -132,7 +132,7 @@ function telOptionsHtml() {
     <label class="chk big"><input type="checkbox" id="telOn" ${tel.on ? 'checked' : ''}> Share flight telemetry</label>
     <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
       <p><b>What it does:</b> when a Free Fly or Session run ends, the game sends that run to the project: the flight path and attitude, your stick and throttle movements, every trick the game called (with how sure it was), your F / Q flags, and your craft, rates and camera tilt. About 30–80 KB a minute; runs under ${TEL.minSeconds} seconds and RaceGOW laps are skipped.</p>
-      <p><b>Why:</b> real flying is what the trick rules are tuned against. Each flight can be re-flown through new versions of the detector to see which calls change, and the unsure calls show which rules need work.</p>
+      <p><b>Why:</b> real flying is what the trick rules are tuned against. Each flight can be re-flown through new versions of the detector to see which calls change, and the unsure calls show which rules need work. Tricks you confirm in Review also become examples in the game's trick library, which everyone's game compares moves against: only measurements of how the quad turned go in, never your name, id or the flight itself.</p>
       <p><b>What's not sent:</b> no e-mail or device details. Your runs carry the pilot name you chose and a random id made in this browser (<code>${esc(tel.pilot || 'made when you turn this on')}</code>) so they can be grouped. Never any access token.</p>
     </details>
       <p class="note" id="telStatus"></p>
@@ -152,7 +152,7 @@ function pilotAsk() {
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
     <input type="text" id="pilotNameIn" maxlength="24" placeholder="your pilot name or handle" value="${esc(pilotName())}" onkeydown="event.stopPropagation()" autocomplete="off">
-    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. You can change it any time in Options.</p>`}
+    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Measurements from tricks you confirm (how the quad turned, no names) may go into the game's trick library for everyone. You can change it any time in Options.</p>`}
     <p class="note" id="pilotMsg"></p>
     <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div></div>`;
   setTimeout(() => $('#pilotNameIn') && $('#pilotNameIn').focus(), 30);
