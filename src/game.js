@@ -924,28 +924,41 @@ function ghostStep(dt) {
 const rv = { file: null, url: null, frames: [], marks: [], dets: [], labels: [], busy: false, cancel: false, prog: 0, hfov: 130, tilt: null, rate: 30, cleanup: true, sel: -1 };
 const RV_COL = ['#ff5a5a', '#7dff9a', '#5ab8ff'];
 function openReview() { mode = 'review'; drone.armed = false; show('#reviewScreen'); $('#hud').classList.add('hide'); if (rv.tilt == null) rv.tilt = tune.camTilt; renderReview(); drawTimeline(); }
+// every video's work so far (measured motion, marks, labels, where measuring stopped) is kept while the page is open,
+// so loading another video and coming back carries on where you left off
+const rvKept = {};
+const rvKey = f => f ? `${f.name}|${f.size}` : '';
 function rvLoad(file) {
   if (!file) return; if (rv.url) URL.revokeObjectURL(rv.url);
-  Object.assign(rv, { file, url: URL.createObjectURL(file), frames: [], marks: [], dets: [], labels: [], prog: 0, sel: -1 });
+  if (rv.file && (rv.frames.length || rv.labels.length || rv.marks.length)) rvKept[rvKey(rv.file)] = { frames: rv.frames, marks: rv.marks, dets: rv.dets, labels: rv.labels, prog: rv.prog, resumeT: rv.resumeT, tr: rv.tr, hfov: rv.hfov, rate: rv.rate };
+  if (rv.busy) rv.cancel = true;
+  const kept = rvKept[rvKey(file)];
+  Object.assign(rv, { file, url: URL.createObjectURL(file), frames: [], marks: [], dets: [], labels: [], prog: 0, sel: -1, resumeT: null, tr: null, att: null }, kept || {});
   const v = $('#rvVideo'); v.src = rv.url; v.load(); $('#rvDrop').classList.add('hide');
-  v.onloadedmetadata = () => { renderReview(); drawTimeline(); };
+  v.onloadedmetadata = () => { rvAttitude(); renderReview(); drawTimeline(); if (kept) flashNow('picked up where you left off'); };
   v.onerror = () => { $('#rvDrop').classList.remove('hide'); $('#rvDrop').firstChild.textContent = "This browser can't play that file (try an .mp4 in Chrome/Edge). "; };
 }
-async function rvAnalyze() {
+// measuring: Stop keeps everything measured so far (and the tracker), Resume carries on from there; Re-measure starts over
+async function rvAnalyze(resume) {
   const v = $('#rvVideo'); if (!v.duration || rv.busy) return;
-  rv.busy = true; rv.cancel = false; rv.frames = []; rv.prog = 0; renderReview();
+  resume = !!(resume && rv.tr && rv.resumeT != null && rv.frames.length);
+  rv.busy = true; rv.cancel = false; if (!resume) { rv.frames = []; rv.prog = 0; } renderReview();
   const W = 240, H = Math.round(W * v.videoHeight / v.videoWidth), c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true });
-  const tr = new Vision.Tracker({ hfov: rv.hfov }), dt = 1 / rv.rate, wasPaused = v.paused; v.pause();
+  const tr = resume ? rv.tr : new Vision.Tracker({ hfov: rv.hfov }), dt = 1 / rv.rate, wasPaused = v.paused; v.pause(); rv.tr = tr;
   const seek = t => new Promise(res => { const done = () => { v.removeEventListener('seeked', done); res(); }; v.addEventListener('seeked', done); v.currentTime = t; });
-  const out = [];
-  for (let t = 0; t < v.duration - 1e-3 && !rv.cancel; t += dt) {
+  const out = resume ? rv.frames.map(f => ({ t: f.t, res: { rpy: f.rpy, how: f.how } })) : [];
+  let tStart = 0;
+  if (resume) { await seek(rv.resumeT); g.drawImage(v, 0, 0, W, H); tr.push(Vision.fromRGBA(g.getImageData(0, 0, W, H).data, W, H)); tStart = rv.resumeT + dt; }   // re-prime the tracker on the last measured frame
+  for (let t = tStart; t < v.duration - 1e-3 && !rv.cancel; t += dt) {
+    rv.resumeT = t;
     await seek(t); g.drawImage(v, 0, 0, W, H); const r = tr.push(Vision.fromRGBA(g.getImageData(0, 0, W, H).data, W, H));
     if (r && r.dup) continue;                                            // repeated frame: no new information
     out.push(r ? { t, res: r } : { t, res: null });
     rv.prog = t / v.duration; if (out.length % 15 === 0) { rv.frames = out.map(f => ({ t: f.t, rpy: f.res ? f.res.rpy : [0, 0, 0] })); renderReview(); drawTimeline(); await new Promise(r => setTimeout(r, 0)); }
   }
   rv.frames = out.map(f => ({ t: f.t, rpy: f.res ? f.res.rpy : [0, 0, 0], how: f.res ? f.res.how : 'first' }));   // loop closures already applied in place
-  rv.busy = false; rv.prog = rv.cancel ? rv.prog : 1; rvDetect(); if (!wasPaused) v.play();
+  const stopped = rv.cancel; rv.busy = false; rv.prog = stopped ? rv.prog : 1; if (!stopped) rv.resumeT = null; rvAttitude(); rvDetect(); if (!wasPaused) v.play();
+  if (stopped) flashNow(`stopped at ${fmtT(rv.resumeT || 0)} — data kept, Resume carries on`);
 }
 function rvDetect() {
   if (!rv.frames.length) { rv.dets = []; return; }
@@ -985,7 +998,7 @@ function renderReview() {
     <div class="row">${rv.file ? `<b>${rv.file.name}</b>` : 'No video loaded'} <label class="rvPick" style="margin-left:auto">${rv.file ? 'change' : 'load video'}<input id="rvFile2" type="file" accept="video/*" hidden></label></div>
     <div class="row"><label>Lens FOV° <input type="number" id="rvFov" value="${rv.hfov}" min="80" max="200"></label><label>Camera tilt° <input type="number" id="rvTilt" value="${rv.tilt}" min="-10" max="60"></label></div>
     <div class="row"><label>Samples/s <select id="rvRate">${[30, 60].map(r => `<option ${r === rv.rate ? 'selected' : ''}>${r}</option>`).join('')}</select></label><label><input type="checkbox" id="rvClean" ${rv.cleanup ? 'checked' : ''}> one axis at a time</label></div>
-    <div class="row"><button data-rv="analyze" ${!has || rv.busy ? 'disabled' : ''}>${rv.frames.length ? 'Re-measure' : 'Measure motion'}</button>${rv.busy ? '<button data-rv="cancel">Stop</button>' : ''}<span>${rv.busy ? Math.round(rv.prog * 100) + '%' : rv.frames.length ? `${rv.frames.length} samples` : ''}</span></div>
+    <div class="row">${!rv.busy && rv.resumeT != null && rv.frames.length ? `<button data-rv="resume" ${!has ? 'disabled' : ''}>Resume measuring</button>` : ''}<button data-rv="analyze" ${!has || rv.busy ? 'disabled' : ''}>${rv.frames.length ? 'Re-measure from the start' : 'Measure motion'}</button>${rv.busy ? '<button data-rv="cancel">Stop (keeps the data)</button>' : ''}<span>${rv.busy ? Math.round(rv.prog * 100) + '%' : rv.frames.length ? `${rv.frames.length} samples` : ''}</span></div>
     ${rv.busy || rv.prog ? `<div class="rvBar"><i style="width:${rv.prog * 100}%"></i></div>` : ''}
     <p class="note">${rv.frames.length ? `Detector suggestions: <b>${rv.dets.length}</b> · you: ✓${nYes} ✗${nNo} +${nAdd} · obstacle marks ${rv.marks.length}` : 'Measure the motion, then mark when you pass under (U) or over (O) things — that unlocks loops, Mattys and Split-S.'}</p>
     ${items}${added}
@@ -1005,26 +1018,70 @@ function drawTimeline() {
   if (rv.busy) { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x(rv.prog * dur), 0, W - x(rv.prog * dur), H); }
   g.fillStyle = '#fff'; g.fillRect(x(v.currentTime || 0) - 1, 0, 2, H);
 }
+// attitude of the quad through the clip (integrated from the measured rotation, camera tilt undone) and the stick
+// positions that would have made it, through the pilot's rates (throttle can't be seen in a video)
+function rvAttitude() {
+  rv.att = null; if (!rv.frames.length) return; const D = Math.PI / 180; let q = { w: 1, x: 0, y: 0, z: 0 }; const out = [{ t: rv.frames[0].t, q, br: [0, 0, 0] }];
+  for (let i = 1; i < rv.frames.length; i++) { const f = rv.frames[i], span = f.t - rv.frames[i - 1].t; const br = f.rpy && span > 0 ? Vision.bodyRates(f.rpy, span, rv.tilt ?? 20, rv.cleanup !== false) : [0, 0, 0];
+    const w = S.v3(br[1] * D, -br[2] * D, -br[0] * D), an = Math.hypot(w.x, w.y, w.z) * span; if (an > 0) q = S.qnorm(S.qmul(q, S.qaxis(S.mul(w, 1 / Math.hypot(w.x, w.y, w.z)), an)));
+    out.push({ t: f.t, q, br }); }
+  rv.att = out;
+}
+function rvAt(t) { const A = rv.att; if (!A || !A.length) return null; let lo = 0, hi = A.length - 1; if (t <= A[0].t) return A[0]; if (t >= A[hi].t) return A[hi]; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m].t <= t) lo = m; else hi = m; } return A[lo]; }
+function stickFromRates(br) {   // body rates (deg/s) -> sticks through the pilot's rate curves (pitch stick forward = nose down)
+  const inv = (rate, r) => { const a = Math.abs(rate); if (a < 1) return 0; let lo = 0, hi = 1; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (Math.abs(S.applyRate(m, r, tune.ratesType)) < a) lo = m; else hi = m; } return Math.sign(rate) * hi; };
+  return { roll: inv(br[0], tune.rates.roll), pitch: -inv(br[1], tune.rates.pitch), yaw: inv(br[2], tune.rates.yaw), thr: 0.5 };
+}
+function drawGhostQuad(cv, q) {
+  const g = cv.getContext('2d'), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+  const P = p => { const w = S.qrot(q, p), cy = Math.cos(0.45), sy = Math.sin(0.45), x = w.x, y = w.y * cy - w.z * sy, z = w.y * sy + w.z * cy, k = 1500 / (4 + z); return [W / 2 + x * k, H / 2 - y * k]; };   // seen from behind, a little above
+  const arms = [[-0.06, 0, -0.06], [0.06, 0, -0.06], [-0.06, 0, 0.06], [0.06, 0, 0.06]].map(a => S.v3(...a));
+  g.lineWidth = 3; g.strokeStyle = 'rgba(120,200,255,0.9)';
+  for (const a of arms) { const [x0, y0] = P(S.v3(0, 0, 0)), [x1, y1] = P(a); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    g.beginPath(); for (let i = 0; i <= 16; i++) { const an = i / 16 * Math.PI * 2, [x, y] = P(S.v3(a.x + Math.cos(an) * 0.032, 0, a.z + Math.sin(an) * 0.032)); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+  const [cx, cy] = P(S.v3(0, 0.01, -0.03)), [fx, fy] = P(S.v3(0, 0.01 + Math.sin((rv.tilt ?? 20) * Math.PI / 180) * 0.09, -0.03 - Math.cos((rv.tilt ?? 20) * Math.PI / 180) * 0.09));
+  g.strokeStyle = '#ffd34d'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(cx, cy); g.lineTo(fx, fy); g.stroke();
+  const [ux, uy] = P(S.v3(0, 0.06, 0)), [ox, oy] = P(S.v3(0, 0, 0)); g.strokeStyle = 'rgba(125,255,154,0.8)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ux, uy); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '10px ui-monospace, monospace'; g.fillText('ghost (measured)', 6, H - 6);
+}
+function rvControls() {
+  const v = $('#rvVideo'); if (!v) return; const d = v.duration || 0, t = v.currentTime || 0, f = x => `${Math.floor(x / 60)}:${(x % 60).toFixed(2).padStart(5, '0')}`;
+  $('#rvTime').textContent = `${f(t)} / ${f(d)}`; $('#rvPlay').textContent = v.paused ? '▶' : '❚❚';
+  const sk = $('#rvSeek'); if (document.activeElement !== sk && d) sk.value = Math.round(t / d * 1000);
+  $('#rvMute').textContent = v.muted || v.volume === 0 ? '🔇' : '🔊'; $('#rvLoop').textContent = rv.loop ? (rv.loop.label || 'loop on') : 'loop off'; $('#rvLoop').classList.toggle('on', !!rv.loop);
+  if (rv.loop && d && !v.paused && (t >= rv.loop.b || t < rv.loop.a - 0.05)) v.currentTime = rv.loop.a;
+}
 function reviewTick() {   // called every animation frame while reviewing
   const v = $('#rvVideo'), el = $('#rvNow'); if (!v) return; const t = v.currentTime;
+  rvControls();
+  const on = $('#rvSticksOn') ? $('#rvSticksOn').checked : true, A = on && rvAt(t);
+  $('#rvSticks').classList.toggle('off', !A); $('#rvGhost').classList.toggle('off', !A);
+  if (A) { const trail = []; for (let k = 15; k >= 1; k--) { const B = rvAt(t - k * 0.033); if (B) trail.push(stickFromRates(B.br)); }
+    drawSticks($('#rvSticks'), stickFromRates(A.br), trail, { label: 'THR (not in video)', label2: 'P/R from motion' }); drawGhostQuad($('#rvGhost'), A.q); }
   const cur = rv.dets.filter(d => t >= d.t0 - 0.1 && t <= d.t + 0.6), fl = el.dataset.until && performance.now() < +el.dataset.until ? el.dataset.flash : '';
   el.innerHTML = cur.map(d => `${d.name}<small>${d.exec}</small>`).join('') + (fl ? `<small>● ${fl}</small>` : '');
   drawTimeline();
 }
 document.addEventListener('change', e => {
   if (e.target.id === 'rvFile' || e.target.id === 'rvFile2') rvLoad(e.target.files[0]);
-  if (e.target.id === 'rvFov') rv.hfov = +e.target.value || 130; if (e.target.id === 'rvTilt') { rv.tilt = +e.target.value; rvDetect(); }
-  if (e.target.id === 'rvRate') rv.rate = +e.target.value; if (e.target.id === 'rvClean') { rv.cleanup = e.target.checked; rvDetect(); }
+  if (e.target.id === 'rvFov') rv.hfov = +e.target.value || 130; if (e.target.id === 'rvTilt') { rv.tilt = +e.target.value; rvAttitude(); rvDetect(); }
+  if (e.target.id === 'rvSpeed') $('#rvVideo').playbackRate = +e.target.value; if (e.target.id === 'rvVol') { const v = $('#rvVideo'); v.volume = +e.target.value; v.muted = v.volume === 0; }
+  if (e.target.id === 'rvRate') rv.rate = +e.target.value; if (e.target.id === 'rvClean') { rv.cleanup = e.target.checked; rvAttitude(); rvDetect(); }
   if (e.target.dataset.rvfix) { const i = +e.target.dataset.rvfix; rvJudge(i, 'no', e.target.value || null); }
   if (e.target.id === 'rvAddName' && e.target.value) { rvAdd(e.target.value); }
 });
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-rv]'); if (b) { const a = b.dataset.rv, i = +b.dataset.i;
-    if (a === 'analyze') rvAnalyze(); if (a === 'cancel') rv.cancel = true; if (a === 'export') rvExport(); if (a === 'upload') rvUpload();
+    if (a === 'analyze') rvAnalyze(false); if (a === 'resume') rvAnalyze(true); if (a === 'cancel') rv.cancel = true; if (a === 'export') rvExport(); if (a === 'upload') rvUpload();
     if (a === 'yes') rvJudge(i, 'yes'); if (a === 'no') rvJudge(i, 'no'); if (a === 'del') { rv.labels.splice(+b.dataset.k, 1); renderReview(); }
     if (a === 'go') { const v = $('#rvVideo'); v.currentTime = Math.max(0, rv.dets[i].t0 - 0.6); v.play(); }
     return; }
   if (e.target.id === 'rvTimeline') { const v = $('#rvVideo'), r = e.target.getBoundingClientRect(); if (v.duration) v.currentTime = (e.clientX - r.left) / r.width * v.duration; }
+  const rc = e.target.closest('[data-rvc]'); if (rc) { const v = $('#rvVideo'), a = rc.dataset.rvc, fr = 1 / (rv.rate || 30); if (!v.duration && a !== 'mute') return;
+    if (a === 'play') v.paused ? v.play() : v.pause(); if (a === 'fprev') { v.pause(); v.currentTime = Math.max(0, v.currentTime - fr); } if (a === 'fnext') { v.pause(); v.currentTime = Math.min(v.duration, v.currentTime + fr); }
+    if (a === 'back1') v.currentTime = Math.max(0, v.currentTime - 1); if (a === 'fwd1') v.currentTime = Math.min(v.duration, v.currentTime + 1);
+    if (a === 'mute') { v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = 0.6; }
+    if (a === 'loop') { if (rv.loop) rv.loop = null; else { const t = v.currentTime, d = rv.dets.find(x => t >= x.t0 - 0.8 && t <= x.t + 0.8); rv.loop = d ? { a: Math.max(0, d.t0 - 0.8), b: d.t + 0.6, label: 'loop: ' + d.name } : { a: 0, b: v.duration, label: 'loop: clip' }; } } }
   if (e.target.closest('[data-act="review"]')) openReview();
 });
 addEventListener('keydown', e => {
@@ -1037,6 +1094,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyU') rvMark('U', e.shiftKey, keys.KeyL); if (e.code === 'KeyO') rvMark('O', e.shiftKey, keys.KeyL); if (e.code === 'KeyX') rvUnmark();
   if (e.code === 'KeyA') { const s = $('#rvAddName'); if (s) s.focus(); }
 });
+document.addEventListener('input', e => { if (e.target.id === 'rvSeek') { const v = $('#rvVideo'); if (v.duration) v.currentTime = +e.target.value / 1000 * v.duration; } });
 (() => { const box = document.getElementById('rvDrop'); if (!box) return; const vb = box.parentElement;
   vb.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('drag'); }); vb.addEventListener('dragleave', () => box.classList.remove('drag'));
   vb.addEventListener('drop', e => { e.preventDefault(); box.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) rvLoad(f); }); })();

@@ -195,6 +195,12 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #edValid .err { color: #ff8b7d; } #edValid .warn { color: #ffd34d; } #edValid .ok { color: #7dff9a; }
 #edHint { position: absolute; left: 220px; right: 300px; bottom: 8px; text-align: center; pointer-events: none !important; font-size: 12px; opacity: .85; text-shadow: 0 0 3px #000; }
 #editorUI .hint { font-size: 11px; opacity: .7; line-height: 1.4; } #editorUI .chk { font-size: 12px; } #editorUI .chk input { width: auto; }
+
+#rvCtl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 12px var(--mono); color: #ddd; } #rvCtl button { padding: 3px 8px; font-size: 13px; } #rvCtl #rvSeek { flex: 1; min-width: 160px; }
+#rvCtl select { padding: 2px; } #rvCtl #rvVol { width: 80px; } #rvCtl .rvOv { font-size: 11px; } #rvCtl button.on { background: #ffd34d; color: #111; }
+#rvSticks { position: absolute; left: 10px; bottom: 10px; width: 208px; height: 96px; pointer-events: none; }
+#rvGhost { position: absolute; right: 10px; bottom: 10px; width: 160px; height: 120px; pointer-events: none; background: #0007; border-radius: 8px; }
+#rvSticks.off, #rvGhost.off { display: none; }
 </style>
 <!--THREE-->
 <script>
@@ -325,7 +331,12 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="reviewScreen" class="screen hide"><div class="rvWrap">
   <div class="rvMain">
-    <div class="rvVidBox"><video id="rvVideo" playsinline muted></video><div id="rvDrop">Drop an FPV video here, or <label class="rvPick">choose a file<input id="rvFile" type="file" accept="video/*" hidden></label><small>The video stays on your computer: only the measured motion and your labels are ever saved or uploaded.</small></div><div id="rvNow"></div></div>
+    <div class="rvVidBox"><video id="rvVideo" playsinline muted></video><canvas id="rvSticks" width="260" height="120" title="Sticks estimated from the measured rotation through your rates"></canvas><canvas id="rvGhost" width="200" height="150" title="Ghost quad: the measured attitude"></canvas><div id="rvDrop">Drop an FPV video here, or <label class="rvPick">choose a file<input id="rvFile" type="file" accept="video/*" hidden></label><small>The video stays on your computer: only the measured motion and your labels are ever saved or uploaded.</small></div><div id="rvNow"></div></div>
+    <div id="rvCtl"><button data-rvc="back1" title="Back 1 s (←)">⏪</button><button data-rvc="fprev" title="Previous frame (,)">◂</button><button data-rvc="play" id="rvPlay" title="Play / pause (Space)">▶</button><button data-rvc="fnext" title="Next frame (.)">▸</button><button data-rvc="fwd1" title="Forward 1 s (→)">⏩</button>
+      <span id="rvTime">0:00.00 / 0:00.00</span><input type="range" id="rvSeek" min="0" max="1000" value="0" step="1">
+      <select id="rvSpeed" title="Playback speed"><option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+      <button data-rvc="loop" id="rvLoop" title="Loop the current trick / whole clip">loop off</button><button data-rvc="mute" id="rvMute" title="Sound">🔇</button><input type="range" id="rvVol" min="0" max="1" step="0.05" value="0.6" title="Volume">
+      <label class="rvOv"><input type="checkbox" id="rvSticksOn" checked> sticks + ghost</label></div>
     <canvas id="rvTimeline" height="150"></canvas>
     <div class="rvKeys"><kbd>Space</kbd> play/pause · <kbd>,</kbd> <kbd>.</kbd> frame · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>U</kbd> passed under · <kbd>O</kbd> passed over (hold <kbd>Shift</kbd> = flying backward, <kbd>L</kbd> = sideways) · <kbd>X</kbd> delete nearest mark · <kbd>A</kbd> add trick here · click the timeline to jump</div>
   </div>
