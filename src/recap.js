@@ -13,6 +13,12 @@ function recapEvent(ev) {
   const toks = ev.toks || [], t = drone.time, t0 = toks.length ? t - (detector.time - Math.min(...toks.map(k => k.t0))) : t - (ev.laps ? ev.laps * 4 : 1.5);
   recap.events.push({ t: +t.toFixed(3), t0: +Math.max(recap.trace.length ? recap.trace[0][0] : 0, t0).toFixed(3), name: ev.name, exec: ev.exec, clean: ev.clean, obstacle: ev.obstacle || null, conf: ev.watch ? ev.watch.conf : null, fails: ev.watch ? ev.watch.fails : [], verdict: null, actual: null });
 }
+// "maybe <trick>?": the trick library's guess where the rules called nothing (never scored). It goes in the review list
+// like a call, so the pilot's ✓ / ✗ teaches the library and the rules (labels carry maybe: true).
+function recapMaybe(m) {
+  if (mode !== 'fly' || race.on || !m || typeof m.name !== 'string') return; const t = +(drone.time - (detector.time - m.t1)).toFixed(3), t0 = +(drone.time - (detector.time - m.t0)).toFixed(3);
+  recap.events.push({ t, t0: Math.max(recap.trace.length ? recap.trace[0][0] : 0, t0), name: m.name, exec: 'MAYBE', clean: null, obstacle: null, conf: m.sim, fails: [], verdict: null, actual: null, maybe: true }); recap.dirty = true;
+}
 function recapFlag(kind) {
   if (mode !== 'fly' || race.on) return;
   if (kind === 'wrong') { const e = recap.events[recap.events.length - 1]; if (!e || drone.time - e.t > 12) { flash('<b>NOTHING TO FLAG</b><small>no call in the last few seconds</small>', 'near'); return; }
@@ -25,7 +31,7 @@ addEventListener('keydown', e => {
 });
 // ---- the review screen: game view on the left replaying the moment, the list on the right
 const recapItems = () => [...recap.events.map((e, i) => ({ kind: 'call', i, t: e.t, e })).filter(x => !x.e.hidden), ...recap.flags.map((f, i) => ({ kind: 'miss', i, t: f.t, f })).filter(x => !x.f.hidden)]
-  .sort((a, b) => { const pa = a.kind === 'miss' || a.e.flag ? 0 : a.e.conf != null && a.e.conf < 0.7 ? 1 : 2, pb = b.kind === 'miss' || b.e.flag ? 0 : b.e.conf != null && b.e.conf < 0.7 ? 1 : 2; return pa - pb || a.t - b.t; });
+  .sort((a, b) => { const pa = a.kind === 'miss' || a.e.flag || a.e.maybe ? 0 : a.e.conf != null && a.e.conf < 0.7 ? 1 : 2, pb = b.kind === 'miss' || b.e.flag || b.e.maybe ? 0 : b.e.conf != null && b.e.conf < 0.7 ? 1 : 2; return pa - pb || a.t - b.t; });
 function openRecap(from) {
   if (recap.trace.length < TRACE_HZ) { flash('<b>NOTHING TO REPLAY YET</b><small>fly first</small>', 'near'); return; }
   recap.back = from || 'pause'; mode = 'recap'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#recapUI').classList.remove('hide'); document.body.classList.add('bbr');
@@ -175,7 +181,7 @@ function renderRecap() {
         return `<div class="rvItem pilot ${on ? 'on' : ''} ${pk} ${gr}" data-rvkey="${it.kind + it.i}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span>${gTag}<b>${f.added ? 'You added a trick' : 'You flagged a missed trick'}</b><div class="row"><button data-rc="go" data-k="miss" data-i="${it.i}">▶</button><select data-rcmiss="${it.i}"><option value="">what was it?</option>${names.map(n => `<option ${f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="delmiss" data-i="${it.i}">✕</button></div>
           <div class="row">${thenB}<span class="rcExec" title="How was it flown?">${[['CLEAN', 'clean'], ['SLOPPY', 'sloppy'], ['BUMP', 'bump']].map(([x, l]) => `<button data-rc="execm" data-i="${it.i}" data-x="${x}" class="${f.execActual === x ? 'on' : ''}">${l}</button>`).join('')}</span></div></div>`; }
       const e = it.e, cls = e.verdict === 'yes' ? 'ok' : e.verdict === 'no' ? 'bad' : '', unsure = e.conf != null && e.conf < 0.7;
-      return `<div class="rvItem ${cls} ${on ? 'on' : ''} ${pk} ${gr}" data-rvkey="${it.kind + it.i}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span>${gTag}<b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
+      return `<div class="rvItem ${cls} ${on ? 'on' : ''} ${pk} ${gr}" data-rvkey="${it.kind + it.i}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span>${gTag}<b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : e.maybe ? ' · <span style="color:#7fd0f2">maybe: the trick library\'s guess, not scored</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
         <div class="row"><button data-rc="go" data-k="call" data-i="${it.i}">▶</button><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}${thenB}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button>${recapHiddenN() ? `<button data-rc="restore" class="ghost" title="Put every deleted trick back on the timeline">↩ Bring back deleted (${recapHiddenN()})</button>` : ''}</div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
@@ -190,7 +196,7 @@ function recapPayload() {
   // game had it. `timed: true` marks spans a pilot set by hand: the most exact labels there are.
   // Only what the pilot has DECIDED is a label. A call they moved, graded, grouped or added to but never said yes or no
   // to goes out marked `undone` (verdict "unlabelled"): kept for the record, never learned from, never scored.
-  for (const e of recap.events) if (e.verdict || e.span || e.execActual || e.grp != null || (e.extra && e.extra.length)) { const sp = e.span || [e.t0, e.t], decided = e.verdict === 'yes' || (e.verdict === 'no' && !!e.actual); const v = decided ? recapVariant(e.verdict === 'no' ? e.actual : e.name) : { actual: null }; labels.push({ target: e.name, ...v, verdict: !decided ? 'unlabelled' : e.verdict === 'no' && v.actual === e.name ? 'yes' : e.verdict, undone: decided ? undefined : true, repStart: sp[0], t: sp[1], gameSpan: [e.t0, e.t], timed: !!e.span, detected: [e.name], conf: e.conf, flagged: !!e.flag, exec: e.exec, clean: e.clean, execActual: e.execActual || null, via: 'review' }); }
+  for (const e of recap.events) if (e.verdict || e.span || e.execActual || e.grp != null || (e.extra && e.extra.length)) { const sp = e.span || [e.t0, e.t], decided = e.verdict === 'yes' || (e.verdict === 'no' && !!e.actual); const v = decided ? recapVariant(e.verdict === 'no' ? e.actual : e.name) : { actual: null }; labels.push({ target: e.name, ...v, verdict: !decided ? 'unlabelled' : e.verdict === 'no' && v.actual === e.name ? 'yes' : e.verdict, undone: decided ? undefined : true, repStart: sp[0], t: sp[1], gameSpan: [e.t0, e.t], timed: !!e.span, detected: e.maybe ? [] : [e.name], maybe: e.maybe || undefined, conf: e.conf, flagged: !!e.flag, exec: e.exec, clean: e.clean, execActual: e.execActual || null, via: 'review' }); }
   for (const f of recap.flags) { if (f.hidden) continue; const timed = f.t0 != null, a = timed ? f.t0 : +(f.t - 5).toFixed(3);
     if (f.actual) labels.push({ target: recapVariant(f.actual).actual, verdict: 'yes', ...recapVariant(f.actual), repStart: a, t: timed ? f.t : +(f.t + 0.5).toFixed(3), timed, detected: [], execActual: f.execActual || null, via: f.added ? 'review-added' : 'flag-missed' });
     else labels.push({ target: 'unknown', verdict: 'unlabelled', actual: null, repStart: a, t: f.t, detected: [], via: f.added ? 'review-added' : 'flag-missed', undone: true }); }

@@ -19,6 +19,7 @@ const checks = [
   ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['video review tracker (synthetic fisheye footage)', () => { const o = run('vision.js'); const m = o.match(/(\d+)\/(\d+) vision checks/); return m && m[1] === m[2] ? null : o; }],
   ['fast combos the way pilots fly them (ramped rates, 0.1 s gaps, bank-to-bank rolls)', () => { const o = run('fastcombo.js'); const m = o.match(/(\d+)\/(\d+) fast-combo/); return m && m[1] === m[2] ? null : o; }],
+  ['trick library (signatures, Watcher vote, maybe calls)', () => { const o = run('library.js'); const m = o.match(/(\d+)\/(\d+) library checks/); return m && m[1] === m[2] ? null : o; }],
   ['community profile (every pilot\'s flying, under the pilot\'s own)', () => { const o = run('community.js'); const m = o.match(/(\d+)\/(\d+) community checks/); return m && m[1] === m[2] ? null : o; }],
   ['learning from review labels (looser only, never against a label)', () => { const o = run('learn.js'); const m = o.match(/(\d+)\/(\d+) learning checks/); return m && m[1] === m[2] ? null : o; }],
   ['2S whoops, Angle mode and 3D mode with the real physics', () => { const o = run('modes.js'); const m = o.match(/(\d+)\/(\d+) mode and 2S checks/); return m && m[1] === m[2] ? null : o; }],

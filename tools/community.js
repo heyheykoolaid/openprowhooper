@@ -17,71 +17,18 @@
 // synthetic benchmark (npm run bench) must not drop. Writes community/profile.json and community/REPORT.md with --write;
 // the owner approves the change (the weekly job opens a pull request).
 const fs = require('fs'), path = require('path'), cp = require('child_process');
-require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
+require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const S = globalThis.Sim;
 const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=').slice(1).join('=') : d; };
 const WRITE = args.includes('--write'), MIN_P = +opt('min-pilots', 2), ROUNDS = +opt('rounds', 3), OUT = path.resolve(opt('out', path.join(ROOT, 'community')));
-const W = { reviewer: 1.5, own: 1.0, judge: 1.0, flag: 0.5, q: 0.3, keep: 0.1, cap: 6 };
+const { W } = require('./evidence.js');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== '.git') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
 args.filter(a => !a.startsWith('--')).forEach(walk);
-const worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (S.MAPS[id] || S.MAPS.playground).build());
-const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
-// a pilot is their chosen name where they gave one (the same person flies from more than one browser, each with its own
-// random id), else that id
-const who = (name, id) => str(name, 30).trim().toLowerCase() || str(id) || '?';
 const profilePath = path.join(OUT, 'profile.json'), readProfile = () => { try { return JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch { return null; } };
 const NEUTRAL = { format: 'pro-whooper-community/1', learn: { tol: 0, rev: 0, crossBack: 0 }, floor: {} };
 
-// ---------- 1. load everything into flights + evidence
-async function load() {
-  const flights = new Map(), labelFiles = [];
-  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
-    const items = j.format === 'pro-whooper-telemetry-bundle/1' && Array.isArray(j.items) ? j.items.map(x => x && x.payload).filter(Boolean) : [j];
-    for (const p of items) {
-      if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
-      if (p.format === 'pro-whooper-score/1' && str(p.flight) && p.trace && !flights.has(p.flight)) flights.set(p.flight, { id: p.flight, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: null, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: [], src: 'leaderboard' });
-      if (p.format === 'pro-whooper-flight-labels/1' && str(p.flight) && Array.isArray(p.labels)) labelFiles.push(p);
-    } }
-  const runs = [];
-  for (const fl of flights.values()) {
-    let rows; try { rows = await FL.unpack(fl.trace); } catch { continue; } if (!Array.isArray(rows) || rows.length < 100) continue;
-    const T0 = rows[0][0], T1 = rows[rows.length - 1][0], ev = [];
-    // the pilot's pace from their Warm-up, without what their own reviews taught their game (that is theirs, not everyone's)
-    const own = fl.profile && typeof fl.profile === 'object' ? { rate: fl.profile.rate, air: fl.profile.air } : null;
-    const labelled = [];   // times covered by decided labels (live flags there are superseded)
-    // decided labels: own reviews, reviewer labels, judge votes (votes are paired up below)
-    const votes = [];
-    for (const lf of labelFiles.filter(x => x.flight === fl.id)) for (const l of lf.labels) {
-      if (!l || typeof l !== 'object' || l.undone || !(l.verdict === 'yes' || l.verdict === 'no') || !Number.isFinite(+l.t)) continue;
-      const author = l.reviewer ? who(l.by, l.byId) : who(lf.name, lf.pilot), rev = !!l.reviewer || (author !== fl.pilot && author !== '?');
-      // a review of a leaderboard run (anyone can open one) is a vote: it counts once a second pilot agrees. The owner's
-      // Flight desk reviews are reviewer labels.
-      const vote = !!l.judge || (rev && l.src === 'board');
-      const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
-      if (a < T0 - 5 || b > T1 + 5) continue;
-      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: vote ? 'judge' : rev ? 'reviewer' : 'own' };
-      if (vote) { votes.push(item); continue; }
-      labelled.push([a - 1, b + 2]);
-      if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: rev ? W.reviewer : W.own, author, src: item.src });
-      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: rev ? W.reviewer : W.own, author, src: item.src });
-      if (l.custom && actual) ev.push({ kind: 'custom', name: actual.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40), label: actual, a, b, author });
-    }
-    // judge votes count only where two different voters agree on the same call
-    for (const v of votes) { if (v.used) continue; const agree = votes.filter(x => !x.used && x !== v && x.author !== v.author && Math.abs(x.b - v.b) < 1 && x.target === v.target && x.verdict === v.verdict && x.actual === v.actual);
-      if (!agree.length) continue; v.used = true; agree.forEach(x => { x.used = true; }); const authors = [v.author, ...agree.map(x => x.author)].join('+'); labelled.push([v.a - 1, v.b + 2]);
-      if (v.actual && v.actual !== 'not a trick') ev.push({ kind: 'want', name: v.actual, a: v.a, b: v.b, w: W.judge, author: authors, src: 'judge' });
-      if (v.verdict === 'no' && v.target && v.target !== v.actual) ev.push({ kind: 'not', name: v.target, a: v.a, b: v.b, w: W.judge, author: authors, src: 'judge' }); }
-    const covered = t => labelled.some(([a, b]) => t >= a && t <= b);
-    // live evidence from the flight itself
-    for (const e of fl.events) { if (!e || !Number.isFinite(+e.t) || covered(+e.t)) continue; const name = str(e.name);
-      if (e.flagged) ev.push({ kind: 'not', name, a: +e.t0 || +e.t - 1.5, b: +e.t, w: W.flag, author: fl.pilot, src: 'F flag' }); }
-    for (const m of fl.missed) if (m && Number.isFinite(+m.t) && !covered(+m.t)) ev.push({ kind: 'miss', t: +m.t, w: W.q, author: fl.pilot, src: 'Q flag' });
-    runs.push({ id: fl.id, pilot: fl.pilot, name: fl.name, map: fl.map, src: fl.src, rows, world: worldOf(fl.map), camTilt: fl.camTilt, own, ev, live: fl.events, T0, T1 });
-  }
-  // a pilot may not carry more than W.cap labels' worth on any one trick
-  const per = {}; for (const r of runs) for (const e of r.ev) if (e.kind === 'want' || e.kind === 'not') { const k = e.author + '|' + e.name; (per[k] = per[k] || []).push(e); }
-  for (const list of Object.values(per)) { const tot = list.reduce((s, e) => s + e.w, 0); if (tot > W.cap) list.forEach(e => { e.w *= W.cap / tot; }); }
-  return { runs, nFlights: flights.size, nLabelFiles: labelFiles.length };
-}
+const { load } = require('./evidence.js');
+// re-fly with the trick library as the game has it: its votes are part of every call's confidence
+try { S.setLibrary(JSON.parse(fs.readFileSync(path.join(ROOT, 'library', 'library.json'), 'utf8'))); } catch { /* no library yet */ }
 
 // ---------- 2. re-fly and score
 // Each run is re-flown in windows around its evidence and around anything a change of rules could touch (calls, big
@@ -146,7 +93,7 @@ function bench(profile) {
 
 (async () => {
   const t0 = Date.now(), log = (...a) => process.stderr.write(a.join(' ') + '\n');
-  const { runs, nFlights } = await load();
+  const { runs, nFlights } = await load(files);
   const before = { ...NEUTRAL, ...(readProfile() || {}) }, cur0 = S.setCommunity(before) || S.setCommunity(NEUTRAL);
   const evAll = runs.flatMap(r => r.ev), pilotsFlying = new Set(runs.map(r => r.pilot)), authors = new Set(evAll.filter(e => e.kind === 'want' || e.kind === 'not').map(e => e.author));
   log(`community: ${runs.length} flights (${nFlights} found), ${pilotsFlying.size} pilots flying, ${authors.size} labelling; ${evAll.length} pieces of evidence`);

@@ -7,6 +7,7 @@ const fs = require('fs'), path = require('path');
 const FL = require('../src/flightlog.js'); const { replayTrace } = require('../test/lib.js');
 require('../src/maps.js'); const MAPS = globalThis.Sim.MAPS, worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (MAPS[id] || MAPS.playground).build());   // each flight is re-flown on the map it was flown on
 try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
+try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'))); } catch { /* no trick library yet */ }
 const args = process.argv.slice(2), verbose = args.includes('--verbose');
 const files = []; const walk = p => { const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); };
 for (const a of args) if (!a.startsWith('--')) walk(a);
@@ -20,7 +21,7 @@ for (const a of args) if (!a.startsWith('--')) walk(a);
   const T = k => tally[k] = tally[k] || { then: 0, now: 0, lost: 0, gained: 0, unsure: 0, flagged: 0 };
   for (const p of flights) { if (seen.has(p.id)) continue; seen.add(p.id);
     const rows = await FL.unpack(p.trace), R = replayTrace(rows, { camTilt: p.camTilt, world: worldOf(p.map) });
-    const now = R.events.filter(e => e.name !== 'near' && e.name !== 'Crash').map(e => ({ name: e.name, t: e.t })), then = (p.events || []).map(e => ({ ...e }));
+    const now = R.events.filter(e => e.name !== 'near' && e.name !== 'Crash').map(e => ({ name: e.name, t: e.t })), then = (p.events || []).filter(e => !e.maybe).map(e => ({ ...e }));
     secs += rows.length / p.trace.hz; calls += then.length;
     // pair calls of the same name within 1.5 s
     const used = new Set(), lost = [];

@@ -82,6 +82,16 @@ lists what changed, what was held back for want of pilots, per-trick agreement b
 named (with what was measured: the start of a draft rule), and the still-missed list (the to-do list for rule work).
 `tools/signatures.js` and `tools/flights.js` re-fly with the community profile, as the game does.
 
+## The trick library (`tools/library.js`, `library/`)
+
+Real examples of each trick, compared against every move while flying (DTW on rotation-per-axis and upright/inverted
+curves). The demo GIFs are the reference (weight 3: they define the tricks); pilots' confirmed tricks (reviewer 1.5,
+own 1.0, custom tricks included) show how they are really flown; rejected calls are counter-examples. It votes in the
+Watcher on every call and says "maybe X?" (not scored) where the rules missed a move that matches a trusted trick (a
+demo, or examples from 2+ pilots). Pilots answer the maybes in Review, which adds examples. Only derived numbers go in
+(no traces, names or ids). Rebuild with `node tools/library.js <data repo> --write` (`--check` counts the maybes it
+would make on the shared flights); the weekly run does this before `tools/community.js`.
+
 ## Raw Blackbox logs
 
 `src/bbl.js` decodes Betaflight `.bbl/.bfl` in the browser and in Node; `test/bbl.js` checks it value-for-value against

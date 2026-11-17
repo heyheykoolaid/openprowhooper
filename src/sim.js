@@ -871,6 +871,57 @@ function cleanCommunity(c) {
   return out;
 }
 function setCommunity(c) { COMMUNITY = cleanCommunity(c); return COMMUNITY; }
+// ---- The trick library (pro-whooper-library/1, library/library.json, built by tools/library.js): real examples of each
+// trick as it was flown. The Tricktionary demo GIFs are the reference (the definition of the trick, weight 3); pilots'
+// confirmed tricks add how real pilots fly them (sloppy, big, small, slow), and calls pilots rejected are counter-examples.
+// A move is a signature: the rotation per axis, summed along the move and resampled to LIB_N points (each 25 Hz sample
+// keeps only its strongest axis, so a tilted camera in a GIF and a gyro in the sim read alike; each axis is turned so its
+// first big movement is positive, so left and right, forward and back read alike), plus how long it took. Two signatures
+// are compared by dynamic time warping, so a slow floaty version lines up with a snappy one.
+// Live it does two things: votes in the Watcher on every rule call (weight 2), and when the rules call nothing for a move
+// that closely matches examples of a trick, says "maybe <trick>?" (never scored; the pilot confirms it in review).
+let LIBRARY = null; const MAYBE_NAMES = new Set();   // filled from OPEN_TRICKS and OBSTACLE_TRICKS below
+const LIB_N = 24, LIB_HZ = 25, LIB_ON = 90, LIB_QUIET = 0.35, LIB_WAIT = 2.5, LIB_THR = 0.3, LIB_GAP = 0.06;
+// up: the up.y of the quad at each sample (from the attitude; when missing, as in a GIF, it is integrated from the rotation
+// starting level). The signature carries it as u: [N] in hundredths: upright 100, knife-edge 0, upside-down -100.
+function libUps(seq) { let q = { w: 1, x: 0, y: 0, z: 0 }; return seq.map(r => { const w = v3((r[1] || 0) * D2R, -(r[2] || 0) * D2R, -(r[0] || 0) * D2R), a = len(w); if (a > 1e-9) q = qnorm(qmul(q, qaxis(mul(w, 1 / a), a))); return qrot(q, v3(0, 1, 0)).y; }); }
+function libSig(seq, hz = LIB_HZ, ups = null) {   // seq: [[dR, dP, dY] degrees per sample] -> { d, c: [N*3], u: [N] } or null
+  if (!Array.isArray(seq)) return null; if (!ups || ups.length !== seq.length) ups = libUps(seq);
+  const dom = seq.map(r => { const a = r.map(v => Number.isFinite(v) ? v : 0), k = Math.abs(a[0]) >= Math.abs(a[1]) && Math.abs(a[0]) >= Math.abs(a[2]) ? 0 : Math.abs(a[1]) >= Math.abs(a[2]) ? 1 : 2, m = Math.hypot(a[0], a[1], a[2]), o = [0, 0, 0]; o[k] = Math.sign(a[k]) * m; return o; });
+  const act = dom.map(r => Math.abs(r[0] + r[1] + r[2]) * hz >= 60); let i0 = act.indexOf(true), i1 = act.lastIndexOf(true); if (i0 < 0) return null;
+  const S = dom.slice(i0, i1 + 1), tot = S.reduce((a, r) => a + Math.abs(r[0]) + Math.abs(r[1]) + Math.abs(r[2]), 0); if (tot < 120) return null;
+  const cum = [[0, 0, 0]]; for (const r of S) { const l = cum[cum.length - 1]; cum.push([l[0] + r[0], l[1] + r[1], l[2] + r[2]]); }
+  for (let ax = 0; ax < 3; ax++) { const f = cum.find(c => Math.abs(c[ax]) >= 45); if (f && f[ax] < 0) for (const c of cum) c[ax] = -c[ax]; }
+  // U[k] = up.y after k samples of the move
+  const U = [i0 > 0 ? ups[i0 - 1] : 1, ...ups.slice(i0, i1 + 1)], c = [], u = []; for (let i = 0; i < LIB_N; i++) { const x = i / (LIB_N - 1) * (cum.length - 1), j = Math.min(cum.length - 2, Math.floor(x)), f = x - j; for (let ax = 0; ax < 3; ax++) c.push(Math.round(cum[j][ax] + (cum[j + 1][ax] - cum[j][ax]) * f));
+    const k = Math.min(U.length - 1, Math.round(x)); u.push(Math.round(clamp(Number.isFinite(U[k]) ? U[k] : 1, -1, 1) * 100)); }
+  return { d: +(S.length / hz).toFixed(2), c, u };
+}
+function libDist(a, b) {
+  const N = LIB_N, B = 5, D = []; for (let i = 0; i < N; i++) D.push(new Float64Array(N).fill(Infinity));
+  const cost = (i, j) => Math.hypot(a.c[i * 3] - b.c[j * 3], a.c[i * 3 + 1] - b.c[j * 3 + 1], a.c[i * 3 + 2] - b.c[j * 3 + 2]) / 360 + (a.u && b.u ? Math.abs(a.u[i] - b.u[j]) / 400 : 0);   // upside-down vs upright: up to 0.5
+  for (let i = 0; i < N; i++) for (let j = Math.max(0, i - B); j <= Math.min(N - 1, i + B); j++) { const k = cost(i, j); D[i][j] = k + (i || j ? Math.min(i ? D[i - 1][j] : Infinity, j ? D[i][j - 1] : Infinity, i && j ? D[i - 1][j - 1] : Infinity) : 0); }
+  return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d))));
+}
+function setLibrary(L) {
+  if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) { LIBRARY = null; return null; }
+  const ex = [], by = {};
+  for (const e of L.examples.slice(0, 5000)) { if (!e || typeof e.t !== 'string' || e.t.length > 60 || !Array.isArray(e.c) || e.c.length !== LIB_N * 3 || !e.c.every(Number.isFinite) || !(+e.d > 0)) continue;
+    const x = { t: e.t, d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs };
+    ex.push(x); const b = by[x.t] || (by[x.t] = { pos: 0, neg: 0, demo: false, pilots: new Set(), dur: [] }); if (x.neg) b.neg++; else { b.pos++; if (x.s === 'demo') b.demo = true; else b.pilots.add(x.p); b.dur.push(x.d); } }
+  for (const [k, b] of Object.entries(by)) { b.dur.sort((p, q) => p - q); b.trusted = b.demo || b.pilots.size >= 2;
+    // only tricks the rotation itself defines are said as maybes (tap, stall, wall, pole and dive tricks need what the rules see)
+    b.sayable = MAYBE_NAMES.has(k) || ex.some(x => x.t === k && x.custom); }
+  LIBRARY = { ex, by, stats: L.stats && typeof L.stats === 'object' ? L.stats : {}, updated: String(L.updated || '').slice(0, 20) }; return LIBRARY;
+}
+// distances from a signature to each trick: the nearest example of it (a demo counts a little closer: it is the definition)
+// and the nearest counter-example. Sorted, best first.
+function libMatch(sig, only) {
+  if (!LIBRARY || !sig) return []; const best = {};
+  for (const e of LIBRARY.ex) { if (only && e.t !== only) continue; const dd = libDist(sig, e) * (e.s === 'demo' ? 0.85 : 1), b = best[e.t] || (best[e.t] = { name: e.t, pos: Infinity, neg: Infinity, demo: false });
+    if (e.neg) b.neg = Math.min(b.neg, dd); else if (dd < b.pos) { b.pos = dd; b.demo = e.s === 'demo'; } }
+  return Object.values(best).filter(b => b.pos < Infinity).sort((a, b) => a.pos - b.pos);
+}
 // the pilot's own profile over the community's: each loosening knob takes the looser value; the rest is the pilot's
 function mergeProfiles(c, p) {
   if (!c) return p || null; const o = p ? JSON.parse(JSON.stringify(p)) : {}, L = o.learn || {};
@@ -906,6 +957,7 @@ function matchTokens(pat, toks) {
 }
 
 // crossing requirement strings: 'UOU' 'OU' 'UO' 'U' 'O' with alternating direction rules
+const OBSTACLE_NAMES = new Set();   // filled below from OBSTACLE_TRICKS (the library's obstacle check)
 const OBSTACLE_TRICKS = [
   { name: 'Powerloop', pats: ['P+~360'], cross: 'UOU', end: 'fwd' },
   { name: 'Power Flip', pats: ['P+~720'], cross: 'UOU', end: 'fwd' },
@@ -952,6 +1004,7 @@ const OBSTACLE_TRICKS = [
   { name: 'Power Switch Tap', pats: ['P+~180 P-~270', 'P+~270 P-~180', 'P+~180 P-~360'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
   { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' },   // demo GIF unclear (see tricktionary-reference.md)
 ];
+for (const T of OBSTACLE_TRICKS) { OBSTACLE_NAMES.add(T.name); MAYBE_NAMES.add(T.name); }
 const OPEN_TRICKS = [
   // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
   { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180'] },
@@ -970,6 +1023,7 @@ const OPEN_TRICKS = [
   { name: 'Yaw Spin', pats: ['Y*360'] },
 ];
 // rotation patterns that also need a situation: a tap, a stall, a rewind, a climb, tracking an object…
+for (const T of OPEN_TRICKS) MAYBE_NAMES.add(T.name);
 const CONTEXT_TRICKS = [
   { name: 'Roll Tap', pats: ['R*~360', 'R*~270'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
   { name: 'Loop Tap', pats: ['R*~90 P+~180', 'R*~90 P+~270', 'P+~90 R*~90 P+~180'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
@@ -1424,7 +1478,38 @@ class TrickDetector {
     }
     return null;
   }
-  emit(ev) { ev.t = this.time; this.out.push(ev); }
+  emit(ev) { ev.t = this.time; this.out.push(ev);
+    if (ev.name !== 'near') { const tk = ev.toks && ev.toks.length ? Math.min(...ev.toks.map(k => k.t0)) : this.time - 2; (this.callLog || (this.callLog = [])).push({ t0: Math.min(tk, this.time - 0.3), t1: this.time }); if (this.callLog.length > 40) this.callLog.shift(); } }
+  drainMaybes() { const o = this.maybes || []; this.maybes = []; return o; }
+  // the library's ear (see LIBRARY): 25 Hz rotation samples, moves split by quiet, and "maybe" calls where the rules said nothing
+  libTick(d, t, rates, dt) {
+    const L = this.lib || (this.lib = { acc: [0, 0, 0], n: 0, buf: [], burst: null, bursts: [], quiet: 0, queue: [] });
+    for (let k = 0; k < 3; k++) L.acc[k] += rates[k] * dt; L.n += dt;
+    if (L.n >= 1 / LIB_HZ - 1e-9) { L.buf.push([t, L.acc[0], L.acc[1], L.acc[2], d.up().y]); L.acc = [0, 0, 0]; L.n = 0; if (L.buf.length > LIB_HZ * 14) L.buf.splice(0, L.buf.length - LIB_HZ * 12); }
+    const on = Math.hypot(rates[0], rates[1], rates[2]) >= LIB_ON && !d.crashed;
+    if (on) { L.quiet = 0; if (!L.burst) L.burst = { a: t, b: t, rot: 0 }; L.burst.b = t; L.burst.rot += Math.hypot(rates[0], rates[1], rates[2]) * dt; }
+    else if (L.burst) { L.quiet += dt; if (L.quiet >= LIB_QUIET) { const B = L.burst; L.burst = null; L.bursts.push(B); if (L.bursts.length > 4) L.bursts.shift();
+      // the move just ended: the last 1-3 bursts (joined while the air between them is under a second) are candidates
+      const cands = []; let a = B.a, rot = 0; for (let i = L.bursts.length - 1; i >= 0; i--) { const x = L.bursts[i]; if (i < L.bursts.length - 1 && L.bursts[i + 1].a - x.b > 1.0) break; a = x.a; rot += x.rot; if (rot >= 150 && B.b - a <= 7) cands.push({ a, b: B.b, rot }); }
+      if (cands.length) L.queue.push({ due: t + LIB_WAIT, cands }); } }
+    if (L.queue.length && t >= L.queue[0].due) this.libJudge(L.queue.shift(), t);
+  }
+  libSeq(a, b) { return (this.lib ? this.lib.buf : []).filter(r => r[0] >= a - 0.02 && r[0] <= b + 0.06); }
+  libSigOf(a, b) { const R = this.libSeq(a, b); return libSig(R.map(r => [r[1], r[2], r[3]]), LIB_HZ, R.map(r => r[4])); }
+  libJudge(q, t) {
+    const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3);
+    let pick = null;
+    for (const c of q.cands) { if (covered(c.a, c.b)) return;   // the rules called something here (or a maybe already went out): nothing to add
+      const m = libMatch(this.libSigOf(c.a, c.b)), top = m[0]; if (!top) continue; const B = LIBRARY.by[top.name];
+      if (!B || !B.trusted || !B.sayable || top.pos > LIB_THR || top.neg <= top.pos + 0.04) continue;
+      if (m[1] && m[1].pos < top.pos + LIB_GAP) continue;   // another trick fits nearly as well: too close to call
+      if (OBSTACLE_NAMES.has(top.name) && !this.crossLog.some(x => x.t > c.a - 2.3 && x.t < c.b + 0.4)) continue;   // an obstacle trick needs its object
+      if (!pick || top.pos < pick.top.pos) pick = { c, top }; }
+    if (!pick) return;
+    const sim = +clamp(1 - pick.top.pos / (LIB_THR * 1.6), 0, 1).toFixed(2);
+    (this.maybeLog || (this.maybeLog = [])).push({ t0: pick.c.a, t1: pick.c.b }); if (this.maybeLog.length > 20) this.maybeLog.shift();
+    (this.maybes || (this.maybes = [])).push({ name: pick.top.name, maybe: true, t0: +pick.c.a.toFixed(3), t1: +pick.c.b.toFixed(3), at: +t.toFixed(3), sim, byDemo: pick.top.demo });
+  }
   drain() { const o = this.out; this.out = []; return o; }
 }
 
@@ -1826,6 +1911,7 @@ class StreamDetector extends TrickDetector {
     this.time += dt; this.lastD = d;
     if (rc) { const L = this.lastRc || (this.lastRc = { thr: 0, roll: 0, pitch: 0, yaw: 0 }); L.thr = rc.thr ?? 0; L.roll = rc.roll ?? 0; L.pitch = rc.pitch ?? 0; L.yaw = rc.yaw ?? 0; } else this.lastRc = null;   // one object, reused: this runs 1000 times a second
     const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates); TOL_X = this.learned.tol;
+    if (LIBRARY) this.libTick(d, t, rates, dt);
     this.trackCrossings(d, t);
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
     this.continuousDetectors(d, dt, t, rc);
@@ -2271,9 +2357,14 @@ class Watcher {
     const fail = checks.find(k => k.hard && !k.ok);
     const by = {}; for (const k of checks) if (!k.hard) { const b = by[k.src] || (by[k.src] = { n: 0, ok: 0 }); b.n += k.w; b.ok += k.ok ? k.w : 0; }
     if (p.toks && p.toks.length && p.err != null) by.rotation = { n: 1, ok: clamp(1 - p.err * 2, 0, 1) };   // the pattern matcher is a witness too
-    const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]);
-    const conf = votes.length ? votes.reduce((a, v) => a + v[1], 0) / votes.length : 1;
-    return { name: p.name, veto: !!fail || (votes.length >= 3 && conf < 0.3), why: fail ? fail.label : (votes.length >= 3 && conf < 0.3 ? 'most witnesses disagree' : null),
+    if (LIBRARY && LIBRARY.by[p.name] && LIBRARY.by[p.name].pos && this.det.lib) {   // the library: how much does this move look like the examples of this trick (and not another)?
+      const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05), m = sig ? libMatch(sig) : [], me = m.find(x => x.name === p.name);
+      if (me) { let v = clamp(1 - (me.pos - 0.15) / (LIB_THR * 1.4), 0, 1); const other = m.find(x => x.name !== p.name); if (other && other.pos < me.pos - 0.08) v *= 0.6; if (me.neg < me.pos) v *= 0.6; by.library = { n: 1, ok: v }; } }
+    const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]), VW = { library: 2 };   // the library leans on the demo GIFs: it counts double
+    const wsum = votes.reduce((a, v) => a + (VW[v[0]] || 1), 0), conf = votes.length ? votes.reduce((a, v) => a + v[1] * (VW[v[0]] || 1), 0) / wsum : 1;
+    // the veto stays with the measured witnesses: the library only moves the confidence (it is still young)
+    const vv = votes.filter(v => v[0] !== 'library'), vconf = vv.length ? vv.reduce((a, v) => a + v[1], 0) / vv.length : 1, out = vv.length >= 3 && vconf < 0.3;
+    return { name: p.name, veto: !!fail || out, why: fail ? fail.label : (out ? 'most witnesses disagree' : null),
       checks, votes: Object.fromEntries(votes.map(([k, v]) => [k, +v.toFixed(2)])), conf: +conf.toFixed(2), t0: +W.t0.toFixed(3), t1: +W.t1.toFixed(3) };
   }
   review(p) { if (!this.on) return { name: p.name, veto: false, checks: [], votes: {}, conf: 1 }; return this.judge(p, false); }
@@ -2527,7 +2618,7 @@ function replayTrace(rows, opts = {}) {
   const det = new StreamDetector(opts.world); det.camTilt = opts.camTilt ?? 20; if (opts.pilot) det.setPilot(opts.pilot);
   if (opts.hook) opts.hook(det);
   const d = Object.create(Drone.prototype); d.armed = true; d.crashed = false; d.contactThisStep = false;
-  const dt = 0.001, out = [], dbg = [], hasV = rows[0].length >= 24;
+  const dt = 0.001, out = [], dbg = [], maybes = [], hasV = rows[0].length >= 24;
   let k = 0, prev = null, lastRow = -1;
   const t0 = opts.from ?? rows[0][0], t1 = Math.min(opts.to ?? Infinity, rows[rows.length - 1][0]);
   while (k < rows.length - 2 && rows[k + 1][0] <= t0) k++;
@@ -2552,9 +2643,10 @@ function replayTrace(rows, opts = {}) {
     d._wasArmed = d.armed;
     det.update(d, dt, rc); det.postStep(d);
     for (const e of det.drain()) out.push({ ...e, t });
+    if (det.maybes && det.maybes.length) for (const m of det.drainMaybes()) maybes.push({ ...m, t });
     if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
   }
-  return { events: out, debug: dbg, det };
+  return { events: out, debug: dbg, det, maybes };
 }
 
 // ---- Learning from the pilot's own review labels.
@@ -2617,6 +2709,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

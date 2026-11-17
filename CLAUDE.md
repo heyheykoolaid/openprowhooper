@@ -334,6 +334,25 @@ listed (not the pilot's own runs); each opens as a guest review of that one call
 reviewer labels (weight 1.5). Anyone's review of a leaderboard run watched from the board goes out with `judge: true`:
 tools/community.js counts such a vote only once a second pilot agrees.
 
+## The trick library (tools/library.js, library/, `LIBRARY` in src/sim.js) — docs/DATA.md
+Real examples of every trick for the detector to compare moves against. **The Tricktionary demo GIFs are the reference**
+(the pilot: the GIFs define the tricks; the text descriptions are too literal for sloppiness, scale and nuance): weight 3,
+and a demo example counts 15% nearer. Pilots' decided labels add how tricks are really flown (reviewer 1.5, own 1.0;
+custom tricks too) and rejected calls are counter-examples. A signature (`libSig`) is the rotation per axis summed along
+the move (each 25 Hz sample keeps its strongest axis, so GIF camera rotation and the sim's gyro read alike; each axis
+turned so its first big movement is positive) resampled to 24 points, the up.y curve (`u`; integrated from the rotation
+for GIFs), and the duration; `libDist` is banded DTW plus a small duration term. Live (`libTick`/`libJudge`): moves are
+split by 0.35 s of quiet; 2.5 s later, where no rule call (or earlier maybe) covers the move, a close match (dist < 0.3,
+another trick at least 0.06 further, nearer than any counter-example, the trick has a demo or examples from 2+ pilots,
+an obstacle trick needs a pass) goes out as a **maybe** (`drainMaybes`, `replayTrace(...).maybes`): only tricks the
+rotation defines (OPEN_TRICKS, OBSTACLE_TRICKS, custom names), never scored, shown as "MAYBE: X?", listed first in
+Review (`recapMaybe`, labels `maybe: true`); the pilot's ✓/✗ is the feedback. On every rule call the library votes in
+the Watcher (`votes.library`, weight 2 in `conf`, but never in the veto). `node tools/library.js <data repo> [--write]
+[--check]` rebuilds it (only derived numbers and an anonymous pilot number: the pilot agreed), `--check` re-flies the
+shared flights and counts the maybes. build.py ships it (`Sim.setLibrary`); Node tests run without it except
+test/library.js; `PW_LIBRARY=file npm run bench`. First build: 107 examples (66 demos), leave-one-out 54%, 30 maybes in
+22 flights, none against a label. The weekly scheduled run rebuilds it before the community learner.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).

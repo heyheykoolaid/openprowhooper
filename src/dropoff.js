@@ -40,7 +40,7 @@ function telCapture(reason) {
     craft: { ...spec, names: params.names || null, stats: params.stats ? { auw: +params.stats.auw.toFixed(2), twr: +params.stats.twr.toFixed(2), hoverThrottle: +params.stats.hoverThrottle.toFixed(3) } : null },
     tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
     score: score ? { total: score.total, maxStreak: +score.maxStreak.toFixed(2) } : null,
-    events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined })),
+    events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
     missed: recap.flags.map(f => ({ t: f.t })) };
   const stamp = telStamp(recap);
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
@@ -221,7 +221,7 @@ function lbSessionOver(r) {   // called by endSession while the run's arrays are
   LB.last = { id: recap.id, total: Math.round(r.total), map: MAP_ID, rows: rows.slice(i0, i0 + 19900),
     totals: { trick: r.trickScore, switchMult: r.switchMult(), kwad: r.kwadBonus, streak: +r.maxStreak.toFixed(2), obstacles: r.uniqueObs.size },
     sheet: r.log.filter(x => x.net || x.exec === 'CRASH').slice(0, 400).map(x => ({ name: x.name, exec: x.exec, net: x.net, base: x.base, obstacle: x.obstacle || undefined })),
-    events: recap.events.slice(0, 400).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec })) };
+    events: recap.events.filter(e => !e.maybe).slice(0, 400).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec })) };
   lbResultsBox(); lbLoad(lbToday()).then(lbResultsBox);
 }
 async function lbLoad(day) {
@@ -316,7 +316,7 @@ async function judgeLoad() {
       const rows = await FlightLog.unpack(run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(x => Array.isArray(x) && x.length >= 27 && x.every(Number.isFinite))) continue;
       await new Promise(res => setTimeout(res, 40));
       const now = S.replayTrace(rows, { world: activeWorld, camTilt: Number.isFinite(+run.camTilt) ? +run.camTilt : 20, debug: false }).events.filter(x => x.name !== 'near' && x.name !== 'Crash');
-      const then = (Array.isArray(run.events) ? run.events : []).filter(y => y && Number.isFinite(y.t) && typeof y.name === 'string').slice(0, 400), of = { of: String(run.name).slice(0, 24), id: e.id, flight: String(run.flight || e.id).slice(0, 40), rows };
+      const then = (Array.isArray(run.events) ? run.events : []).filter(y => y && Number.isFinite(y.t) && typeof y.name === 'string' && !y.maybe).slice(0, 400), of = { of: String(run.name).slice(0, 24), id: e.id, flight: String(run.flight || e.id).slice(0, 40), rows };
       for (const x of now) { const was = then.find(y => Math.abs(y.t - x.t) < 1), conf = x.watch ? x.watch.conf : 1;
         const why = was && was.name !== x.name ? [3, `called ${was.name.slice(0, 40)} then`] : !was ? [2, 'new call: the game did not call it then'] : conf < 0.75 ? [1, `the game is unsure (${Math.round(conf * 100)}%)`] : null;
         if (why) clips.push({ ...of, name: x.name.slice(0, 60), t: x.t, rank: why[0], why: why[1] }); }

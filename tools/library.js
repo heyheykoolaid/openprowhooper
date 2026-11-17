@@ -1,0 +1,88 @@
+// The trick library: real examples of every trick, for the detector to compare moves against (see LIBRARY in src/sim.js).
+//   node tools/library.js <data folders or files…> [--write] [--check] [--out=library]
+// Examples come from
+//   - the Tricktionary demo GIFs (calibration/demos/, measured camera rotation): THE reference for what each trick is,
+//     weight 3 (scaled by how much of the clip could be tracked). The text descriptions say less than these.
+//   - pilots' decided review labels on shared flights and leaderboard runs (tools/evidence.js): confirmed tricks are
+//     examples (reviewer 1.5, own 1.0), rejected calls are counter-examples. Custom tricks pilots named are examples too.
+// Only derived numbers go in the library (rotation curves and durations, an anonymous pilot number): no traces, names or ids.
+// --check re-flies every shared flight with the new library and reports the "maybe" calls it would make (and how many
+// of them land on a trick a pilot labelled), plus a leave-one-out score of the library against itself.
+const fs = require('fs'), path = require('path');
+const { load, W } = require('./evidence.js'); const S = globalThis.Sim;
+const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=').slice(1).join('=') : d; };
+const OUT = path.resolve(opt('out', path.join(ROOT, 'library'))), WRITE = args.includes('--write'), CHECK = args.includes('--check');
+const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== '.git') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
+args.filter(a => !a.startsWith('--')).forEach(walk);
+const log = (...a) => process.stderr.write(a.join(' ') + '\n');
+
+// ---------- demo GIFs
+function demoExamples() {
+  const dir = path.join(ROOT, 'calibration', 'demos'), out = [], notes = [];
+  let index = [], cases = []; try { index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); cases = JSON.parse(fs.readFileSync(path.join(dir, 'cases.json'), 'utf8')).cases || []; } catch { return { out, notes: ['no demo data'] }; }
+  for (const it of index) {
+    let d; try { d = JSON.parse(fs.readFileSync(path.join(dir, it.file), 'utf8')); } catch { continue; }
+    const F = d.frames || [], ms = d.msPerFrame || it.msPerFrame || 40, hz = 1000 / ms, track = F.filter(r => Array.isArray(r)).length / Math.max(1, F.length);
+    if (track < 0.55) { notes.push(`${it.trick}: only ${Math.round(track * 100)}% of frames tracked, left out`); continue; }
+    // blurred frames (fast rotation) are null: fill each gap at the rate on either side of it
+    const fr = F.map(r => Array.isArray(r) ? r.slice(0, 3) : null);
+    for (let i = 0; i < fr.length; i++) if (!fr[i]) { let j = i; while (j < fr.length && !fr[j]) j++; const A = fr[i - 1] || fr[j] || [0, 0, 0], B = fr[j] || A; for (let k = i; k < j; k++) { const f = (k - i + 1) / (j - i + 1); fr[k] = [0, 1, 2].map(x => A[x] + (B[x] - A[x]) * f); } i = j; }
+    // the trick: the frames cases.json names, else the busiest stretch of the clip (bursts joined across short air)
+    const cs = cases.find(c => c.file === it.file); let a = 0, b = fr.length - 1;
+    if (cs) [a, b] = cs.frames; else {
+      const mag = fr.map(r => Math.hypot(...r) * hz), bursts = []; let cur = null;
+      mag.forEach((m, i) => { if (m >= 60) { if (cur && i - cur.b <= Math.round(0.6 * hz)) { cur.b = i; cur.rot += m / hz; } else { cur = { a: i, b: i, rot: m / hz }; bursts.push(cur); } } });
+      const top = bursts.sort((x, y) => y.rot - x.rot)[0]; if (!top) continue; a = top.a; b = top.b; }
+    b = Math.min(b, fr.length - 1); a = Math.max(0, Math.min(a, b));
+    // resample to the library's 25 Hz
+    const seq = []; const N = Math.max(1, Math.round((b - a + 1) / (hz / 25)));
+    for (let k = 0; k < N; k++) { const i0 = a + k * (hz / 25), i1 = a + (k + 1) * (hz / 25), s = [0, 0, 0]; for (let i = Math.floor(i0); i < Math.min(b + 1, Math.ceil(i1)); i++) { if (!fr[i]) continue; const ov = Math.min(i + 1, i1) - Math.max(i, i0); if (ov > 0) for (let x = 0; x < 3; x++) s[x] += fr[i][x] * ov; } seq.push(s); }
+    const sig = S.libSig(seq, 25); if (!sig) { notes.push(`${it.trick}: no clear move found`); continue; }
+    out.push({ t: it.trick, ...sig, w: +(3 * Math.min(1, track + 0.1)).toFixed(2), s: 'demo', obs: !/open air/i.test(it.object || '') });
+  }
+  return { out, notes };
+}
+// ---------- pilots' labels
+function flightExamples(runs) {
+  const out = [], pid = {}, P = a => pid[a] || (pid[a] = String(Object.keys(pid).length + 1));
+  for (const r of runs) {
+    const upY = row => { const q = { w: row[4], x: row[5], y: row[6], z: row[7] }; return S.qrot(q, S.v3(0, 1, 0)).y; };
+    const seqOf = (a, b) => { const seq = [], ups = []; let acc = [0, 0, 0], n = 0; for (let i = 1; i < r.rows.length; i++) { const row = r.rows[i], dt = row[0] - r.rows[i - 1][0]; if (row[0] < a) continue; if (row[0] > b) break; if (!(dt > 0 && dt < 0.2)) continue;
+      for (let x = 0; x < 3; x++) acc[x] += row[8 + x] * dt; n += dt; if (n >= 0.04 - 1e-9) { seq.push(acc); ups.push(upY(row)); acc = [0, 0, 0]; n = 0; } } return { seq, ups }; };
+    for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue;
+      const so = seqOf(e.a - 0.25, e.b + 0.25), sig = S.libSig(so.seq, 25, so.ups); if (!sig) continue;
+      out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined }); }
+  }
+  return out;
+}
+(async () => {
+  const t0 = Date.now();
+  const { out: demos, notes } = demoExamples();
+  const { runs } = await load(files);
+  const fl = flightExamples(runs), examples = [...demos, ...fl];
+  const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; return o; }) };
+  const L = S.setLibrary(lib);
+  // leave-one-out: does the nearest OTHER example of the same clip's trick come out on top?
+  const loo = {}; let right = 0, tot = 0;
+  for (const [i, e] of L.ex.entries()) { if (e.neg) continue; let best = null; for (const [j, x] of L.ex.entries()) { if (i === j || x.neg) continue; const dd = S.libDist(e, x) * (x.s === 'demo' ? 0.85 : 1); if (!best || dd < best.d) best = { d: dd, t: x.t }; }
+    if (!best || L.by[e.t].pos < 2 || !L.by[e.t].sayable) continue; const k = loo[e.t] || (loo[e.t] = { n: 0, ok: 0, conf: {} }); k.n++; tot++; if (best.t === e.t) { k.ok++; right++; } else k.conf[best.t] = (k.conf[best.t] || 0) + 1; }
+  const tricks = Object.entries(L.by).sort((a, b) => (b[1].demo - a[1].demo) || (b[1].pos - a[1].pos));
+  const R = [`# Trick library`, ``, `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${L.ex.length} examples of ${tricks.length} tricks: ${demos.length} from the demo GIFs (the reference), ${fl.filter(e => !e.neg).length} confirmed by pilots, ${fl.filter(e => e.neg).length} counter-examples (calls pilots rejected).`, ``,
+    `"Maybe" calls are made only for tricks with a demo GIF or confirmed examples from 2+ pilots (trusted below).`, ``,
+    `Leave-one-out (each example's nearest other example is the same trick): **${tot ? Math.round(right / tot * 100) : 0}%** of ${tot}.`, ``,
+    `| trick | demo | pilot examples | pilots | counter-examples | trusted | leave-one-out | mixed up with |`, `|---|---|---|---|---|---|---|---|`,
+    ...tricks.map(([t, b]) => { const k = loo[t]; return `| ${t} | ${b.demo ? '✓' : ''} | ${b.pos - (b.demo ? 1 : 0)} | ${b.pilots.size} | ${b.neg} | ${b.trusted ? '✓' : ''} | ${k ? `${k.ok}/${k.n}` : '—'} | ${k ? Object.entries(k.conf).map(([n, c]) => `${n}×${c}`).join(', ') : ''} |`; }),
+    ``, ...(notes.length ? ['Demo clips left out: ' + notes.join('; ')] : [])];
+  if (CHECK) {   // what the library would do live: re-fly every shared flight with it and count the maybe calls
+    log('checking: re-flying every flight with the library…'); let n = 0, hit = 0, wrong = 0; const per = {};
+    for (const r of runs) { const Rr = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, pilot: r.own, debug: false });
+      for (const m of Rr.maybes) { const off = m.t - m.at, a = m.t0 + off, b = m.t1 + off; n++; const k = per[m.name] || (per[m.name] = { n: 0, hit: 0, wrong: 0 }); k.n++;
+        if (r.ev.some(x => x.kind === 'want' && x.name === m.name && b >= x.a - 0.7 && a <= x.b + 0.7)) { hit++; k.hit++; }
+        else if (r.ev.some(x => (x.kind === 'want' || x.kind === 'not') && b >= x.a - 0.7 && a <= x.b + 0.7)) { wrong++; k.wrong++; } } }
+    R.push('', `## Maybe calls on the shared flights`, `${n} maybe calls in ${runs.length} flights: ${hit} on a trick a pilot labelled as that trick, ${wrong} where a pilot labelled something else, ${n - hit - wrong} where nobody labelled anything.`, '',
+      ...Object.entries(per).sort((a, b) => b[1].n - a[1].n).map(([t, k]) => `- ${t}: ${k.n} (${k.hit} right, ${k.wrong} wrong, ${k.n - k.hit - k.wrong} unlabelled)`));
+  }
+  R.push('', `${((Date.now() - t0) / 1000).toFixed(0)} s.`);
+  console.log(R.join('\n'));
+  if (WRITE) { fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(path.join(OUT, 'library.json'), JSON.stringify({ ...lib, stats: { examples: L.ex.length, demos: demos.length, tricks: tricks.length, trusted: tricks.filter(([, b]) => b.trusted).length, loo: tot ? +(right / tot).toFixed(3) : null } }) + '\n'); fs.writeFileSync(path.join(OUT, 'REPORT.md'), R.join('\n') + '\n'); log('wrote library/library.json and REPORT.md'); }
+})();
