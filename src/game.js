@@ -17,6 +17,7 @@ const MAP_ID = S.MAPS[store.get('map', 'school')] ? store.get('map', 'school') :
 const world = S.MAPS[MAP_ID].build();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
+drone.crashImpact = 9.5;   // a ducted whoop bounces off more than the bare number used by the tests (pilot: crashing should be more forgiving)
 const detector = new S.TrickDetector(world);
 let activeWorld = world;   // the playground, or a race track's room + gates (editor.js useWorld)
 let score = new S.ScoreKeeper();

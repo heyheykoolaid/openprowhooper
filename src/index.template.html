@@ -228,10 +228,11 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #recapNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
 #recapBar { position: absolute; left: 12px; right: 362px; bottom: 10px; background: #12141aee; border: 1px solid #2c2f3a; padding: 8px 10px; color: #eee; font: 13px system-ui, sans-serif; }
 #recapBar .rcTrack { position: relative; height: 62px; background: #0b0c10; border: 1px solid #2c2f3a; cursor: pointer; overflow: hidden; touch-action: none; user-select: none; }
-#recapBar .rcSpan { position: absolute; bottom: 0; height: 6px; background: #ffffff2e; pointer-events: none; }
-#recapBar .rcM { position: absolute; transform: translateX(-50%); max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
+#recapBar .rcSpan { position: absolute; bottom: 0; height: 4px; background: #ffffff40; pointer-events: none; }
+#recapBar .rcM { position: absolute; min-width: 9px; box-sizing: border-box; cursor: grab; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 10px/14px var(--mono); padding: 0 4px; background: #3a3f4d; color: #fff; border-radius: 2px; cursor: pointer; }
 #recapBar .rcM.ok { background: #1f7a44; } #recapBar .rcM.bad { background: #a8521c; } #recapBar .rcM.unsure { background: #8a6d10; } #recapBar .rcM.add { background: #1d5fa8; } #recapBar .rcM.gone { background: #4a2020; text-decoration: line-through; color: #c99; }
 #recapBar .rcM.on { outline: 2px solid #ffd34d; z-index: 2; }
+#recapBar .rcM .rcH { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; } #recapBar .rcM .rcH.l { left: 0; border-left: 2px solid #ffffff90; } #recapBar .rcM .rcH.r { right: 0; border-right: 2px solid #ffffff90; }
 #recapBar .rcClip { position: absolute; top: 0; bottom: 0; background: #ffd34d2b; border-left: 2px solid #ffd34d; border-right: 2px solid #ffd34d; pointer-events: none; }
 body.rcWide #recapBar { right: 12px; }
 .rcExec { display: inline-flex; gap: 2px; margin-left: 2px; } .rcExec button { font: 10px var(--mono) !important; padding: 2px 5px !important; text-transform: lowercase; background: #22252e; color: #9aa; border: 1px solid #3a3f4d; transform: none; box-shadow: none; } .rcExec button.was { border-color: #ffd34d; color: #ffd34d; } .rcExec button.on { background: #ffd34d; color: #111; border-color: #ffd34d; }
@@ -310,7 +311,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="mainMenu" class="screen hide"><div class="panel" style="max-width:560px">
   <h1 class="logo">Open Pro<br>Whooper</h1><div class="logoSub">PROJECT</div>
   <p class="sub">tiny whoop freestyle · <span id="menuMap">the playground</span> · v0.1 · best <b id="best">0</b></p>
-  <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · and <b>the Whoop Community!</b><br>Music: <b>8BiT_</b> and <b>Infinity Loops</b></p>
+  <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b><br>Music: <b>8BiT_</b></p>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>

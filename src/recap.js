@@ -39,45 +39,60 @@ function closeRecap() {
 }
 // The player: the whole run on a timeline. Picking a call (or a mark on the timeline) jumps to it and loops that moment;
 // scrubbing or stepping leaves the loop. p = { t, playing, speed, looping, loop: {a, b} | null, key }
+// Every item on the timeline is a block with a start and an end the pilot can drag and stretch. The game's own times
+// (e.t0, e.t) are kept; the pilot's version is e.span / f.t0..f.t and goes into the label next to them.
+const recapSpanOf = it => it.kind === 'call' ? (it.e.span || [it.e.t0, it.e.t]) : [it.f.t0 ?? it.f.t - 2, it.f.t];
+function recapSetSpan(it, a, b) { const [T0, T1] = recapSpan(); a = Math.max(T0, Math.min(T1 - 0.1, a)); b = Math.max(a + 0.1, Math.min(T1, b)); a = +a.toFixed(3); b = +b.toFixed(3);
+  if (it.kind === 'call') it.e.span = [a, b]; else { it.f.t0 = a; it.f.t = b; } recap.dirty = true; }
+// the stretch of the run the timeline shows: all of it, or a zoomed window that follows the playhead
+function recapView() { const [T0, T1] = recapSpan(), z = recap.zoom; if (!z || z >= T1 - T0) return [T0, T1]; let a = recap.viewA ?? T0; a = Math.max(T0, Math.min(T1 - z, a)); return [a, a + z]; }
+function recapViewFollow(force) { const z = recap.zoom, p = recap.play; if (!z || !p || recap.drag) return false; const [a, b] = recapView(); if (!force && p.t >= a + z * 0.02 && p.t <= b - z * 0.06) return false; recap.viewA = p.t - z * (force ? 0.5 : 0.15); return true; }
+function recapZoom(dir) { const [T0, T1] = recapSpan(), W = T1 - T0, cur = recap.zoom && recap.zoom < W ? recap.zoom : W, steps = [5, 10, 20, 40, 80, 160].filter(x => x < W); let z;
+  if (dir > 0) z = steps.slice().reverse().find(x => x < cur - 0.01) ?? steps[0] ?? 0; else z = steps.find(x => x > cur + 0.01) ?? 0;
+  recap.zoom = z || 0; recapViewFollow(true); renderRecapBar(); }
 const recapSpan = () => { const T = recap.trace; return T.length ? [T[0][0], T[T.length - 1][0]] : [0, 1]; };
-function recapPlay(it) { if (!it || !recap.trace.length) return; const [T0, T1] = recapSpan(), old = recap.play || { speed: 1, looping: true };
-  const a = it.kind === 'call' ? it.e.t0 - 1.2 : it.t - (it.f && it.f.added ? 2.5 : 5), b = it.kind === 'call' ? it.e.t + 0.9 : it.t + (it.f && it.f.added ? 2.5 : 0.6);
+function recapPlay(it) { if (!it || !recap.trace.length) return; const [T0, T1] = recapSpan(), old = recap.play || { speed: 1, looping: false };
+  const sp = recapSpanOf(it), a = sp[0] - 1.2, b = sp[1] + 0.9;
   recap.play = { t: Math.max(T0, a), playing: true, speed: old.speed, looping: old.looping, loop: { a: Math.max(T0, a), b: Math.min(T1, b) }, key: it.kind + it.i }; }
 function recapSeek(t, keepLoop) { const p = recap.play; if (!p) return; const [T0, T1] = recapSpan(); p.t = Math.max(T0, Math.min(T1, t)); if (!keepLoop) p.loop = null; }
 function recapRowAt(t) { const T = recap.trace; let lo = 0, hi = T.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m][0] <= t) lo = m; else hi = m; } return T[lo]; }
 function recapStep(dt) {
   const p = recap.play; if (!p || !recap.trace.length) return; const [T0, T1] = recapSpan();
   const C = recap.clip, R = recap.rec;
-  if (p.playing) { p.t += dt * p.speed; if (R) { if (p.t >= R.b) { p.t = R.b; p.playing = false; recapRecStop(); } } else if (C && p.looping) { if (p.t > C.b || p.t < C.a - 0.05) p.t = C.a; } else if (p.loop && p.looping && p.t > p.loop.b + 0.4) p.t = p.loop.a; if (p.t >= T1) { p.t = T1; p.playing = false; recapBarState(); } }
+  if (p.playing) { p.t += dt * p.speed; if (R) { if (p.t >= R.b) { p.t = R.b; p.playing = false; recapRecStop(); } } else if (C && p.looping) { if (p.t > C.b || p.t < C.a - 0.05) p.t = C.a; } else if (p.loop && p.looping && p.t > p.loop.b + 0.4) p.t = p.loop.a; else if (p.loop && !p.looping && p.t > p.loop.b + 0.4) p.loop = null; if (p.t >= T1) { p.t = T1; p.playing = false; recapBarState(); } }
   const r = recapRowAt(p.t); drone.pos = S.v3(r[1], r[2], r[3]); drone.q = { w: r[4], x: r[5], y: r[6], z: r[7] }; drone.vel = S.v3(r[21], r[22], r[23]); for (let i = 0; i < 4; i++) drone.motorW[i] = r[13] && p.playing ? 2600 : 0;
   camMode = recap.cam; const trail = []; for (let k = 15; k >= 1; k--) { const q = recapRowAt(Math.max(T0, p.t - k * 0.03)); trail.push({ thr: q[11], roll: q[24], pitch: q[25], yaw: q[26] }); }
   drawSticks($('#recapSticks'), { thr: r[11], roll: r[24], pitch: r[25], yaw: r[26] }, trail);
   const now = recap.events.filter(e => p.t >= e.t - 0.15 && p.t <= e.t + 0.9); $('#recapNow').innerHTML = now.map(e => `${e.name}<small>${e.exec}</small>`).join('');
   if (R) { const m = $('#rcRecMsg'); if (m) m.textContent = `● recording ${(p.t - R.a).toFixed(1)} / ${(R.b - R.a).toFixed(1)} s`; }
-  const head = $('#rcHead'); if (head) { head.style.left = ((p.t - T0) / Math.max(0.01, T1 - T0) * 100) + '%'; $('#rcTime').textContent = `${fmtT(p.t - T0)} / ${fmtT(T1 - T0)}`; }
+  if (recapViewFollow()) renderRecapBar(); const head = $('#rcHead'); if (head) { const [V0, V1] = recapView(); head.style.left = ((p.t - V0) / Math.max(0.01, V1 - V0) * 100) + '%'; $('#rcTime').textContent = `${fmtT(p.t - T0)} / ${fmtT(T1 - T0)}`; }
 }
 const recapSel = () => { const p = recap.play; if (!p || !p.key) return null; return recapItems().find(it => it.kind + it.i === p.key) || null; };
 // what the pilot says a call really was: the same trick (= correct), another trick, or not a trick at all
 function recapSetCall(i, val) { const e = recap.events[i]; if (!e) return; if (!val) { e.verdict = null; e.actual = null; } else if (val === e.name) { e.verdict = 'yes'; e.actual = null; } else { e.verdict = 'no'; e.actual = val; } recap.dirty = true; }
-function recapAddAt(t) { recap.flags.push({ t: +t.toFixed(3), actual: null, added: true }); recap.dirty = true; const i = recap.flags.length - 1, old = recap.play; recapPlay({ kind: 'miss', i, t, f: recap.flags[i] }); recap.play.t = t; recap.play.playing = false; if (old) recap.play.speed = old.speed; }
+// A trick the pilot adds starts AT the red line and runs 1.5 s (drag its end to fit). Playback is left alone.
+function recapAddAt(t, len = 1.5) { const [, T1] = recapSpan(), a = Math.min(t, T1 - 0.2), f = { t0: +a.toFixed(3), t: +Math.min(T1, a + len).toFixed(3), actual: null, added: true }; recap.flags.push(f); recap.dirty = true; if (recap.play) { recap.play.key = 'miss' + (recap.flags.length - 1); recap.play.loop = null; } return f; }
+// "…then": the next trick of the same combo, starting where the selected one ends (a call that was really two tricks)
+function recapAddAfter(it) { if (!it) return; const sp = recapSpanOf(it); recapAddAt(sp[1], 1.2); }
 function recapRemove(it) { if (!it) return; if (it.kind === 'miss') { recap.flags.splice(it.i, 1); if (recap.play) recap.play.key = null; } else { const e = it.e; if (e.verdict === 'no' && e.actual === 'not a trick') { e.verdict = null; e.actual = null; } else { e.verdict = 'no'; e.actual = 'not a trick'; } } recap.dirty = true; }
 function recapBarState() { const b = $('#rcPlay'), p = recap.play; if (b && p) b.textContent = p.playing ? '⏸' : '▶'; const l = $('#rcLoop'); if (l && p) l.classList.toggle('lp', !!p.looping); }
 function renderRecapBar() {
-  const el = $('#recapBar'), p = recap.play; if (!el || !p) return; const [T0, T1] = recapSpan(), W = Math.max(0.01, T1 - T0), pc = t => ((Math.max(T0, Math.min(T1, t)) - T0) / W * 100).toFixed(2);
+  const el = $('#recapBar'), p = recap.play; if (!el || !p) return; const [T0, T1] = recapSpan(), [V0, V1] = recapView(), W = Math.max(0.01, V1 - V0), pc = t => ((t - V0) / W * 100).toFixed(2), wd = (a, b) => Math.max(0.5, (b - a) / W * 100).toFixed(2);
   const chrono = recapItems().slice().sort((a, b) => a.t - b.t), sel = recapSel(), names = ALL_TRICKS().map(x => nameOf(x));
   const marks = chrono.map((it, k) => { const on = p.key === it.kind + it.i;
-    if (it.kind === 'miss') return `<div class="rcM add ${it.f.actual ? 'ok' : ''} ${on ? 'on' : ''}" style="left:${pc(it.t)}%;top:${4 + (k % 3) * 17}px" data-rcm="miss" data-i="${it.i}" title="${esc(it.f.actual || 'trick you added — say what it was')}">${esc(it.f.actual || '＋ ?')}</div>`;
+    const sp = recapSpanOf(it), H = '<i class="rcH l"></i><i class="rcH r"></i>', pos = `left:${pc(sp[0])}%;width:${wd(sp[0], sp[1])}%;top:${3 + (k % 3) * 18}px`; if (sp[1] < V0 || sp[0] > V1) return '';
+    if (it.kind === 'miss') return `<div class="rcM add ${it.f.actual ? 'ok' : ''} ${on ? 'on' : ''}" style="${pos}" data-rcm="miss" data-i="${it.i}" title="${esc(it.f.actual || 'trick you added — say what it was')} · drag to move, drag an end to stretch">${H}${esc(it.f.actual || '＋ ?')}</div>`;
     const e = it.e, gone = e.verdict === 'no' && e.actual === 'not a trick', cls = e.verdict === 'yes' ? 'ok' : gone ? 'gone' : e.verdict === 'no' ? 'bad' : (e.flag || (e.conf != null && e.conf < 0.7)) ? 'unsure' : '';
-    return `<div class="rcSpan" style="left:${pc(e.t0)}%;width:${Math.max(0.3, pc(e.t) - pc(e.t0))}%"></div><div class="rcM ${cls} ${on ? 'on' : ''}" style="left:${pc(e.t)}%;top:${4 + (k % 3) * 17}px" data-rcm="call" data-i="${it.i}" title="${esc(e.name)}${e.actual ? ' → ' + esc(e.actual) : ''}">${esc(e.verdict === 'no' && e.actual && !gone ? e.actual : e.name)}</div>`; }).join('');
-  const selBox = !sel ? '<span class="note">Click a trick on the timeline, or move to a spot and add one.</span>'
-    : sel.kind === 'miss' ? `<b>${sel.f.added ? 'Added' : 'Missed'} @ ${fmtT(sel.t - T0)}</b><select data-rcmiss="${sel.i}"><option value="">what was it?</option>${names.map(n => `<option ${sel.f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-rc="remove" title="Take this off the timeline (Delete)">🗑 Remove</button>`
-    : `<b>${esc(sel.e.name)} @ ${fmtT(sel.t - T0)}</b>${recapCallSelect(sel.i, sel.e, names)}${recapExecBtns(sel.i, sel.e)}<button data-rc="remove" title="This wasn't a trick: take it off the timeline (Delete)">${sel.e.verdict === 'no' && sel.e.actual === 'not a trick' ? '↩ Put back' : '🗑 Remove'}</button>`;
+    return `${e.span ? `<div class="rcSpan" style="left:${pc(e.t0)}%;width:${wd(e.t0, e.t)}%" title="where the game put it"></div>` : ''}<div class="rcM ${cls} ${on ? 'on' : ''}" style="${pos}" data-rcm="call" data-i="${it.i}" title="${esc(e.name)}${e.actual ? ' → ' + esc(e.actual) : ''} · drag to move, drag an end to stretch">${H}${esc(e.verdict === 'no' && e.actual && !gone ? e.actual : e.name)}</div>`; }).join('');
+  const selBox = !sel ? '<span class="note">Click a trick to pick it. Drag it to move it, drag an end to stretch it, zoom in for fine work. Add a trick at the red line with ＋.</span>'
+    : sel.kind === 'miss' ? `<b>${sel.f.added ? 'Added' : 'Missed'} @ ${fmtT(sel.t - T0)}</b><select data-rcmiss="${sel.i}"><option value="">what was it?</option>${names.map(n => `<option ${sel.f.actual === n ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="rcExec" title="How was it flown?">${[['CLEAN', 'clean'], ['SLOPPY', 'sloppy'], ['BUMP', 'bump']].map(([x, l]) => `<button data-rc="execm" data-i="${sel.i}" data-x="${x}" class="${sel.f.execActual === x ? 'on' : ''}">${l}</button>`).join('')}</span><button data-rc="then" title="Add the next trick of this combo, starting where this one ends (T)">＋ then…</button><button data-rc="remove" title="Take this off the timeline (Delete)">🗑 Remove</button>`
+    : `<b>${esc(sel.e.name)} @ ${fmtT(sel.t - T0)}</b>${recapCallSelect(sel.i, sel.e, names)}${recapExecBtns(sel.i, sel.e)}<button data-rc="then" title="It was really a combo: add the next trick, starting where this one ends (T)">＋ then…</button>${sel.e.span ? '<button data-rc="unspan" title="Put it back where the game had it">↩ timing</button>' : ''}<button data-rc="remove" title="This wasn't a trick: take it off the timeline (Delete)">${sel.e.verdict === 'no' && sel.e.actual === 'not a trick' ? '↩ Put back' : '🗑 Remove'}</button>`;
   const C = recap.clip, clipBand = C ? `<div class="rcClip" style="left:${pc(C.a)}%;width:${Math.max(0.3, pc(C.b) - pc(C.a))}%"></div>` : '';
   document.body.classList.toggle('rcWide', !recap.review);
   el.innerHTML = `<div class="rcTrack" id="rcTrack">${clipBand}<div class="rcMarks">${marks}</div><div id="rcHead"></div></div>
     <div class="rcRow"><button data-rc="prev" title="Previous trick ([)">⏮</button><button data-rc="back" title="Back 1 s (←)">−1s</button><button data-rc="fb" title="Back one frame (,)">◂</button><button data-rc="toggle" id="rcPlay" class="primary" title="Play / pause (Space)">⏸</button><button data-rc="ff" title="Forward one frame (.)">▸</button><button data-rc="fwd" title="Forward 1 s (→)">+1s</button><button data-rc="next" title="Next trick (])">⏭</button>
       <select id="rcSpeed" title="Playback speed">${[0.1, 0.25, 0.5, 1, 2].map(v => `<option value="${v}" ${p.speed === v ? 'selected' : ''}>${v}×</option>`).join('')}</select>
-      <button data-rc="loop" id="rcLoop" title="Loop the selected trick (L)">⟲ loop</button><button data-rc="cam" title="Camera (C)">📷</button><span id="rcTime"></span>
+      <button data-rc="loop" id="rcLoop" title="Repeat the selected trick instead of playing on (L)">⟲ loop</button><button data-rc="zin" title="Zoom the timeline in (+ or mouse wheel)">🔍＋</button><button data-rc="zout" title="Zoom out (−)">🔍−</button><button data-rc="cam" title="Camera (C)">📷</button><span id="rcTime"></span>
       ${recap.review ? '<button data-rc="add" class="add" title="Add a trick the game missed, at the playhead (A)">＋ Add trick here</button>' : ''}</div>
     <div class="rcRow"><b>Clip</b><button data-rc="in" title="Start the clip at the playhead (I)">[ In</button><button data-rc="out" title="End the clip at the playhead (O)">Out ]</button>
       <span class="note">${C ? `${fmtT(C.a - T0)} → ${fmtT(C.b - T0)} · ${(C.b - C.a).toFixed(1)} s` : sel ? 'no clip set: export uses the selected trick' : 'mark In and Out, or pick a trick'}</span>
@@ -103,14 +118,20 @@ function renderRecap() {
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button></div>
     <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
     <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
-    <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera · <kbd>I</kbd><kbd>O</kbd> clip in / out</p>`;
+    <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add at the red line · <kbd>T</kbd> then… (combo) · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera · <kbd>I</kbd><kbd>O</kbd> clip in / out</p>`;
   renderRecapBar();
 }
 function recapPayload() {
-  const labels = [];
-  for (const e of recap.events) if (e.verdict) labels.push({ target: e.name, verdict: e.verdict, actual: e.verdict === 'no' ? (e.actual || null) : e.name, repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, flagged: !!e.flag, exec: e.exec, clean: e.clean, execActual: e.execActual || null, via: 'review' });
-  for (const f of recap.flags) if (f.actual) labels.push({ target: f.actual, verdict: 'yes', actual: f.actual, repStart: +(f.t - (f.added ? 2.5 : 5)).toFixed(3), t: +(f.t + (f.added ? 2.5 : 0.5)).toFixed(3), detected: [], via: f.added ? 'review-added' : 'flag-missed' });
-    else labels.push({ target: 'unknown', verdict: 'unlabelled', actual: null, repStart: +(f.t - 5).toFixed(3), t: f.t, detected: [], via: 'flag-missed', undone: true });
+  let labels = [];
+  // repStart..t is where the trick really was (the pilot's block when they moved or stretched it); gameSpan is where the
+  // game had it. `timed: true` marks spans a pilot set by hand: the most exact labels there are.
+  for (const e of recap.events) if (e.verdict || e.span) { const sp = e.span || [e.t0, e.t]; labels.push({ target: e.name, verdict: e.verdict || 'yes', actual: e.verdict === 'no' ? (e.actual || null) : e.name, repStart: sp[0], t: sp[1], gameSpan: [e.t0, e.t], timed: !!e.span, detected: [e.name], conf: e.conf, flagged: !!e.flag, exec: e.exec, clean: e.clean, execActual: e.execActual || null, via: 'review' }); }
+  for (const f of recap.flags) { const timed = f.t0 != null, a = timed ? f.t0 : +(f.t - 5).toFixed(3);
+    if (f.actual) labels.push({ target: f.actual, verdict: 'yes', actual: f.actual, repStart: a, t: timed ? f.t : +(f.t + 0.5).toFixed(3), timed, detected: [], execActual: f.execActual || null, via: f.added ? 'review-added' : 'flag-missed' });
+    else labels.push({ target: 'unknown', verdict: 'unlabelled', actual: null, repStart: a, t: f.t, detected: [], via: f.added ? 'review-added' : 'flag-missed', undone: true }); }
+  // combos as the pilot laid them out: real tricks that follow each other within the combo window share a combo number
+  labels.sort((x, y) => x.repStart - y.repStart); { let c = 0, end = -1e9; for (const l of labels) { if (!l.actual || l.actual === 'not a trick') continue; if (l.repStart - end > COMBO_IDLE) c++; l.combo = c; end = Math.max(end, l.t); }
+    const n = {}; for (const l of labels) if (l.combo) n[l.combo] = (n[l.combo] || 0) + 1; for (const l of labels) if (l.combo) { l.comboLen = n[l.combo]; } }
   return { format: 'pro-whooper-session/2', source: 'review', build: '0.1', map: MAP_ID, camTilt: tune.camTilt, craft: { ...spec }, tune, pilot: store.get('pilot', null),
     run: { id: recap.id, started: recap.started, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, events: recap.events.map(e => ({ t: e.t, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf })), labels } };
 }
@@ -156,11 +177,12 @@ function recapRecFrame() {
 }
 function recapJump(dir) { const p = recap.play; if (!p) return; const L = recapItems().slice().sort((a, b) => a.t - b.t); const it = dir > 0 ? L.find(x => x.t > p.t + 0.05 && x.kind + x.i !== p.key) : L.slice().reverse().find(x => x.t < p.t - 0.3 && x.kind + x.i !== p.key); if (it) recapPlay(it); }
 document.addEventListener('click', e => {
-  const m = e.target.closest('[data-rcm]'); if (m && mode === 'recap') { const i = +m.dataset.i; recapPlay(m.dataset.rcm === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] }); renderRecap(); return; }
+  const m = e.target.closest('[data-rcm]'); if (m && mode === 'recap') { if (recap.dragged) { recap.dragged = false; return; } const i = +m.dataset.i; recapPlay(m.dataset.rcm === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] }); renderRecap(); return; }
   const b = e.target.closest('[data-rc]'); if (b && mode === 'recap') { const a = b.dataset.rc, i = +b.dataset.i, p = recap.play;
     if (a === 'go') recapPlay(b.dataset.k === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] });
     if (a === 'yes') { const ev = recap.events[i]; recapSetCall(i, ev.name); }
     if (a === 'exec') { const ev = recap.events[i]; ev.execActual = ev.execActual === b.dataset.x ? null : b.dataset.x; if (ev.execActual && !ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
+    if (a === 'execm') { const f = recap.flags[i]; if (f) { f.execActual = f.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true; } }
     if (a === 'delmiss') { recap.flags.splice(i, 1); recap.dirty = true; if (p) p.key = null; }
     if (a === 'allyes') { for (const ev of recap.events) if (!ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
     if (a === 'export') saveFile(`run-review-${recap.id}.json`, JSON.stringify(recapPayload()));
@@ -179,6 +201,9 @@ document.addEventListener('click', e => {
       if (a === 'clipclear') recap.clip = null;
       if (a === 'exportclip') { if (recap.rec) recapRecStop(true); else recapRecStart(); }
       if (a === 'add') recapAddAt(p.t);
+      if (a === 'then') recapAddAfter(recapSel());
+      if (a === 'unspan') { const it = recapSel(); if (it && it.kind === 'call') { delete it.e.span; recap.dirty = true; } }
+      if (a === 'zin' || a === 'zout') { recapZoom(a === 'zin' ? 1 : -1); return; }
       if (a === 'remove') recapRemove(recapSel());
     }
     renderRecap(); return; }
@@ -187,7 +212,17 @@ document.addEventListener('click', e => {
 });
 // scrubbing: press or drag on the timeline (not on a trick mark)
 let recapDrag = false;
-const recapScrub = e => { const tr = $('#rcTrack'); if (!tr) return; const r = tr.getBoundingClientRect(), [T0, T1] = recapSpan(); recapSeek(T0 + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (T1 - T0)); };
+const recapScrub = e => { const tr = $('#rcTrack'); if (!tr) return; const r = tr.getBoundingClientRect(), [T0, T1] = recapView(); recapSeek(T0 + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (T1 - T0)); };
+// moving and stretching a trick on the timeline: press on the block (move) or on one of its ends (stretch)
+addEventListener('pointerdown', e => { const m = e.target.closest('[data-rcm]'); if (mode !== 'recap' || !m || !recap.review || recap.rec) return; const i = +m.dataset.i, it = m.dataset.rcm === 'miss' ? { kind: 'miss', i, f: recap.flags[i] } : { kind: 'call', i, e: recap.events[i] }; if (!(it.f || it.e)) return;
+  const r = m.getBoundingClientRect(), edge = Math.min(8, r.width / 3), part = e.target.classList.contains('rcH') ? (e.target.classList.contains('l') ? 'l' : 'r') : e.clientX - r.left < edge ? 'l' : r.right - e.clientX < edge ? 'r' : 'move', sp = recapSpanOf(it), [V0, V1] = recapView();
+  recap.drag = { it, part, x0: e.clientX, a: sp[0], b: sp[1], el: m, spp: (V1 - V0) / Math.max(1, $('#rcTrack').getBoundingClientRect().width), moved: false }; e.preventDefault(); });
+addEventListener('pointermove', e => { const D = recap.drag; if (!D) return; const dx = e.clientX - D.x0; if (!D.moved && Math.abs(dx) < 4) return; D.moved = true; const dt = dx * D.spp;
+  if (D.part === 'move') recapSetSpan(D.it, D.a + dt, D.a + dt + (D.b - D.a)); else if (D.part === 'l') recapSetSpan(D.it, Math.min(D.a + dt, D.b - 0.1), D.b); else recapSetSpan(D.it, D.a, Math.max(D.b + dt, D.a + 0.1));
+  const sp = recapSpanOf(D.it), [V0, V1] = recapView(), W = Math.max(0.01, V1 - V0); D.el.style.left = ((sp[0] - V0) / W * 100) + '%'; D.el.style.width = Math.max(0.5, (sp[1] - sp[0]) / W * 100) + '%';
+  if (recap.play) { recap.play.playing = false; recap.play.loop = null; recap.play.t = D.part === 'r' ? sp[1] : sp[0]; } });   // the picture follows the edge being moved: line the trick up by eye
+addEventListener('pointerup', () => { const D = recap.drag; if (!D) return; recap.drag = null; if (D.moved) { recap.dragged = true; setTimeout(() => { recap.dragged = false; }, 50); if (recap.play) recap.play.key = D.it.kind + D.it.i; renderRecap(); } });
+addEventListener('wheel', e => { if (mode !== 'recap' || !e.target.closest('#rcTrack')) return; e.preventDefault(); recapZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
 addEventListener('pointerdown', e => { if (mode !== 'recap' || !e.target.closest('#rcTrack') || e.target.closest('[data-rcm]')) return; recapDrag = true; recapScrub(e); e.preventDefault(); });
 addEventListener('pointermove', e => { if (recapDrag) recapScrub(e); });
 addEventListener('pointerup', () => { recapDrag = false; });
@@ -200,7 +235,7 @@ document.addEventListener('change', e => {
 });
 addEventListener('keydown', e => {
   if (mode !== 'recap' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; const p = recap.play, click = a => { const b = document.querySelector(`#recapBar [data-rc="${a}"]`); if (b) b.click(); };
-  const map = { Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove', KeyI: 'in', KeyO: 'out' };
+  const map = { KeyT: 'then', Equal: 'zin', Minus: 'zout', Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove', KeyI: 'in', KeyO: 'out' };
   if (map[e.code] && p) { e.preventDefault(); click(map[e.code]); }
   if (e.code === 'Escape') closeRecap();
 });

@@ -46,6 +46,7 @@ function readPad(kind = inputCfg.mode) {
   return pads.find(p => p.id === P.device) || pads.find(p => describePad(p).kind === kind) || null;
 }
 const kb = { thr: 0, yaw: 0, pitch: 0, roll: 0 };
+let armSeen = null, armMovedAt = -1e9, resetAskAt = 0;
 let armSwitchPrev = null, resetPrev = false, armBtnPrev = false, crashLock = false, armBlock = '';
 const ARM_THR_MAX = 0.08;
 function axisVal(pad, a) { if (!pad || pad.axes[a.i] === undefined) return 0; let v = pad.axes[a.i]; v = ((v - a.min) / ((a.max - a.min) || 1)) * 2 - 1; v = Math.max(-1, Math.min(1, v)); return a.inv ? -v : v; }
@@ -61,16 +62,22 @@ function getRC(dt) {
     if (P.arm.toggle) { const b = switchOn(pad, P.arm); if (b && !armBtnPrev) setArmed(!drone.armed); armBtnPrev = b; }
     else {
       // Switch arming: armed while the switch is on and throttle was low when it armed.
-      // After a crash the switch has to go off once (like Betaflight's crash flip / re-arm).
+      // After a crash the switch can stay on: zero throttle rights the quad and re-arms it (play.js).
       const sw = switchOn(pad, P.arm); armSwitchPrev = sw;
       if (!sw) { crashLock = false; if (drone.armed) setArmed(false); armBlock = 'ARM SWITCH OFF'; }
       else if (!drone.armed) {
-        if (crashLock) armBlock = 'CRASHED · FLIP ARM SWITCH OFF, THEN ON';
+        if (drone.crashed) { crashLock = true; armBlock = 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
         else if (rc.thr > ARM_THR_MAX) armBlock = `THROTTLE HIGH (${Math.round(rc.thr * 100)}%) · LOWER TO ARM`;
         else { armBlock = ''; setArmed(true); }
       } else armBlock = '';
     }
-    const rp = switchOn(pad, P.reset); if (rp && !resetPrev) respawn(); resetPrev = rp;
+    // Reset switch. Arming must never send you back to the start (it would undo a Slide Disarm): a reset control that is
+    // the same switch as arm is ignored, and so is a reset that fires in the same moment as the arm switch moves
+    // (two channels driven by one switch on the radio). The R key always resets.
+    { const sameAsArm = P.reset && P.arm && P.reset.type === P.arm.type && P.reset.i === P.arm.i, swNow = switchOn(pad, P.arm), nowT = performance.now();
+      if (swNow !== armSeen) { armSeen = swNow; armMovedAt = nowT; }
+      const rp = !sameAsArm && switchOn(pad, P.reset); if (rp && !resetPrev) resetAskAt = nowT; resetPrev = rp;
+      if (resetAskAt && nowT - resetAskAt > 150) { const withArm = Math.abs(resetAskAt - armMovedAt) < 400; resetAskAt = 0; if (!withArm) respawn(); } }
     return rc;
   }
   const ramp = (cur, tgt, rate) => cur + Math.max(-rate * dt, Math.min(rate * dt, tgt - cur));

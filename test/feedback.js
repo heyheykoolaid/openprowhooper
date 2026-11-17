@@ -51,9 +51,10 @@ for (const [tilt, spin, rate] of [[0, 360, 380], [30, 360, 380], [30, 330, 350],
 // 3. trippy spin round a lamp post: inverted, leaning hard into the pole so it stays at the top of the screen (lots of body
 // roll per lap, but never upright). And a real Double Rolling Trippy: barrel rolls while orbiting.
 const LP = v3(-14, 0, -16);
-function orbit(laps, lean, rollsPerLap) {
-  const R = 1.6, w = 170 * D, T = laps * 2 * P / w;
-  return { T: T + 1.5, at: t => { const a = Math.min(t, T) * w, pos = v3(LP.x + R * Math.cos(a), 2.4, LP.z + R * Math.sin(a));
+function orbit(laps, lean, rollsPerLap, LP0, R = 1.6, y = 2.4, drift = 0) { const LPc = LP0 || LP; { const LP = LPc; return orbitAt(LP, laps, lean, rollsPerLap, R, y, drift); } }
+function orbitAt(LP0, laps, lean, rollsPerLap, R, y, drift) {
+  const w = 170 * D, T = laps * 2 * P / w;
+  return { T: T + 1.5, at: t => { const LP = v3(LP0.x + drift * Math.min(t, T), 0, LP0.z); const a = Math.min(t, T) * w, pos = v3(LP.x + R * Math.cos(a), y, LP.z + R * Math.sin(a));
     const toP = v3(-Math.cos(a), 0, -Math.sin(a)), face = faceQ(toP);
     let q = qmul(face, qmul(rollQ(P), rollQ(-lean * D)));                        // inverted, top of the quad leaning out so the pole sits high on screen
     if (rollsPerLap) q = qmul(face, rollQ(rollsPerLap * Math.min(t, T) * w));
@@ -221,4 +222,18 @@ for (const c of [{ style: 'A', tilt: 50, entry: 'flip' }, { style: 'C', tilt: 50
   { style: 'C', tilt: 30, wob: 12 }, { style: 'C', tilt: 45, wob: 12 }, { style: 'A', tilt: 40, spin: 330 }, { style: 'A', tilt: 10, entry: 'roll', exit: 'flip' }, { style: 'B', tilt: 40, rate: 220 }]) {
   const got = M.detect(iys(c), W, c.tilt).map(e => e.name), ok = JSON.stringify(got) === '["Inverted Yaw Spin"]'; total++; if (ok) pass++;
   console.log(`${ok ? '✓' : '✗'} ${('inverted yaw spin ' + JSON.stringify(c).replace(/"/g, '')).padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want Inverted Yaw Spin'}`); }
+// 2026-11-17, pilot: "open air trippies and powerloops aren't being counted". A trippy with nothing in the middle (high over
+// the playground, well clear of every pole), a wide one, one that drifts; an upright circle in open air stays a turn.
+const AIR = v3(4, 0, 4);
+run('open-air trippy spin (nothing in the middle)', orbit(2.2, 45, 0, AIR, 1.6, 11), ['Trippy Spin x2']);
+run('open-air trippy spin, wide (R 2.8)', orbit(2.2, 35, 0, AIR, 2.8, 12), ['Trippy Spin x2']);
+run('open-air trippy spin, drifting 0.4 m/s', orbit(2.3, 45, 0, AIR, 1.5, 11, 0.4), ['Trippy Spin x2']);
+run('upright circle in open air is just a turn', { T: 6, at: t => { const a = Math.min(t, 4.4) * 170 * D, pos = v3(4 + 1.6 * Math.cos(a), 11, 4 + 1.6 * Math.sin(a)); return { pos, q: qmul(faceQ(v3(-Math.cos(a), 0, -Math.sin(a))), rollQ(0.4)) }; } }, []);
+// open powerloops: in clear air, and in clear air but passing over something low on the way (the Surveyor finds an
+// over/under nearly everywhere on the school map; only a loop that really goes round the object belongs to it)
+function clearLoop(c, R = 1.3, v = 5.5) { const L = 2 * P * R / v, T0 = 0.7; return { T: T0 + L + 1.6, at: t => { if (t < T0) return { pos: v3(c.x, c.y - R, c.z + (T0 - t) * v), q: H.ID }; const th = Math.min(t - T0, L) * v / R, after = Math.max(0, t - T0 - L);
+  return { pos: v3(c.x, c.y - R * Math.cos(th), c.z - R * Math.sin(th) - after * v), q: pitchQ(th) }; } }; }
+run('open powerloop in clear air', clearLoop(v3(6, 9, 6)), ['Powerloop']);
+run('open powerloop, big and floaty (R 2.2)', clearLoop(v3(6, 10, 6), 2.2, 5), ['Powerloop']);
+run('open powerloop above the swing bar (over it, never under)', clearLoop(v3(0, 4.6, -6), 1.2, 5.5), ['Powerloop']);
 console.log(`\n${pass}/${total} pilot-feedback flights`);

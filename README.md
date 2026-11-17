@@ -73,7 +73,7 @@ node test/stress.js 40 --tilt=30 --human=1 --air=0.6 --slow=1.3   # randomised b
 
 ## Credits
 
-Thanks and credit to Tyrantt, Pro Whooper, IGOW, RaceGOW, Skittles, and the Whoop Community.
+Thanks and credit to Tyrantt, Pro Whooper, IGOW, RaceGOW, Skittles, Infinity Loops, and the Whoop Community.
 
 Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.com) calculator.
 

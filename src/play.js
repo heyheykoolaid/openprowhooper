@@ -1,13 +1,17 @@
 // ============================================================ audio
-let actx = null, osc = [], gains = [], noiseG = null;
+let actx = null, osc = [], gains = [], noiseG = null, airG = null, airBp = null, crashAt = null, wasArmed = false;
 function initAudio() {
   if (actx) return; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
   const master = actx.createGain(); master.gain.value = store.get('vol', 0.35); master.connect(actx.destination); window._master = master;
-  const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200; lp.connect(master);
-  for (let i = 0; i < 4; i++) { const o = actx.createOscillator(); o.type = 'sawtooth'; const g = actx.createGain(); g.gain.value = 0; o.connect(g); g.connect(lp); o.start(); osc.push(o); gains.push(g); }
+  // Prop sound: a soft-harmonic tone an octave-and-a-bit under the blade-pass whine, plus rushing air that follows
+  // the rpm. (The first version was four raw sawtooths at the blade frequency: thin and whiny.)
+  const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1900; lp.Q.value = 0.4; lp.connect(master);
+  const wave = actx.createPeriodicWave(new Float32Array([0, 0, 0, 0, 0, 0, 0]), new Float32Array([0, 1, 0.55, 0.3, 0.16, 0.08, 0.04]));
+  for (let i = 0; i < 4; i++) { const o = actx.createOscillator(); o.setPeriodicWave(wave); const g = actx.createGain(); g.gain.value = 0; o.connect(g); g.connect(lp); o.start(); osc.push(o); gains.push(g); }
   const buf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const ns = actx.createBufferSource(); ns.buffer = buf; ns.loop = true; const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
   noiseG = actx.createGain(); noiseG.gain.value = 0; ns.connect(bp); bp.connect(noiseG); noiseG.connect(master); ns.start();
+  airBp = actx.createBiquadFilter(); airBp.type = 'bandpass'; airBp.frequency.value = 500; airBp.Q.value = 0.9; airG = actx.createGain(); airG.gain.value = 0; ns.connect(airBp); airBp.connect(airG); airG.connect(master);
 }
 // Crash sounds: a dull thud for everyone... except one pilot.
 let audioWasCrashed = false;
@@ -31,7 +35,8 @@ function crashFart() {
 function updateAudio() {
   if (!actx) return;
   if (drone.crashed && !audioWasCrashed) { try { isRidgeRipper() ? crashFart() : crashThud(); } catch {} } audioWasCrashed = drone.crashed; const t = actx.currentTime; const blades = S.PARTS.props[spec.prop].blades;
-  for (let i = 0; i < 4; i++) { const rpm = drone.motorW[i] * 60 / (2 * Math.PI); osc[i].frequency.setTargetAtTime(Math.max(30, rpm / 60 * blades * 0.5 + i * 3), t, 0.01); gains[i].gain.setTargetAtTime(drone.armed ? 0.02 + 0.06 * Math.min(1, rpm / params.stats.rpmMax) : 0, t, 0.02); }
+  for (let i = 0; i < 4; i++) { const rpm = drone.motorW[i] * 60 / (2 * Math.PI); osc[i].frequency.setTargetAtTime(Math.max(24, rpm / 60 * blades * 0.2 * (1 + (i - 1.5) * 0.012)), t, 0.015); gains[i].gain.setTargetAtTime(drone.armed ? 0.03 + 0.08 * Math.min(1, rpm / params.stats.rpmMax) : 0, t, 0.02); }
+  { const m = (drone.motorW[0] + drone.motorW[1] + drone.motorW[2] + drone.motorW[3]) / 4 * 60 / (2 * Math.PI), k = Math.min(1, m / params.stats.rpmMax); airBp.frequency.setTargetAtTime(350 + 900 * k, t, 0.04); airG.gain.setTargetAtTime(drone.armed ? 0.02 + 0.2 * k * k : 0, t, 0.04); }
   noiseG.gain.setTargetAtTime(Math.min(0.25, S.len(drone.vel) * 0.012 + drone.washLevel * 0.15), t, 0.05);
 }
 
@@ -110,7 +115,7 @@ function hud() {
   const noDev = inputCfg.mode !== 'keyboard' && !readPad();
   $('#osdState').textContent = noDev ? `${inputCfg.mode.toUpperCase()} NOT DETECTED · MOVE A STICK` : drone.armed ? '' :
     usingSwitch ? (armBlock || 'DISARMED') :
-    drone.crashed ? (drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
+    drone.crashed ? (crashLock ? 'CRASH · THROTTLE TO ZERO TO GO AGAIN' : drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
     (lastRC.thr > ARM_THR_MAX ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
   $('#osdTimer').textContent = fmtT(flightTime);
   $('#sessionT').textContent = train.on ? 'TRAINING' : session ? fmtT(Math.max(0, session.timeLeft)) : 'FREE FLY';
@@ -138,7 +143,10 @@ function frame(now) {
     if (!race.on) for (const ev of detector.drain()) onTrick(ev);
     if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
     renderCombo();
-    if (drone.crashed) crashLock = true;
+    // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
+    // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).
+    if (drone.crashed) { if (crashAt == null) { crashAt = now; crashLock = wasArmed; } else if (crashLock && now - crashAt > 350 && lastRC.thr <= ARM_THR_MAX && mode !== 'judge' && !race.on) { crashLock = false; setArmed(true); } }
+    else { crashAt = null; wasArmed = drone.armed; }
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
     updateAudio(); hud(); passFeed(); stickHud(rc); if (race.on) raceHud();

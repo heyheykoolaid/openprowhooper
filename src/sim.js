@@ -768,7 +768,7 @@ class Drone {
     }
     // crash rules (≈ "contact + disarm" in TPW terms)
     if (this.armed && !this.crashed) {
-      if (maxImpact > 7.5) this.crash('impact');
+      if (maxImpact > (this.crashImpact || 7.5)) this.crash('impact');
       const up = this.up();
       const speed = len(this.vel);
       if (hit && up.y < -0.35 && speed < 0.6) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }
@@ -836,7 +836,7 @@ const OBSTACLE_TRICKS = [
   { name: 'Matty Twister', pats: ['Ra360 P-~360', 'P-~90 Ra360 P-~270'], cross: 'OU', end: 'back' },
   { name: 'Matty Roll', pats: ['P-270 Ra360 P-90', 'P-270 Ra360'], cross: 'OU', end: 'back' },
   { name: 'Matty 360', pats: ['P-~180 Ya360 P-~180', 'P-~270 Ya360'], cross: 'OU', end: 'back' },
-  { name: 'Split-S', pats: ['Ra180 P+~180'], cross: 'OU', end: 'fwd' },
+  { name: 'Split-S', pats: ['Ra180 P+~180', 'Ra~180 P+~180'], cross: 'OU', end: 'fwd' },
   { name: '540 Split S', pats: ['Ra540 P+180'], cross: 'OU', end: 'fwd' },
   { name: 'Split-Back', pats: ['Ra180 P+~540'], cross: 'OU', end: 'fwd' },
   { name: 'Split Yaw', pats: ['Ra180 P+~90 Yb180', 'Ra180 Yb180 P+~90'], cross: 'OU', end: 'back' },
@@ -1360,7 +1360,7 @@ class StreamDetector extends TrickDetector {
     this.liveTaps = true; this.camTilt = this.camTilt ?? 20; this.live = null; this.lastTrippy = null;
     { const st = this.watcher && this.watcher.style; this.watcher = new Watcher(this); if (st) this.watcher.style = st; } this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
     this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
-    this.orb = {}; this.passTr = {}; this.vst = {}; this.hst = {}; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
+    this.orb = {}; this.passTr = {}; this.vst = {}; this.hst = {}; this.airPole = null; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
     // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
     // swing-set legs, slide-tower posts, monkey-bar & jungle-gym uprights, the pilot). Fence posts and wall pipes are excluded.
     this.poles = [];
@@ -1415,12 +1415,34 @@ class StreamDetector extends TrickDetector {
       hs.u = u; hs.uBefore = u;
     } else if (vh < 0.7 && hs.u && hs.slowT == null) hs.slowT = t;
     if (hs.slowT != null && t - hs.slowT > 2.5) hs.slowT = null;
+    // Open-air trippies (pilot: "open air trippies aren't being counted"): the same coordinated, rolled-over orbit with
+    // nothing in the middle. The game knows where every pole is, so when the quad is rolled past knife-edge and
+    // circling a point that is NOT a pole, that point becomes a pole of its own for as long as the circling lasts: the
+    // centre of the turn, measured from the path. Everything after that (laps, the "held at the top of the picture"
+    // check, how round it is) is the ordinary orbit code. Only trippies count this way; an upright circle is just a turn.
+    { const A = this.airPole, hd = Math.atan2(d.vel.z, d.vel.x); let dh = hs.hd == null ? 0 : hd - hs.hd; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; hs.hd = hd;
+      const om = vh > 0.8 ? dh / dt : 0; hs.om = (hs.om || 0) + (om - (hs.om || 0)) * Math.min(1, dt / 0.12);
+      const R = Math.abs(hs.om) > 0.35 ? vh / Math.abs(hs.om) : 99, turning = d.armed && up.y < 0.35 && vh > 0.8 && R >= 0.3 && R <= 4.5;
+      const cx = turning ? d.pos.x - d.vel.z / hs.om : 0, cz = turning ? d.pos.z + d.vel.x / hs.om : 0;
+      const nearReal = turning && this.poles.some(P => { const o = this.orb[P.id]; return (o && o.acc > 90) || (Math.hypot(P.x - cx, P.z - cz) < Math.max(1.5, R * 0.8) && d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5); });
+      if (!A) {
+        const c = hs.airC;
+        if (!turning || nearReal) hs.airC = null;
+        else if (!c) hs.airC = { t0: t, x: cx, z: cz, n: 1, sx: cx, sz: cz, dir: Math.sign(hs.om) };
+        else if (Math.sign(hs.om) !== c.dir || Math.hypot(cx - c.sx / c.n, cz - c.sz / c.n) > Math.max(1.2, R)) hs.airC = null;
+        else { c.sx += cx; c.sz += cz; c.n++; if (t - c.t0 > 0.45) { const P = { id: 'air', air: true, objId: 'air', name: 'open air', x: c.sx / c.n, z: c.sz / c.n, y0: d.pos.y - 5, y1: d.pos.y + 5, tTurn: t, t0: t }; P.point = y => v3(P.x, y, P.z); this.airPole = P; hs.airC = null; } }
+      } else {
+        if (turning) { A.tTurn = t; const k = Math.min(1, dt / 1.2); A.x += (cx - A.x) * k; A.z += (cz - A.z) * k; A.y0 = Math.min(A.y0, d.pos.y - 3); A.y1 = Math.max(A.y1, d.pos.y + 3); }   // an open-air orbit drifts: follow it slowly
+        const liveHere = this.live && this.live.key === 'air';
+        if (!d.armed || nearReal && !liveHere || t - A.tTurn > (liveHere ? 1.0 : 0.6)) { const ob = this.orb.air; if (ob && ob.acc > 0) { this.endOrbit(A, ob, 'exit'); ev = true; } delete this.orb.air; delete this.passTr.air; this.airPole = null; }
+      } }
     // poles: passes (closest approach then clear) and orbits (angle swept around the pole)
-    for (const P of this.poles) {
+    for (const P of (this.airPole ? [...this.poles, this.airPole] : this.poles)) {
       const at = P.point(d.pos.y), dx = d.pos.x - at.x, dz = d.pos.z - at.z, dist = Math.hypot(dx, dz);
       const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
       const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
-      if (dist > 6 || !inY) { pt.dmin = 99; pt.lock = false; pt.far = 0; }
+      if (P.air) { /* nothing is there to pass */ }
+      else if (dist > 6 || !inY) { pt.dmin = 99; pt.lock = false; pt.far = 0; }
       else if (pt.lock) { pt.far = Math.max(pt.far || 0, dist); if (dist < pt.far - 0.3) { pt.lock = false; pt.far = 0; pt.dmin = dist; pt.tc = t; } }   // one pass per approach: wait until it heads back in
       else { if (dist < pt.dmin) { pt.dmin = dist; pt.tc = t; }
         if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = 99; pt.lock = true; pt.far = dist; this.newEv.push('pass'); ev = true; } }
@@ -1473,14 +1495,14 @@ class StreamDetector extends TrickDetector {
     if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin x2';
     const mr = ob.aw ? ob.as / ob.aw : 0, round = mr > 0 ? Math.sqrt(Math.max(0, ob.as2 / ob.aw - mr * mr)) / mr : 1;   // 0 = a circle; a straight fly-by is 0.5+
     const around = ob.pl > 0 ? ob.pt / ob.pl : 0;
-    if (ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8) return 'Orbit x2';
+    if (!ob.air && ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8) return 'Orbit x2';
     return null;
   }
   orbLapDeg(ob, kind) { return kind === 'Trippy Spin x2' ? this.orbSpan(ob) : ob.acc; }
   updateLive(t) {
     // the post with the most sweep owns the live trick (circling the slide tower sweeps all 4 posts at once)
     let best = null, bestP = null;
-    for (const P of this.poles) { const ob = this.orb[P.id]; if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) { best = ob; bestP = P; } }
+    for (const P of (this.airPole ? [...this.poles, this.airPole] : this.poles)) { const ob = this.orb[P.id]; if (ob && P.air) ob.air = true; if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) { best = ob; bestP = P; } }
     const L = this.live;
     if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2; L.t1 = t; if (L.name === 'Trippy Spin x2') L.t0 = L.ob.poseT0; }
     else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: this.orbitKind(best) === 'Trippy Spin x2' ? best.poseT0 : best.t0, t1: t, laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2 };
@@ -1519,7 +1541,7 @@ class StreamDetector extends TrickDetector {
     const c0 = ob && ob.poseT0 != null ? ob.poseT0 - 0.1 : ob ? ob.t0 - 0.3 : 0;
     if (ob && ob.acc > 270) { for (const k of this.toks) if (k.t0 >= c0 && k.t0 <= ob.t1) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c && c.t0 >= c0 + 0.3 - 0.3) c.usedUntil = this.time; }   // rotation during an orbit is the orbit's, not a separate roll
     if (this.live && this.live.ob === ob) this.finishLive(reason);
-    if (ob.acc < 250 || !ob.n) return;
+    if (ob.acc < 250 || !ob.n || P.air) return;
     this.orbSegs.push({ obj: P.id, name: P.name, dir: ob.dir, acc: ob.acc, t0: ob.t0, t1: ob.t1, inv: ob.inv / ob.n, view: ob.view / ob.n, top: ob.top / ob.n, roll: ob.roll, id: 'orb' + P.id + '@' + ob.t0.toFixed(2) });
     this.newEv.push('orbit');
   }
@@ -1551,7 +1573,13 @@ class StreamDetector extends TrickDetector {
   matchOpenLoop(toks) {
     if (!toks.length || !toks.some(k => k.ax === 'P' && k.raw >= 250)) return null;
     const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1;
-    if (this.crossLog.some(c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3)) return null;   // passed an obstacle (not just high above one): the obstacle version decides
+    // An obstacle only takes the loop away from the open-air reading when the loop really went ROUND it: under and over
+    // the same thing. Passing over a roof edge or under some far-off bar while looping in clear air is still an open
+    // loop (pilot, on the school map where the Surveyor finds an over/under everywhere: open powerloops weren't counted).
+    { const near = this.crossLog.filter(c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3);
+      var anyCross = near.length > 0;
+      if (near.some(c => c.kind === 'U' && near.some(o => o.kind === 'O' && o.obj === c.obj))) return null;
+      if (near.some(c => c.kind === 'U' && c.t > t0 - 0.25 && c.t < t0 + 0.6) && this.time - t1 < 0.45) return null; }   // went in under something: give the way back under a moment to show up
     const ps = this.pathSweep(t0 - 0.25, t1 + 0.25);
     if (ps.speed < 1.6 || ps.rise < 0.8) return null;
     let best = null;
@@ -1560,6 +1588,7 @@ class StreamDetector extends TrickDetector {
       const mattyFam = tr.cross === 'OU' && tr.end === 'back';
       if (!loopFam && !mattyFam) continue;
       if (loopFam && !(ps.sweep >= 270)) continue;
+      if (mattyFam && anyCross) continue;   // a Matty near any object waits for the object's own reading (over, then back under)
       if (mattyFam && !(ps.sweep <= -120 && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
       for (const pp of tr.parsed) { const m = matchTokens(pp, toks); if (!m) continue;
         const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
@@ -1632,6 +1661,14 @@ class StreamDetector extends TrickDetector {
   eventCands(t) {
     const out = [], fresh = this.newEv; this.newEv = [];
     const mk = (o) => { const c = { err: 0.1, clen: 2, draft: true, toks: [], ...o }; c.t0 = c.t0 ?? (c.toks[0] ? c.toks[0].t0 : t); c.tDone = c.tDone ?? t; out.push(c); };
+    // Inverted Yaw Spin as pilots really finish it (first labelled flight, 2026-11-17: called a Yaw Spin): half flip or roll
+    // in, the spin upside-down, then back upright any way that works — often a quick tug and a slow pull-out that never
+    // makes a clean 180 token. Entry + inverted spin + "is upright again within 2 s" is the trick; the textbook pattern
+    // (with a crisp exit) still matches first when it is there.
+    { const N = this.normalized(), ri = [...N].reverse().findIndex(k => k.ax === 'Y' && k.inv && k.raw >= 270 && k.raw <= 470), yi = ri < 0 ? -1 : N.length - 1 - ri, y = yi >= 0 ? N[yi] : null, e = y && yi > 0 ? N[yi - 1] : null;
+      if (y && e && t - y.t1 < 2.0 && t - y.t1 > 0.15 && e.ax !== 'Y' && e.raw >= 120 && e.raw <= 260 && y.t0 - e.t1 <= this.airAllowed(e.t1, y.t0) && this.lastD && this.lastD.up().y > 0.55
+        && !N.slice(yi + 1).some(k => k.raw >= 130) && !this.claimUsed.has('iys' + y.t0.toFixed(2)) && !this.orbiting())
+        mk({ name: 'Inverted Yaw Spin', toks: N.slice(yi - 1), err: 0.3, clen: 0, draft: false, claims: ['iys' + y.t0.toFixed(2)], t0: e.t0, notes: ['loose exit'] }); }
     for (const tp of this.taps) if (!this.claimUsed.has(tp.id) && t - tp.t < 1.5 && tp.face === 'bottom' && tp.surface === 'wall' && tp.wallish)
       mk({ name: 'Wall Tap', clen: 0.5, draft: false, t0: tp.t, tDone: tp.t, claims: [tp.id], tapRef: tp, obstacle: tp.name, holdIfSpin: true });
     for (const fc of this.faces) if (!this.claimUsed.has(fc.id)) mk({ name: 'Facepunch', clen: 0.5, t0: fc.t, tDone: fc.t, claims: [fc.id], tapRef: fc, obstacle: 'the pilot', draft: false });
@@ -1688,6 +1725,9 @@ class StreamDetector extends TrickDetector {
       this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks: [] }); return;
     }
     if (!d.crashed) this.crashSeen = false;
+    // attitude log for the revolution witness (see normalized): time, how upright, total rotation so far (any axis, degrees)
+    { let H = this.attLog || (this.attLog = []), l = H[H.length - 1]; if (l && t < l[0]) { H.length = 0; l = null; } this.totRot = (this.totRot || 0) + len(d.w) * R2D * dt;
+      if (!l || t - l[0] >= 0.01) { H.push([t, up.y, this.totRot]); if (H.length > 700) H.splice(0, 100); } }
     let finished = false; const loopCtx = this.crossLog.some(c => t - c.t < 4);
     for (let k = 0; k < 3; k++) {
       const r = trates[k], ar = Math.abs(r), c = this.cur[k];
@@ -1710,6 +1750,8 @@ class StreamDetector extends TrickDetector {
     if (newCross) this.trigger(t, true);
     // tricks waiting on a situation (rewind, flying backward, …) get re-checked a few times a second
     if (this.pend.some(p => p.hold === HOLD_OBST) && t - this.lastRetrig > 0.1) { this.lastRetrig = t; this.trigger(t, false); }
+    // an upside-down yaw spin just ended: keep looking for a little while to see the quad come back upright
+    else if (t - this.lastRetrig > 0.1 && up.y > 0.45 && this.toks.length) { const k = this.toks[this.toks.length - 1]; if (k.usedUntil < k.t1 && ((k.ax === 'Y' && k.raw > 250 && t - k.t1 < 2.0 && k.inv > k.n * 0.5 && up.y > 0.55) || (k.ax !== 'Y' && k.raw >= 150 && k.raw < 312 && t - k.t1 < 0.6))) { this.lastRetrig = t; this.trigger(t, false); } }   // …or a roll/flip that read short finish its slow tail (revolution witness)
     for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
       if (t < p.deadline) continue;
       const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
@@ -1770,6 +1812,23 @@ class StreamDetector extends TrickDetector {
           maxGap: fl || floatOver ? (l.maxGap || 0) : Math.max(l.maxGap || 0, gap), segments: (l.segments || 1) + (floatOver ? 0 : 1), floated: floatOver || l.floated, spans: [...l.spans, ...a.spans], base: null };
       } else out.push({ ...a, maxGap: a.maxGap || 0, segments: 1 });
     }
+    // Revolution witness (first shared flights, 2026-11: a quarter of real rolls and flips measured 200–310° and were
+    // dropped). One axis of the gyro under-reads a real roll: the camera tilt moves part of it onto yaw, the stick is
+    // rarely dead straight, and the slow start and finish fall under the token threshold. The attitude does not care:
+    // upright → upside-down → upright again with about one turn of total rotation, most of it on this axis, IS the
+    // full roll or flip. Count it as one (the off-axis part still makes it sloppy), and fold in what rode along.
+    let fused = out;
+    for (const t of out) { if (t.ax === 'Y' || t.raw < 195 || t.raw >= 312 || !this.attLog) continue;
+      const H = this.attLog; let u0 = -1, uMin = 1, u1 = -1, r0 = null, r1 = null;
+      // …but not when another axis shares or carries on the turn (half roll then pull through = a Split-S; half flip blended into a half roll = a Juicy Flick)
+      if ([...this.toks, ...this.cur.filter(Boolean)].some(o => o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < t.t1 + 0.1 && o.t1 > t.t0 - 0.3)) continue;
+      for (const h of H) { if (h[0] < t.t0 - 0.2) continue; if (h[0] > t.t1 + 0.2) break; if (r0 === null) r0 = h[2]; r1 = h[2];
+        if (h[0] <= t.t0 + 0.05) u0 = Math.max(u0, h[1]); if (h[0] >= t.t0 && h[0] <= t.t1) uMin = Math.min(uMin, h[1]); if (h[0] >= t.t1 - 0.05) u1 = Math.max(u1, h[1]); }
+      const tot = (r1 ?? 0) - (r0 ?? 0);
+      if (u0 >= 0.45 && uMin <= -0.5 && u1 >= 0.45 && tot >= 262 && tot <= 450 && t.raw >= 0.6 * tot) {
+        t.rev = true; t.off += Math.max(0, 330 - t.raw) * 0.5; t.raw = Math.max(t.raw, 322);
+        fused = fused.filter(o => o === t || o.ax === t.ax || o.raw >= 170 || Math.min(o.t1, t.t1 + 0.3) - Math.max(o.t0, t.t0 - 0.3) < 0.5 * (o.t1 - o.t0)); } }
+    if (fused !== out) { const keep = fused.slice(); out.length = 0; out.push(...keep); }
     for (const t of out) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / Math.max(1, t.raw); }
     return out;
   }

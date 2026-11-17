@@ -170,6 +170,27 @@ Credits: the main menu and README thank 8BiT_ and Infinity Loops for the music. 
 the pilot's own pieces plus the MoPenguinz FPV and ByTe_Me logos (their makers' marks, added at the pilot's request,
 for this game only).
 
+## Fusing the witnesses (2026-11, from the first shared flights)
+One gyro axis under-reads real moves (camera tilt puts part of a roll on yaw, sticks are never straight, slow starts and
+ends fall under `TOK_TH`): a quarter of real rolls/flips measured 200–310° and were dropped. The detector now keeps an
+attitude log (`attLog`: time, up.y, total rotation on any axis) and `normalized()` applies the **revolution witness**:
+upright → upside-down → upright with about one turn in total, most of it on one axis, is a full roll/flip (`rev: true`,
+sloppy), unless another R/P token shares or carries on the turn (Split-S, Juicy Flick). Inverted Yaw Spin has a
+**loose exit** (half flip/roll in, spin inverted, upright again within 2 s; `eventCands`). **Open-air trippies**: when
+the quad is rolled past knife-edge and circling a point that is not a pole, the centre of the turn (from the path)
+becomes a temporary pole (`airPole`, id 'air') and the ordinary orbit code judges it; only trippies count there, never
+Orbit x2. **Open powerloops** are only handed to an obstacle when the loop went under AND over the same object.
+`test/fastcombo.js` flies human-shaped chains (ramped rates, 0.1 s gaps, bank-to-bank rolls). Shared flights are private
+data: analyse them from the data repo, do not copy them into `test/fixtures/`.
+
+## Review timeline, crashes, reset
+Review blocks can be dragged and stretched (`recapSpanOf`, `recapSetSpan`; zoom with wheel / + −); labels then carry
+`repStart..t` = the pilot's span, `gameSpan`, `timed: true`, and `combo` / `comboLen` (tricks within `COMBO_IDLE` of each
+other). "＋ then…" adds the next trick of a combo where the selected one ends; Add starts at the red line. Selecting a
+trick plays on past it unless Loop is on. After a crash, throttle to zero rights the quad and re-arms (play.js
+`crashLock`); the game's drone has `crashImpact = 9.5` (tests keep 7.5). A reset switch never fires together with the
+arm switch (input.js): arming must not send the pilot back to the start. Only R (or a separate reset switch) resets.
+
 ## Architecture pointers (src/sim.js)
 - `buildDrone(spec)` → physical params from parts. `Drone.step()` 1 kHz physics. `FlightController` = Betaflight-like.
 - `buildPlayground()` → map objects with collision prims + tags (`obstacle` for over/under passes, `gap`, `pole`, `wall`).
