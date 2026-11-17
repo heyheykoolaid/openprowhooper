@@ -99,6 +99,12 @@ const N = track.gates.length, lap = [...Array(N).keys()].slice(1).concat([0]);  
   ok('…and without "only the next gate counts" the same flight is spoilt', ev2.some(e => e.type === 'invalid'));
   const a = R.gateGeom(R.newGate('pipe', v3(0, 0, 0), 0, { h: 1 })), b = R.gateGeom(R.newGate('bar', v3(0.33, 0.58, 0.02), 0, { w: 1 })), d = R.snapDelta(b, [a]);
   ok('magnet: a bar dropped near the top of an upright snaps onto it', d && Math.abs(d.x + 0.0252) < 0.01 && Math.abs(d.y - 0.0296) < 0.01 && Math.abs(d.z + 0.02) < 0.01, JSON.stringify(d)); }
+// RaceGOW sizing: sections of PVC used, footprint, and scaling the whole track with the gate size
+{ const st = R.sampleTracks().find(t => t.nextOnly), G0 = R.buildTrackWorld(st, PG).geoms, a = R.trackStats(st, G0);
+  ok('structure sample counts its PVC sections and footprint', a.sections > 15 && a.sections < 30 && a.sectionIn === 24 && a.footprint[0] > 0, JSON.stringify(a));
+  const big = R.rescaleTrack(JSON.parse(JSON.stringify(st)), 0.9144), G1 = R.buildTrackWorld(big, PG).geoms, b = R.trackStats(big, G1);
+  ok('36-inch gates: same track, everything 1.5x', b.sectionIn === 36 && Math.abs(b.sections - a.sections) < 0.11 && Math.abs(G1[3].pipes[0][1].x - G0[3].pipes[0][1].x * 1.5) < 1e-3 && Math.abs((G1[20].opening.x1 - G1[20].opening.x0) - 1.5 * (G0[20].opening.x1 - G0[20].opening.x0)) < 1e-6, JSON.stringify(b));
+  ok('gate size can\'t go below 24 inches', R.rescaleTrack(JSON.parse(JSON.stringify(st)), 0.3).section === R.U); }
 // the drone really hits a crossbar
 { const d = new S.Drone(S.buildDrone(S.PRESETS['Air65 Racing']), S.defaultTune(), W); const g = G[1], top = g.pipes[2][0];
   const mid = add(g.pipes[2][0], mul(sub(g.pipes[2][1], g.pipes[2][0]), 0.5)); d.reset({ pos: sub(mid, mul(g.fwd, 0.3)), yaw: 0 }); d.pos = sub(mid, mul(g.fwd, 0.3)); d.vel = mul(g.fwd, 3); d.armed = true; void top;

@@ -319,7 +319,7 @@ document.addEventListener('click', e => {
 // ============================================================ the track editor
 const edCamP = new THREE.PerspectiveCamera(55, 1, 0.02, 400), edCamO = new THREE.OrthographicCamera(-5, 5, 5, -5, -100, 400);
 const ed = { track: null, sel: new Set(), tool: 'move', space: 'global', snap: 15, grid: false, ortho: false, place: null, paint: null, undo: [], redo: [], cam: { t: new THREE.Vector3(), dist: 8, yaw: 0.6, pitch: 0.75 },
-  drag: null, color: 'white', magnet: true, flight: false, flightMesh: null, flightT: 0, meshes: new Map(), extras: new THREE.Group(), box: null, valid: null, validT: 0, W: null, mouse: new THREE.Vector2(), hover: null, dirty: false };
+  drag: null, color: 'white', axis: null, magnet: true, flight: false, flightMesh: null, flightT: 0, meshes: new Map(), extras: new THREE.Group(), box: null, valid: null, validT: 0, W: null, mouse: new THREE.Vector2(), hover: null, dirty: false };
 scene.add(ed.extras);
 function openEditor(track, keepCam) {
   raceMats(); if (race.on) raceOff();
@@ -329,7 +329,7 @@ function openEditor(track, keepCam) {
   mode = 'editor'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#editorUI').classList.remove('hide'); ed.extras.visible = true; document.body.classList.add('editing');
   $('#edName').value = track.name; $('#edSF').checked = track.startFinish !== false; $('#edNext').checked = !!track.nextOnly;
   $('#edEnv').textContent = `Room: ${RC.ENVIRONMENTS[track.env].label} — ${RC.ENVIRONMENTS[track.env].desc}`;
-  $('#edLib').innerHTML = Object.entries(RC.GATE_TYPES).map(([k, T]) => `<button data-ed="lib:${k}" title="${T.desc}">${T.label}</button>`).join('');
+  $('#edLib').innerHTML = Object.entries(RC.GATE_TYPES).filter(([k, T]) => !T.hidden).map(([k, T]) => `<button data-ed="lib:${k}" title="${T.desc}">${T.label}</button>`).join('');
   $('#edColor').innerHTML = Object.keys(RC.COLORS).map(c => `<option ${c === ed.color ? 'selected' : ''}>${c}</option>`).join('');
   edRebuild(); edPanels(); edToolbar(); resize();
 }
@@ -383,8 +383,8 @@ function edFlightTick(dt) {
 // magnet: pipe ends click onto nearby pipe ends / pipes of other parts (checkpoints don't snap: size them to the opening)
 function edMagnet(ids) {
   if (!ed.magnet) return false; const list = ids.filter(id => id !== 'launch').map(gateById).filter(Boolean); if (!list.length) return false;
-  const others = ed.track.gates.filter(g => !list.includes(g)).map(RC.gateGeom); let best = null;
-  for (const g of list) { const d = RC.snapDelta(RC.gateGeom(g), others, 0.14); if (d && (!best || S.len(d) < S.len(best))) best = d; }
+  const sec = (ed.track.section || RC.U), others = ed.track.gates.filter(g => !list.includes(g)).map(g => RC.gateGeom(g, sec)); let best = null;
+  for (const g of list) { const d = RC.snapDelta(RC.gateGeom(g, sec), others, 0.14); if (d && (!best || S.len(d) < S.len(best))) best = d; }
   if (!best || S.len(best) < 1e-4) return false;
   for (const g of list) { g.pos[0] = +(g.pos[0] + best.x).toFixed(4); g.pos[1] = Math.max(0, +(g.pos[1] + best.y).toFixed(4)); g.pos[2] = +(g.pos[2] + best.z).toFixed(4); }
   return true;
@@ -419,12 +419,11 @@ function edPick(e) {
 function edFloor(e, y = 0) { const r = edRay(e), p = new THREE.Vector3(); return r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), p) ? p : null; }
 const roomSizes = {}; const roomLimit = () => { const env = ed.track.env, E = RC.ENVIRONMENTS[env]; if (!(env in roomSizes)) roomSizes[env] = E.build ? E.build().size : null; return roomSizes[env]; };
 function clampToRoom(p) { const s = roomLimit(); if (!s) return p; p[0] = Math.max(-s.x / 2 + 0.05, Math.min(s.x / 2 - 0.05, p[0])); p[2] = Math.max(-s.z / 2 + 0.05, Math.min(s.z / 2 - 0.05, p[2])); p[1] = Math.max(0, Math.min(s.h - 0.1, p[1])); return p; }
-const GRID = RC.U / 4;
-const snapG = v => ed.grid ? Math.round(v / GRID) * GRID : Math.round(v * 1000) / 1000;
+const snapG = v => { const GRID = (ed.track && ed.track.section || RC.U) / 4; return ed.grid ? Math.round(v / GRID) * GRID : Math.round(v * 1000) / 1000; };
 const snapA = a => ed.snap ? Math.round(a / ed.snap) * ed.snap : Math.round(a * 10) / 10;
 function camYawDeg() { return Math.round((((ed.cam.yaw * 180 / Math.PI) % 360) + 360) % 360); }   // gates placed facing away from the camera
 function edPlace(type, p) {
-  edPush(); const g = RC.newGate(type, { x: snapG(p.x), y: 0, z: snapG(p.z) }, snapA(camYawDeg()), { color: ed.color }); clampToRoom(g.pos);
+  edPush(); const loose = RC.GATE_TYPES[type].loose, g = RC.newGate(type, loose && p.y > 0.02 ? { x: p.x, y: p.y, z: p.z } : { x: snapG(p.x), y: 0, z: snapG(p.z) }, loose ? 0 : snapA(camYawDeg()), { color: ed.color }); clampToRoom(g.pos);
   ed.track.gates.push(g); ed.sel.clear(); ed.sel.add(g.id); if (RC.GATE_TYPES[type].loose) edMagnet([g.id]); edRebuild(); edPanels(); return g;
 }
 function faceAlong(g, from, to) { const dx = to[0] - from[0], dz = to[2] - from[2]; if (Math.hypot(dx, dz) > 0.05) g.rot[0] = snapA(Math.atan2(-dx, -dz) * 180 / Math.PI); }
@@ -437,7 +436,7 @@ function edCorner(e) {
   if (best) return best.p; const f = edFloor(e); return f ? { x: snapG(f.x), y: 0, z: snapG(f.z) } : null;
 }
 function edDefine(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, hz = Math.hypot(dx, dz), U = RC.U, cam = ed.ortho ? edCamO : edCamP, look = new THREE.Vector3(); cam.getWorldDirection(look);
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, hz = Math.hypot(dx, dz), U = (ed.track.section || RC.U), cam = ed.ortho ? edCamO : edCamP, look = new THREE.Vector3(); cam.getWorldDirection(look);
   let g;
   if (Math.abs(dy) < 0.06 && hz > 0.1) {   // both corners at one height: a flat gate (dive through it); sides follow the structure's axes
     if (Math.abs(dx) < 0.08 || Math.abs(dz) < 0.08) { edHint('Those two corners are in line: click the opposite corner of the opening (diagonal).'); return null; }
@@ -445,11 +444,26 @@ function edDefine(a, b) {
   } else if (hz > 0.08 && Math.abs(dy) > 0.06) {   // a standing gate between the two corners
     let yaw = Math.atan2(-dz, dx) * 180 / Math.PI;   // local +x along the horizontal run
     g = RC.newGate('invisible', { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y), z: (a.z + b.z) / 2 }, 0, { w: hz / U, h: Math.abs(dy) / U, color: 'green' });
-    g.rot[0] = yaw; const G = RC.gateGeom(g); if (G.fwd.x * look.x + G.fwd.z * look.z < 0) g.rot[0] = yaw + 180;   // flown away from where you're looking; "Reverse direction" flips it
+    g.rot[0] = yaw; const G = RC.gateGeom(g, (ed.track.section || RC.U)); if (G.fwd.x * look.x + G.fwd.z * look.z < 0) g.rot[0] = yaw + 180;   // flown away from where you're looking; "Reverse direction" flips it
     g.rot[0] = ((Math.round(g.rot[0] * 10) / 10) % 360 + 360) % 360;
   } else { edHint('Pick two corners that are diagonal from each other (for a standing gate: one low, one high).'); return null; }
   edPush(); ed.track.gates.push(g); ed.sel.clear(); ed.sel.add(g.id); edRebuild(); edPanels();
   edHint(`Gate ${RC.required(ed.track).length} defined (${(g.w).toFixed(2)} × ${(g.h).toFixed(2)} sections). Raise h in the panel for an open-topped gate; "Reverse direction" flips it.`); return g;
+}
+// full 3D rotation of a part: turn it by deg about a world or local axis ('x' | 'y' | 'z'), around a pivot point
+const AXV = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+const rotQ = rot => new THREE.Quaternion().setFromEuler(new THREE.Euler((rot[1] || 0) * Math.PI / 180, (rot[0] || 0) * Math.PI / 180, (rot[2] || 0) * Math.PI / 180, 'YXZ'));
+function rotated(o, axis, deg, pivot, local) {
+  const q0 = rotQ(o.rot), ax = AXV[axis].clone(); if (local) ax.applyQuaternion(q0);
+  const qa = new THREE.Quaternion().setFromAxisAngle(ax, deg * Math.PI / 180), e = new THREE.Euler().setFromQuaternion(qa.clone().multiply(q0), 'YXZ'), r = v => { const d = Math.round(v * 180 / Math.PI * 100) / 100; return Math.abs(d) < 0.005 ? 0 : d; };
+  const p = new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2]).sub(pivot).applyQuaternion(qa).add(pivot);
+  return { pos: [+p.x.toFixed(4), Math.max(0, +p.y.toFixed(4)), +p.z.toFixed(4)], rot: [((r(e.y) % 360) + 360) % 360, r(e.x), r(e.z)] };
+}
+function edRotateSel(axis, deg) {   // buttons / keys: turn the selection in place (each part about its own joining end; a group about its middle)
+  const ids = [...ed.sel].filter(id => id !== 'launch'); if (!ids.length) return; edPush(); const gs = ids.map(gateById);
+  const c = new THREE.Vector3(); gs.forEach(g => c.add(new THREE.Vector3(g.pos[0], g.pos[1], g.pos[2]))); c.multiplyScalar(1 / gs.length);
+  for (const g of gs) { const r = rotated(g, axis, deg, gs.length > 1 && ed.space === 'global' ? c : new THREE.Vector3(g.pos[0], g.pos[1], g.pos[2]), ed.space === 'local'); g.pos = r.pos; g.rot = r.rot; }
+  edMagnet(ids); edRebuild(); edPanels();
 }
 canvas.addEventListener('contextmenu', e => { if (mode === 'editor') e.preventDefault(); });
 canvas.addEventListener('mousedown', e => {
@@ -463,7 +477,7 @@ canvas.addEventListener('mousedown', e => {
   if (ed.tool === 'paint') { const p = edFloor(e); if (!p) return; const prev = ed.paint && ed.paint.last ? gateById(ed.paint.last) : null;
     const type = ed.place || 'gate', g = edPlace(type, p); if (prev) { faceAlong(prev, ed.paint.prevPrev || prev.pos, g.pos); faceAlong(g, prev.pos, g.pos); }
     ed.paint = { last: g.id, prevPrev: prev ? prev.pos : null }; edRebuild(); edPanels(); return; }
-  if (ed.place) { const p = edFloor(e); if (p) { edPlace(ed.place, p); if (!e.shiftKey) { ed.place = null; edToolbar(); } } return; }
+  if (ed.place) { const p = RC.GATE_TYPES[ed.place].loose ? edCorner(e) : edFloor(e); if (p) { edPlace(ed.place, p); if (!e.shiftKey) { ed.place = null; edToolbar(); } } return; }
   const id = edPick(e);
   if (!id) { if (!e.shiftKey) { ed.sel.clear(); edSelBox(); edPanels(); } return; }
   if (e.shiftKey) { if (ed.sel.has(id)) ed.sel.delete(id); else ed.sel.add(id); edSelBox(); edPanels(); return; }
@@ -481,15 +495,15 @@ addEventListener('mousemove', e => {
   if (d.kind !== 'xf') return; d.moved = true;
   const set = (it, fn) => { if (it.id === 'launch') { const L = ed.track.launch; const r = fn({ pos: L.pos.slice(), rot: [L.yaw || 0, 0, 0], scale: 1 }, it); L.pos = [r.pos[0], 0.03, r.pos[2]]; L.yaw = r.rot[0]; } else { const g = gateById(it.id); const r = fn(g, it); g.pos = r.pos; g.rot = r.rot; g.scale = r.scale; } };
   if (ed.tool === 'move' || ed.tool === 'paint') {
-    if (d.vertical) { const dyM = -dy * ed.cam.dist * 0.0015; for (const it of d.items) set(it, (g, o) => ({ pos: clampToRoom([o.pos[0], snapG(Math.max(0, o.pos[1] + dyM)), o.pos[2]]), rot: g.rot, scale: g.scale })); }
-    else { const f = edFloor(e, d.y0); if (!f || !d.f0) return; const ox = f.x - d.f0.x, oz = f.z - d.f0.z;
+    if (d.vertical || ed.axis === 'y') { const dyM = -dy * ed.cam.dist * 0.0015; for (const it of d.items) set(it, (g, o) => ({ pos: clampToRoom([o.pos[0], snapG(Math.max(0, o.pos[1] + dyM)), o.pos[2]]), rot: g.rot, scale: g.scale })); }
+    else { const f = edFloor(e, d.y0); if (!f || !d.f0) return; const ox = ed.axis === 'z' ? 0 : f.x - d.f0.x, oz = ed.axis === 'x' ? 0 : f.z - d.f0.z;
       for (const it of d.items) set(it, (g, o) => ({ pos: clampToRoom([snapG(o.pos[0] + ox), o.pos[1], snapG(o.pos[2] + oz)]), rot: g.rot, scale: g.scale })); }
   } else if (ed.tool === 'rotate') {
-    const da = dx * 0.5;
-    const cx = d.items.reduce((a, it) => a + it.pos[0], 0) / d.items.length, cz = d.items.reduce((a, it) => a + it.pos[2], 0) / d.items.length;
-    for (const it of d.items) set(it, (g, o) => { const yaw = snapA(o.rot[0] + da); let pos = o.pos;
-      if (ed.space === 'global' && d.items.length > 1) { const a = (yaw - o.rot[0]) * Math.PI / 180, rx = o.pos[0] - cx, rz = o.pos[2] - cz; pos = [cx + rx * Math.cos(a) + rz * Math.sin(a), o.pos[1], cz - rx * Math.sin(a) + rz * Math.cos(a)]; }
-      return { pos, rot: [((yaw % 360) + 360) % 360, o.rot[1], o.rot[2]], scale: g.scale }; });
+    // drag sideways to turn about the chosen axis (X / Y / Z keys or the Axis button; Y = turn on the floor)
+    const axis = ed.axis || 'y', da = snapA(dx * 0.5), gi = d.items.filter(it => it.id !== 'launch');
+    const c = new THREE.Vector3(); gi.forEach(it => c.add(new THREE.Vector3(it.pos[0], it.pos[1], it.pos[2]))); if (gi.length) c.multiplyScalar(1 / gi.length);
+    for (const it of d.items) set(it, (g, o) => { if (it.id === 'launch') return { pos: o.pos, rot: [(((o.rot[0] + da) % 360) + 360) % 360, 0, 0], scale: 1 };
+      const r = rotated(o, axis, da, gi.length > 1 && ed.space === 'global' ? c : new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2]), ed.space === 'local'); return { pos: r.pos, rot: r.rot, scale: g.scale }; });
   } else if (ed.tool === 'scale') {
     const f = Math.exp(-dy * 0.006); for (const it of d.items) if (it.id !== 'launch') set(it, (g, o) => ({ pos: g.pos, rot: g.rot, scale: Math.round(Math.max(0.25, Math.min(4, o.scale * f)) * 100) / 100 }));
   }
@@ -507,6 +521,8 @@ addEventListener('keydown', e => {
   if (ctl && k === 'KeyZ') { e.preventDefault(); e.shiftKey ? edRedo() : edUndo(); return; } if (ctl && k === 'KeyY') { e.preventDefault(); edRedo(); return; }
   if (ctl && k === 'KeyD') { e.preventDefault(); edAct('clone'); return; } if (ctl && k === 'KeyS') { e.preventDefault(); edAct('save'); return; }
   if (k === 'KeyW') edAct('tool:move'); if (k === 'KeyE') edAct('tool:rotate'); if (k === 'KeyR') edAct('tool:scale'); if (k === 'KeyP') edAct('tool:paint');
+  if (k === 'KeyX' || k === 'KeyY' || k === 'KeyZ') { const ax = k.slice(3).toLowerCase(); if (e.shiftKey) edRotateSel(ax, e.altKey ? -90 : 90); else ed.axis = ed.axis === ax ? null : ax; edToolbar(); return; }
+  if (k === 'KeyN') { edAct('anglesnap'); return; } if (k === 'KeyM') { edAct('magnet'); return; }
   if (k === 'KeyD' && !ctl) edAct('tool:define');
   if (k === 'KeyL') edAct('space'); if (k === 'KeyG') edAct('ground'); if (k === 'KeyF') edAct('focus'); if (k === 'KeyO') edAct('ortho'); if (k === 'KeyT') edAct('test');
   if (k === 'Delete' || k === 'Backspace') edAct('delete');
@@ -530,6 +546,10 @@ function edAct(a) {
   if (a === 'grid') ed.grid = !ed.grid;
   if (a === 'ortho') ed.ortho = !ed.ortho;
   if (a === 'magnet') ed.magnet = !ed.magnet;
+  if (a === 'anglesnap') { if (ed.snap) { ed.snapWas = ed.snap; ed.snap = 0; } else ed.snap = ed.snapWas || 15; }
+  if (a === 'axis') ed.axis = { null: 'x', x: 'y', y: 'z', z: null }[String(ed.axis || null)];
+  if (a.startsWith('rot:')) { const [, ax, dg] = a.split(':'); edRotateSel(ax, +dg); return; }
+  if (a === 'rescale') { const v = parseFloat($('#edSec').value); if (v > 0) { edPush(); RC.rescaleTrack(T, v * 0.0254); $('#edSec').value = (T.section / 0.0254).toFixed(1); edRebuild(); edPanels(); edAct('focus'); edHint(`Whole track scaled to ${(T.section / 0.0254).toFixed(1)}-inch gates.`); } return; }
   if (a === 'flight') { ed.flight = !ed.flight; ed.flightT = 0; edFlightLine(); }
   if (a === 'undo') edUndo(); if (a === 'redo') edRedo();
   if (a === 'ground' && ed.sel.size) { edPush(); for (const id of ed.sel) if (id !== 'launch') gateById(id).pos[1] = 0; edRebuild(); edPanels(); }
@@ -549,10 +569,11 @@ function edToolbar() {
   for (const b of document.querySelectorAll('#edTop [data-ed^="tool:"]')) b.classList.toggle('on', b.dataset.ed === 'tool:' + ed.tool);
   for (const b of document.querySelectorAll('#edLib [data-ed]')) b.classList.toggle('on', b.dataset.ed === 'lib:' + ed.place);
   $('#edSpace').textContent = ed.space === 'global' ? 'Global' : 'Local'; $('#edGrid').textContent = 'Grid: ' + (ed.grid ? '6 in' : 'off'); $('#edOrtho').textContent = ed.ortho ? 'Ortho' : 'Persp';
-  $('#edSnap').value = String(ed.snap); $('#edMagnet').textContent = 'Magnet: ' + (ed.magnet ? 'on' : 'off'); $('#edMagnet').classList.toggle('on', ed.magnet); $('#edFlight').classList.toggle('on', ed.flight);
+  $('#edSnap').value = String(ed.snap); $('#edAngle').textContent = 'Angle snap: ' + (ed.snap ? ed.snap + '°' : 'off'); $('#edAngle').classList.toggle('on', !!ed.snap); $('#edAxis').textContent = 'Axis: ' + (ed.axis ? ed.axis.toUpperCase() : 'free'); $('#edAxis').classList.toggle('on', !!ed.axis);
+  $('#edMagnet').textContent = 'Snap: ' + (ed.magnet ? 'on' : 'off'); $('#edMagnet').classList.toggle('on', ed.magnet); $('#edFlight').classList.toggle('on', ed.flight);
   edHint(ed.tool === 'define' ? 'Define gate: click two opposite corners of any opening or open space. Corners snap to pipe ends; elsewhere they land on the floor. Same height = a flat gate to dive through.' : ed.tool === 'paint' ? `Paint path: click the floor to lay ${RC.GATE_TYPES[ed.place || 'gate'].label}s in order — each one turns to face along the path. Esc to stop.`
     : ed.place ? `Click in the room to place a ${RC.GATE_TYPES[ed.place].label} (Shift+click to place several). Esc to cancel.`
-    : ed.sel.size ? `${ed.tool === 'move' ? 'Drag to move (Alt+drag: up/down)' : ed.tool === 'rotate' ? 'Drag sideways to rotate' : 'Drag up/down to scale'} · arrows nudge · PgUp/PgDn height · [ ] rotate · Ctrl+D clone · Del delete`
+    : ed.sel.size ? `${ed.tool === 'move' ? 'Drag to move (Alt+drag or Axis Y: up/down; X / Z lock a direction)' : ed.tool === 'rotate' ? `Drag sideways to rotate about ${(ed.axis || 'y').toUpperCase()} (press X / Y / Z to pick the axis; Shift+X/Y/Z = quarter turn)` : 'Drag up/down to scale'} · arrows nudge · PgUp/PgDn height · [ ] rotate · Ctrl+D clone · Del delete`
     : 'Click a gate to select it (Shift+click adds). Pick a part on the left to place it.');
 }
 let hintT = 0; function edHint(t) { $('#edHint').textContent = t; hintT = performance.now(); }
@@ -564,6 +585,9 @@ function edPanels() {
     return `<div class="oRow ${ed.sel.has(g.id) ? 'sel' : ''} ${req ? '' : 'opt'}" data-oi="${i}"><span class="n">${req ? num + (num === 1 ? '▶' : '') : '–'}</span><span class="lb">${RC.GATE_TYPES[g.type].label}${g.color !== 'white' ? ' · ' + g.color : ''}${g.bidir ? ' ⇄' : ''}</span>
       <button data-oup="${i}" title="Earlier">↑</button><button data-odn="${i}" title="Later">↓</button></div>`; }).join('') + `<div class="oRow ${ed.sel.has('launch') ? 'sel' : ''}" data-olaunch><span class="n">▣</span><span class="lb">Launch pad</span></div>`;
   $('#edCount').textContent = `(${RC.required(T).length} gates)`; $('#edNext').checked = !!T.nextOnly;
+  const stt = RC.trackStats(T, ed.W.geoms), hasLoose = T.gates.some(g => RC.GATE_TYPES[g.type].loose);
+  $('#edStats').innerHTML = hasLoose ? `PVC: <b>${stt.sections}</b> / 20 sections of ${stt.sectionIn}″ ${stt.sections > 20.05 ? '<span class="warn">(over the RaceGOW 20)</span>' : ''}<br>Footprint: ${stt.footprint[0]} × ${stt.footprint[1]} sections ${stt.fits ? '<span class="ok">fits 4′ × 6′ at 24″</span>' : '<span class="warn">bigger than RaceGOW\'s 2 × 3</span>'}` : `Gate size ${stt.sectionIn}″`;
+  if (document.activeElement !== $('#edSec')) $('#edSec').value = stt.sectionIn;
   const v = ed.valid; $('#edValid').innerHTML = (v.errors.map(x => `<div class="err">✗ ${x}</div>`).join('') + v.warnings.map(x => `<div class="warn">! ${x}</div>`).join('')) || '<div class="ok">✓ Ready to race</div>';
   edPropsPanel();
 }
@@ -582,7 +606,8 @@ function edPropsPanel() {
     <label>Colour <select data-p="color">${Object.keys(RC.COLORS).map(c => `<option ${c === g.color ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     ${T.prop ? '' : `<label class="chk"><input type="checkbox" data-p="required" ${g.required ? 'checked' : ''}> numbered (part of the lap)</label><label class="chk"><input type="checkbox" data-p="bidir" ${g.bidir ? 'checked' : ''}> either direction counts</label>`}
     ${T.invisible ? `<div class="row" style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0"><button data-pfn="stand">Standing</button><button data-pfn="down">Flat: dive down through</button><button data-pfn="upw">Flat: climb up through</button><button data-pfn="flip">Reverse direction</button><button data-pfn="again">Use this opening again</button></div><p class="hint">Size it to the opening in your structure (w × h in sections). It can stick out past the pipes for an open-topped gate.</p>` : ''}
-    <div class="row" style="display:flex;gap:4px;flex-wrap:wrap"><button data-pfn="face">Face the next gate</button><button data-pfn="first">Make it gate 1</button></div>`;
+    <div class="row" style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0">${['x', 'y', 'z'].map(ax => `<button data-ed="rot:${ax}:${ed.snap || 90}" title="Turn about ${ax.toUpperCase()}">⟳ ${ax.toUpperCase()} +${ed.snap || 90}°</button><button data-ed="rot:${ax}:-${ed.snap || 90}">−</button>`).join('')}</div>
+    ${T.loose ? `<div class="row" style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0"><button data-pfn="pUp">Upright</button><button data-pfn="pX">Lay along X</button><button data-pfn="pZ">Lay along Z</button><button data-pfn="pEnd" title="Swap which end is the joining end">Swap ends</button></div><p class="hint">A pipe turns about the end you joined it by. Click a pipe end with "Pipe" picked to add the next one there.</p>` : `<div class="row" style="display:flex;gap:4px;flex-wrap:wrap"><button data-pfn="face">Face the next gate</button><button data-pfn="first">Make it gate 1</button></div>`}`;
 }
 function edPropsLive() {   // keep the numbers in the panel in step while dragging
   const ids = [...ed.sel]; if (ids.length !== 1 || ids[0] === 'launch') return; const g = gateById(ids[0]); if (!g) return;
@@ -614,6 +639,9 @@ document.addEventListener('click', e => {
   if (lr) { ed.sel.clear(); ed.sel.add('launch'); edSelBox(); edPanels(); return; }
   if (fn) { const g = gateById([...ed.sel][0]); if (!g) return; edPush();
     if (fn.dataset.pfn === 'first') { T.gates = [g, ...T.gates.filter(x => x !== g)]; }
+    if (fn.dataset.pfn === 'pUp') g.rot = [0, 0, 0]; if (fn.dataset.pfn === 'pX') g.rot = [0, 0, -90]; if (fn.dataset.pfn === 'pZ') g.rot = [0, 90, 0];
+    if (fn.dataset.pfn === 'pEnd') { const G = RC.gateGeom(g, T.section), e = G.pipes[0][1]; g.pos = [+e.x.toFixed(4), Math.max(0, +e.y.toFixed(4)), +e.z.toFixed(4)]; const r = rotated(g, 'x', 180, new THREE.Vector3(g.pos[0], g.pos[1], g.pos[2]), true); g.rot = r.rot; }
+    if (fn.dataset.pfn.startsWith('p')) edMagnet([g.id]);
     if (fn.dataset.pfn === 'stand') { g.rot[1] = 0; g.rot[2] = 0; if (g.lift < 0) g.lift = 0; }
     if (fn.dataset.pfn === 'down' || fn.dataset.pfn === 'upw') { g.rot[1] = fn.dataset.pfn === 'down' ? -90 : 90; g.rot[2] = 0; g.lift = -g.h / 2; }   // centred on its position
     if (fn.dataset.pfn === 'flip') { if (Math.abs(g.rot[1]) > 45) g.rot[1] = -g.rot[1]; else g.rot[0] = (g.rot[0] + 180) % 360; }
@@ -622,4 +650,5 @@ document.addEventListener('click', e => {
     edRebuild(); edPanels(); }
 });
 window.__pw.race = { start: (t, m, o) => raceStart(t, m, o), get state() { return race; }, editor: t => openEditor(t || RC.newTrack('livingroom')), get ed() { return ed; }, menu: () => openRaceMenu(), off: () => raceOff(), edAct, step: (p0, dt) => raceStep(p0, dt),
+  projectPt: p => { const v = new THREE.Vector3(p[0], p[1], p[2]).project(edCam()); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; },
   project: id => { const i = ed.track.gates.findIndex(g => g.id === id), G = ed.W.geoms[i], p = G.pipes[2] ? S.mul(S.add(G.pipes[2][0], G.pipes[2][1]), 0.5) : G.centre, v = new THREE.Vector3(p.x, p.y, p.z).project(edCam()); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };

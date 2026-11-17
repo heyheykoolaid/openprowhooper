@@ -305,7 +305,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="editorUI" class="hide">
   <div id="edTop">
     <span class="edGroup"><button data-ed="tool:move" title="Move (W)">Move <kbd>W</kbd></button><button data-ed="tool:rotate" title="Rotate (E)">Rotate <kbd>E</kbd></button><button data-ed="tool:scale" title="Scale (R)">Scale <kbd>R</kbd></button><button data-ed="tool:paint" title="Paint a path of gates (P)">Paint path <kbd>P</kbd></button><button data-ed="tool:define" title="Make any opening or open space a gate: click two opposite corners (D)">Define gate <kbd>D</kbd></button></span>
-    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><select id="edSnap" title="Rotation snap"><option value="0">free rotate</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button><button data-ed="magnet" id="edMagnet" title="Pipe ends click onto nearby pipes">Magnet: on</button></span>
+    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><button data-ed="axis" id="edAxis" title="Lock moving / choose the rotation axis (X, Y, Z keys)">Axis: free</button><button data-ed="anglesnap" id="edAngle" title="Angle snap on/off (N)">Angle snap: 15°</button><select id="edSnap" title="Angle snap step" style="width:64px"><option value="0">free</option><option value="5">5°</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button><button data-ed="magnet" id="edMagnet" title="Pipe ends click onto nearby pipes (M)">Snap: on</button></span>
     <span class="edGroup"><button data-ed="ground" title="Drop to the floor (G)">Ground <kbd>G</kbd></button><button data-ed="clone" title="Clone (Ctrl+D)">Clone</button><button data-ed="delete" title="Delete (Del)">Delete</button><button data-ed="focus" title="Focus on selection (F)">Focus <kbd>F</kbd></button><button data-ed="ortho" id="edOrtho" title="Orthographic / perspective (O)">Persp</button><button data-ed="flight" id="edFlight" title="Animate the lap as a red line through the checkpoints, in order">Flight line</button></span>
     <span class="edGroup"><button data-ed="undo" title="Undo (Ctrl+Z)">↶</button><button data-ed="redo" title="Redo (Ctrl+Y)">↷</button></span>
   </div>
@@ -315,7 +315,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <div class="edEnv" id="edEnv"></div>
     <h4>Gate library</h4><div id="edLib"></div>
     <label>Colour <select id="edColor"></select></label>
-    <p class="hint">Build one structure from loose pipes (ends snap together, connectors and feet appear by themselves), then drop Checkpoints into its openings and order them. Alt+drag lifts a part. Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
+    <p class="hint">Build one structure from Pipes: pick Pipe, click the floor or a pipe end to join one there, then turn it with Rotate (X / Y / Z pick the axis) — pipes just join. Then use Define gate on its openings. Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
   </div>
   <div id="edRight">
     <h4>Gate order <small id="edCount"></small></h4>
@@ -323,6 +323,8 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <label class="chk" title="For one-structure tracks where checkpoints share pipes and you fly through other checkpoints on the way"><input type="checkbox" id="edNext"> Only the next gate counts (structure tracks)</label>
     <div id="edOrder"></div>
     <h4>Selection</h4><div id="edProps"><p class="hint">Nothing selected.</p></div>
+    <h4>RaceGOW sizing</h4><div id="edStats" class="hint" style="font-size:12px;opacity:.95"></div>
+    <label style="display:flex;gap:4px;align-items:center">Gate size (in) <input id="edSec" type="number" min="24" step="1" style="width:64px"> <button data-ed="rescale" title="Scales the whole track equally, like the RaceGOW rules">Scale track</button></label>
     <h4>Checks</h4><div id="edValid"></div>
   </div>
   <div id="edHint"></div>

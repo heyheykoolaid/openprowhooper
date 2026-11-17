@@ -82,7 +82,10 @@ concatenated by build.py). Tracks: `pro-whooper-track/1`; race results/ghosts: `
 A RaceGOW track is usually ONE connected PVC structure whose openings are the gates, flown many times from different
 sides: build it from loose `pipe`/`bar` parts (ends magnet together, connectors via `trackJoints`), mark openings with
 `invisible` checkpoints (any size/angle, flat ones are dived through; the editor's Define-gate tool makes one from two
-clicked corners), and set `track.nextOnly` so only the next checkpoint counts.
+clicked corners), and set `track.nextOnly` so only the next checkpoint counts. RaceGOW rules the editor follows: one
+gate (section) size per track, 24 in minimum, the whole track scales with it (`track.section`, `rescaleTrack`); 20 PVC
+sections and a 4 ft x 6 ft footprint at 24 in (`trackStats`, shown as guidance, not enforced). Pipes just join: no
+connector parts. The `Pipe` part turns freely in 3D about its joining end (`rotated`, axis X/Y/Z, angle snap toggle).
 
 ## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
 bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log

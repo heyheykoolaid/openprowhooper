@@ -55,9 +55,9 @@
     pylon:  { label: 'Pylon', desc: 'Turn marker (a prop, not a gate)', defaults: { w: 0.5, h: 2, lift: 0 }, prop: true,
       build: g => ({ pipes: [[P(0, 0, 0), P(0, g.h, 0)], [P(-g.w / 2, 0, 0), P(g.w / 2, 0, 0)], [P(0, 0, -g.w / 2), P(0, 0, g.w / 2)]], decor: [{ shape: 'cap', at: P(0, g.h, 0) }], opening: null }) },
     // loose pipes for building one connected structure (RaceGOW tracks are a single frame; the checkpoints are its openings)
-    pipe:   { label: 'Pipe ↕ upright', desc: 'One upright pipe, h sections long (gets a foot when it stands on the floor)', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true,
+    pipe:   { label: 'Pipe', desc: 'One PVC section. Click a pipe end to join it there, then rotate it any way in 3D (it gets a foot when it stands on the floor)', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true,
       build: g => ({ pipes: [[P(0, 0, 0), P(0, g.h, 0)], ...(g.pos[1] < 0.02 && !(g.rot[1] || g.rot[2]) ? [[P(-0.09, 0, 0), P(0.09, 0, 0)], [P(0, 0, -0.09), P(0, 0, 0.09)]] : [])], opening: null }) },
-    bar:    { label: 'Pipe ↔ flat', desc: 'One horizontal pipe, w sections long', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true,
+    bar:    { label: 'Pipe (flat)', desc: 'One horizontal pipe, w sections long', defaults: { w: 1, h: 1, lift: 0 }, prop: true, loose: true, hidden: true,
       build: g => ({ pipes: [[P(-g.w / 2, 0, 0), P(g.w / 2, 0, 0)]], opening: null }) },
     invisible: { label: 'Checkpoint', desc: 'A rectangle to fly through, any size and angle, no pipes of its own: put it in an opening of your structure', defaults: { w: 1, h: 1, lift: 0 }, invisible: true,
       build: g => ({ pipes: [], opening: { x0: -g.w / 2, x1: g.w / 2, y0: g.lift, y1: g.lift + g.h } }) },
@@ -80,8 +80,8 @@
   const mv = (m, p) => v3(m[0] * p.x + m[1] * p.y + m[2] * p.z, m[3] * p.x + m[4] * p.y + m[5] * p.z, m[6] * p.x + m[7] * p.y + m[8] * p.z);
   const mtv = (m, p) => v3(m[0] * p.x + m[3] * p.y + m[6] * p.z, m[1] * p.x + m[4] * p.y + m[7] * p.z, m[2] * p.x + m[5] * p.y + m[8] * p.z);
   // world geometry of a gate: pipes, connector joints, and the opening as a plane + local bounds (metres)
-  function gateGeom(g) {
-    const T = GATE_TYPES[g.type] || GATE_TYPES.gate, b = T.build(g), m = rotM(g.rot || [0, 0, 0]), s = (g.scale || 1) * U, o = v3(g.pos[0], g.pos[1], g.pos[2]);
+  function gateGeom(g, sec) {   // sec: the track's section (gate) size in metres; RaceGOW minimum is 24 in
+    const T = GATE_TYPES[g.type] || GATE_TYPES.gate, b = T.build(g), m = rotM(g.rot || [0, 0, 0]), s = (g.scale || 1) * (typeof sec === 'number' && sec > 0 ? sec : U), o = v3(g.pos[0], g.pos[1], g.pos[2]);
     const W = p => add(o, mv(m, mul(p, s)));
     const pipes = b.pipes.map(([a, c]) => [W(a), W(c)]);
     const key = p => p.x.toFixed(3) + ',' + p.y.toFixed(3) + ',' + p.z.toFixed(3), J = new Map();
@@ -193,7 +193,7 @@
     if (!t || !Array.isArray(t.gates)) throw new Error('not a track file');
     const n = x => (typeof x === 'number' && isFinite(x) ? x : 0);
     return { format: 'pro-whooper-track/1', id: String(t.id || ('t' + Date.now().toString(36))), name: String(t.name || 'Track').slice(0, 60), env: ENVIRONMENTS[t.env] ? t.env : 'livingroom',
-      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false, nextOnly: !!t.nextOnly,
+      created: t.created || new Date().toISOString(), launch: { pos: (t.launch && t.launch.pos || [0, 0.03, 2]).slice(0, 3).map(n), yaw: n(t.launch && t.launch.yaw) }, startFinish: t.startFinish !== false, nextOnly: !!t.nextOnly, section: Math.max(U, Math.min(3, n(t.section) || U)),
       gates: t.gates.filter(g => GATE_TYPES[g.type]).slice(0, 300).map(g => ({ id: String(g.id || ('g' + nextId++)), type: g.type, pos: (g.pos || [0, 0, 0]).slice(0, 3).map(n), rot: (g.rot || [0, 0, 0]).slice(0, 3).map(n),
         scale: Math.min(4, Math.max(0.25, n(g.scale) || 1)), w: Math.min(12, Math.max(0.125, n(g.w) || GATE_TYPES[g.type].defaults.w)), h: Math.min(12, Math.max(0.125, n(g.h) || GATE_TYPES[g.type].defaults.h)),
         lift: Math.min(8, Math.max(0, g.lift == null ? GATE_TYPES[g.type].defaults.lift : n(g.lift))), color: COLORS[g.color] ? g.color : 'white', required: g.required !== false && !GATE_TYPES[g.type].prop, bidir: !!g.bidir })) };
@@ -204,12 +204,24 @@
     const base = E && E.build ? E.build() : playground;
     const objs = base.objs.slice(), prims = base.prims.slice(), geoms = [];
     for (const g of track.gates) {
-      const G = gateGeom(g); geoms.push(G);
+      const G = gateGeom(g, track.section); geoms.push(G);
       const o = { id: objs.length, name: (GATE_TYPES[g.type] || {}).label || 'Gate', kind: 'gate', gateId: g.id, prims: gatePrims(G), vis: [] };
       for (const pr of o.prims) { pr.owner = o.id; prims.push(pr); } objs.push(o);
     }
     const L = track.launch;
     return { ...base, objs, prims, geoms, spawn: { pos: v3(L.pos[0], L.pos[1], L.pos[2]), yaw: (L.yaw || 0) * D2R }, env: track.env };
+  }
+  function trackStats(track, geoms) {
+    const sec = track.section || U; let L = 0, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
+    geoms.forEach((G, i) => { const T = GATE_TYPES[track.gates[i].type]; if (G.invisible) return; for (const [a, b] of G.pipes) { const l = len(sub(b, a)); if (T.loose && l < 0.25 * sec) continue;   // feet don't count
+      L += l; n++; for (const p of [a, b]) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); } } });
+    const fx = n ? (x1 - x0) / sec : 0, fz = n ? (z1 - z0) / sec : 0;
+    return { sections: Math.round(L / sec * 10) / 10, footprint: [Math.round(Math.min(fx, fz) * 10) / 10, Math.round(Math.max(fx, fz) * 10) / 10], fits: Math.min(fx, fz) <= 2.05 && Math.max(fx, fz) <= 3.05, sectionIn: Math.round(sec / 0.0254 * 10) / 10 };
+  }
+  // RaceGOW: any gate size from 24 in up, but the whole track scales with it
+  function rescaleTrack(track, sec) {
+    sec = Math.max(U, Math.min(3, sec)); const k = sec / (track.section || U); track.section = sec;
+    for (const g of track.gates) g.pos = g.pos.map(v => +(v * k).toFixed(4)); track.launch.pos = [+(track.launch.pos[0] * k).toFixed(3), 0.03, +(track.launch.pos[2] * k).toFixed(3)]; return track;
   }
   const required = track => track.gates.map((g, i) => i).filter(i => track.gates[i].required && !isProp(track.gates[i]));
   // problems a track has before it can be raced
@@ -221,7 +233,7 @@
     const blocked = (p, r, ignoreOwner) => p.y < r * 0.5 ? false : W.prims.some(pr => pr.owner !== ignoreOwner && S.sphereVs(pr, p, r));
     const L = track.launch, lp = v3(L.pos[0], 0.06, L.pos[2]);
     if (blocked(lp, 0.06)) errors.push('The launch pad is inside something.');
-    const geoms = W.geoms || track.gates.map(gateGeom);
+    const geoms = W.geoms || track.gates.map(g => gateGeom(g, track.section));
     track.gates.forEach((g, i) => {
       const G = geoms[i]; if (!G.opening) return;
       const rp = resetPoint(G), own = W.objs.findIndex(o => o.gateId === g.id);
@@ -391,5 +403,5 @@
   }
 
   root.Race = { U, PIPE_R, COLORS, GATE_TYPES, ENVIRONMENTS, newGate, newTrack, cleanTrack, gateGeom, crossing, insideOpening, local, resetPoint, gatePrims,
-    buildTrackWorld, validateTrack, trackJoints, snapDelta, RaceSession, best3, GhostRecorder, ghostAt, joinLaps, sampleTracks, rotM, mv, mtv, isProp, required };
+    buildTrackWorld, validateTrack, trackJoints, snapDelta, trackStats, rescaleTrack, RaceSession, best3, GhostRecorder, ghostAt, joinLaps, sampleTracks, rotM, mv, mtv, isProp, required };
 })(typeof window !== 'undefined' ? window : globalThis);
