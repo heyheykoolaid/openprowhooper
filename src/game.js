@@ -536,11 +536,11 @@ function frame(now) {
     acc += dt; let n = 0;
     while (acc >= DT && n < 120) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
-      drone.step(rc, DT); detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); acc -= DT; n++;
+      drone.step(rc, DT); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
     }
     if (n >= 120) acc = 0;
-    for (const ev of detector.drain()) onTrick(ev);
+    if (!race.on) for (const ev of detector.drain()) onTrick(ev);
     if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
     renderCombo();
     if (drone.crashed) crashLock = true;
