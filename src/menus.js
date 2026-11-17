@@ -10,7 +10,7 @@ function openMaps() {
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); }
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu') { const j = $('#judgeBtn'); if (j) j.classList.toggle('hide', !ghMenus()); } }   // Judge the community: the project owner's tool for now
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
 function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
 function startFlyGo(withSession) {

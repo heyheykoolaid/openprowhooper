@@ -328,7 +328,7 @@ tests run without it (null), except test/community.js. A change needs gains from
 lost confirmed trick, no returning rejected call, and no benchmark drop (`PW_COMMUNITY=file npm run bench`). The owner
 approves: a weekly scheduled task runs it and opens a pull request, and also works the to-do list (rule changes per
 "When asked to analyze the calibration data"). Takes ~12 min on 22 flights (2 cores).
-**Judge the community** (main menu, `JG` in dropoff.js): today's posted leaderboard runs on the current map are re-flown;
+**Judge the community** (main menu, only when the pilot name is heyheykoolaid, like the Flight desk; `JG` in dropoff.js): today's posted leaderboard runs on the current map are re-flown;
 moments where the game now calls something else, no longer calls it, makes a new call, or is unsure (< 75%) are
 listed (not the pilot's own runs); each opens as a guest review of that one call. Verdicts go out as reviewer labels
 with `judge: true` (as do reviews of leaderboard runs watched from the board); tools/community.js counts a vote only

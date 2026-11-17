@@ -304,7 +304,7 @@ async function reviewerSave() {
 // The pilot's own runs are left out. Re-flying a run takes a few seconds, so it happens here in the menu, never in flight.
 const JG = { clips: null, msg: '', done: store.get('judgeDone', {}) };
 const jgKey = c => `${c.id}@${c.t.toFixed(1)}`;
-function judgeOpen() { show('#judgeScreen'); judgeRender(); if (!JG.clips) judgeLoad(); }
+function judgeOpen() { if (!ghMenus()) return; show('#judgeScreen'); judgeRender(); if (!JG.clips) judgeLoad(); }
 async function judgeLoad() {
   if (!lbBase()) { JG.msg = 'Judging needs the online version of the game.'; judgeRender(); return; }
   JG.msg = 'Finding moments to judge…'; judgeRender(); await lbLoad(lbToday());
