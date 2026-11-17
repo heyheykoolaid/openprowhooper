@@ -140,6 +140,8 @@ function vaporMats() {
   MAT.crt = new THREE.MeshBasicMaterial({ map: TX.crt, toneMapped: false });
   MAT.vPlaza = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xb9a9e8, roughness: 0.7, metalness: 0.05 });
   MAT.vRubberFloor = new THREE.MeshStandardMaterial({ map: TX.vChecker, roughness: 1 });
+  MAT.blossom = new THREE.MeshStandardMaterial({ color: 0xf6b3cf, roughness: 0.85, flatShading: true });   // Clappy Park's sakura
+  MAT.fluoro = new THREE.MeshBasicMaterial({ color: 0xf2f8ff, toneMapped: false });                         // More Warehouse's tube lights
   MAT.vChromeFloor = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xcfc2ff, roughness: 0.12, metalness: 0.92, envMapIntensity: 1.1 });
   MAT.vGrid = new THREE.MeshStandardMaterial({ map: TX.vGrid, emissiveMap: TX.vGridE, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.25 });
 }
@@ -240,6 +242,7 @@ function pipeMesh(a, b, r, mat, cone) {
 // ============================================================ build world meshes
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
+  const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   if (VAPOR) vaporBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
@@ -248,9 +251,9 @@ function buildScene() {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   playRoot.add(sky);
   // lights
-  playRoot.add(new THREE.HemisphereLight(0xa9c0e0, 0x5a4532, 0.9));
+  playRoot.add(new THREE.HemisphereLight(IND ? 0xc8d2e0 : 0xa9c0e0, IND ? 0x3a3630 : 0x5a4532, IND ? 1.15 : 0.9));
   const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.set(-30, 22, 18); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; sh.left = -56; sh.right = 32; sh.top = 32; sh.bottom = -32; sh.near = 1; sh.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+  sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
@@ -282,7 +285,9 @@ function buildScene() {
   }
   if (VAPOR) return;
   // lamp lights
-  for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(0xffc98a, 6, 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
+  if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
+  for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, o.lightPower || 6, o.lightRange || 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
+  if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)
   const sk = new THREE.MeshStandardMaterial({ color: 0x4d4a52, roughness: 1, map: TX.concrete });
   for (let i = 0; i < 26; i++) {

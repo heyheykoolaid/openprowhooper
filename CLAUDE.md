@@ -157,6 +157,22 @@ Figure-8 Pole pair, a Ceiling Slab 2.3 m, a Test Wall 3 m (16 m long) and a Dive
 `addPlaygroundExtras` (the Node tests' base map is unchanged); its skyline skips that area and the sun's shadow box
 reaches it. The bot flies Powerloops, Mattys and Split-S on the test bars correctly on both maps (27/27 each).
 
+**Clappy Park** (`clappy`, `buildClappy`, theme 'park') and **More Warehouse** (`warehouse`, `buildWarehouse`, theme
+'industrial'): original levels from the pilot's design brief (an urban park block; a dense industrial warehouse). Clappy
+Park: a 24 x 24 m plaza 0.6 m up (Twister Tower with three decks and slides, the Clappy Spinner and its pole, the Clappy
+Bars, a Dome Climber, balance beams, sakura trees with round over/unders), a street ring (sidewalks, utility poles and
+wires, four Race Gates, a Footbridge 5 m up to the east roofs), outer blocks of shops and flats (kind 'building', flat
+reachable roofs, awnings and balconies the Surveyor turns into over/unders, alleys tagged as gaps with Alley Walkways
+over them, the pilot's Clappy and HeyHey pieces on North Shops 2), and the Trick Park west from x = -46. More Warehouse:
+a 60 x 40 x 12 m shell (walls kind 'wall', three Roll-up Door gaps south, four Skylight gaps in the roof), Steel
+Columns (poles), three rows of pallet racks (Rack Beams at 1.6/3.2/4.8/6.4 m, Rack Bay gaps), Containers (stacks of up
+to three) and a Container Tunnel, a Mezzanine with an Office under it, two Catwalks, a Crane Bridge, a Conveyor, crate
+stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 8 fluorescent lights are point lights
+(`o.light` with `lightColor`, `lightPower`, `lightRange`); the industrial theme dims the fog and brightens the hemisphere.
+Destructible or moving props from the brief are not in (the physics world is static). Only the playground draws the
+skyline and power lines; the sun's shadow box is sized from each map's bounds. Static materials `blossom` and `fluoro`
+are new. test/maps.js checks every map (builds, Surveyor counts, clear spawn, bot Powerloops/Mattys on its own objects).
+
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of
 approach direction: (1) a tagged object that is really a slab (at least 0.6 m both ways within its over/under band) gets

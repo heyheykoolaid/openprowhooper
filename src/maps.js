@@ -67,6 +67,196 @@
     return { zone: { shape: 'zone', mat: M.zone, c: v3(X(16), 0.007, Zw(0)), h: v3(16, 0, 21) } };
   }
 
+  // =============================================================== Shared pieces for the newer maps
+  // the same three helpers the school uses (a standing frame to fly through, a wall with real window gaps, a bar),
+  // for any kit; `glow` pieces are seen, never hit
+  function parts(K) {
+    const { O, box, pipe, neon } = K;
+    const frame = (name, cx, cz, w, hgt, along, mat, glow) => { const o = O(name, 'overunder'), t = 0.09, ax = along === 'x';
+      for (const s of [-1, 1]) box(o, v3(cx + (ax ? s * (w / 2 + t) : 0), hgt / 2, cz + (ax ? 0 : s * (w / 2 + t))), v3(t, hgt / 2, t), mat);
+      box(o, v3(cx, hgt + t, cz), v3(ax ? w / 2 + 2 * t : t, t, ax ? t : w / 2 + 2 * t), mat);
+      if (glow) neon(o, v3(cx, hgt - 0.015, cz), v3(ax ? w / 2 : 0.02, 0.015, ax ? 0.02 : w / 2), glow);
+      o.obstacle = { a: v3(cx - (ax ? w / 2 : 0), 0, cz - (ax ? 0 : w / 2)), b: v3(cx + (ax ? w / 2 : 0), 0, cz + (ax ? 0 : w / 2)), under: hgt, over: hgt + 2 * t };
+      O(name + ' opening', 'gap', { gap: { c: v3(cx, hgt / 2, cz), n: ax ? v3(0, 0, 1) : v3(1, 0, 0), hu: w / 2, hv: hgt / 2, u: ax ? v3(1, 0, 0) : v3(0, 0, 1) } });
+      return o; };
+    const bar = (name, a, b, r, mat) => { const o = O(name, 'overunder', { obstacle: { a: v3(a.x, 0, a.z), b: v3(b.x, 0, b.z), under: Math.min(a.y, b.y) - r, over: Math.max(a.y, b.y) + r } }); pipe(o, a, b, r, mat); return o; };
+    // a slab you can go over and under (tagged by hand so its line crosses the long way)
+    const slabOU = (name, c, h, mat, kind = 'overunder') => { const o = O(name, kind), along = h.x >= h.z;
+      o.obstacle = { a: v3(c.x - (along ? h.x : 0), 0, c.z - (along ? 0 : h.z)), b: v3(c.x + (along ? h.x : 0), 0, c.z + (along ? 0 : h.z)), under: c.y - h.y, over: c.y + h.y }; box(o, c, h, mat); return o; };
+    return { frame, bar, slabOU };
+  }
+
+  // =============================================================== Clappy Park
+  // A bright neighbourhood park in a small city block (an original level after the pilot's "urban park" brief): a raised
+  // playground plaza in the middle (a three-deck twister slide tower, a spinner, the Clappy Bars, a climbing dome, balance
+  // beams, sakura trees), a street ring round it with sidewalks, utility poles and wires, race gates, a footbridge from the
+  // plaza to the east rooftops, and an outer ring of low shops and flats with reachable flat roofs, awnings, balconies,
+  // alleys with overhead walkways, dumpsters, AC units and pipes. The Trick Park is to the west. x east, z south.
+  function buildClappy() {
+    const K = kit(), { O, box, pipe, ball, disc } = K, { frame, bar, slabOU } = parts(K);
+    const Y = 0.6;   // the plaza deck
+    // ---- the plaza: a 24 x 24 m deck 0.6 m up, steps on all four sides
+    { const o = O('Clappy Plaza', 'deco'); box(o, v3(0, Y / 2, 0), v3(12, Y / 2, 12), 'concrete');
+      for (const [ax, sg] of [['x', 1], ['x', -1], ['z', 1], ['z', -1]]) for (let i = 0; i < 3; i++) { const d = 12 + 0.35 * (i + 0.5), hh = Y * (3 - i) / 3 / 2;
+        box(o, ax === 'x' ? v3(sg * d, hh, 0) : v3(0, hh, sg * d), ax === 'x' ? v3(0.175, hh, 3) : v3(3, hh, 0.175), 'concrete'); } }
+    // ---- Twister Tower: three decks on four posts, a slide off each deck in a different direction, ladder rungs
+    { const cx = -6, cz = -6, t = O('Twister Tower', 'deco');
+      for (const [a, b] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) pipe(t, v3(cx + a, Y, cz + b), v3(cx + a, Y + 5.2, cz + b), 0.07, 'paintRed');
+      [[1.4, 'paintOrange'], [2.8, 'paintBlue'], [4.2, 'paintGreen']].forEach(([h, m], i) => {
+        slabOU(`Twister Deck ${i + 1}`, v3(cx, Y + h, cz), v3(1.5, 0.05, 1.5), m);
+        bar('Twister Rail', v3(cx - 1.5, Y + h + 0.9, cz - 1.5), v3(cx + 1.5, Y + h + 0.9, cz - 1.5), 0.03, 'paintRed'); });
+      const sl = O('Twister Slide', 'deco');
+      for (const [h, dir, len] of [[1.4, 0, 2.6], [2.8, 1, 4.2], [4.2, 2, 5.8]]) { const ang = Math.atan2(h, len), L = Math.hypot(h, len) / 2, mid = h / 2;
+        if (dir === 0) box(sl, v3(cx + 1.5 + len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, -ang, 0.08);
+        if (dir === 1) box(sl, v3(cx, Y + mid, cz + 1.5 + len / 2), v3(0.45, 0.04, L), 'metalSlide', 0, ang, 0.08);
+        if (dir === 2) box(sl, v3(cx - 1.5 - len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, ang, -0.08); }
+      for (let i = 1; i <= 16; i++) pipe(t, v3(cx - 1.5, Y + i * 0.28, cz + 1.55), v3(cx - 0.9, Y + i * 0.28, cz + 1.55), 0.015, 'galv', { noCollide: true }); }
+    // ---- Clappy Spinner: a free-standing round platform with a centre pole and hand poles (trippies round the middle)
+    { const cx = 6, cz = -6, o = O('Clappy Spinner', 'deco'); disc(o, v3(cx, Y + 0.35, cz), 2.0, 0.06, 'paintOrange'); pipe(o, v3(cx, Y, cz), v3(cx, Y + 0.32, cz), 0.25, 'galv');
+      const pole = O('Spinner Pole', 'pole'); pipe(pole, v3(cx, Y + 0.4, cz), v3(cx, Y + 1.8, cz), 0.08, 'paintBlue');
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; pipe(o, v3(cx + Math.cos(a) * 1.5, Y + 0.4, cz + Math.sin(a) * 1.5), v3(cx + Math.cos(a) * 1.5, Y + 1.25, cz + Math.sin(a) * 1.5), 0.03, 'paintRed'); } }
+    // ---- the Clappy Bars (monkey bars), a climbing dome and balance beams
+    { const cx = 6, cz = 6, o = O('Clappy Bars', 'overunder', { obstacle: { a: v3(cx, 0, cz - 0.4), b: v3(cx, 0, cz + 0.4), under: Y + 2.0, over: Y + 2.1 } });
+      for (const z of [cz - 0.4, cz + 0.4]) { pipe(o, v3(cx - 2.2, Y + 2.05, z), v3(cx + 2.2, Y + 2.05, z), 0.04, 'paintGreen'); for (const x of [cx - 2.2, cx + 2.2]) pipe(o, v3(x, Y, z), v3(x, Y + 2.05, z), 0.05, 'paintGreen'); }
+      for (let x = cx - 1.9; x <= cx + 1.95; x += 0.42) pipe(o, v3(x, Y + 2.05, cz - 0.4), v3(x, Y + 2.05, cz + 0.4), 0.025, 'galv'); }
+    { const cx = -6, cz = 6, R = 1.8, o = O('Dome Climber', 'deco');
+      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI; let prev = null; for (let i = 0; i <= 6; i++) { const th = i / 6 * Math.PI, p = v3(cx + Math.cos(a) * Math.cos(th) * R, Y + Math.sin(th) * R, cz + Math.sin(a) * Math.cos(th) * R); if (prev) pipe(o, prev, p, 0.025, k % 2 ? 'paintBlue' : 'plasticYellow'); prev = p; } } }
+    bar('Balance Beam', v3(-2, Y + 0.45, 9.5), v3(2, Y + 0.45, 9.5), 0.06, 'wood'); bar('Balance Beam', v3(-1.5, Y + 0.7, -9.5), v3(2.5, Y + 0.7, -9.5), 0.06, 'wood');
+    // ---- sakura trees: four on the plaza corners, more along the outer sidewalks
+    const sakura = (x, z, y0, s) => { const tr = O('Sakura Tree', 'pole');
+      tr.round = { c: v3(x, 0, z), r: 1.8 * s, under: y0 + 2.2 * s, over: y0 + 5.0 * s }; tr.obstacle = { a: v3(x - 1.8 * s, 0, z), b: v3(x + 1.8 * s, 0, z), under: y0 + 2.2 * s, over: y0 + 5.0 * s };
+      pipe(tr, v3(x, y0, z), v3(x, y0 + 2.9 * s, z), 0.14 * s, 'bark');
+      ball(tr, v3(x, y0 + 3.7 * s, z), 1.4 * s, 'blossom'); ball(tr, v3(x + 0.9 * s, y0 + 3.2 * s, z + 0.4), 0.9 * s, 'blossom'); ball(tr, v3(x - 0.8 * s, y0 + 3.4 * s, z - 0.5), 1.0 * s, 'blossom'); };
+    for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) sakura(x, z, Y, 1);
+    for (const [x, z] of [[-18, 23], [6, 23], [23, -9], [-23, 9], [-6, -23], [23, 15]]) sakura(x, z, 0, 0.9);
+    // benches, bins and lamps round the plaza
+    for (const [x, z, ry] of [[-3, 11, 0], [3, 11, 0], [-11, 3, Math.PI / 2], [11, -3, Math.PI / 2], [0, -11, 0]]) { const b = O('Bench', 'deco'); box(b, v3(x, Y + 0.42, z), v3(0.8, 0.04, 0.22), 'wood', ry); box(b, v3(x, Y + 0.2, z), v3(0.7, 0.2, 0.05), 'metal', ry); }
+    for (const [x, z] of [[-11.2, -11.2], [11.2, -11.2], [-11.2, 11.2], [11.2, 11.2]]) { const l = O('Park Lamp', 'pole', { light: v3(x, Y + 4.2, z) }); pipe(l, v3(x, Y, z), v3(x, Y + 4.2, z), 0.06, 'metal'); ball(l, v3(x, Y + 4.3, z), 0.2, 'lampHead', { noCollide: true }); }
+    // ---- the street ring: sidewalks 12-14 and 22-24, the road between; utility poles and wires; race gates
+    const up = O('Utility Pole', 'pole'), poles = [];
+    for (const t of [-18, -6, 6, 18]) for (const [x, z] of [[t, -23.3], [t, 23.3], [-23.3, t], [23.3, t]]) { pipe(up, v3(x, 0, z), v3(x, 8, z), 0.12, 'wood'); pipe(up, v3(x - 0.7, 7.5, z), v3(x + 0.7, 7.5, z), 0.05, 'wood', { noCollide: true }); poles.push(v3(x, 7.5, z)); }
+    { const w = O('Overhead Wires', 'deco'); for (const side of ['N', 'S', 'E', 'W']) { const P = poles.filter(p => side === 'N' ? p.z < -23 : side === 'S' ? p.z > 23 : side === 'E' ? p.x > 23 : p.x < -23).sort((a, b) => (a.x + a.z) - (b.x + b.z));
+      for (let i = 1; i < P.length; i++) for (const dx of [-0.6, 0.6]) pipe(w, v3(P[i - 1].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i - 1].z + (side === 'N' || side === 'S' ? dx : 0)), v3(P[i].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i].z + (side === 'N' || side === 'S' ? dx : 0)), 0.008, 'rubberBlack', { noCollide: true }); } }
+    frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, 0, 3.2, 2.6, 'x', 'paintBlue'); frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
+    // the footbridge from the plaza's east edge over the street to the east rooftops (5 m up), on two pillars
+    { const o = slabOU('Footbridge', v3(18, 5.0, -3), v3(6.2, 0.1, 1.2), 'concrete'); for (const x of [14.5, 21.5]) pipe(o, v3(x, 0, -3), v3(x, 4.9, -3), 0.22, 'concrete');
+      for (const z of [-4.15, -1.85]) bar('Footbridge Rail', v3(12, 6.0, z), v3(24, 6.0, z), 0.03, 'galv');
+      const st = O('Footbridge Stairs', 'deco'); for (let i = 0; i < 10; i++) box(st, v3(12 - 0.35 * (i + 0.5) + 0, Y + (5 - Y) * (10 - i) / 10 / 2, -6), v3(0.175, Y / 2 + (5 - Y) * (10 - i) / 10 / 2, 1.1), 'concrete'); }
+    // ---- the outer ring: blocks of shops and flats (24-40 out), alleys 3 m wide between them, overhead walkways
+    const blocks = [];
+    const side = (name, along, out, n) => { const spans = [[-40, -22], [-19, -3], [0, 14], [17, 40]];
+      spans.forEach(([a0, a1], i) => { const h = [4.2, 7.5, 5.4, 9.2, 6.3, 4.8][(i + n) % 6], c = (a0 + a1) / 2, hl = (a1 - a0) / 2, d0 = 24, d1 = 40, dm = (d0 + d1) / 2;
+        const ax = along === 'x', ctr = ax ? v3(c, h / 2, out * dm) : v3(out * dm, h / 2, c), half = ax ? v3(hl, h / 2, 8) : v3(8, h / 2, hl);
+        const o = O(`${name} ${i + 1}`, 'building', { wallNormal: ax ? v3(0, 0, -out) : v3(-out, 0, 0), tall: h, perchHeight: h });
+        const art = name === 'North Shops' && i === 1 ? { graffiti: 'south', art: [{ name: 'clappy', x: 0.3, y: 3.6, h: 5.6, rot: -0.03 }, { name: 'heyhey', x: 0.74, y: 3.8, h: 4.2, rot: 0.03 }] } : {};
+        box(o, ctr, half, ['brick', 'concrete', 'vConcrete', 'brick'][(i + n) % 4], 0, 0, 0, art);
+        blocks.push({ ax, out, a0, a1, h });
+        // street face: a shutter or storefront, an awning over it, balconies on the taller ones
+        const f = out * d0 - out * 0.02, sh = O('Shopfront', 'deco');
+        for (let k = 0; k < Math.floor((a1 - a0) / 5); k++) { const m = a0 + 2.5 + k * 5;
+          box(sh, ax ? v3(m, 1.3, f) : v3(f, 1.3, m), ax ? v3(1.6, 1.3, 0.03) : v3(0.03, 1.3, 1.6), k % 2 ? 'metal' : 'dumpster');
+          if (k % 2 === 0) { const aw = O('Awning', 'deco'); box(aw, ax ? v3(m, 2.85, f - out * 0.6) : v3(f - out * 0.6, 2.85, m), ax ? v3(1.9, 0.05, 0.6) : v3(0.6, 0.05, 1.9), ['paintRed', 'paintBlue', 'paintGreen', 'paintOrange'][(k + i) % 4]); }
+          if (h > 6 && k % 2 === 1) { const bc = O('Balcony', 'deco'); box(bc, ax ? v3(m, 4.2, f - out * 0.55) : v3(f - out * 0.55, 4.2, m), ax ? v3(1.5, 0.06, 0.55) : v3(0.55, 0.06, 1.5), 'concrete'); }
+          if ((k + i) % 3 === 0) { const vm = O('Vending Machine', 'deco'); box(vm, ax ? v3(m + 2.0, 0.9, f - out * 0.4) : v3(f - out * 0.4, 0.9, m + 2.0), v3(0.45, 0.9, 0.38), ['paintBlue', 'paintRed'][(k + i) % 2]); } }
+        // AC units and a drain pipe on the alley side
+        const ac = O('AC Unit', 'deco'), pp = O('Drain Pipe', 'deco');
+        for (const e of [a0, a1]) { if (e === -40 || e === 40) continue; const sx = e === a0 ? -1 : 1;
+          box(ac, ax ? v3(e + sx * 0.3, 2.4, out * 28) : v3(out * 28, 2.4, e + sx * 0.3), ax ? v3(0.3, 0.35, 0.5) : v3(0.5, 0.35, 0.3), 'metal');
+          pipe(pp, ax ? v3(e + sx * 0.1, 0, out * 31) : v3(out * 31, 0, e + sx * 0.1), ax ? v3(e + sx * 0.1, h, out * 31) : v3(out * 31, h, e + sx * 0.1), 0.06, 'galv'); } });
+      // alleys: a dumpster in each, and an overhead walkway across two of them
+      [-20.5, -1.5, 15.5].forEach((m, k) => { const d = O('Dumpster', 'deco'); box(d, along === 'x' ? v3(m, 0.65, out * 33) : v3(out * 33, 0.65, m), along === 'x' ? v3(0.8, 0.65, 1.0) : v3(1.0, 0.65, 0.8), 'dumpster');
+        if ((k + n) % 2 === 0) slabOU('Alley Walkway', along === 'x' ? v3(m, 3.6, out * 30) : v3(out * 30, 3.6, m), along === 'x' ? v3(1.5, 0.08, 0.9) : v3(0.9, 0.08, 1.5), 'metalPlate');
+        O('Alley', 'gap', { gap: { c: along === 'x' ? v3(m, 1.6, out * 24) : v3(out * 24, 1.6, m), n: along === 'x' ? v3(0, 0, 1) : v3(1, 0, 0), hu: 1.5, hv: 1.6, u: along === 'x' ? v3(1, 0, 0) : v3(0, 0, 1) } }); }); };
+    side('North Shops', 'x', -1, 0); side('South Flats', 'x', 1, 2); side('East Shops', 'z', 1, 1); side('West Flats', 'z', -1, 3);
+    // bike racks and bollards on the inner sidewalk
+    for (const [x, z] of [[-8, 13.2], [8, -13.2]]) { const br = O('Bike Rack', 'deco'); for (let k = 0; k < 4; k++) { pipe(br, v3(x - 1.2 + k * 0.8, 0, z), v3(x - 1.2 + k * 0.8, 0.8, z), 0.025, 'galv'); } bar('Bike Rack Rail', v3(x - 1.2, 0.8, z), v3(x + 1.2, 0.8, z), 0.025, 'galv'); }
+    const park = trickPark(K, -46, 0, -1, { post: 'galv', bar: 'paintRed', pole: 'galv', slab: 'metalPlate', wall: 'concrete', tower: 'brick', accent: 'plasticYellow', glow: false, zone: 'concrete' });
+    const zones = [park.zone,
+      { shape: 'zone', mat: 'asphalt', c: v3(0, 0.004, 0), h: v3(23, 0, 23) },
+      { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, -23), h: v3(24, 0, 1) }, { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, 23), h: v3(24, 0, 1) },
+      { shape: 'zone', mat: 'concrete', c: v3(-23, 0.006, 0), h: v3(1, 0, 22) }, { shape: 'zone', mat: 'concrete', c: v3(23, 0.006, 0), h: v3(1, 0, 22) },
+      { shape: 'zone', mat: 'rubberMat', c: v3(0, Y + 0.004, 0), h: v3(11.5, 0, 11.5) }, { shape: 'zone', mat: 'sand', c: v3(-6, Y + 0.008, 6), h: v3(2.6, 0, 2.6) }];
+    return K.done({ id: 'clappy', title: 'Clappy Park', theme: 'park', zones, spawn: { pos: v3(-8, 0.03, 18), yaw: 0 }, bounds: { x: [-80, 40], z: [-40, 40] } });
+  }
+
+  // =============================================================== More Warehouse
+  // A big, dim, cluttered logistics warehouse (an original level after the pilot's "warehouse" brief), 60 x 40 m and
+  // 12 m to the roof: pallet-rack aisles in the west half (beams at four heights, crates on the shelves), stacked shipping
+  // containers and an open container tunnel in the east, a mezzanine with an office under it, two catwalks crossing the
+  // hall, an overhead crane bridge, a conveyor, steel columns, crate stacks and barrels, fluorescent lights and four
+  // skylights. Three roll-up doors in the south wall lead out to a loading dock and a parked trailer.
+  function buildWarehouse() {
+    const K = kit(), { O, box, pipe, neon } = K, { frame, bar, slabOU } = parts(K);
+    let seed = 4242; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const X = 30, Z = 20, H = 12, T = 0.3;
+    // ---- the shell: three plain walls, the south wall with three roll-up doors, a roof with four skylights
+    for (const [c, h, n, name] of [[v3(0, H / 2, -Z - T / 2), v3(X + T, H / 2, T / 2), v3(0, 0, 1), 'North Wall'], [v3(-X - T / 2, H / 2, 0), v3(T / 2, H / 2, Z), v3(1, 0, 0), 'West Wall'], [v3(X + T / 2, H / 2, 0), v3(T / 2, H / 2, Z), v3(-1, 0, 0), 'East Wall']]) {
+      const o = O(name, 'wall', { wallNormal: n }); box(o, c, h, 'metalPlate'); }
+    { const o = O('South Wall', 'wall', { wallNormal: v3(0, 0, -1) }), z = Z + T / 2, doors = [-16, 0, 16], DW = 2.2, DH = 4.5; let x0 = -X;
+      for (const d of doors) { box(o, v3((x0 + d - DW) / 2, H / 2, z), v3((d - DW - x0) / 2, H / 2, T / 2), 'metalPlate'); box(o, v3(d, (DH + H) / 2, z), v3(DW, (H - DH) / 2, T / 2), 'metalPlate'); x0 = d + DW;
+        box(o, v3(d, DH + 0.3, z - 0.2), v3(DW, 0.3, 0.2), 'galv');   // the rolled-up door
+        neon(o, v3(d, DH - 0.02, z - T / 2 - 0.01), v3(DW, 0.02, 0.01), 'plasticYellow');
+        O('Roll-up Door', 'gap', { gap: { c: v3(d, DH / 2, z), n: v3(0, 0, 1), hu: DW, hv: DH / 2, u: v3(1, 0, 0) } }); }
+      box(o, v3((x0 + X) / 2, H / 2, z), v3((X - x0) / 2, H / 2, T / 2), 'metalPlate'); }
+    { const r = O('Warehouse Roof', 'deco'), holes = [[-15, -4], [15, -4]], SW = 3, SL = 5;   // skylights: two pairs, each opening 6 x 10 m split in two
+      // strips of roof between and around the skylight openings (x -18..-12 and 12..18, z -9..1)
+      for (const [a, b] of [[-X - T, -18], [-12, 12], [18, X + T]]) box(r, v3((a + b) / 2, H + 0.15, 0), v3((b - a) / 2, 0.15, Z + T), 'metal');
+      for (const [hx] of holes) { box(r, v3(hx, H + 0.15, (-Z - T - 9) / 2), v3(SW, 0.15, (Z + T - 9) / 2), 'metal'); box(r, v3(hx, H + 0.15, (1 + Z + T) / 2), v3(SW, 0.15, (Z + T - 1) / 2), 'metal');
+        box(r, v3(hx, H + 0.1, -4), v3(SW, 0.03, 0.08), 'galv', 0, 0, 0, { noCollide: true });
+        for (const zc of [-6.5, -1.5]) O('Skylight', 'gap', { gap: { c: v3(hx, H + 0.15, zc), n: v3(0, 1, 0), hu: SW, hv: SL / 2, u: v3(1, 0, 0) } }); void SL; } }
+    // ---- steel columns (the roof's), lights on the roof trusses
+    const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); neon(col, v3(x, 1.2, z), v3(0.21, 0.08, 0.21), 'plasticYellow'); }
+    for (const x of [-22, -8, 8, 22]) for (const z of [-12, 8]) { const l = O('Fluorescent Light', 'deco', { light: v3(x, H - 0.8, z), lightColor: 0xe8f4ff, lightPower: 14, lightRange: 24 });
+      box(l, v3(x, H - 0.6, z), v3(1.2, 0.05, 0.15), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); pipe(l, v3(x, H - 0.55, z), v3(x, H, z), 0.01, 'chain', { noCollide: true }); }
+    // ---- pallet racks: three rows in the west half, bays 2.7 m wide, beams at 1.6 / 3.2 / 4.8 / 6.4 m, crates on the shelves
+    const up = O('Rack Upright', 'deco'), crate = O('Crate', 'deco');
+    for (const rz of [-15, -8, -1]) { const x0 = -28, nb = 8, bw = 2.7, D = 0.55;
+      for (let i = 0; i <= nb; i++) for (const dz of [-D, D]) box(up, v3(x0 + i * bw, 3.6, rz + dz), v3(0.05, 3.6, 0.05), 'paintOrange');
+      for (let i = 0; i < nb; i++) { const xa = x0 + i * bw, xb = xa + bw;
+        for (const y of [1.6, 3.2, 4.8, 6.4]) { bar('Rack Beam', v3(xa, y, rz - D), v3(xb, y, rz - D), 0.05, 'paintOrange'); pipe(up, v3(xa, y, rz + D), v3(xb, y, rz + D), 0.05, 'paintOrange');
+          box(up, v3((xa + xb) / 2, y + 0.06, rz), v3(bw / 2 - 0.06, 0.02, D), 'wood');
+          if (rnd() < 0.55) { const w = 0.4 + rnd() * 0.35, hh = 0.25 + rnd() * 0.35; box(crate, v3(xa + 0.6 + rnd() * (bw - 1.2), y + 0.08 + hh, rz), v3(w, hh, Math.min(D - 0.05, w)), rnd() < 0.5 ? 'wood' : 'dumpster'); } }
+        if (i % 3 === 1) O('Rack Bay', 'gap', { gap: { c: v3((xa + xb) / 2, 2.4, rz), n: v3(0, 0, 1), hu: bw / 2 - 0.08, hv: 0.7, u: v3(1, 0, 0) } }); } }
+    // ---- shipping containers: stacks in the east half, one open both ends as a tunnel
+    const cont = (name, cx, cy, cz, ry, mat, open) => { const L = 6, W = 1.2, Hh = 1.3, alongX = ry === 0, o = O(name, 'overunder');
+      const c = v3(cx, cy + Hh, cz), hx = alongX ? L / 2 : W, hz = alongX ? W : L / 2;
+      if (!open) box(o, c, v3(hx, Hh, hz), mat);
+      else { box(o, v3(cx, cy + 2 * Hh - 0.05, cz), v3(hx, 0.05, hz), mat); box(o, v3(cx, cy + 0.05, cz), v3(hx, 0.05, hz), mat);
+        for (const s of [-1, 1]) box(o, alongX ? v3(cx, cy + Hh, cz + s * (W - 0.05)) : v3(cx + s * (W - 0.05), cy + Hh, cz), alongX ? v3(L / 2, Hh, 0.05) : v3(0.05, Hh, L / 2), mat);
+        O(name + ' mouth', 'gap', { gap: { c: v3(cx + (alongX ? L / 2 : 0), cy + Hh, cz + (alongX ? 0 : L / 2)), n: alongX ? v3(1, 0, 0) : v3(0, 0, 1), hu: W - 0.1, hv: Hh - 0.1, u: alongX ? v3(0, 0, 1) : v3(1, 0, 0) } }); }
+      o.obstacle = alongX ? { a: v3(cx, 0, cz - W), b: v3(cx, 0, cz + W), under: cy, over: cy + 2 * Hh } : { a: v3(cx - W, 0, cz), b: v3(cx + W, 0, cz), under: cy, over: cy + 2 * Hh }; return o; };
+    cont('Container', 8, 0, -9, 0, 'paintBlue'); cont('Container', 8, 2.6, -9, 0, 'paintRed');
+    cont('Container', 16, 0, -9, 0, 'paintGreen'); cont('Container', 24, 0, -4, 1, 'paintOrange'); cont('Container', 24, 2.6, -4, 1, 'paintBlue'); cont('Container', 24, 5.2, -4, 1, 'paintGreen');
+    cont('Container Tunnel', 14, 0, 3, 0, 'rust', true);
+    // ---- mezzanine (north-east) with an office under it and stairs up
+    { const o = slabOU('Mezzanine', v3(15, 4.5, -17), v3(13, 0.12, 3), 'metalPlate'); for (const x of [3, 9, 15, 21, 27]) pipe(o, v3(x, 0, -14.2), v3(x, 4.4, -14.2), 0.1, 'paintBlue');
+      bar('Mezzanine Rail', v3(2, 5.5, -14), v3(28, 5.5, -14), 0.03, 'plasticYellow');
+      const st = O('Mezzanine Stairs', 'deco'); for (let i = 0; i < 12; i++) box(st, v3(1.6 - 0.0, 4.5 * (i + 1) / 12 / 2, -14.4 - (11 - i) * 0.3 + 0), v3(0.6, 4.5 * (i + 1) / 12 / 2, 0.15), 'metalPlate', 0, 0, 0);
+      const of = O('Office', 'building', { wallNormal: v3(0, 0, 1), tall: 3.2 });
+      box(of, v3(24, 1.6, -15.2), v3(4, 1.6, 0.06), 'vConcrete'); box(of, v3(20, 1.6, -17.6), v3(0.06, 1.6, 2.4), 'vConcrete'); box(of, v3(24, 3.25, -17.6), v3(4, 0.05, 2.4), 'vConcrete');
+      O('Office Window', 'gap', { gap: { c: v3(24, 1.5, -15.2), n: v3(0, 0, 1), hu: 1.0, hv: 0.5, u: v3(1, 0, 0) } }); }
+    // ---- two catwalks crossing the hall, the crane bridge, the conveyor
+    { slabOU('Catwalk', v3(-1, 7.5, 6), v3(27, 0.05, 0.6), 'metalPlate'); for (const z of [5.4, 6.6]) bar('Catwalk Rail', v3(-28, 8.5, z), v3(26, 8.5, z), 0.025, 'plasticYellow');
+      slabOU('Catwalk', v3(5, 8.6, 0), v3(0.6, 0.05, 13), 'metalPlate'); for (const x of [4.4, 5.6]) bar('Catwalk Rail', v3(x, 9.6, -13), v3(x, 9.6, 13), 0.025, 'plasticYellow');
+      const hg = O('Catwalk Hanger', 'deco'); for (const x of [-20, -5, 15]) for (const z of [5.4, 6.6]) pipe(hg, v3(x, 7.5, z), v3(x, H, z), 0.015, 'galv', { noCollide: true }); }
+    for (const z of [-Z + 0.5, Z - 0.5]) bar('Crane Runway', v3(-X + 0.5, 10, z), v3(X - 0.5, 10, z), 0.12, 'plasticYellow');
+    { const o = slabOU('Crane Bridge', v3(-12, 10.2, 0), v3(0.35, 0.3, Z - 0.6), 'plasticYellow'); pipe(o, v3(-12, 9.9, 3), v3(-12, 6.5, 3), 0.02, 'chain', { noCollide: true }); box(o, v3(-12, 6.3, 3), v3(0.25, 0.2, 0.25), 'rust'); }
+    { const o = slabOU('Conveyor', v3(10, 1.0, 12), v3(14, 0.1, 0.45), 'rubberBlack'); for (let x = -3.5; x <= 23.5; x += 3) for (const z of [11.6, 12.4]) pipe(o, v3(x, 0, z), v3(x, 0.9, z), 0.04, 'galv'); }
+    // ---- crate stacks, barrels, a forklift, floor markings
+    for (const [x, z, n] of [[-6, 10, 3], [-3, 15, 2], [3, 14.5, 1], [-24, 10, 2], [-18, 15, 3], [26, 10, 2]]) { const o = O('Crate Stack', 'deco'); for (let k = 0; k < n; k++) box(o, v3(x + (k % 2) * 0.1, 0.6 + k * 1.2, z), v3(0.6, 0.6, 0.6), 'wood', k * 0.3); }
+    { const b = O('Barrels', 'deco'); for (const [x, z] of [[-26, 16], [-25.3, 16.6], [-26.6, 16.8], [27, 15], [26.3, 15.7]]) pipe(b, v3(x, 0, z), v3(x, 0.9, z), 0.3, ['paintBlue', 'paintRed', 'rust'][Math.floor(rnd() * 3)]); }
+    { const f = O('Forklift', 'deco'), x = 9, z = 17; box(f, v3(x, 0.6, z), v3(0.6, 0.45, 1.0), 'plasticYellow'); for (const s of [-1, 1]) pipe(f, v3(x + s * 0.45, 0, z - 1.0), v3(x + s * 0.45, 2.6, z - 1.0), 0.04, 'metal'); box(f, v3(x, 0.15, z - 1.6), v3(0.5, 0.03, 0.6), 'metal'); box(f, v3(x, 1.9, z + 0.2), v3(0.6, 0.04, 0.7), 'metal'); }
+    { const m = O('Floor Marking', 'deco'); for (const z of [-11.5, -4.5, 2.5]) box(m, v3(-15, 0.008, z), v3(13, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); for (const x of [-16, 0, 16]) box(m, v3(x, 0.008, Z - 2), v3(2.4, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); }
+    // ---- outside: the loading dock and a parked trailer
+    { const d = O('Loading Dock', 'deco'); box(d, v3(0, 0.6, Z + T + 1.5), v3(22, 0.6, 1.5), 'concrete'); for (const x of [-16, 0, 16]) for (const s of [-1, 1]) box(d, v3(x + s * 1.8, 0.8, Z + T + 3.05), v3(0.2, 0.25, 0.06), 'rubberBlack');
+      const tr = O('Trailer', 'overunder', { obstacle: { a: v3(-17.25, 0, 30), b: v3(-14.75, 0, 30), under: 1.25, over: 4.15 } }); box(tr, v3(-16, 2.7, 30), v3(1.25, 1.45, 6), 'metalPlate'); box(tr, v3(-16, 1.2, 30), v3(1.2, 0.05, 6), 'metal');
+      for (const z of [33.5, 34.8]) for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 1.05, 0.5, z), v3(-16 + s * 1.3, 0.5, z), 0.5, 'tire');
+      for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 0.9, 0, 24.6), v3(-16 + s * 0.9, 1.15, 24.6), 0.05, 'metal'); }
+    void frame;
+    const zones = [{ shape: 'zone', mat: 'concrete', c: v3(0, 0.005, 0), h: v3(X, 0, Z) }, { shape: 'zone', mat: 'asphalt', c: v3(0, 0.004, Z + 9), h: v3(X, 0, 9) }];
+    return K.done({ id: 'warehouse', title: 'More Warehouse', theme: 'industrial', zones, spawn: { pos: v3(0, 0.03, 16), yaw: 0 }, bounds: { x: [-X, X], z: [-Z, Z + 18] } });
+  }
+
   // =============================================================== Abandoned Vaporwave School
   // A school complex round a courtyard, a little oversized for a whoop, under a permanent pink sunset. x east, z south.
   //   Entrance plaza (south, z 12..31): chrome pillar grid, planters and gap frames, floating acrylic, stairs.
@@ -308,7 +498,9 @@
 
   S.MAPS = {
     school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => S.surveyObstacles(buildSchool()) },
+    clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => S.surveyObstacles(buildClappy()) },
+    warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, dim logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => S.surveyObstacles(buildWarehouse()) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
   };
-  S.buildSchool = buildSchool;
+  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse;
 })(typeof window !== 'undefined' ? window : globalThis);
