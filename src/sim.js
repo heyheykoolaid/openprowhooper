@@ -1931,7 +1931,10 @@ class StreamDetector extends TrickDetector {
     // the same thing. Passing over a roof edge or under some far-off bar while looping in clear air is still an open
     // loop (pilot, on the school map where the Surveyor finds an over/under everywhere: open powerloops weren't counted).
     { const near = this.crossLog.filter(c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3);
-      var anyCross = near.length > 0;
+      // a Matty only waits for an object's own reading when it really went over and then under one object (owner, Clappy Park:
+      // sweeping open-air Mattys beside the shops brushed an awning, a window and the façade trim and were never called)
+      var objMatty = near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
+      var overOpen = near.some(o => o.kind === 'O' && !near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
       if (near.some(c => c.kind === 'U' && near.some(o => o.kind === 'O' && o.obj === c.obj))) return null;
       if (near.some(c => c.kind === 'U' && c.t > t0 - 0.25 && c.t < t0 + 0.6) && this.time - t1 < 0.45) return null; }   // went in under something: give the way back under a moment to show up
     const ps = this.pathSweep(t0 - 0.25, t1 + 0.25);
@@ -1946,7 +1949,8 @@ class StreamDetector extends TrickDetector {
       // tall, slow loop turns the path less than a full 270 because it stalls over the top. So: either way round, and a
       // loop that climbs 1.5 m and takes over a second counts from half a turn of path.
       if (loopFam && !(Math.abs(ps.sweep) >= 270 || (Math.abs(ps.sweep) >= 180 && ps.rise >= 1.5 && t1 - t0 >= 1.0))) continue;
-      if (mattyFam && anyCross) continue;   // a Matty near any object waits for the object's own reading (over, then back under)
+      if (mattyFam && objMatty) continue;   // over then under one object: that object's own Matty reading takes it
+      if (mattyFam && overOpen && this.time - t1 < 0.6) continue;   // went over something: give the way back under it a moment to show up
       // a Matty's path goes forward -> down -> backward; a big sweeping one (owner, 2026-11-18: punch up ~12 m, flip forward over
       // the top, fall back flying backward, 3-4 s) turns the path the other way round, up over the top, while the nose flips
       // forward: allowed when it climbs 3 m and takes 1.5 s (a powerloop ends flying forward, so it never reads as one)

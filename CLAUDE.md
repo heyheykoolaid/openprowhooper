@@ -707,7 +707,10 @@ two clear halves (Segmented Flips/Rolls: the benchmark caught that) is one full 
 longer) when the quad ends flying backward (a powerloop ends forward). The owner's flight: 1 → 4 Mattys called; bench 96.6 %
 unchanged; re-flown over the 126 shared flights: Roll 433 → 492, Powerloop 155 → 179, Matty Flip 216 → 227, Flip 105 → 116 (slow
 sweeps, unlabelled: watch them), Stall Rewind 24 → 12 and Eject Roll 8 → 4 (the map-edge fix); the big-sweep path rule is for
-forward-flip Mattys only (it first made backflips while climbing into 13 Anti Mattys); test/sweep.js (synthetic sweeps, a big slow powerloop that must stay one, a slow half flip). The detector's
+forward-flip Mattys only (it first made backflips while climbing into 13 Anti Mattys); test/sweep.js (synthetic sweeps, a big slow powerloop that must stay one, a slow half flip). An open Matty now gives way to an object's own reading only when it really went over and then under ONE object
+(`objMatty` in `matchOpenLoop`; it used to give way to any pass at all: on Clappy Park the owner's sweeps beside the shops
+brushed awnings, windows and façade trim and were never called; labelled flights: Matty Flip 14 → 15 of 17 found, no rejected
+one back). The detector's
 `nearTall` now skips the map edge (a Stall Rewind / Eject Roll was called "on the Map Edge").
 **Half Matty Pendulum** (owner: "chain 3 half mattys together"; `pendulumStep`, `PENDULUM_GAP` 1.6 s): the third Half Matty in
 a row on the same object, nothing else in between, is called Half Matty Pendulum (draft). Not in the TPW book: `EXTRA_TRICKS`
