@@ -364,7 +364,7 @@ function deviceCard(d, kind) {
   if (!d) return `<div class="dev none"><b>No ${kind} detected</b><span>${kind === 'radio'
     ? 'Plug the radio in over USB and choose <i>USB Joystick (HID)</i> when it asks. In EdgeTX: SYS → Hardware / USB mode → Joystick. Then move a stick so the browser sees it.'
     : 'Connect a controller and press any button so the browser sees it.'}</span></div>`;
-  return `<div class="dev"><b>${d.name}</b><span>${d.firmware ? d.firmware + ' · ' : ''}${d.vendor ? `USB ${d.vendor}:${d.product} · ` : ''}${d.axes} channels/axes · ${d.buttons} buttons</span></div>`;
+  return `<div class="dev"><b>${esc(d.name)}</b><span>${d.firmware ? esc(d.firmware) + ' · ' : ''}${d.vendor ? `USB ${esc(d.vendor)}:${esc(d.product)} · ` : ''}${d.axes} channels/axes · ${d.buttons} buttons</span></div>`;
 }
 function renderControls() {
   const mode = inputCfg.mode, P = prof(), pads = allPads().map(describePad);
@@ -377,7 +377,7 @@ function renderControls() {
     const n = Math.max(8, cur ? cur.axes.length : 8);
     const chOpt = sel => Array.from({ length: n }, (_, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${isR ? 'CH' + (i + 1) : 'Axis ' + i}</option>`).join('');
     const sameKind = pads.filter(p => p.kind === mode), other = pads.filter(p => p.kind !== mode);
-    const devSel = pads.length > 1 || (pads.length && !sameKind.length) ? `<label>Device<select id="cDev">${[...sameKind, ...other].map(p => `<option value="${encodeURIComponent(p.id)}" ${cur && cur.id === p.id ? 'selected' : ''}>${p.name}${p.kind !== mode ? ' (' + p.kind + '?)' : ''}</option>`).join('')}</select></label>` : '';
+    const devSel = pads.length > 1 || (pads.length && !sameKind.length) ? `<label>Device<select id="cDev">${[...sameKind, ...other].map(p => `<option value="${encodeURIComponent(p.id)}" ${cur && cur.id === p.id ? 'selected' : ''}>${esc(p.name)}${p.kind !== mode ? ' (' + p.kind + '?)' : ''}</option>`).join('')}</select></label>` : '';
     const swRow = (key, s) => `<tr><td>${key}</td><td><select data-swt="${key}"><option value="axis" ${s.type === 'axis' ? 'selected' : ''}>${isR ? 'switch (channel)' : 'axis'}</option><option value="button" ${s.type === 'button' ? 'selected' : ''}>button</option></select>
       ${s.type === 'axis' ? `<select data-swi="${key}">${chOpt(s.i)}</select>` : `<input type=number min=0 max=31 data-swi="${key}" value="${s.i}">`}</td><td>${key === 'arm' && !isR ? `<label class="chk"><input type=checkbox data-swtog ${s.toggle ? 'checked' : ''}> toggle</label>` : ''}</td><td><div class="bar"><i id="lv_${key}"></i></div></td><td><button data-detect="${key}">Detect</button></td></tr>`;
     body = `${deviceCard(d, mode)}${devSel}
@@ -448,14 +448,14 @@ addEventListener('gamepadconnected', e => {
   const d = describePad(e.gamepad);
   if (inputCfg.mode === 'keyboard') { inputCfg.mode = d.kind; saveInput(); }
   if (!$('#controls').classList.contains('hide')) renderControls();
-  else flash(`<b>${d.kind === 'radio' ? 'RADIO' : 'GAMEPAD'} CONNECTED</b><small>${d.name}${d.firmware ? ' · ' + d.firmware : ''}</small>`);
+  else flash(`<b>${d.kind === 'radio' ? 'RADIO' : 'GAMEPAD'} CONNECTED</b><small>${esc(d.name)}${d.firmware ? ' · ' + esc(d.firmware) : ''}</small>`);
   updateMenuDevice();
 });
 addEventListener('gamepaddisconnected', () => { if (!$('#controls').classList.contains('hide')) renderControls(); updateMenuDevice(); });
 function updateMenuDevice() {
   const el = $('#menuDevice'); if (!el) return;
   if (GPU_SOFT) { el.innerHTML = `<b style="color:#ff8b7d">Your browser is drawing the game without your graphics card</b> (hardware acceleration is off), so it will run slowly and work the CPU hard. Chrome / Edge: Settings → System → turn on "Use graphics acceleration when available", then relaunch. Firefox: Settings → General → Performance.`; return; } const d = describePad(readPad('radio')) || describePad(readPad('gamepad'));
-  el.innerHTML = inputCfg.mode === 'keyboard' ? (d ? `${d.kind === 'radio' ? 'Radio' : 'Gamepad'} found: <b>${d.name}</b> — switch to it under Controls.` : 'Input: keyboard. Plug in your radio as a USB joystick for real acro.')
+  el.innerHTML = inputCfg.mode === 'keyboard' ? (d ? `${d.kind === 'radio' ? 'Radio' : 'Gamepad'} found: <b>${esc(d.name)}</b> — switch to it under Controls.` : 'Input: keyboard. Plug in your radio as a USB joystick for real acro.')
     : (describePad(readPad()) ? `Input: <b>${describePad(readPad()).name}</b> (${inputCfg.mode})` : `Input: ${inputCfg.mode} — not connected yet. Move a stick once it's plugged in.`);
 }
 

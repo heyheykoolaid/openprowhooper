@@ -315,7 +315,8 @@ function guestOpen(rows, events, of, review) {
   if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(r => Array.isArray(r) && r.length >= 27 && r.every(Number.isFinite))) throw new Error('bad trace');
   if (!recap.guest) LB.keep = { trace: recap.trace, events: recap.events, flags: recap.flags, id: recap.id, started: recap.started, mode: recap.mode, dirty: recap.dirty, telDone: recap.telDone };   // the player's own run comes back afterwards
   recapReset(); recap.guest = true; recap.guestOf = of; recap.trace = rows; recap.telDone = recap.id;
-  recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: e.name.slice(0, 60), exec: String(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? e.obstacle.slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null }));
+  const plain = x => String(x).replace(/[<>&"'`\\]/g, '');   // someone else's file: names are shown in many places, so no markup gets in at all
+  recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: plain(e.name).slice(0, 60), exec: plain(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? plain(e.obstacle).slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null }));
   openRecap(of.source); recap.review = !!review; renderRecap();
 }
 async function reviewerSave() {

@@ -36,11 +36,11 @@ const music = (() => {
     RADIO.cur = t; el.loop = false; el.src = t.src; $('#mTitle').textContent = t.title; $('#mArtist').textContent = t.artist; $('#mArt').style.backgroundImage = '';
     $('#mList').innerHTML = `<li class="on">${hesc(t.title)}<span>${hesc(t.artist)}</span></li>`;
     radioNote(`${list.length} tracks, shuffled. Streamed from the Infinity Loops free-to-use collection on archive.org; rights remain with the artists.`);
-    play(); nowPlaying({ title: hesc(t.title), artist: hesc(t.artist) });
+    play(); nowPlaying(t);
   }
   function radioSet(on) { RADIO.on = on; store.set('radio', on); RADIO.fails = 0; if (on) radioNext(); else { RADIO.cur = null; radioNote(''); load(idx, wantPlay); } }
   // until the first track is tuned in, the player says Radio, not the built-in track's name
-  function radioIdle() { RADIO.cur = null; el.removeAttribute('src'); $('#mTitle').textContent = 'byTe_me Radio'; $('#mArtist').textContent = 'Infinity Loops · press play'; $('#mArt').style.backgroundImage = ''; $('#mList').innerHTML = '<li class="on">byTe_me Radio<span>streams when you press play</span></li>' + tracks.map((x, k) => `<li data-track="${k}">${x.title}<span>${x.artist || ''}</span></li>`).join(''); }
+  function radioIdle() { RADIO.cur = null; el.removeAttribute('src'); $('#mTitle').textContent = 'byTe_me Radio'; $('#mArtist').textContent = 'Infinity Loops · press play'; $('#mArt').style.backgroundImage = ''; $('#mList').innerHTML = '<li class="on">byTe_me Radio<span>streams when you press play</span></li>' + tracks.map((x, k) => `<li data-track="${k}">${hesc(x.title)}<span>${hesc(x.artist || '')}</span></li>`).join(''); }
   el.addEventListener('error', () => { if (!RADIO.on) return; if (++RADIO.fails > 4) { RADIO.on = false; RADIO.cur = null; RADIO.fails = 0; load(idx, wantPlay); radioNote('The stream stopped responding; back to the built-in track for now.'); } else radioNext(); });
   el.addEventListener('playing', () => { RADIO.fails = 0; });
   function load(i, autoplay) {
@@ -48,14 +48,14 @@ const music = (() => {
     el.src = t.src; el.loop = tracks.length === 1;
     $('#mTitle').textContent = t.title; $('#mArtist').textContent = t.artist || '';
     $('#mArt').style.backgroundImage = t.art ? `url("${t.art}")` : '';
-    $('#mList').innerHTML = tracks.map((x, k) => `<li class="${k === idx ? 'on' : ''}" data-track="${k}">${x.title}<span>${x.artist || ''}</span></li>`).join('');
+    $('#mList').innerHTML = tracks.map((x, k) => `<li class="${k === idx ? 'on' : ''}" data-track="${k}">${hesc(x.title)}<span>${hesc(x.artist || '')}</span></li>`).join('');
     if (autoplay) play();
     nowPlaying(t);
   }
   function play() { wantPlay = true; store.set('musicOn', true); const p = el.play(); if (p && p.catch) p.catch(() => { ui.classList.add('needsTap'); }); render(); }
   function pause() { wantPlay = false; store.set('musicOn', false); el.pause(); render(); }
   function render() { $('#mPlay').textContent = el.paused ? '▶' : '❚❚'; ui.classList.toggle('playing', !el.paused); $('#mVol').value = el.volume; }
-  function nowPlaying(t) { const n = $('#nowPlaying'); n.innerHTML = `<small>NOW PLAYING</small><b>${t.title}</b><span>${t.artist || ''}</span>`; n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
+  function nowPlaying(t) { const n = $('#nowPlaying'); n.innerHTML = `<small>NOW PLAYING</small><b>${hesc(t.title)}</b><span>${hesc(t.artist || '')}</span>`; /* remote / file-name text: always escaped */ n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
   el.addEventListener('play', () => { ui.classList.remove('needsTap'); render(); });
   el.addEventListener('pause', render);
   el.addEventListener('ended', () => { if (RADIO.on) radioNext(); else load(idx + 1, true); });

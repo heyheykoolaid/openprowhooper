@@ -84,7 +84,7 @@ function brStep(dt) {
   const trail = []; for (let k = 20; k >= 1; k--) { const j = brIndex(br.t - k * 0.025); trail.push({ roll: SS.st[j * 4], pitch: SS.st[j * 4 + 1], yaw: SS.st[j * 4 + 2], thr: SS.st[j * 4 + 3] }); }
   drawSticks($('#bbrSticks'), rc, trail, { label: `THR ${Math.round(rc.thr * 100)}%`, label2: 'P/R (real sticks)' });
   const now = br.dets.filter(d => br.t >= d.t0 - 0.1 && br.t <= d.t + 0.6);
-  $('#bbrNow').innerHTML = now.map(d => `${d.name}<small>${d.exec}${d.watch ? ` · watcher ${Math.round(d.watch.conf * 100)}%` : ''}</small>`).join('');
+  $('#bbrNow').innerHTML = now.map(d => `${esc(d.name)}<small>${esc(d.exec || '')}${d.watch ? ` · watcher ${Math.round(d.watch.conf * 100)}%` : ''}</small>`).join('');
   brTimeline(); $('#bbrTime').textContent = `${fmtT(br.t)} / ${fmtT(SS.dur)}`;
 }
 function brTimeline() {

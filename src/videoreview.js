@@ -170,7 +170,7 @@ function reviewTick() {   // called every animation frame while reviewing
   if (A) { const trail = []; for (let k = 15; k >= 1; k--) { const B = rvAt(t - k * 0.033); if (B) trail.push(stickFromRates(B.br)); }
     drawSticks($('#rvSticks'), stickFromRates(A.br), trail, { label: 'THR (not in video)', label2: 'P/R from motion' }); drawGhostQuad($('#rvGhost'), A.q); }
   const cur = rv.dets.filter(d => t >= d.t0 - 0.1 && t <= d.t + 0.6), fl = el.dataset.until && performance.now() < +el.dataset.until ? el.dataset.flash : '';
-  el.innerHTML = cur.map(d => `${d.name}<small>${d.exec}</small>`).join('') + (fl ? `<small>● ${fl}</small>` : '');
+  el.innerHTML = cur.map(d => `${esc(d.name)}<small>${esc(d.exec || '')}</small>`).join('') + (fl ? `<small>● ${fl}</small>` : '');
   drawTimeline();
 }
 document.addEventListener('change', e => {
