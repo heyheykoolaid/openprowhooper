@@ -939,7 +939,7 @@ function libSig(seq, hz = LIB_HZ, ups = null) {   // seq: [[dR, dP, dY] degrees 
 // points through the move (0-100), cmd = how much of the rotation had the stick on that axis pushed (0-100: a bump or a
 // tumble has the sticks centred). Both only count when both signatures have them.
 function libLev(a, b) { const m = a.length, n = b.length; if (!m || !n) return Math.max(m, n); let p = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const q = [i]; for (let j = 1; j <= n; j++) q.push(Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))); p = q; } return p[n]; }
-const LIB_XW = +(process.env.LIB_XW ?? 0.12), LIB_KW = +(process.env.LIB_KW ?? 0);   // sticks: recorded, but on the first 224 examples they told confirmed and rejected calls apart no better than chance (both ~99% commanded): weight 0 until they do
+const ENV = typeof process !== "undefined" && process.env ? process.env : {}, LIB_XW = +(ENV.LIB_XW ?? 0.12), LIB_KW = +(ENV.LIB_KW ?? 0);   // (Node tools may override; the browser has no process)   // sticks: recorded, but on the first 224 examples they told confirmed and rejected calls apart no better than chance (both ~99% commanded): weight 0 until they do
 function libExtra(a, b) { let e = 0;
   if (typeof a.ps === 'string' && typeof b.ps === 'string') e += LIB_XW * Math.min(1, libLev(a.ps, b.ps) / Math.max(1, a.ps.length, b.ps.length));
   if (a.k && b.k) { let th = 0; for (let i = 0; i < 8; i++) th += Math.abs(a.k.th[i] - b.k.th[i]); e += LIB_KW * (th / 800 + Math.abs(a.k.cmd - b.k.cmd) / 100) / 2; }
