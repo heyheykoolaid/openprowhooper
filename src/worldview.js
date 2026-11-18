@@ -274,6 +274,27 @@ function pnwBackdrop() {
   add(Math.atan2(170, -150), 245, 150, 60, 0x7a8c92, true);   // Mt Begbie, south-west
   add(Math.atan2(-60, 230), 250, 120, 70, 0x6f8288, true);    // Mt Mackenzie, east
 }
+// ---- Static batching (performance, 2026-11-17: testers reported heavy CPU). Every piece of scenery used to be its own
+// mesh: a thousand or more draw calls a frame, twice over with shadows. The scenery never moves, so pieces that share a
+// material, shadow settings and a 32 m patch of the map are merged into one mesh: a few dozen draw calls, and the patches
+// still let the camera skip what is behind it. Glowing pieces are merged among themselves and stay on the bloom layer.
+const MERGE_STATIC = store.get('mergeStatic', true), STATIC = new Map();
+function staticAdd(m, v) {
+  const c = v.c || (v.a && v.b ? { x: (v.a.x + v.b.x) / 2, z: (v.a.z + v.b.z) / 2 } : { x: 0, z: 0 }), cell = Math.floor(c.x / 32) + ',' + Math.floor(c.z / 32);
+  const glow = !!v.glow, key = m.material.uuid + '|' + (m.castShadow ? 1 : 0) + (m.receiveShadow ? 1 : 0) + (glow ? 'g' : '') + '|' + cell;
+  let g = STATIC.get(key); if (!g) STATIC.set(key, g = { mat: m.material, cast: m.castShadow, recv: m.receiveShadow, glow, geos: [] });
+  m.updateMatrix(); const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix); g.geos.push(geo); m.geometry.dispose();
+}
+function staticFlush() {
+  for (const g of STATIC.values()) {
+    let n = 0; for (const x of g.geos) n += x.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2); let o = 0;
+    for (const x of g.geos) { const k = x.attributes.position.count; pos.set(x.attributes.position.array, o * 3); if (x.attributes.normal) nor.set(x.attributes.normal.array, o * 3); if (x.attributes.uv) uv.set(x.attributes.uv.array, o * 2); o += k; x.dispose(); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, g.mat); mesh.castShadow = g.cast; mesh.receiveShadow = g.recv; mesh.matrixAutoUpdate = false; if (g.glow) mesh.layers.enable(1); /* the neon still glows: bloom draws layer 1 */ playRoot.add(mesh);
+  }
+  PERF.staticPieces = [...STATIC.values()].reduce((a, g) => a + g.geos.length, 0); PERF.staticMeshes = STATIC.size; STATIC.clear();
+}
 // ============================================================ build world meshes
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
@@ -318,8 +339,10 @@ function buildScene() {
     else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
     else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
     if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1); playRoot.add(m);
+    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
+    if (!MERGE_STATIC) playRoot.add(m); else staticAdd(m, v);
   }
+  staticFlush();
   if (VAPOR) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);

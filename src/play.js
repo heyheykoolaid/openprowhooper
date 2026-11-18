@@ -131,16 +131,19 @@ const tmpQ = new THREE.Quaternion(), tiltQ = new THREE.Quaternion();
 const chasePos = new THREE.Vector3(0, 1, 14);
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
+  if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;
     acc += dt; let n = 0;
     while (acc >= DT && n < 120) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
-      drone.step(rc, DT); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } acc -= DT; n++;   // racing is about the track and the clock: no trick judging
+      if (pf) { const a = performance.now(); drone.step(rc, DT); const b = performance.now(); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } tPh += b - a; tDe += performance.now() - b; }
+      else { drone.step(rc, DT); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } }
+      acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
     }
-    if (n >= 120) acc = 0;
+    if (n >= 120) { acc = 0; if (pf) PERF.acc.drop = (PERF.acc.drop || 0) + 1; } if (pf) PERF.acc.steps += n;
     if (!race.on) for (const ev of detector.drain()) onTrick(ev);
     if (!race.on && detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (mode === 'fly' && store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in SKITTLES mode</small>`, 'near'); }
     if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
@@ -189,8 +192,10 @@ function frame(now) {
     chasePos.lerp(target, 1 - Math.exp(-dt * 6)); chaseCam.position.copy(chasePos); chaseCam.lookAt(drone.pos.x, drone.pos.y + 0.02, drone.pos.z);
   }
   if (mode === 'review') { reviewTick(); return; }
+  const rT0 = pf ? performance.now() : 0;
   renderer.render(scene, cam);
   if (BLOOM.on && world.theme === 'vapor' && !race.on) bloomRender(cam);
+  if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 }
@@ -203,3 +208,27 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+
+// ---- the diagnostic overlay (PERF in game.js). Times are this tab's main-thread CPU per frame: physics (1 kHz steps),
+// trick detection (detector, Watcher, library), drawing (three.js submitting the scene; the GPU's own work is not
+// counted), and everything else (HUD, audio, menus). Shown 4 times a second, averaged over that window.
+function perfFrame(now, fT0, tPh, tDe, tR) {
+  const A = PERF.acc, ft = performance.now() - fT0; A.phys += tPh; A.det += tDe; A.rend += tR; A.frame += ft; A.n++; A.worst = Math.max(A.worst, ft);
+  A.calls = (A.calls || 0) + renderer.info.render.calls; A.tris = (A.tris || 0) + renderer.info.render.triangles; A.gap = Math.max(A.gap || 0, now - (A.last || now)); A.last = now;
+  if (now - PERF.shown < 250) return; const n = Math.max(1, A.n), secs = (now - PERF.shown) / 1000; PERF.shown = now; if (secs > 2) { Object.assign(A, { phys: 0, det: 0, rend: 0, frame: 0, n: 0, worst: 0, steps: 0, calls: 0, tris: 0, gap: 0, drop: 0 }); return; }
+  const el = $('#perfHud'); if (!el) return; const f = x => (x / n).toFixed(2), mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB' : '—', fps = n / secs, busy = A.frame / (secs * 1000) * 100;
+  const pr = renderer.getPixelRatio(), cv = renderer.domElement, info = renderer.info.memory;
+  el.innerHTML = `<b>${fps.toFixed(0)} fps</b> · frame CPU ${f(A.frame)} ms (worst ${A.worst.toFixed(1)}) · main thread ${busy.toFixed(0)}% busy
+    <br>physics ${f(A.phys)} ms (${(A.steps / n).toFixed(0)} steps)${A.drop ? ` · <span class="bad">${A.drop} catch-up drops</span>` : ''} · tricks ${f(A.det)} ms · draw ${f(A.rend)} ms · other ${f(A.frame - A.phys - A.det - A.rend)} ms
+    <br>${Math.round(A.calls / n)} draw calls · ${(A.tris / n / 1000).toFixed(0)}k triangles · ${info.geometries} geometries · ${info.textures} textures · longest gap ${A.gap.toFixed(0)} ms
+    <br>${cv.width}×${cv.height} px (×${pr.toFixed(2)}) · shadows ${renderer.shadowMap.enabled ? 'on' : 'off'} · neon glow ${BLOOM.on && world.theme === 'vapor' ? 'on' : 'off'} · scenery ${PERF.staticPieces} pieces in ${PERF.staticMeshes} meshes
+    <br>${esc(world.title || world.id || '')} · ${world.objs.length} objects · ${world.prims.length} colliders · JS heap ${mem} · mode ${esc(mode)}`;
+  Object.assign(A, { phys: 0, det: 0, rend: 0, frame: 0, n: 0, worst: 0, steps: 0, calls: 0, tris: 0, gap: 0, drop: 0 });
+}
+function perfToggle(on) { PERF.on = on; store.set('perfHud', on); renderer.info.autoReset = !on; $('#perfHud').classList.toggle('hide', !on); PERF.shown = performance.now(); }
+function perfApply() {   // render resolution and shadows, live
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res); resize();
+  if (renderer.shadowMap.enabled !== PERF.shadows) { renderer.shadowMap.enabled = PERF.shadows; scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; }); }
+}
+addEventListener('keydown', e => { if (e.code === 'F3') { e.preventDefault(); perfToggle(!PERF.on); } });
+setTimeout(() => { $('#perfHud').classList.toggle('hide', !PERF.on); renderer.info.autoReset = !PERF.on; }, 0);

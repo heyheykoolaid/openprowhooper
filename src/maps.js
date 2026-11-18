@@ -659,12 +659,26 @@
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
 
+  // Every map is closed in (pilot, 2026-11-17: "proper bounding boxes"): invisible walls round everything that was built
+  // (its colliders' extent and the declared bounds, plus 6 m) and a ceiling 20 m above the tallest thing (at least 35 m
+  // up). Kind 'edge': never a tap, a wall ride, an over/under or a pole. Added after the Surveyor so it never sees them.
+  function closeIn(w) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, top = 0;
+    for (const p of w.prims) { const a = p.aabb; if (!a) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); top = Math.max(top, a.max.y); }
+    if (w.bounds) { x0 = Math.min(x0, w.bounds.x[0]); x1 = Math.max(x1, w.bounds.x[1]); z0 = Math.min(z0, w.bounds.z[0]); z1 = Math.max(z1, w.bounds.z[1]); }
+    x0 -= 6; x1 += 6; z0 -= 6; z1 += 6; const H = Math.max(35, top + 20), T = 1, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, hx = (x1 - x0) / 2, hz = (z1 - z0) / 2;
+    const o = { id: w.objs.reduce((m, q) => Math.max(m, q.id + 1), 0), name: 'Map Edge', kind: 'edge', prims: [], vis: [] };
+    for (const [c, h] of [[v3(x0 - T, H / 2, cz), v3(T, H / 2 + T, hz + 2 * T)], [v3(x1 + T, H / 2, cz), v3(T, H / 2 + T, hz + 2 * T)], [v3(cx, H / 2, z0 - T), v3(hx + 2 * T, H / 2 + T, T)], [v3(cx, H / 2, z1 + T), v3(hx + 2 * T, H / 2 + T, T)], [v3(cx, H + T, cz), v3(hx + 2 * T, T, hz + 2 * T)]]) {
+      const b = makeBox(c, h); b.owner = o.id; o.prims.push(b); w.prims.push(b); }
+    w.objs.push(o); w.bounds = { x: [x0, x1], z: [z0, z1] }; w.ceiling = H; return w;
+  }
+
   S.MAPS = {
-    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => S.surveyObstacles(buildSchool()) },
-    clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => S.surveyObstacles(buildClappy()) },
-    warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, high-bay-lit logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => S.surveyObstacles(buildWarehouse()) },
-    moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet neighbourhood park in Arrow Heights, Revelstoke: groves of tall cedar and hemlock with grassy lanes between them, a weathered swing set and small play unit, picnic tables in the shade, a half-buried tire tunnel among the birch, and the Selkirks beyond the rooftops.', build: () => S.surveyObstacles(buildMoose()) },
-    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })) },
+    moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet neighbourhood park in Arrow Heights, Revelstoke: groves of tall cedar and hemlock with grassy lanes between them, a weathered swing set and small play unit, picnic tables in the shade, a half-buried tire tunnel among the birch, and the Selkirks beyond the rooftops.', build: () => closeIn(S.surveyObstacles(buildMoose())) },
+    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(buildSchool())) },
+    clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(buildClappy())) },
+    warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, high-bay-lit logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => closeIn(S.surveyObstacles(buildWarehouse())) },
+    playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' }))) },
   };
   S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose;
 })(typeof window !== 'undefined' ? window : globalThis);

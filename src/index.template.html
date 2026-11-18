@@ -52,6 +52,7 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #cross { left: 50%; top: 50%; transform: translate(-50%,-50%); opacity: .7; font-size: 15px; }
 #washMeter { left: 50%; bottom: 30px; transform: translateX(-50%); color: #ffd23a; opacity: 0; }
 .blink { animation: blink .5s steps(2) infinite; color: #ff6b5a; } @keyframes blink { 50% { opacity: .2 } }
+#perfHud { position: fixed; left: 8px; top: 8px; z-index: 60; pointer-events: none; padding: 6px 9px; background: rgba(8,8,10,.78); border-left: 3px solid var(--acid); font: 11px/1.45 var(--mono); color: #e9e6dc; max-width: 640px; } #perfHud .bad { color: #ff7a5c; }
 #fps { position: fixed; right: 8px; bottom: 6px; font: 11px var(--mono); color: rgba(255,255,255,.4); }
 #breakdown { position: absolute; right: 16px; top: 70px; background: rgba(10,9,8,.82); border: 2px solid #222; padding: 8px; font: 12px var(--mono); pointer-events: none; }
 #breakdown table { border-collapse: collapse; } #breakdown td, #breakdown th { padding: 2px 6px; text-align: right; } #breakdown td:first-child, #breakdown th:first-child { text-align: left; }
@@ -349,7 +350,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <span class="o" id="osdThr"></span><span class="o" id="osdSpd"></span><span class="o" id="osdAlt"></span><span class="o" id="osdTimer"></span><span class="o" id="osdState"></span><span class="o" id="washMeter">≋ PROPWASH ≋</span></div>
   <div id="breakdown" class="hide"><b>Score breakdown (TPW calculator rules)</b><table><thead><tr><th>Trick</th><th>Base</th><th>Exec</th><th>×Ex</th><th>×Rep</th><th>×B2B</th><th>×Obs</th><th>×TotW</th><th>×Streak</th><th>Net</th></tr></thead><tbody></tbody></table></div>
 </div>
-<div id="fps"></div>
+<div id="fps"></div><div id="perfHud" class="hide"></div>
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
 <div id="train" class="hide"></div>

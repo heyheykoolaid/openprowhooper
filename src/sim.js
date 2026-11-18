@@ -576,7 +576,7 @@ function surveyObstacles(world, opts = {}) {
   const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
   let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0); const made = [], report = { slabs: 0, found: 0, edges: 0 };
   for (const o of world.objs.slice()) {
-    if (o.kind === 'pilot' || o.kind === 'gap' || o.auto) continue;
+    if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.auto) continue;
     if (o.obstacle && !o.round) {                                             // job 1
       const { under, over } = o.obstacle; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
       for (const p of o.prims) { const a = p.aabb; if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue; if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); n++; }
@@ -1090,8 +1090,23 @@ class TrickDetector {
     if (resting) { this.restT += dt; if (this.restT > 0.55) this.close(d, t, false); } else this.restT = 0;
     if (t - this.winStart > 12) this.close(d, t, false);
   }
+  // Only objects near the quad can be crossed. The list of them is rebuilt every 0.1 s with a 30 m margin (a whoop covers
+  // at most ~3 m in that time), so the result is the same as checking every object every step, for a fraction of the CPU
+  // (performance, 2026-11-17). An object leaving the list forgets which side the quad was on, as if seen for the first time.
+  nearObjs(d, t) {
+    if (this.nearT != null && t >= this.nearT && t - this.nearT < 0.1 && this.nearW === this.world) return this.near;
+    this.nearT = t; this.nearW = this.world; const out = [], keep = new Set();
+    for (const o of this.world.objs) { if (!o.round && !o.obstacle && !o.gap) continue;
+      let r = o._nearR; if (r == null) { const pts = []; if (o.round) pts.push([o.round.c, (o.round.box ? Math.max(o.round.box.hx, o.round.box.hz) : o.round.r) + 3]); if (o.obstacle) { pts.push([o.obstacle.a, 0], [o.obstacle.b, 0]); } if (o.gap) pts.push([o.gap.c, Math.max(o.gap.hu, o.gap.hv)]);
+        let cx = 0, cz = 0; for (const [p] of pts) { cx += p.x; cz += p.z; } cx /= pts.length; cz /= pts.length; r = 0; for (const [p, e] of pts) r = Math.max(r, Math.hypot(p.x - cx, p.z - cz) + e); o._nearC = [cx, cz]; o._nearR = r; }
+      if (o.round) { if (Math.hypot(d.pos.x - o.round.c.x, d.pos.z - o.round.c.z) > o._nearR + 30) continue; }   // a tree's line is re-aimed round its centre
+      else if (Math.hypot(d.pos.x - o._nearC[0], d.pos.z - o._nearC[1]) > o._nearR + 30) continue;
+      out.push(o); keep.add(o.id); }
+    if (this.near) for (const o of this.near) if (!keep.has(o.id)) { delete this.prevSide[o.id]; delete this.prevSide['g' + o.id]; }
+    this.near = out; return out;
+  }
   trackCrossings(d, t) {
-    for (const o of this.world.objs) {
+    for (const o of this.nearObjs(d, t)) {
       if (o.round) {   // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
         const R = o.round, st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
         const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
@@ -1143,7 +1158,7 @@ class TrickDetector {
         }
       }
     }
-    this.crossLog = this.crossLog.filter(c => t - c.t < 20);
+    if (this.crossLog.length && t - this.crossLog[0].t >= 20) this.crossLog = this.crossLog.filter(c => t - c.t < 20);   // only when something has expired (it ran every step)
   }
   tokenize(samples) {
     const toks = []; let cur = null; let idle = 0;
@@ -1592,7 +1607,8 @@ class StreamDetector extends TrickDetector {
     // deliberate taps: soft contact with anything but the ground, remembering which side of the quad touched
     if (d.contactThisStep && d.armed && !d.crashed && !d.contactGround && d.contactNormal) {
       const o = this.world.objs[d.contactOwner];
-      if (o && o.kind === 'pilot' && t - this.lastFaceT > 1 && d.pos.y > 1.35) { this.lastFaceT = t; this.faces.push({ t, id: 'face' + t.toFixed(3), obj: o.id }); this.newEv.push('face'); ev = true; }
+      if (o && o.kind === 'edge') { /* the map's invisible edge: not a trick */ }
+      else if (o && o.kind === 'pilot' && t - this.lastFaceT > 1 && d.pos.y > 1.35) { this.lastFaceT = t; this.faces.push({ t, id: 'face' + t.toFixed(3), obj: o.id }); this.newEv.push('face'); ev = true; }
       else if (d.lastImpact < 3.2 && t - this.lastTapT > 0.25) {
         const n = d.contactNormal, nB = qinv(d.q, n);
         const face = nB.y > 0.55 ? 'bottom' : nB.y < -0.55 ? 'top' : 'side';
@@ -1640,7 +1656,11 @@ class StreamDetector extends TrickDetector {
         if (!d.armed || nearReal && !liveHere || t - A.tTurn > (liveHere ? 1.0 : 0.6)) { const ob = this.orb.air; if (ob && ob.acc > 0) { this.endOrbit(A, ob, 'exit'); ev = true; } delete this.orb.air; delete this.passTr.air; this.airPole = null; }
       } }
     // poles: passes (closest approach then clear) and orbits (angle swept around the pole)
-    for (const P of (this.airPole ? [...this.poles, this.airPole] : this.poles)) {
+    // only poles within 40 m can be passed or orbited (both need the quad within 9 m); the list is rebuilt every 0.1 s, so
+    // a pole drops off it long after it has been reset as "far" (performance, 2026-11-17)
+    if (this.nearPT == null || t < this.nearPT || t - this.nearPT >= 0.1 || this.nearPA !== this.poles) { this.nearPT = t; this.nearPA = this.poles;
+      this.nearP = this.poles.filter(P => { const a = P.point(P.y0), b = P.point(P.y1); return Math.min(Math.hypot(d.pos.x - a.x, d.pos.z - a.z), Math.hypot(d.pos.x - b.x, d.pos.z - b.z)) < 40; }); }
+    for (const P of (this.airPole ? [...this.nearP, this.airPole] : this.nearP)) {
       const at = P.point(d.pos.y), dx = d.pos.x - at.x, dz = d.pos.z - at.z, dist = Math.hypot(dx, dz);
       const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
       const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
@@ -1934,7 +1954,7 @@ class StreamDetector extends TrickDetector {
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
     this.continuousDetectors(d, dt, t, rc);
     if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
-    if (this.contacts.length && t - this.contacts[0].t >= 6) this.contacts = this.contacts.filter(c => t - c.t < 6);
+    if (this.contacts.length && t - this.contacts[0].t >= 6) { let i = 0; while (i < this.contacts.length && t - this.contacts[i].t >= 6) i++; this.contacts.splice(0, i); }
     const ctxEv = this.sense(d, dt, t, rates, up);
     if (d.crashed && !this.crashSeen) {               // finished tricks still count; anything mid-air is lost
       this.crashSeen = true;

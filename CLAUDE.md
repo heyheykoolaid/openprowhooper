@@ -134,7 +134,7 @@ the Pilot Warm-up is recommended once to anyone without a profile. The name goes
 feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
 ## Maps (src/maps.js) and their look (src/worldview.js)
-`Sim.MAPS` lists the maps: `school` (the Abandoned Vaporwave School, the default) and `playground` (the original;
+`Sim.MAPS` lists the maps (carousel order): `moose` (Moose Knuckle Park, the default since 2026-11-17: `MAP_ID` in game.js), `school` (the Abandoned Vaporwave School), `clappy`, `warehouse` and `playground` (the original;
 `buildPlayground()` in sim.js). The game builds one at start-up from `store 'map'`; the Map button on the main menu
 switches and reloads. A map is `{ objs, prims, zones, spawn, id, title, theme }`; the detector reads only tags
 (`obstacle`, `round`, `gap`, kind 'pole' capsules up to 0.25 m radius, kind 'wall'/'building', kind 'pilot'), so any
@@ -191,6 +191,23 @@ bear-resistant bins, the routed park sign and a carved cedar moose; steep-roofed
 45° roof panels), back fences, power poles and pickups round the edges. `pnwBackdrop` in worldview.js draws forested
 ridges, Mt Begbie (SW) and Mt Mackenzie (E), unfogged and pre-hazed; cool sky, softer high sun, grass ground plane.
 Muted materials only (no bright primary plastic). No Trick Park on this map (the pilot's brief: a compact park).
+
+**Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls 6 m beyond every
+collider and the declared bounds, and a ceiling 20 m above the tallest thing (at least 35 m). One object, kind 'edge':
+the Surveyor skips it, and the detector never counts it as a tap, wall ride, over/under or pole. `w.bounds` is then the
+closed-in area (the sun's shadow box uses it) and `w.ceiling` its height. The Node tests' base `buildPlayground()` has none.
+
+## Performance (2026-11-17, testers reported heavy CPU) — the overlay is Options → Graphics or F3
+- **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,
+  glow and a 32 m patch are merged into one mesh (draw calls 800–2000 → 180–400). `store 'mergeStatic'` false turns it off
+  for comparison. Never add a `//` comment mid-line in these one-line statements: it swallowed `playRoot.add` once.
+- **Detector culling**: `trackCrossings` only looks at objects within 30 m (`nearObjs`, rebuilt every 0.1 s, side state
+  forgotten when an object leaves the list) and the pole loop at poles within 40 m (`nearP`); crossLog / contacts are
+  trimmed only when something expired. Calls are identical (tests, bench, stress, the shared flights re-flown).
+- **Diagnostic overlay** (`PERF` in game.js, `perfFrame` in play.js): fps, CPU per frame split into physics / tricks /
+  draw / other, physics steps and catch-up drops, draw calls, triangles, geometries, textures, resolution, shadows, glow,
+  scenery batching, objects, colliders, JS heap. Graphics options: Shadows (`store 'shadows'`) and Render resolution
+  (`store 'renderScale'`), both applied live (`perfApply`).
 
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of

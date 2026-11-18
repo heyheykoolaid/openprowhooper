@@ -56,4 +56,4 @@ addEventListener('keydown', e => {
     else if (e.code === 'Enter') closeAsk(true); else if (e.code === 'Escape') closeAsk(false); return; }
   if (train.on && mode === 'fly' && e.code === 'KeyP' && !(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) { ask.on = !ask.on; store.set('pauseAsk', ask.on); renderTrain(); }
 }, true);
-window.__pw.ask = ask; window.__pw.run = run; window.__pw.mode = () => mode; window.__pw.setMode = m => { mode = m; }; window.__pw.show = id => show(id);
+window.__pw.ask = ask; window.__pw.run = run; window.__pw.mode = () => mode; window.__pw.setMode = m => { mode = m; }; window.__pw.scene = scene; window.__pw.show = id => show(id);

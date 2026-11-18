@@ -13,7 +13,7 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
     if (r && r.center === o[0] && r.max === o[1] && Math.abs(r.expo - o[2]) < 1e-6) Object.assign(r, { center: d[ax].center, max: d[ax].max, expo: d[ax].expo }); }
   tune.ratesV2 = true; store.set('tune', tune); })();
 // the map: chosen on the main menu, remembered, built once at start-up (changing it reloads the page)
-const MAP_ID = S.MAPS[store.get('map', 'school')] ? store.get('map', 'school') : 'school';
+const MAP_ID = S.MAPS[store.get('map', 'moose')] ? store.get('map', 'moose') : 'moose';   // Moose Knuckle Park is the default (pilot, 2026-11-17)
 const world = S.MAPS[MAP_ID].build();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
@@ -28,10 +28,13 @@ let camMode = 'fpv';
 // ============================================================ renderer / scene
 const canvas = $('#view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+// Performance (2026-11-17, testers reported heavy CPU): the diagnostic overlay (Options → Graphics, or F3) and two graphics
+// settings: render resolution (a share of the screen's pixels) and shadows. PERF collects the timings play.js measures.
+const PERF = { on: store.get('perfHud', false), res: store.get('renderScale', 1), shadows: store.get('shadows', true), acc: { phys: 0, det: 0, rend: 0, frame: 0, ui: 0, steps: 0, n: 0, worst: 0 }, shown: 0, staticPieces: 0, staticMeshes: 0 };
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = PERF.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const playRoot = new THREE.Group(); scene.add(playRoot);   // the playground; race rooms have their own group (editor.js)
 scene.fog = new THREE.Fog(0xc7ae8c, 28, 110);
