@@ -10,13 +10,16 @@ const tel = Object.assign({ on: false, asked: false, pilot: '' }, store.get('tel
 // The pilot's name: asked for on the first start, shown on the menu, sent with shared flights and feedback.
 const cleanName = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
 const pilotName = () => cleanName(store.get('pilotName', ''));
+// 'Continue without a name' on the first prompt (owner, 2026-11-18): no name, sharing off, and nothing is queued or sent
+// (telQueue refuses everything); a name or sharing turned on later in Options ends it
+const anonOn = () => store.get('anon', false) === true && !pilotName();
 const isRidgeRipper = () => pilotName().toLowerCase().replace(/[^a-z0-9]/g, '') === 'ridgeripperfpv';
 const TEL = { relay: (window.PW_DROPOFF || '').trim(), minSeconds: 20, minArmed: 10, perDay: 40, keep: 40, part: 120000 };
 const telState = { busy: false, last: '', mem: [], route: null };
 const saveTel = () => store.set('telemetry', { on: tel.on, asked: tel.asked, pilot: tel.pilot });
 function telPilot() { if (!tel.pilot) { tel.pilot = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3); saveTel(); } return tel.pilot; }
 const telStamp = r => `${r.started.replace(/[:.]/g, '-')}-${r.id}`;
-function telSet(on) { tel.on = !!on; tel.asked = true; saveTel(); if (tel.on) { telPilot(); telPump(true); } telRenderStatus(); }
+function telSet(on) { tel.on = !!on; tel.asked = true; if (on) store.set('anon', false); saveTel(); if (tel.on) { telPilot(); telPump(true); } telRenderStatus(); }
 
 // ---- Things that went wrong in the game's own code on this machine (message and where, nothing else). The last few
 // ride along with a shared flight or a feedback note, so a bug a pilot hits can be found without them reporting it.
@@ -71,6 +74,7 @@ async function procFlight(job, after) {
 async function telList() { const a = await idb.all('telemetry'); return (a.length ? a : telState.mem).slice().sort((x, y) => (x.at < y.at ? -1 : 1)); }
 async function telStore(item) { const ok = await idb.ok(); if (ok) await idb.put('telemetry', item); else { const i = telState.mem.findIndex(x => x.id === item.id); if (i >= 0) telState.mem[i] = item; else telState.mem.push(item); } }
 async function telQueue(kind, name, payload, explicit) {
+  if (anonOn()) return;   // flying without a name: nothing is collected or sent, not even what a click would send
   await telStore({ id: `${kind}/${name}`, kind, name, at: new Date().toISOString(), body: JSON.stringify(payload), sent: null, explicit: !!explicit });
   const all = await telList(); for (const old of all.slice(0, Math.max(0, all.length - TEL.keep))) { await idb.del('telemetry', old.id); telState.mem = telState.mem.filter(x => x.id !== old.id); }
   telRenderStatus(); return telPump(true);   // a new item gets one immediate try
@@ -107,6 +111,7 @@ async function telToGitHub(it) {
 // minutes; a copy the relay will not accept from (the downloaded file) stops trying for the session.
 const TEL_BACKOFF = [60, 120, 300, 900, 3600];
 async function telPump(force) {
+  if (anonOn()) return;   // no name chosen: nothing leaves the browser
   if (telState.busy) return; if (!force && telState.retryAt && Date.now() < telState.retryAt) return; telState.busy = true;
   try {
     for (const it of await telList()) { if (it.sent) continue; if (it.kind !== 'feedback' && it.kind !== 'video' && !it.explicit && !tel.on) continue;   // feedback and a video review are sent by the player's own click
@@ -154,7 +159,8 @@ function pilotAsk() {
     <input type="text" id="pilotNameIn" maxlength="24" placeholder="your pilot name or handle" value="${esc(pilotName())}" onkeydown="event.stopPropagation()" autocomplete="off">
     ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Measurements from tricks you confirm (how the quad turned, no names) may go into the game's trick library for everyone. You can change it any time in Options.</p>`}
     <p class="note" id="pilotMsg"></p>
-    <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div></div>`;
+    <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div>
+    <p class="note"><button data-pilot="anon" class="ghost">Continue without a name</button> nothing is collected or shared (no flights, reviews, votes or feedback). You can add a name or turn sharing on later in Options.</p></div>`;
   setTimeout(() => $('#pilotNameIn') && $('#pilotNameIn').focus(), 30);
 }
 // then recommend the Pilot Warm-up to anyone who has no profile yet (once; it stays on the main menu)
@@ -187,7 +193,9 @@ function pilotWarmAsk() {
 document.addEventListener('change', e => { if (e.target.id === 'optPilotName') { const n = cleanName(e.target.value); if (n.length >= 2) { store.set('pilotName', n); pilotShowName(); } e.target.value = pilotName(); const g = $('#ghSection'); if (g) g.classList.toggle('hide', !ghMenus()); } });
 document.addEventListener('keydown', e => { if (e.target.id === 'pilotNameIn' && e.code === 'Enter') { const b = $('#pilotModal [data-pilot].primary'); if (b) b.click(); } }, true);
 document.addEventListener('click', async e => {
-  const pb = e.target.closest('[data-pilot]'); if (pb) { const n = cleanName($('#pilotNameIn').value);
+  const pb = e.target.closest('[data-pilot]');
+  if (pb && pb.dataset.pilot === 'anon') { store.set('pilotName', ''); store.set('anon', true); tel.on = false; tel.asked = true; saveTel(); await idb.clear('telemetry'); telState.mem = []; pilotShowName(); $('#pilotModal').classList.add('hide'); flashNote('Flying without a name: nothing is collected or shared'); pilotWarmAsk(); return; }
+  if (pb) { const n = cleanName($('#pilotNameIn').value);
     if (n.length < 2) { $('#pilotMsg').textContent = 'Pick a name with at least 2 characters.'; $('#pilotNameIn').focus(); return; }
     store.set('pilotName', n); pilotShowName(); $('#pilotModal').classList.add('hide');
     if (pb.dataset.pilot === 'warm') { startWarmup(); return; } if (pb.dataset.pilot === 'later') { store.set('warmAsked', true); return; }
@@ -219,7 +227,7 @@ addEventListener('pagehide', () => telCapture('closed'));
 // anything still waiting is tried again now and then (telPump keeps to its back-off)
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { if (!pilotName()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
+setTimeout(async () => { if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
 

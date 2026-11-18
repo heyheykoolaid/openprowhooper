@@ -160,7 +160,10 @@ in the project database" in Options for the traces (they are too big to read thr
 it does not count in `npm run bench` unless labels came with it.
 
 ## First start (src/dropoff.js `pilotAsk`, `pilotWarmAsk`)
-Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing; then
+Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing, or
+presses **Continue without a name** (owner, 2026-11-18: `store 'anon'`, `anonOn()`): no name, sharing off, the waiting queue
+cleared, and `telQueue` / `telPump` refuse everything (flights, reviews, votes, bot judging, video, feedback); the board,
+RaceGOW sharing and map sharing need a name anyway. Setting a name or turning sharing on in Options ends it. Then
 the Pilot Warm-up is recommended once to anyone without a profile. The name goes with shared flights, labels and
 feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
