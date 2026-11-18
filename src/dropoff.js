@@ -152,7 +152,7 @@ async function telRenderStatus() {
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
 }
 // ---- first start: every pilot picks a name, and says yes or no to sharing, before the menu
-function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; }
+function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; ownerMenus(); }
 function pilotAsk() {
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
@@ -228,7 +228,7 @@ addEventListener('pagehide', () => telCapture('closed'));
 // anything still waiting is tried again now and then (telPump keeps to its back-off)
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
+setTimeout(async () => { pilotShowName(); if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
 

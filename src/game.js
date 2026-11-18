@@ -8,6 +8,8 @@ const store = { get(k, d) { try { const v = localStorage.getItem('pw.' + k); ret
 // ============================================================ state
 let spec = store.get('spec', { ...S.PRESETS['Air65 Racing'] });
 let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
+// the feel fitted from real Blackbox logs (Feel Lab, tools/feelfit.js): shake 1 and 3 ms of loop delay unless the pilot set them
+if (tune.shake == null) tune.shake = 1; if (tune.loopDelayMs == null) tune.loopDelayMs = 3;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

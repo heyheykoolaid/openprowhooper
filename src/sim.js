@@ -4,6 +4,8 @@
 'use strict';
 
 const RHO = 1.225, G = 9.81, D2R = Math.PI / 180, R2D = 180 / Math.PI;
+let SHAKE_A = 30;   // rad/s² per unit of tune.shake: shake 1 = the owner's whoop (tools/feelfit.js --fit on blackbox/2026-11-17-bum-darts, with loopDelayMs 3)
+const setShakeA = a => { SHAKE_A = +a || SHAKE_A; };
 
 // ---------------------------------------------------------------- vector / quat helpers
 const v3 = (x = 0, y = 0, z = 0) => ({ x, y, z });
@@ -678,6 +680,11 @@ class Drone {
     // attitude for Angle mode, in the pilot's axes: roll right +, pitch back (nose up) +
     const att = (this.fc.modeOverride || this.fc.tune.flightMode) === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
     const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
+    this.duty = out;   // the motor commands this step (Feel Lab compares them with the motor speed)
+    // Loop delay (tune.loopDelayMs: 0 = none, the physics default): a real quad answers a little late (gyro filtering, the
+    // DShot frame, the ESC), the sim's FC at once. The motors get the commands of that long ago (Feel Lab fits it).
+    const LD = +this.tune.loopDelayMs || 0; let outD = out;
+    if (LD > 0) { const n = Math.max(1, Math.round(LD / 1000 / dt)), Q = this.cmdQ || (this.cmdQ = []); Q.push(Array.from(out)); while (Q.length > n + 1) Q.shift(); outD = Q[0]; }
     // ---- motors + battery
     const up = this.up();
     const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
@@ -696,7 +703,7 @@ class Drone {
     const hGround = this.heightAbove();
     for (let i = 0; i < 4; i++) {
       const m = p.motors[i];
-      const duty = out[i] || 0;   // signed in 3D mode: a negative duty drives the motor backward
+      const duty = outD[i] || 0;   // signed in 3D mode: a negative duty drives the motor backward
       let w = this.motorW[i];
       const Vm = duty * Vbus;
       let I = (Vm - w / p.kvRad) / p.rm;
@@ -764,6 +771,16 @@ class Drone {
       else if (f.kind === 'boost') { const B = qrot(this.q, Fb), g = f.gain - 1; Fw.x += B.x * g; Fw.y += B.y * g; Fw.z += B.z * g; } }
     this.vel = add(this.vel, mul(Fw, dt / p.mass));
     const I = p.I, w = this.w;
+    // Shake (tune.shake: 0 = none, the physics default; the game gives players 1, fitted from the owner's Blackbox logs with
+    // tools/feelfit.js): air that is never still pushes a light quad about. A random angular kick per axis, smoothed over ~60
+    // ms (the 2-20 Hz wobble real hover logs show), growing with thrust, with prop wash and with speed; the FC fights it like
+    // a real one. Its own random stream (seeded), so turning it off leaves every other number exactly as it was.
+    const SH = +this.tune.shake || 0;
+    if (SH > 0 && this.armed && !this.crashed) { const T = this.turb || (this.turb = { a: [0, 0, 0], rng: makeRng(4711) }), tau = 0.06, k = Math.sqrt(2 * dt / tau);
+      const Tt = this.thrust.reduce((a, b) => a + Math.abs(b), 0), load = Math.min(2.5, Tt / (p.mass * G)), sp = len(this.vel);
+      const amp = SH * SHAKE_A * (0.25 + load) * (1 + 1.5 * this.washLevel) * (1 + sp / 10);
+      for (let i = 0; i < 3; i++) { let n = 0; for (let j = 0; j < 3; j++) n += T.rng(); T.a[i] += (-T.a[i] * dt / tau) + k * n * 0.577; }   // roughly Gaussian, unit variance
+      Tb.x += I.x * amp * T.a[0]; Tb.y += I.y * amp * T.a[1] * 0.15; Tb.z += I.z * amp * T.a[2]; }   // little on yaw: the sim's yaw authority is weak and real yaw tracks as well as the sim's (Feel Lab)
     const Iw = v3(I.x * w.x, I.y * w.y, I.z * w.z), gyro = cross(w, Iw);
     this.w = v3(w.x + (Tb.x - gyro.x) / I.x * dt, w.y + (Tb.y - gyro.y) / I.y * dt, w.z + (Tb.z - gyro.z) / I.z * dt);
     this.pos = add(this.pos, mul(this.vel, dt));
@@ -2855,6 +2872,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

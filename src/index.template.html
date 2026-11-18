@@ -166,6 +166,7 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 
 /* ---- RaceGOW tracks, race HUD and the track editor */
 .panel.wide { max-width: 1100px; width: 94vw; }
+#feelBody .flT { border-collapse: collapse; margin: 8px 0; font-size: 14px; } #feelBody .flT td, #feelBody .flT th { padding: 3px 10px; border-bottom: 1px solid #fff1; text-align: left; } #feelBody canvas { width: 100%; max-width: 860px; display: block; margin: 8px 0; border: 1px solid #2c2f3a; } #feelBody button.on { background: #ffd34d; color: #111; }
 #rgBody .rTracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 10px; }
 #rgBody .rCard { background: #0006; border: 1px solid #fff2; border-radius: 10px; padding: 10px 12px; }
 #rgBody .rCard h3 { margin: 0 0 2px; font-size: 17px; } #rgBody .rCard small { opacity: .7; }
@@ -397,14 +398,14 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="board">Daily leaderboard</button>
-    <button data-act="race" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
+    <button data-act="race" class="hide" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
     <button data-act="judge" id="judgeBtn" class="hide" title="Watch moments from other pilots' runs and say what the trick really was">Judge the community</button>
     <button data-act="map">Maps</button><button data-act="mapedit" title="Move, add or remove anything on this map">Map Editor</button>
     <button data-act="garage">Garage &amp; Tune</button>
     <button data-act="controls">Controls / Radio</button>
     <button data-act="tricks">Tricktionary</button>
     <button data-act="options">Options</button>
-    <button data-act="tools">Tools &amp; labs ▸</button>
+    <button data-act="tools" class="hide">Tools &amp; labs ▸</button>
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
@@ -431,6 +432,11 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="rgBody"></div>
 </div></div>
 
+<div id="feelScreen" class="screen hide"><div class="panel wide">
+  <div class="topbar"><h2>Feel Lab</h2><span class="sp"></span><button data-act="back">Back</button></div>
+  <div id="feelBody"></div>
+</div></div>
+
 <div id="rgResults" class="screen hide"><div class="panel" style="max-width:560px"><div id="rgResBody"></div></div></div>
 
 <div id="rgEd" class="hide"><div id="edTopBar"></div><div id="edLeftP"></div><div id="edRightP"></div><div id="edHint2"></div></div>
@@ -454,6 +460,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div class="menuBtns toolBtns">
     <button data-act="warmup">Pilot Warm-up<small>teach the game your pace (about a minute)</small></button>
     <button data-act="bbreplay">Blackbox Replay<small>watch a real flight from its Betaflight log</small></button>
+    <button data-act="feellab">Feel Lab<small>your Blackbox log next to the sim: match the feel of your own whoop</small></button>
     <button data-act="blackbox">Blackbox Lab<small>download logs from your quad over USB</small></button>
     <button data-act="review">Video Review<small>measure tricks in an FPV video</small></button>
     <button data-act="desk" id="deskBtn" class="hide">Flight desk<small>review flights pilots have shared (project owner)</small></button>
@@ -499,6 +506,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*MAPS*/</script>
 <script>/*RACE*/</script>
 <script>/*BBL*/</script>
+<script>/*FEELFIT*/</script>
 <script>/*FLIGHTLOG*/</script>
 <script>/*DROPOFF_URL*/</script>
 <script>/*MANEUVERS*/</script>

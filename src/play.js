@@ -143,6 +143,7 @@ function lightsAuto(dt) {
   const fps = LA.n / (LA.t - 2); PERF.lightsAuto = fps < 50 ? 'few' : 'full';
   if (PERF.lightsAuto === 'few') { mapLightsBuild(); flash(`<b>LIGHTING REDUCED</b><small>${Math.round(fps)} fps here · Options → Graphics → Map lights</small>`, 'warn'); }
 }
+const buzzE = new THREE.Euler(), buzzQ = new THREE.Quaternion();
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); resAutoTick(); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
@@ -201,6 +202,9 @@ function frame(now) {
     fpvCam.position.set(cp.x, cp.y, cp.z);
     tmpQ.set(drone.q.x, drone.q.y, drone.q.z, drone.q.w); tiltQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), tune.camTilt * Math.PI / 180);
     fpvCam.quaternion.copy(tmpQ).multiply(tiltQ);
+    // the fine buzz a real FPV picture has (frame and motor vibration, 40 Hz and up in the owner's logs): seen, not flown
+    if ((tune.shake ?? 0) > 0 && drone.armed && !drone.crashed && mode === 'fly') { const load = Math.min(2, drone.thrust.reduce((a, b) => a + Math.abs(b), 0) / (params.mass * 9.81)), A = tune.shake * 0.0022 * (0.25 + load);
+      buzzE.set((Math.random() - 0.5) * A, (Math.random() - 0.5) * A, (Math.random() - 0.5) * A * 0.5); fpvCam.quaternion.multiply(buzzQ.setFromEuler(buzzE)); }
   } else {
     cam = chaseCam; const f = drone.fwd(); const fl = Math.hypot(f.x, f.z) || 1;
     const target = new THREE.Vector3(drone.pos.x - f.x / fl * 0.45, drone.pos.y + 0.16, drone.pos.z - f.z / fl * 0.45);

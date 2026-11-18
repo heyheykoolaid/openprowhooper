@@ -5,7 +5,7 @@ Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
 `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `raceedit.js`,
-`mapedit.js`, `bbreplay.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
+`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
@@ -71,7 +71,27 @@ the pilot's labels, and tune like calibration data. Expect the camera tilt and l
 First log from the owner (2026-11-18, `blackbox/2026-11-17-bum-darts/`: Air2 frame, C03, Beast Brain, RCINPower EVO 31800KV,
 Matrix 2 AIO; 35 logs, the long ones 0 and 27-34): hover 25-28 % motor, motor command → eRPM lag 4-7 ms (the sim's Air65
 answers in ~23 ms), hover gyro noise unfiltered sd 10-43 °/s with peaks at 320-350 Hz and a broad wobble under 20 Hz (the
-sim has none: the "lofty, shuddery" feel the pilot misses). Not fitted yet.
+sim had none: the "lofty, shuddery" feel the pilot missed). Fitted the same day with the Feel Lab tools (below).
+
+## Feel Lab: the sim's feel fitted to real Blackbox logs (src/feelfit.js, tools/feelfit.js, src/feellab.js; 2026-11-18)
+`FeelFit` (pure, Node and browser; a plain script after bbl.js) takes a decoded log, finds the longest flight (throttle chops
+under 2 s are the same flight), flies the log's sticks through the sim high in empty air with the pilot's build and tune
+and the log's own rates (`rcCommand` already through the log's throttle curve, so the sim's is linear), and measures both
+the same way: hover motor, motor dead time (cross-correlation of command and eRPM changes), throttle steps to 63 %,
+per-axis lag behind the setpoint and tracking error, and the **unasked wobble** (gyro minus the lagged setpoint, 2-20 Hz,
+cruising): `measure`, `simulate`, `compare`, `suggest`, and `fit` (a grid over loop delay × shake by `cost`).
+`node tools/feelfit.js [files…] [--fit --delays= --shakes=] [--shake= --delay=]` (default: every log under blackbox/).
+**Two new physics settings, off in the physics (Node tests and the hash unchanged), on in the game** (game.js fills them in
+when the pilot has none): `tune.shake` (Drone.step: a smoothed random angular kick per axis, ~60 ms, growing with thrust,
+prop wash and speed, little on yaw; `SHAKE_A` 30 rad/s² per unit; its own seeded random stream) and `tune.loopDelayMs` (the
+motors get the FC's commands that long ago: gyro filtering, DShot and the ESC). Plus a drawn-only camera buzz (play.js,
+scaled by shake and motor load). Garage → Advanced → physics feel has both sliders; "All back to the defaults" = shake
+100 %, 3 ms. **Fit on the owner's 4 long flights: loop delay 3 ms, shake 1 (= 0.5 × the first scale)**: roll / pitch lag
+6-8 → 10-12 ms (theirs 10-12), tracking error 4-6 % → 6-10 % (theirs 8-11 %), unasked wobble matches; the 25-120 Hz
+ringing band matches too. Not measurable from a log: drag and coasting (no position). Motor steps to 63 % were rarely
+clean enough to time in freestyle logs (a hover with throttle blips would help). The game's **Feel Lab** (Tools & labs):
+load a .bbl, pick a flight, real vs sim table, a roll plot (setpoint / real / sim), suggestions with Apply, "Find my feel"
+(a 5 × 5 grid with a progress bar), export as `pro-whooper-feelfit/1`. Nothing leaves the browser.
 `blackbox/<date>-<craft>/` holds the raw `.bbl` (Betaflight onboard flash dump), `diff-all.txt`, and `build.json`
 (FC info, the game's craft/tune at upload, and the optional pilot build sheet: parts, all-up weight, prop condition,
 notes on how the sim felt). Decode the `.bbl` with Betaflight's `blackbox_decode` (or the blackbox-tools/orangebox
@@ -90,7 +110,8 @@ Tricks are built from segments; pilots leave air between them. `AIR_OPEN` (1.0 s
 allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad holds steady. `stress.js --air=0.6`.
 
 ## RaceGOW racing (src/racegow.js, src/raceedit.js) — redesigned 2026-11-18, racing only (no trick scoring)
-On: main menu "RaceGOW racing" (`RACEGOW_ON` in menus.js). **racegow.js** (window.RG, pure, test/racegow.js) is the track
+On: main menu "RaceGOW racing" (`RACEGOW_ON` in menus.js), shown only to the owner for now (pilot name heyheykoolaid, like Tools &
+labs and Judge the community: `ownerMenus` in menus.js, called from `pilotShowName`; the buttons start hidden). **racegow.js** (window.RG, pure, test/racegow.js) is the track
 format `pro-whooper-track/2` (`newTrack`, `cleanTrack` for anything untrusted, `trackHash` = the geometry, leaderboards key
 on it; `/1` tracks convert), one kind of track (owner, 2026-11-18: "combine the two": IGOW-style whoop gates, furniture and rooms mix with white
 PVC in one section size per track, 24 in minimum; `preset` is always 'racegow', older 'indoor' tracks open the same), venues (a room from `ROOMS`, the sized `empty` volume, or a map: `venue.kind 'map'`, raced on that
@@ -363,7 +384,7 @@ Champion 16.6 vs 16.6): mass was never the problem. Pilots with a feel slider of
 dropoff.js, `store 'phys2Asked'`; the old values kept in `store 'feelBefore2'`) whether to try the new defaults.
 Not changed, no data: yaw reaches full rate in 35-95 ms (the spec says 120-160; no pilot has said yaw feels wrong); the
 1002 19000KV (75 mm 1S build) is still weak (TWR 3.4); battery drain (5.3 min to brown-out at ~55 % throttle; real packs
-~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model yet (a guess without a log).
+~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model then; shake and loop delay were fitted from the first Blackbox log (see Feel Lab).
 
 ## Keyboard assist, pause button, 3D checkbox (2026-11-18)
 Keyboard is Mode 2 (owner, 2026-11-18, settled after one swap): W A S D the left stick (W / S throttle, A / D yaw), the arrows

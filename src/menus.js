@@ -78,7 +78,9 @@ document.addEventListener('click', e => { const y = e.target.closest('[data-myma
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); store.set('myMap', null); store.set('commMap', null); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { const j = $('#judgeBtn'); if (j) j.classList.toggle('hide', !ghMenus()); } }   // Judge the community: the project owner's tool for now
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
+// owner-only buttons (owner, 2026-11-18): shown only when the pilot name is heyheykoolaid
+function ownerMenus() { const own = ghMenus(); for (const sel of ['#judgeBtn', '#mainMenu [data-act="tools"]', '#mainMenu [data-act="race"]']) { const b = $(sel); if (b) b.classList.toggle('hide', !own); } }
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
 function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
 function startFlyGo(withSession) {
@@ -114,8 +116,8 @@ document.addEventListener('click', e => {
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
-  if (a === 'map') openMaps(); if (a === 'tools') { show('#toolsScreen'); $('#deskBtn').classList.toggle('hide', !ghMenus()); }
-  if (a === 'race' && RACEGOW_ON) openRaceMenu();
+  if (a === 'map') openMaps(); if (a === 'tools' && ghMenus()) { show('#toolsScreen'); $('#deskBtn').classList.toggle('hide', !ghMenus()); }
+  if (a === 'race' && RACEGOW_ON && ghMenus()) openRaceMenu();
 });
 
 // ---------------- garage
@@ -181,7 +183,9 @@ function renderGarage() {
     <details class="gAdv" ${FEEL.some(([k]) => (tune[k] ?? 1) !== 1) ? 'open' : ''}><summary>Advanced: physics feel</summary>
       <p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts; these change only how the physics feels, not the parts or the figures above. Drag a slider to try it while you fly next.</p>
       ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label title="${help}">${name} <b id="gFeelV-${k}">${v}%</b><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
-      <div class="row"><button id="gFeelReset" class="ghost">All back to 100%</button></div>
+      <label title="Air that is never still: the wobble a light whoop has in its own air, and the fine buzz you see in the goggles. 100% is fitted from a real whoop's Blackbox logs (Tools & labs → Feel Lab); 0 is the old glassy-smooth sim">Shake <b id="gShakeV">${Math.round((tune.shake ?? 1) * 100)}%</b><input type=range id="gShake" min=0 max=300 step=10 value="${Math.round((tune.shake ?? 1) * 100)}"></label>
+      <label title="A real quad answers a few milliseconds late (gyro filtering, DShot, the ESC); the sim's flight controller used to answer at once, which feels locked-in. 3 ms is fitted from a real whoop's Blackbox logs">Loop delay <b id="gDelayV">${tune.loopDelayMs ?? 3} ms</b><input type=range id="gDelay" min=0 max=10 step=0.5 value="${tune.loopDelayMs ?? 3}"></label>
+      <div class="row"><button id="gFeelReset" class="ghost">All back to the defaults</button></div>
     </details>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
@@ -233,7 +237,7 @@ document.addEventListener('click', e => {
 });
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.feel; if (k) { const v = $('#gFeelV-' + k); if (v) v.textContent = e.target.value + '%'; } });
-document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; saveTune(); renderGarage(); } });
+document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; tune.shake = 1; tune.loopDelayMs = 3; saveTune(); renderGarage(); } });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}), ...(spec.canopy ? { canopy: spec.canopy } : {}) }; applyParts(); }
@@ -249,6 +253,8 @@ document.addEventListener('change', e => {
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
   if (t.id === 'gLinkHz') { tune.rcLinkHz = +t.value; saveTune(); }
   if (t.dataset.feel) { tune[t.dataset.feel] = +t.value / 100; saveTune(); }
+  if (t.id === 'gShake') { tune.shake = +t.value / 100; const b = $('#gShakeV'); if (b) b.textContent = t.value + '%'; saveTune(); }
+  if (t.id === 'gDelay') { tune.loopDelayMs = +t.value; const b = $('#gDelayV'); if (b) b.textContent = t.value + ' ms'; saveTune(); }
   if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
   if (t.dataset.t3d !== undefined) { if (t.checked) { if (tune.flightMode !== '3d') store.set('mode2d', tune.flightMode || 'acro'); setFlightMode('3d'); } else setFlightMode(store.get('mode2d', 'acro') === 'angle' ? 'angle' : 'acro'); saveTune(); }
