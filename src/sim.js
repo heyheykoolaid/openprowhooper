@@ -265,6 +265,8 @@ class FlightController {
   }
   reset() {
     this.i = [0, 0, 0]; this.gf = [0, 0, 0]; this.dPrev = [0, 0, 0]; this.dF = [0, 0, 0];
+    this.gS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.g2S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.dS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.d2S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];   // Betaflight-style filter stages
+    this.thrLp5 = 0; this.thrLp15 = 0;   // anti-gravity and throttle boost watch the throttle's changes
     this.spPrev = [0, 0, 0]; this.spF = [0, 0, 0]; this.spLp = [0, 0, 0]; this.ffF = [0, 0, 0];
     this.out = [0, 0, 0, 0]; this.sp = [0, 0, 0]; this.pidSum = [0, 0, 0];
     this.link = null; this.sp3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];   // radio link model and Betaflight-style smoothing state
@@ -296,6 +298,20 @@ class FlightController {
     // factor 30 as stock: 56 Hz on a 150 Hz link, 19 Hz on a 50 Hz one), which is what makes a real quad feel rounder.
     const smooth = t.rcSmooth || 'sim', autoCut = smooth === 'auto' ? Math.max(5, (LHz > 0 ? LHz : 150) * 1.5 / (1 + (t.rcSmoothFactor ?? 30) / 10)) : 0;
     const lpa = (fc) => 1 - Math.exp(-2 * Math.PI * fc * dt);
+    // Betaflight-style filters and PID extras (Garage → Advanced physics → Betaflight; all absent = the sim as it always was:
+    // one 180 Hz PT1 on the gyro, one 90 Hz PT1 on the D-term, no TPA, anti-gravity, thrust linear, boost or output limit).
+    // Filter types as Betaflight's: PT1, PT2, PT3 (cutoffs corrected so the -3 dB point stays put), BIQUAD (drawn as a PT2).
+    // A cutoff of 0 is off. A dynamic lowpass (…MaxHz above …Hz) opens with the throttle like Betaflight's dyn_lpf curve.
+    const lpf = (S, x, hz, type) => { if (!(hz > 0)) return x; const n = type === 'PT3' ? 3 : (type === 'PT2' || type === 'BIQUAD') ? 2 : 1, a = lpa(hz * (n === 3 ? 1.961 : n === 2 ? 1.553 : 1));
+      S[0] += (x - S[0]) * a; if (n > 1) S[1] += (S[0] - S[1]) * a; if (n > 2) S[2] += (S[1] - S[2]) * a; return S[n - 1]; };
+    const thrIn = clamp(rc.thr, 0, 1), dyn = (lo, hi, ex) => { if (!(hi > lo) || !(lo > 0)) return lo; const e = (ex ?? 5) / 10, c = thrIn * (1 - thrIn) * e + thrIn; return lo + (hi - lo) * c; };
+    const gHz = dyn(t.gyroLpfHz ?? 180, t.gyroLpfMaxHz, t.gyroLpfExpo), dHz = dyn(t.dtermLpfHz ?? 90, t.dtermLpfMaxHz, t.dtermLpfExpo);
+    // TPA: above the breakpoint the D (or P and D) gains fade, reaching tpaRate % less at full throttle
+    const tpaR = (+t.tpaRate || 0) / 100, tpaB = t.tpaBreakpoint ?? 0.35, tpa = tpaR > 0 && thrIn > tpaB ? 1 - tpaR * Math.min(1, (thrIn - tpaB) / Math.max(0.01, 1 - tpaB)) : 1;
+    // anti-gravity: quick throttle changes speed up the I-term so the nose does not dip on a punch or a chop
+    this.thrLp5 += (thrIn - this.thrLp5) * lpa(5); const agG = +t.antiGravity || 0, iMul = agG > 0 ? 1 + (agG / 10) * Math.min(1, Math.abs(thrIn - this.thrLp5) * 10) : 1;
+    // Betaflight's simplified tuning sliders, here on top of the PIDs in the table (1 = as typed)
+    const sM = t.simMaster ?? 1, sP = sM * (t.simPI ?? 1), sD = sM * (t.simD ?? 1), sF = sM * (t.simFF ?? 1);
     for (let k = 0; k < 3; k++) {
       const name = axes[k];
       // pitch stick forward = nose down => setpoint pitch-back negative
@@ -306,25 +322,31 @@ class FlightController {
       else if (smooth === 'off') this.spF[k] = sp;
       else this.spF[k] += (sp - this.spF[k]) * lpa(40);            // RC smoothing
       this.sp[k] = this.spF[k];
-      this.gf[k] += (gyro[k] - this.gf[k]) * lpa(180);          // gyro LPF
+      this.gf[k] = lpf(this.gS[k], gyro[k], gHz, t.gyroLpfType);   // gyro LPF1 (180 Hz PT1 unless set)
+      if (t.gyroLpf2Hz > 0) this.gf[k] = lpf(this.g2S[k], this.gf[k], t.gyroLpf2Hz, t.gyroLpf2Type);
       const pid = t.pid[name];
       const err = this.sp[k] - this.gf[k];
-      const P = pid.p * PTERM * err;
+      const P = pid.p * sP * PTERM * err * (t.tpaMode === 'PD' ? tpa : 1);
       // iterm relax (setpoint based)
       this.spLp[k] += (this.sp[k] - this.spLp[k]) * lpa(15);
       let iErr = err;
       if (t.itermRelax && k < 2) { const hp = Math.abs(this.sp[k] - this.spLp[k]); iErr *= Math.max(0, 1 - hp / 40); }
-      if (armed) this.i[k] = clamp(this.i[k] + pid.i * ITERM * iErr * dt, -400, 400); else this.i[k] = 0;
+      if (armed) this.i[k] = clamp(this.i[k] + pid.i * sP * ITERM * iErr * iMul * dt, -400, 400); else this.i[k] = 0;
       const dg = (this.gf[k] - this.dPrev[k]) / dt; this.dPrev[k] = this.gf[k];
-      this.dF[k] += (dg - this.dF[k]) * lpa(90);
-      const D = -pid.d * DTERM * this.dF[k];
+      this.dF[k] = lpf(this.dS[k], dg, dHz, t.dtermLpfType);       // D-term LPF1 (90 Hz PT1 unless set)
+      if (t.dtermLpf2Hz > 0) this.dF[k] = lpf(this.d2S[k], this.dF[k], t.dtermLpf2Hz, t.dtermLpf2Type);
+      const D = -pid.d * sD * DTERM * this.dF[k] * tpa;
       const dsp = (this.sp[k] - this.spPrev[k]) / dt; this.spPrev[k] = this.sp[k];
       this.ffF[k] += (dsp - this.ffF[k]) * lpa(30);
-      const F = (pid.f / 100) * FFS * this.ffF[k];
+      const F = (pid.f * sF / 100) * FFS * this.ffF[k];
       const lim = k === 2 ? 400 : 500;
       this.pidSum[k] = clamp(P + this.i[k] + D + F, -lim, lim);
     }
     let thr = throttleCurve(clamp(rc.thr, 0, 1), t.thrMid, t.thrExpo);
+    this.thrLp15 += (thr - this.thrLp15) * lpa(15);
+    if (t.throttleBoost > 0) thr = clamp(thr + (t.throttleBoost / 10) * (thr - this.thrLp15), 0, 1);   // throttle boost: a kick on quick throttle moves
+    const tl = (+t.thrustLinear || 0) / 100, tlB = tl > 0 ? (1 - tl) / (2 * tl) : 0;
+    if (tl > 0) thr = thr * (thr * tl + 1 - tl);   // thrust linear: Betaflight lowers the throttle to match, so hover stays where it was
     if (!armed) { this.out = [0, 0, 0, 0]; this.dir3d = 1; this.wait3d = fm === '3d'; return this.out; }
     let dir = 1;
     if (fm === '3d') {
@@ -349,7 +371,9 @@ class FlightController {
       mixS *= Math.min(1, thr * 4 + 0.05);
     }
     for (let i = 0; i < 4; i++) {
-      const m = clamp(thr + raw[i] * mixS, 0, 1);
+      let m = clamp(thr + raw[i] * mixS, 0, 1);
+      if (tl > 0 && m > 0) m = Math.sqrt(m / tl + tlB * tlB) - tlB;   // thrust linear: more authority low in the throttle
+      if (t.motorOutputLimit > 0 && t.motorOutputLimit < 100) m *= t.motorOutputLimit / 100;
       this.out[i] = (t.idle + (1 - t.idle) * m) * dir;
     }
     return this.out;
@@ -2677,9 +2701,43 @@ class ScoreKeeper {
 }
 
 // ================================================================= Betaflight diff import
+// Betaflight's filters and PID extras from a diff (CLI names, text values) or a Blackbox header (numbers, "min,max" pairs)
+const BF_LPF = ['PT1', 'BIQUAD', 'PT2', 'PT3'];
+function bfFilters(set, found = []) {
+  const o = {}, has = k => set[k] !== undefined && set[k] !== '', num = k => +String(set[k]).split(',')[0];
+  const typ = k => { const v = String(set[k]).toUpperCase(); return BF_LPF.includes(v) ? v : BF_LPF[+v] || 'PT1'; };
+  const pair = (k, kmin, kmax) => has(k) && String(set[k]).includes(',') ? String(set[k]).split(',').map(Number) : [has(kmin) ? +set[kmin] : undefined, has(kmax) ? +set[kmax] : undefined];
+  for (const [pre, key, dflt] of [['gyro', 'gyroLpf', 180], ['dterm', 'dtermLpf', 90]]) {
+    const [lo, hi] = pair(pre + '_lpf1_dyn_hz', pre + '_lpf1_dyn_min_hz', pre + '_lpf1_dyn_max_hz'), st = has(pre + '_lpf1_static_hz') ? num(pre + '_lpf1_static_hz') : undefined;
+    if (lo > 0) { o[key + 'Hz'] = lo; o[key + 'MaxHz'] = hi > lo ? hi : 0; found.push(pre + '_lpf1_dyn_hz'); }   // Betaflight: a dynamic lowpass wins over the static one
+    else if (st !== undefined || lo === 0) { o[key + 'Hz'] = st || 0; o[key + 'MaxHz'] = 0; found.push(pre + '_lpf1_static_hz'); }
+    if (has(pre + '_lpf1_dyn_expo')) o[key + 'Expo'] = num(pre + '_lpf1_dyn_expo');
+    if (has(pre + '_lpf1_type')) o[key + 'Type'] = typ(pre + '_lpf1_type');
+    if (has(pre + '_lpf2_static_hz')) { o[key + '2Hz'] = num(pre + '_lpf2_static_hz'); found.push(pre + '_lpf2_static_hz'); }
+    if (has(pre + '_lpf2_type')) o[key + '2Type'] = typ(pre + '_lpf2_type');
+    void dflt;
+  }
+  if (has('tpa_rate')) { o.tpaRate = num('tpa_rate'); found.push('tpa_rate'); }
+  if (has('tpa_breakpoint')) o.tpaBreakpoint = Math.max(0, Math.min(1, (num('tpa_breakpoint') - 1000) / 1000));
+  if (has('tpa_mode')) o.tpaMode = /^(PD|0)$/i.test(set.tpa_mode) ? 'PD' : 'D';
+  for (const [k, key] of [['anti_gravity_gain', 'antiGravity'], ['thrust_linear', 'thrustLinear'], ['throttle_boost', 'throttleBoost'], ['motor_output_limit', 'motorOutputLimit']])
+    if (has(k)) { o[key] = num(k); found.push(k); }
+  return o;
+}
+// Betaflight 4.5's stock filters and extras (what a fresh flight controller flies)
+const BF_STOCK = { gyroLpfHz: 250, gyroLpfMaxHz: 500, gyroLpfExpo: 5, gyroLpfType: 'PT1', gyroLpf2Hz: 500, gyroLpf2Type: 'PT1',
+  dtermLpfHz: 75, dtermLpfMaxHz: 150, dtermLpfExpo: 5, dtermLpfType: 'PT1', dtermLpf2Hz: 150, dtermLpf2Type: 'PT1',
+  tpaRate: 65, tpaBreakpoint: 0.35, tpaMode: 'D', antiGravity: 80, thrustLinear: 0, throttleBoost: 5, motorOutputLimit: 100 };
+// the sim's own (what an untouched tune flies: the physics as it always was)
+const BF_SIM = { gyroLpfHz: 180, gyroLpfMaxHz: 0, gyroLpfExpo: 5, gyroLpfType: 'PT1', gyroLpf2Hz: 0, gyroLpf2Type: 'PT1',
+  dtermLpfHz: 90, dtermLpfMaxHz: 0, dtermLpfExpo: 5, dtermLpfType: 'PT1', dtermLpf2Hz: 0, dtermLpf2Type: 'PT1',
+  tpaRate: 0, tpaBreakpoint: 0.35, tpaMode: 'D', antiGravity: 0, thrustLinear: 0, throttleBoost: 0, motorOutputLimit: 100, simMaster: 1, simPI: 1, simD: 1, simFF: 1 };
 function importDiff(text, tune) {
   const t = JSON.parse(JSON.stringify(tune)); const set = {}; const found = [];
-  for (const line of text.split(/\r?\n/)) { const m = line.match(/^\s*set\s+(\w+)\s*=\s*(\S+)/i); if (m) set[m[1].toLowerCase()] = m[2]; }
+  for (const line of text.split(/\r?\n/)) { const m = line.match(/^\s*set\s+(\w+)\s*=\s*(.+?)\s*$/i) || line.match(/^\s*H\s+(\w+):(.*)$/); if (m) set[m[1].toLowerCase()] = m[2].trim(); }
+  // Blackbox headers carry the PIDs as "rollPID:41,70,37" and the feedforward as "ff_weight:111,110,111"
+  for (const ax of ['roll', 'pitch', 'yaw']) { const v = set[ax.toLowerCase() + 'pid']; if (v) { const [p, i, d] = v.split(',').map(Number); if (isFinite(p)) set['p_' + ax] = p; if (isFinite(i)) set['i_' + ax] = i; if (isFinite(d)) set['d_' + ax] = d; } }
+  if (set.ff_weight && set.ff_weight.includes(',')) ['roll', 'pitch', 'yaw'].forEach((ax, j) => { const v = +set.ff_weight.split(',')[j]; if (isFinite(v)) set['f_' + ax] = v; });
   const num = k => set[k] !== undefined ? +set[k] : undefined;
   for (const ax of ['roll', 'pitch', 'yaw']) {
     for (const [k, f] of [['p', 'p'], ['i', 'i'], ['d', 'd'], ['f', 'f']]) { const v = num(`${k}_${ax}`); if (v !== undefined) { t.pid[ax][f] = v; found.push(`${k}_${ax}`); } }
@@ -2697,7 +2755,8 @@ function importDiff(text, tune) {
   if (num('dshot_idle_value') !== undefined) { t.idle = num('dshot_idle_value') / 10000; found.push('dshot_idle_value'); }
   if (num('thr_mid') !== undefined) t.thrMid = num('thr_mid') / 100;
   if (num('thr_expo') !== undefined) t.thrExpo = num('thr_expo') / 100;
-  if (set.iterm_relax) t.itermRelax = set.iterm_relax.toUpperCase() !== 'OFF';
+  if (set.iterm_relax) t.itermRelax = !/^(OFF|0)$/i.test(set.iterm_relax);
+  Object.assign(t, bfFilters(set, found));
   return { tune: t, found };
 }
 
@@ -2874,6 +2933,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

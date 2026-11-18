@@ -89,8 +89,8 @@ scaled by shake and motor load). **Owner, after flying it (2026-11-18): "really 
 sim with a hint of soft wobble on movement** (`FEEL3` in game.js: shake 0.35, `shakeTau` 0.2 s (the wobble is smoothed twice,
 no sharp edges), `shakeMove` 1 (it grows with rotation rate and speed; a still hover stays nearly calm), loop delay 0, camera
 buzz `camBuzz` 0 (smoothed now, it hummed per frame before); pilots still on the first fitted values get them once, `store
-'feel3'`). Garage → Advanced → physics feel: Wobble, Wobble smoothness, Wobble on movement, Loop delay, Camera buzz; "All
-back to the defaults" = FEEL3. The Feel Lab's fit (shake 1, 3 ms) is what a real log measures, not the default. **Fit on the owner's 4 long flights: loop delay 3 ms, shake 1 (= 0.5 × the first scale)**: roll / pitch lag
+'feel3'`). The Garage's **⚙ Advanced physics…** button opens a popup (`renderAdv` in menus.js, `#advModal`) with tabs Feel /
+Wobble and lag / Betaflight filters / PID extras / Radio link, all sliders and button rows; "Back to the defaults" = FEEL3. The Feel Lab's fit (shake 1, 3 ms) is what a real log measures, not the default. **Fit on the owner's 4 long flights: loop delay 3 ms, shake 1 (= 0.5 × the first scale)**: roll / pitch lag
 6-8 → 10-12 ms (theirs 10-12), tracking error 4-6 % → 6-10 % (theirs 8-11 %), unasked wobble matches; the 25-120 Hz
 ringing band matches too. Not measurable from a log: drag and coasting (no position). Motor steps to 63 % were rarely
 clean enough to time in freestyle logs (a hover with throttle blips would help). The game's **Feel Lab** (Tools & labs):
@@ -398,7 +398,20 @@ height hold (W / S climb and sink, released = hover; a PI on vertical speed in i
 throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`, right of the score in `#scoreRow`, clear of the "what counted" list).
 The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 
-## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
+## Betaflight filters and PID extras (Advanced physics popup; `FlightController.update`, `bfFilters`, 2026-11-18)
+Owner: "use Betaflight parameters as inspiration". Tune keys, all absent = the sim as it always was (`S.BF_SIM`: gyro 180 Hz
+PT1, D-term 90 Hz PT1, nothing else; physics hash unchanged): `gyroLpfHz` / `gyroLpfMaxHz` (dynamic, opens with throttle by
+`gyroLpfExpo`, Betaflight's curve) / `gyroLpfType` (PT1, PT2, PT3, BIQUAD drawn as PT2; cutoffs corrected) / `gyroLpf2Hz`,
+the same for `dterm…`; `tpaRate` / `tpaBreakpoint` (0-1 throttle; 1350 = 0.35) / `tpaMode` D | PD; `antiGravity` (I-term
+sped up on quick throttle moves); `thrustLinear` (Betaflight's formula, throttle compensated so hover stays); `throttleBoost`;
+`motorOutputLimit`; `simMaster` / `simPI` / `simD` / `simFF` (simplified-tuning sliders on top of the PID table). `S.BF_STOCK`
+is Betaflight 4.5's stock set. `importDiff` reads them from a `diff all` and from Blackbox header lines (`H key:value`,
+`rollPID`, `ff_weight`); the popup's "From my Blackbox log" decodes a .bbl in the browser and imports its header. The owner's
+log: gyro 250-500 + 500, D-term 75-150 + 150, TPA 65 % D at 1350, anti-gravity 80, thrust linear 20, boost 5. Feel Lab:
+those filters move roll/pitch lag under 1 ms (6.2/7 ms vs the real 11.7/11): the rest of a real whoop's lag is the ESC and
+motor side (`loopDelayMs`), and the sim has no motor noise for the filters to remove.
+
+## Radio link and stick smoothing (Advanced physics popup → Radio link; `FlightController.update`)
 Off by default (the sticks reach the FC instantly: crisper than a real quad; a pilot found identical Betaflight rates
 "harsh"). `tune.rcLinkHz` sends the sticks in packets, `tune.rcDelayMs` delays them, `tune.rcSmooth` is `sim` (40 Hz
 PT1, the default), `off`, or `auto` (Betaflight's rule: PT3 at link rate × 1.5 / (1 + `rcSmoothFactor`/10)). "Real

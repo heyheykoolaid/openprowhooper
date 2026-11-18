@@ -172,28 +172,10 @@ function renderGarage() {
       <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
       <label class="chk" title="Betaflight's 3D mode: throttle stick in the middle is zero thrust, below the middle the motors spin backward so the quad can fly upside-down. Same as the 3 key while flying (1 acro, 2 angle)."><input type=checkbox data-t3d ${tune.flightMode === '3d' ? 'checked' : ''}> 3D mode (reversible motors)</label>
     </div>
-    <details class="gAdv" ${tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim') ? 'open' : ''}><summary>Advanced: radio link and stick smoothing</summary>
-      <p class="note">By default your sticks reach the flight controller instantly, which is crisper than any real quad. These add what a real radio link does. Try "Real radio feel" if the sim feels harsher than your quad on the same rates.</p>
-      <label>Radio link rate<select id="gLinkHz">${[[0, 'ideal (no packets)'], [50, '50 Hz'], [100, '100 Hz'], [150, '150 Hz'], [250, '250 Hz'], [333, '333 Hz'], [500, '500 Hz'], [1000, '1000 Hz']].map(([v, l]) => `<option value="${v}" ${(+tune.rcLinkHz || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label>Link delay (ms)<input type=number min=0 max=80 step=1 data-t="rcDelayMs" value="${+tune.rcDelayMs || 0}"></label>
-      <label>Stick smoothing<select id="gRcSmooth">${[['sim', 'sim default (light)'], ['off', 'off'], ['auto', 'Betaflight auto']].map(([v, l]) => `<option value="${v}" ${(tune.rcSmooth || 'sim') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label>Auto smoothing factor<input type=number min=0 max=250 step=5 data-t="rcSmoothFactor" value="${tune.rcSmoothFactor ?? 30}" ${tune.rcSmooth === 'auto' ? '' : 'disabled'}></label>
-      <div class="row"><button id="gLinkReal">Real radio feel</button><button id="gLinkIdeal" class="ghost">Back to ideal</button></div>
-    </details>
-    <details class="gAdv" ${FEEL.some(([k]) => (tune[k] ?? 1) !== 1) ? 'open' : ''}><summary>Advanced: physics feel</summary>
-      <p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts; these change only how the physics feels, not the parts or the figures above. Drag a slider to try it while you fly next.</p>
-      ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label title="${help}">${name} <b id="gFeelV-${k}">${v}%</b><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
-      <h4 style="margin:10px 0 4px">Wobble and lag (fitted from a real whoop's Blackbox logs in the Feel Lab)</h4>
-      <label title="Air that is never still: a soft wobble a light whoop has in its own air. 0 = the old glassy-smooth sim; 100% = what the Feel Lab measured on a real whoop (jittery for most pilots)">Wobble <b id="gShakeV">${Math.round((tune.shake ?? 0.35) * 100)}%</b><input type=range id="gShake" min=0 max=150 step=5 value="${Math.round((tune.shake ?? 0.35) * 100)}"></label>
-      <label title="How slowly the wobble changes: smoother is a lazy float, sharper is a quick shudder">Wobble smoothness <b id="gTauV">${Math.round((tune.shakeTau ?? 0.2) * 1000)} ms</b><input type=range id="gTau" min=30 max=400 step=10 value="${Math.round((tune.shakeTau ?? 0.2) * 1000)}"></label>
-      <label title="100%: the wobble comes with movement (turns, speed) and a still hover stays calm; 0%: the same wobble all the time">Wobble on movement <b id="gMoveV">${Math.round((tune.shakeMove ?? 1) * 100)}%</b><input type=range id="gMove" min=0 max=100 step=10 value="${Math.round((tune.shakeMove ?? 1) * 100)}"></label>
-      <label title="A real quad answers a few milliseconds late (gyro filtering, DShot, the ESC). More is softer but makes the quad twitch; the Feel Lab measured about 3 ms on a real whoop">Loop delay <b id="gDelayV">${tune.loopDelayMs ?? 0} ms</b><input type=range id="gDelay" min=0 max=6 step=0.5 value="${tune.loopDelayMs ?? 0}"></label>
-      <label title="A fine hum of motor vibration on the FPV picture only (it does not move the quad)">Camera buzz <b id="gBuzzV">${Math.round((tune.camBuzz ?? 0) * 100)}%</b><input type=range id="gBuzz" min=0 max=200 step=10 value="${Math.round((tune.camBuzz ?? 0) * 100)}"></label>
-      <div class="row"><button id="gFeelReset" class="ghost">All back to the defaults</button></div>
-    </details>
+    <div class="row advRow"><button id="gAdvOpen">⚙ Advanced physics…</button><span class="note">${advSummary()}</span></div>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
-  drawRateCurve(); garagePreviewRefresh();
+  drawRateCurve(); garagePreviewRefresh(); if (ADV.open) renderAdv();
 }
 function drawRateCurve() {
   const c = $('#rateCurve'); if (!c) return; const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
@@ -232,6 +214,107 @@ addEventListener('pointerdown', e => { if (e.target.id === 'gPreview') { gPrev.d
 addEventListener('pointermove', e => { const d = gPrev.drag; if (!d) return; gPrev.yaw = d.yaw - (e.clientX - d.x) * 0.01; gPrev.pitch = Math.max(-1.3, Math.min(1.4, d.pitch + (e.clientY - d.y) * 0.01)); });
 addEventListener('pointerup', () => { gPrev.drag = null; });
 window.__pwGarage = gPrev;
+// ============================================================ Advanced physics (a popup from the Garage)
+// Everything that shapes how the whoop flies beyond the parts and the PIDs, in tabs, with sliders and button rows rather
+// than drop-downs. The Betaflight tab uses Betaflight's own settings (src/sim.js FlightController; imported from a diff all
+// or straight from a Blackbox log's header); untouched, every one of them is the sim as it always was (S.BF_SIM).
+const ADV = { open: false, tab: 'feel' };
+// [tune key, name, min, max, step, shown = value × this, unit, what it does, default]
+const ADV_SL = {
+  wobble: [['shake', 'Wobble', 0, 1.5, 0.05, 100, '%', 'Air that is never still: a soft wobble a light whoop has in its own air. 0 = the old glassy-smooth sim; 100% = what the Feel Lab measured on a real whoop (jittery for most pilots)', FEEL3.shake],
+    ['shakeTau', 'Wobble smoothness', 0.03, 0.4, 0.01, 1000, ' ms', 'How slowly the wobble changes: longer is a lazy float, shorter a quick shudder', FEEL3.shakeTau],
+    ['shakeMove', 'Wobble on movement', 0, 1, 0.1, 100, '%', '100%: the wobble comes with turns and speed and a still hover stays calm; 0%: the same wobble all the time', FEEL3.shakeMove],
+    ['loopDelayMs', 'Motor / ESC delay', 0, 6, 0.5, 1, ' ms', 'A real quad answers a few ms late (DShot, the ESC, the motor). More is softer but rings; the Feel Lab measured about 3 ms on a real whoop', FEEL3.loopDelayMs],
+    ['camBuzz', 'Camera buzz', 0, 2, 0.1, 100, '%', 'A fine hum of motor vibration on the FPV picture only (it does not move the quad)', FEEL3.camBuzz]],
+  filters: [['gyroLpfHz', 'Gyro lowpass 1 (min)', 0, 500, 5, 1, ' Hz', 'gyro_lpf1: lower is smoother and laggier. With a max above it, it is dynamic and opens with the throttle (0 = off)', 180],
+    ['gyroLpfMaxHz', 'Gyro lowpass 1 dynamic max', 0, 1000, 10, 1, ' Hz', 'gyro_lpf1_dyn_max_hz (0 = static)', 0],
+    ['gyroLpf2Hz', 'Gyro lowpass 2', 0, 1000, 10, 1, ' Hz', 'gyro_lpf2_static_hz (0 = off)', 0],
+    ['dtermLpfHz', 'D-term lowpass 1 (min)', 0, 300, 5, 1, ' Hz', 'dterm_lpf1: the D-term amplifies every twitch, so it is filtered harder (0 = off)', 90],
+    ['dtermLpfMaxHz', 'D-term lowpass 1 dynamic max', 0, 400, 5, 1, ' Hz', 'dterm_lpf1_dyn_max_hz (0 = static)', 0],
+    ['dtermLpf2Hz', 'D-term lowpass 2', 0, 400, 5, 1, ' Hz', 'dterm_lpf2_static_hz (0 = off)', 0]],
+  extras: [['simMaster', 'Master multiplier', 0.5, 2, 0.05, 100, '%', 'simplified_master_multiplier: all the PID gains together, on top of the table', 1],
+    ['simPI', 'Tracking (P and I)', 0.5, 2, 0.05, 100, '%', 'simplified_pi_gain: how hard it holds the rate you ask for', 1],
+    ['simD', 'Damping (D)', 0.3, 2, 0.05, 100, '%', 'simplified_d_gain: stops overshoot and bounce-back; too much feels dull and hot', 1],
+    ['simFF', 'Stick response (FF)', 0, 2, 0.05, 100, '%', 'simplified_feedforward_gain: how sharply it reacts to stick movement', 1],
+    ['tpaRate', 'TPA rate', 0, 100, 5, 1, '%', 'tpa_rate: how much the gains fade at full throttle (Betaflight 4.5: 65% on D)', 0],
+    ['tpaBreakpoint', 'TPA breakpoint', 0, 0.9, 0.05, 1000, '', 'tpa_breakpoint: the throttle where TPA starts (shown as 1000-2000 like Betaflight; 1350 stock)', 0.35, 1000],
+    ['antiGravity', 'Anti-gravity', 0, 250, 5, 1, '', 'anti_gravity_gain: speeds up the I-term on quick throttle moves so the nose holds on punches and chops (80 stock)', 0],
+    ['thrustLinear', 'Thrust linear', 0, 150, 5, 1, '%', 'thrust_linear: more authority low in the throttle, where whoop props push weakly (whoop tunes often use 20-40)', 0],
+    ['throttleBoost', 'Throttle boost', 0, 100, 1, 1, '', 'throttle_boost: a short kick when the throttle moves quickly (5 stock)', 0],
+    ['motorOutputLimit', 'Motor output limit', 20, 100, 5, 1, '%', 'motor_output_limit: caps the motors, like a smaller battery or a softer build', 100]]
+};
+const advVal = d => { const v = tune[d[0]]; return v == null || !isFinite(+v) ? d[8] : +v; };
+const advShow = d => { const v = advVal(d); if (d[0] === 'tpaBreakpoint') return Math.round(1000 + v * 1000); if (/Lpf.*Hz$/.test(d[0]) && !v) return 'off'; return (Math.round(v * d[5] * 10) / 10) + d[6]; };
+const advSlider = d => `<label class="advS" title="${d[7]}"><span>${d[1]} <b id="advV-${d[0]}">${advShow(d)}</b></span><input type=range data-adv="${d[0]}" min=${d[2]} max=${d[3]} step=${d[4]} value="${advVal(d)}"></label>`;
+const advSeg = (key, opts, cur, title = '') => `<div class="advSeg" title="${title}">${opts.map(([v, l]) => `<button data-advset="${key}" data-v="${v}" class="${String(cur) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+function advSummary() {
+  const n = [];
+  if (FEEL.some(([k]) => (tune[k] ?? 1) !== 1)) n.push('feel');
+  if (ADV_SL.wobble.some(d => advVal(d) !== d[8])) n.push('wobble');
+  if ([...ADV_SL.filters, ...ADV_SL.extras].some(d => advVal(d) !== d[8]) || ['gyroLpfType', 'dtermLpfType', 'gyroLpf2Type', 'dtermLpf2Type'].some(k => tune[k] && tune[k] !== 'PT1')) n.push('Betaflight');
+  if (tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim')) n.push('radio link');
+  return n.length ? 'Changed: ' + n.join(', ') : 'Feel, wobble, Betaflight filters and PID extras, radio link';
+}
+function renderAdv() {
+  let el = $('#advModal'); if (!el) { el = document.createElement('div'); el.id = 'advModal'; document.body.appendChild(el); }
+  const body = el.querySelector('.advBody'), sc = body ? body.scrollTop : 0;
+  el.classList.remove('hide'); ADV.open = true;
+  const tabs = [['feel', 'Feel'], ['wobble', 'Wobble and lag'], ['bf', 'Betaflight filters'], ['extras', 'PID extras'], ['link', 'Radio link']];
+  let h = '';
+  if (ADV.tab === 'feel') h = `<p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts; these change only how the physics feels, not the parts or the Garage figures.</p>
+    ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label class="advS" title="${help}"><span>${name} <b id="gFeelV-${k}">${v}%</b></span><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
+    <div class="row"><button data-advreset="feel" class="ghost">Feel back to 100%</button></div>`;
+  if (ADV.tab === 'wobble') h = `<p class="note">The life a real whoop has in the air, fitted from real Blackbox logs (Tools &amp; labs → Feel Lab). The defaults are the old smooth sim with a hint of wobble when you move.</p>
+    ${ADV_SL.wobble.map(advSlider).join('')}<div class="row"><button data-advreset="wobble" class="ghost">Back to the defaults</button><button data-advpreset="logfit" class="ghost" title="What the Feel Lab measured on the owner's Air2 whoop: shake 100%, 60 ms, 3 ms of delay. Real, and jittery">As measured on a real whoop</button></div>`;
+  if (ADV.tab === 'bf') h = `<p class="note">The flight controller's filters, as Betaflight has them. Lower cutoffs are smoother and laggier; a dynamic lowpass opens with the throttle. The sim has no motor noise to filter, so here they shape only the lag and the softness. Untouched: one 180 Hz gyro filter and one 90 Hz D-term filter, the sim as it always was.</p>
+    ${ADV_SL.filters.slice(0, 3).map(advSlider).join('')}
+    <div class="advPair"><span>Gyro lowpass 1 type</span>${advSeg('gyroLpfType', [['PT1', 'PT1'], ['PT2', 'PT2'], ['PT3', 'PT3'], ['BIQUAD', 'BIQUAD']], tune.gyroLpfType || 'PT1', 'gyro_lpf1_type')}</div>
+    <div class="advPair"><span>Gyro lowpass 2 type</span>${advSeg('gyroLpf2Type', [['PT1', 'PT1'], ['PT2', 'PT2'], ['PT3', 'PT3'], ['BIQUAD', 'BIQUAD']], tune.gyroLpf2Type || 'PT1', 'gyro_lpf2_type')}</div>
+    ${advSlider(['gyroLpfExpo', 'Gyro dynamic curve expo', 0, 10, 1, 1, '', 'gyro_lpf1_dyn_expo: how early in the throttle the dynamic filter opens', 5])}
+    ${ADV_SL.filters.slice(3).map(advSlider).join('')}
+    <div class="advPair"><span>D-term lowpass 1 type</span>${advSeg('dtermLpfType', [['PT1', 'PT1'], ['PT2', 'PT2'], ['PT3', 'PT3'], ['BIQUAD', 'BIQUAD']], tune.dtermLpfType || 'PT1', 'dterm_lpf1_type')}</div>
+    <div class="advPair"><span>D-term lowpass 2 type</span>${advSeg('dtermLpf2Type', [['PT1', 'PT1'], ['PT2', 'PT2'], ['PT3', 'PT3'], ['BIQUAD', 'BIQUAD']], tune.dtermLpf2Type || 'PT1', 'dterm_lpf2_type')}</div>
+    ${advSlider(['dtermLpfExpo', 'D-term dynamic curve expo', 0, 10, 1, 1, '', 'dterm_lpf1_dyn_expo', 5])}
+    <div class="row"><button data-advpreset="bfstock">Betaflight 4.5 stock</button><button data-advpreset="sim" class="ghost">Sim default</button><label class="advFile" title="Reads the Betaflight settings in the log's header (filters, TPA, anti-gravity, thrust linear, boost, PIDs, idle). Nothing leaves the browser.">From my Blackbox log (.bbl)<input type=file id="advBbl" accept=".bbl,.bfl,.txt"></label></div><p class="note" id="advMsg"></p>`;
+  if (ADV.tab === 'extras') h = `<p class="note">Betaflight's PID helpers. The first four are its simplified-tuning sliders, here on top of the PID table in the Garage (100% = the table as typed). Untouched, the rest are off.</p>
+    ${ADV_SL.extras.slice(0, 4).map(advSlider).join('')}<h4>Throttle</h4>${ADV_SL.extras.slice(4).map(advSlider).join('')}
+    <div class="advPair"><span>TPA mode</span>${advSeg('tpaMode', [['D', 'D only'], ['PD', 'P and D']], tune.tpaMode || 'D', 'tpa_mode')}</div>
+    <div class="row"><button data-advpreset="bfstock">Betaflight 4.5 stock</button><button data-advpreset="sim" class="ghost">Sim default</button></div>`;
+  if (ADV.tab === 'link') h = `<p class="note">By default your sticks reach the flight controller instantly, which is crisper than any real quad. These add what a real radio link does. Try "Real radio feel" if the sim feels harsher than your quad on the same rates.</p>
+    <div class="advPair"><span>Radio link rate</span>${advSeg('rcLinkHz', [[0, 'ideal'], [50, '50'], [150, '150'], [250, '250'], [500, '500'], [1000, '1000 Hz']], +tune.rcLinkHz || 0)}</div>
+    ${advSlider(['rcDelayMs', 'Link delay', 0, 80, 1, 1, ' ms', 'Radio + receiver delay', 0])}
+    <div class="advPair"><span>Stick smoothing</span>${advSeg('rcSmooth', [['sim', 'sim (light)'], ['off', 'off'], ['auto', 'Betaflight auto']], tune.rcSmooth || 'sim')}</div>
+    ${tune.rcSmooth === 'auto' ? advSlider(['rcSmoothFactor', 'Auto smoothing factor', 0, 250, 5, 1, '', 'rc_smoothing_auto_factor (30 stock)', 30]) : ''}
+    <div class="row"><button id="gLinkReal">Real radio feel</button><button id="gLinkIdeal" class="ghost">Back to ideal</button></div>`;
+  el.innerHTML = `<div class="advPanel"><div class="advHead"><h3>Advanced physics</h3><button id="advClose" class="ghost">Done</button></div>
+    <div class="advTabs">${tabs.map(([k, l]) => `<button data-advtab="${k}" class="${ADV.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="advBody">${h}</div><p class="note advFoot">Changes apply at once; they are saved with your tune.</p></div>`;
+  el.querySelector('.advBody').scrollTop = sc;
+}
+function closeAdv() { ADV.open = false; const el = $('#advModal'); if (el) el.classList.add('hide'); renderGarage(); }
+document.addEventListener('click', e => {
+  const t = e.target; if (!t || !t.closest) return;
+  if (t.id === 'gAdvOpen') { renderAdv(); return; }
+  if (t.id === 'advClose' || t.id === 'advModal') { closeAdv(); return; }
+  if (t.dataset.advtab) { ADV.tab = t.dataset.advtab; const b = $('#advModal .advBody'); if (b) b.scrollTop = 0; renderAdv(); }
+  if (t.dataset.advset) { const k = t.dataset.advset, v = t.dataset.v; tune[k] = /^-?\d+(\.\d+)?$/.test(v) ? +v : v; saveTune(); renderAdv(); }
+  if (t.dataset.advreset === 'feel') { for (const [k] of FEEL) tune[k] = 1; saveTune(); renderAdv(); }
+  if (t.dataset.advreset === 'wobble') { Object.assign(tune, FEEL3); saveTune(); renderAdv(); }
+  if (t.dataset.advpreset) { const p = t.dataset.advpreset; Object.assign(tune, p === 'bfstock' ? S.BF_STOCK : p === 'sim' ? S.BF_SIM : { shake: 1, shakeTau: 0.06, shakeMove: 0, loopDelayMs: 3 }); saveTune(); renderAdv(); }
+});
+document.addEventListener('input', e => { const t = e.target, k = t.dataset && t.dataset.adv; if (!k) return;
+  const d = [...ADV_SL.wobble, ...ADV_SL.filters, ...ADV_SL.extras].find(x => x[0] === k) || { gyroLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], dtermLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], rcDelayMs: [k, '', 0, 0, 0, 1, ' ms', '', 0], rcSmoothFactor: [k, '', 0, 0, 0, 1, '', '', 30] }[k];
+  tune[k] = +t.value; const b = $('#advV-' + k); if (b && d) b.textContent = advShow(d); });
+document.addEventListener('change', async e => { const t = e.target;
+  if (t.dataset && t.dataset.adv) saveTune();
+  if (t.id === 'advBbl' && t.files && t.files[0]) { const msg = $('#advMsg');
+    try { const buf = new Uint8Array(await t.files[0].arrayBuffer()); let text;
+      if (/\.txt$/i.test(t.files[0].name)) text = new TextDecoder().decode(buf);
+      else { const logs = BBL.decode(buf); if (!logs.length) throw new Error('no logs in that file'); text = Object.entries(logs[logs.length - 1].headers || {}).map(([k, v]) => 'H ' + k + ':' + v).join('\n'); }
+      const r = S.importDiff(text, tune); Object.assign(tune, r.tune); saveTune(); renderAdv(); const m = $('#advMsg'); if (m) m.textContent = r.found.length ? `Read ${r.found.length} Betaflight settings from ${t.files[0].name} (filters, extras, PIDs, idle).` : 'No Betaflight settings found in that file.';
+    } catch (err) { if (msg) msg.textContent = 'Could not read that log: ' + err.message; } }
+});
+addEventListener('keydown', e => { if (ADV.open && e.key === 'Escape') { e.stopPropagation(); closeAdv(); } }, true);
 const rateProfiles = () => { const a = store.get('rateProfiles', []); return Array.isArray(a) ? a.filter(p => p && p.name && p.rates) : []; };
 function rateEdited() { if (tune.rateProfile) { const p = rateProfiles().find(x => x.name === tune.rateProfile); if (!p || p.ratesType !== tune.ratesType || JSON.stringify(p.rates) !== JSON.stringify(tune.rates)) { tune.rateProfile = ''; const m = $('#gRPMsg'); if (m) m.textContent = 'Changed since it was saved — press Save to keep these.'; const sel = $('#gRP'); if (sel) sel.value = ''; } } }
 document.addEventListener('click', e => {
@@ -241,7 +324,6 @@ document.addEventListener('click', e => {
 });
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.feel; if (k) { const v = $('#gFeelV-' + k); if (v) v.textContent = e.target.value + '%'; } });
-document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; Object.assign(tune, FEEL3); saveTune(); renderGarage(); } });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}), ...(spec.canopy ? { canopy: spec.canopy } : {}) }; applyParts(); }
@@ -257,8 +339,6 @@ document.addEventListener('change', e => {
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
   if (t.id === 'gLinkHz') { tune.rcLinkHz = +t.value; saveTune(); }
   if (t.dataset.feel) { tune[t.dataset.feel] = +t.value / 100; saveTune(); }
-  { const F = { gShake: ['shake', 100, '%'], gTau: ['shakeTau', 1000, ' ms'], gMove: ['shakeMove', 100, '%'], gDelay: ['loopDelayMs', 1, ' ms'], gBuzz: ['camBuzz', 100, '%'] }[t.id];
-    if (F) { tune[F[0]] = +t.value / F[1]; const b = $('#' + t.id + 'V'); if (b) b.textContent = t.value + F[2]; saveTune(); } }
   if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
   if (t.dataset.t3d !== undefined) { if (t.checked) { if (tune.flightMode !== '3d') store.set('mode2d', tune.flightMode || 'acro'); setFlightMode('3d'); } else setFlightMode(store.get('mode2d', 'acro') === 'angle' ? 'angle' : 'acro'); saveTune(); }
