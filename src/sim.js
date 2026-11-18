@@ -2825,10 +2825,13 @@ async function learnFromLabels(runs, profile, opts = {}) {
     for (const st of LEARN_STEPS) { const cand = learnClone(cur);
       for (let k = 0; k < 3; k++) {   // a knob may need more than one notch before anything changes: take the smallest that helps
         if (!st.step(cand)) break; if (opts.tick) await opts.tick();
-        const sc = learnScore(runs, cand); if (sc.bad > best.bad) break;   // brought back a call the pilot rejected: further is worse
-        // must find more of the pilot's tricks and must not lose any they confirmed
-        const kept = sc.hitNames.slice(), keepsAll = best.hitNames.every(nm => { const x = kept.indexOf(nm); if (x < 0) return false; kept.splice(x, 1); return true; });
-        if (sc.hits > best.hits && keepsAll) { if (!pick || sc.value > pick.sc.value) pick = { st, cand: learnClone(cand), sc }; break; } } }
+        const sc = learnScore(runs, cand);
+        // labels are weights, not vetoes (owner, 2026-11-18): a notch must find more of the pilot's tricks, and what it costs
+        // (confirmed tricks no longer found, rejected calls back, 1.5 each) may be at most a quarter of what it finds
+        const kept = sc.hitNames.slice(); let lostN = 0; for (const nm of best.hitNames) { const x = kept.indexOf(nm); if (x < 0) lostN++; else kept.splice(x, 1); }
+        const newHits = kept.length, cost = lostN + 1.5 * Math.max(0, sc.bad - best.bad), fair = newHits > 0 && cost <= 0.25 * newHits;
+        if (sc.bad > best.bad && !fair) break;   // brought back rejected calls it cannot pay for: further is worse
+        if (sc.hits > best.hits && fair && sc.value > best.value) { if (!pick || sc.value > pick.sc.value) pick = { st, cand: learnClone(cand), sc }; break; } } }
     if (!pick) break;
     cur = pick.cand; best = pick.sc; report.changes.push(pick.st.what);
     if (best.hits === best.want) break;

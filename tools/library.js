@@ -48,7 +48,7 @@ function flightExamples(runs) {
   for (const r of runs) {
     // each labelled stretch is re-flown through the detector itself, so the example is measured exactly as the game measures
     // a move live: rotation, up.y, the over/under/gap passes and the sticks (the detector's libSigOf)
-    for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue;
+    for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue; if (e.inferred) continue;   // a guessed 'no' is never a counter-example
       const from = Math.max(r.rows[0][0], e.a - 3.5), { det } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined }); }

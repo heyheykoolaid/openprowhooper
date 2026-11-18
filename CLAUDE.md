@@ -15,6 +15,12 @@ built from these files in order: `game.js` (state, renderer), `worldview.js`, `i
 - Never commit secrets. The game's GitHub token lives only in the player's browser (localStorage); it must never be
   written into exports, uploads, the build, or the repo.
 - Don't delete pilot data in `calibration/` or `blackbox/`.
+- **Labels are weights, never verdicts; nothing undecided is a "no"** (owner, 2026-11-18). Whoops make a lot of motion that
+  looks like a trick and isn't, and pilots skip things. A label counts by who decided it (docs/DATA.md weights); learners
+  trade evidence (a change may cost at most a quarter of the weighted evidence it gains: `TRADE` in tools/community.js,
+  the same in `learnFromLabels`), no single label vetoes; an unreviewed call is a faint keep (0.1), never a rejection;
+  skipped / untouched / unanswered things send nothing; guesses made for the pilot are `inferred` (0.15, never a library
+  counter-example). Don't add new ways of turning silence into a "no".
 
 ## When asked to "analyze the calibration data" / "improve trick detection"
 1. `git pull` to get new uploads under `calibration/round-*/`.

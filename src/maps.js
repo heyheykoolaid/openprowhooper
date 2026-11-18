@@ -859,7 +859,7 @@
     const NS = { noSurvey: true }, ND = { noCollide: true }, GL = { noCollide: true, glow: true };
     // a wall along x (at z = fixed) or along z (at x = fixed) from u0 to u1, y0..y1, with rectangular holes {a, b, y0, y1}
     const wallH = (o, axis, fixed, u0, u1, y0, y1, t, holes, mat, opts = NS) => {
-      const seg = (a, b, ya, yb) => { if (b - a < 0.01 || yb - ya < 0.01) return; const cu = (a + b) / 2, cy = (ya + yb) / 2, hu = (b - a) / 2, hy = (yb - ya) / 2;
+      const seg = (a, b, ya, yb) => { ya += 0.004; yb -= 0.004; if (b - a < 0.01 || yb - ya < 0.01) return; const cu = (a + b) / 2, cy = (ya + yb) / 2, hu = (b - a) / 2, hy = (yb - ya) / 2;   // 4 mm short of the slabs they meet: no shared faces to flicker
         if (axis === 'x') box(o, v3(cu, cy, fixed), v3(hu, hy, t / 2), mat, 0, 0, 0, opts); else box(o, v3(fixed, cy, cu), v3(t / 2, hy, hu), mat, 0, 0, 0, opts); };
       const cuts = [...new Set([u0, u1, ...holes.flatMap(h => [h.a, h.b])])].filter(x => x >= u0 && x <= u1).sort((p, q) => p - q);
       for (let i = 0; i + 1 < cuts.length; i++) { const a = cuts[i], b = cuts[i + 1], m = (a + b) / 2, hs = holes.filter(h => h.a <= m && h.b >= m).sort((p, q) => p.y0 - q.y0);
@@ -871,7 +871,7 @@
       for (let k = 0; k < segs; k++) pipe(o, P(k), P(k + 1), r, mat, opts); return { u, w }; };
     const rail = (o, a, b, y, posts = 1.2) => { pipe(o, v3(a.x, y, a.z), v3(b.x, y, b.z), 0.03, 'brass'); const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / posts));
       for (let i = 0; i <= n; i++) { const f = i / n; pipe(o, v3(a.x + (b.x - a.x) * f, y - 1.0, a.z + (b.z - a.z) * f), v3(a.x + (b.x - a.x) * f, y, a.z + (b.z - a.z) * f), 0.018, 'brass', NS); }
-      neon(o, v3((a.x + b.x) / 2, y - 0.08, (a.z + b.z) / 2), v3(Math.abs(b.x - a.x) / 2 + 0.01, 0.012, Math.abs(b.z - a.z) / 2 + 0.01), o.railGlow || 'neonPink'); };
+      neon(o, v3((a.x + b.x) / 2, y - 0.08, (a.z + b.z) / 2), v3(L / 2 + 0.01, 0.012, 0.012), o.railGlow || 'neonPink', -Math.atan2(b.z - a.z, b.x - a.x)); };   // a thin strip turned along the rail (an unturned box spanning dx x dz made big plates on the curved bow rail)
     const slope = (o, x0, y0, x1, y1, z, hw, mat) => { const L = Math.hypot(x1 - x0, y1 - y0), a = Math.atan2(y1 - y0, x1 - x0); box(o, v3((x0 + x1) / 2, (y0 + y1) / 2, z), v3(L / 2, 0.12, hw), mat, 0, 0, a); };
     const DECK = 6, L2 = 10, L3 = 14, ROOF = 18, T = 0.15;
 
@@ -897,12 +897,12 @@
       skin(DECK / 2, DECK / 2, STERN0 - STERN_L, STERN0 + 0.4, 0.45); }
     // the deck: one plank field midships, slices fore and aft
     box(hull, v3((STERN0 + BOW0) / 2, DECK + 0.01, 0), v3((BOW0 - STERN0) / 2, 0.01, HW), 'teakWet', 0, 0, 0, ND);
-    for (let x = BOW0; x < stemAt(DECK); x += DX) { const w = hw(x + DX / 2, DECK) - 0.02; if (w > 0.05) box(hull, v3(x + DX / 2, DECK + 0.01, 0), v3(DX / 2 + 0.01, 0.01, w), 'teakWet', 0, 0, 0, ND); }
-    for (let x = STERN0; x > STERN0 - STERN_L; x -= DX / 2) { const w = hw(x - DX / 4, DECK) - 0.02; if (w > 0.05) box(hull, v3(x - DX / 4, DECK + 0.01, 0), v3(DX / 4 + 0.01, 0.01, w), 'teakWet', 0, 0, 0, ND); }
+    for (let x = BOW0; x < stemAt(DECK); x += DX) { const w = hw(x + DX / 2, DECK) - 0.02; if (w > 0.05) box(hull, v3(x + DX / 2, DECK + 0.01, 0), v3(DX / 2, 0.01, w), 'teakWet', 0, 0, 0, ND); }
+    for (let x = STERN0; x > STERN0 - STERN_L; x -= DX / 2) { const w = hw(x - DX / 4, DECK) - 0.02; if (w > 0.05) box(hull, v3(x - DX / 4, DECK + 0.01, 0), v3(DX / 4, 0.01, w), 'teakWet', 0, 0, 0, ND); }
     // a line along the hull side at height y, as short straight pieces turned to follow the curve
     const along = (y, x0, x1, step, fn) => { for (let x = x0; x < x1 - 1e-6; x += step) { const xa = x, xb = Math.min(x1, x + step), wa = hw(xa, y), wb = hw(xb, y); if (wa < 0.3 && wb < 0.3) continue; fn(xa, xb, wa, wb); } };
     const sideStrip = (y, hy, mat, opt, x0 = STERN0 - STERN_L, x1 = stemAt(y)) => { for (const s of [-1, 1]) along(y, x0, x1, 1.0, (xa, xb, wa, wb) => { const dx = xb - xa, dz = (wb - wa) * s, L = Math.hypot(dx, dz), ry = -Math.atan2(dz, dx);
-      box(hull, v3((xa + xb) / 2, y, s * ((wa + wb) / 2 + 0.02)), v3(L / 2 + 0.01, hy, 0.02), mat, ry, 0, 0, opt); }); };
+      box(hull, v3((xa + xb) / 2, y, s * ((wa + wb) / 2 + 0.02)), v3(L / 2 + (Math.abs(dz) > 1e-4 ? 0.01 : 0), hy, 0.02), mat, ry, 0, 0, opt); }); };   // pieces on the straight sides butt end to end; only turned ones overlap a little to close the corner
     sideStrip(1.4, 0.45, 'hullNavy', ND); sideStrip(2.3, 0.06, 'neonCyan', GL);
     for (const s of [-1, 1]) for (let x = -46; x <= 42; x += 2.2) { const w = hw(x, 4.2), w2 = hw(x + 0.3, 4.2); if (w < 1.5) continue; const ry = -Math.atan2((w2 - w) * s, 0.3);
       box(hull, v3(x, 4.2, s * (w + 0.03)), v3(0.22, 0.22, 0.02), 'windowLit', ry, 0, 0, GL); }
@@ -978,7 +978,7 @@
     gapO('Hold Side Door', v3(-20, DECK + 1.25, -ZW), v3(0, 0, 1), v3(1, 0, 0), 0.92, 1.17);
 
     // ---------------------------------------------------------------- the Hold (L1 west): seized cargo, lines of tunnels
-    { const hold = O('Hold Floor', 'deco'); box(hold, v3(-19, DECK + 0.01, 0), v3(11, 0.01, ZW), 'deckWet', 0, 0, 0, ND); }
+    { const hold = O('Hold Floor', 'deco'); box(hold, v3(-19, DECK + 0.026, 0), v3(11, 0.01, ZW), 'deckWet', 0, 0, 0, ND); /* above the teak, not in it (they flickered) */ }
     for (const z of [-6, -3, 3, 6]) for (const x of [-27, -24.6, -22.2, -15, -12.6, -10.2]) pallet(x, z, DECK, (Math.abs(x + z) % 3) < 1 ? 2 : 1);
     cart(-18.5, DECK, -7.4, 0.2); cart(-19.5, DECK, 7.2, -0.3);
     O('Hold Lamp', 'deco', { light: v3(-19, L2 - 0.6, 0), lightColor: 0xffa040, lightPower: 30, lightRange: 18 });
@@ -992,7 +992,7 @@
           for (let u = x0 + CL * i; u < x0 + CL * (i + 1) - 1e-6; u += 1.1) { const a = u, b = Math.min(u + 1.1, x0 + CL * (i + 1)), z = s * (CW + 0.06 + 0.05 * Math.sin(a * 2.3 + s));
             const pieces = b <= dA || a >= dB ? [[a, b]] : [[a, Math.min(b, dA)], [Math.max(a, dB), b]];
             for (const [p0, p1] of pieces) if (p1 - p0 > 0.01) box(cor, v3((p0 + p1) / 2, (Y0 + Y1) / 2, z), v3((p1 - p0) / 2, (Y1 - Y0) / 2, 0.06), s < 0 ? 'memphis' : 'memphisPink', 0, 0, 0, NS);
-            if (a < dB && b > dA) box(cor, v3(cx, (Y0 + 2.1 + Y1) / 2, s * (CW + 0.06)), v3(0.45, (Y1 - Y0 - 2.1) / 2, 0.06), s < 0 ? 'memphis' : 'memphisPink', 0, 0, 0, NS); }
+            if (a < dB && b > dA && a <= cx && b > cx) box(cor, v3(cx, (Y0 + 2.1 + Y1) / 2, s * (CW + 0.06)), v3(0.45, (Y1 - Y0 - 2.1) / 2, 0.06), s < 0 ? 'memphis' : 'memphisPink', 0, 0, 0, NS); }   // once per doorway
           // the door, blown half off its hinges: a 0.45 m leaf hanging at an angle, 0.45 m clear beside it
           const dr = O('Breached Door', 'deco'); box(dr, v3(dA + 0.2 + 0.03, Y0 + 1.0, s * (CW + 0.06) + s * 0.07), v3(0.2, 0.98, 0.025), 'doorWood', s * 0.28);   /* leaf edge ~1 cm short of the centre: 0.46 m clear */
           box(dr, v3(cx + 0.2, Y0 + 0.12, s * (CW + 1.3)), v3(0.42, 0.04, 0.9), 'doorWood', 0.4, 0, 0.12);   // the other leaf, on the floor inside
@@ -1016,8 +1016,9 @@
 
     // ---------------------------------------------------------------- roof west: the Lido Deck and the empty pool
     { const pool = O('Empty Pool', 'deco'), PX0 = -27, PX1 = -13, PZ = 5, PB = L3;   // deep end floor at y 14 (4 m deep), shallow end ramps up to 16.8
-      for (const s of [-1, 1]) box(pool, v3((PX0 + PX1) / 2, (PB + ROOF) / 2, s * (PZ + 0.1)), v3((PX1 - PX0) / 2, (ROOF - PB) / 2, 0.1), 'poolTile');
-      for (const x of [PX0 - 0.1, PX1 + 0.1]) box(pool, v3(x, (PB + ROOF) / 2, 0), v3(0.1, (ROOF - PB) / 2, PZ), 'poolTile');
+      const PT = ROOF - 0.003;   // 3 mm inside the deck's edges and under its top: no shared faces
+      for (const s of [-1, 1]) box(pool, v3((PX0 + PX1) / 2, (PB + PT) / 2, s * (PZ + 0.097)), v3((PX1 - PX0) / 2 - 0.003, (PT - PB) / 2, 0.1), 'poolTile');
+      for (const x of [PX0 - 0.097, PX1 + 0.097]) box(pool, v3(x, (PB + PT) / 2, 0), v3(0.1, (PT - PB) / 2, PZ - 0.003), 'poolTile');
       box(pool, v3(-20, PB + 0.01, 0), v3(7, 0.01, PZ), 'poolTile', 0, 0, 0, ND); slope(pool, PX0, 16.8, -19, PB + 0.2, 0, PZ, 'poolTile');
       for (const s of [-1, 1]) box(pool, v3(-20, PB + 0.5, s * (PZ - 0.01)), v3(7, 0.03, 0.01), 'neonCyan', 0, 0, 0, GL);
       box(pool, v3(-16, PB + 0.012, 1.2), v3(0.7, 0.004, 0.3), 'uvChalk', -0.5, 0, 0, GL); }
@@ -1075,26 +1076,36 @@
         rail(bl, v3(IX0, 0, IZ), v3(IX1, 0, IZ), y + 1.05); rail(bl, v3(IX0, 0, -IZ), v3(IX1, 0, -IZ), y + 1.05);
         rail(bl, v3(IX0, 0, -IZ), v3(IX0, 0, y === L2 ? -1.4 : IZ), y + 1.05); if (y === L2) rail(bl, v3(IX0, 0, 1.4), v3(IX0, 0, IZ), y + 1.05); rail(bl, v3(IX1, 0, -IZ), v3(IX1, 0, IZ), y + 1.05); }
       // sweeping stairs up the side walls, casino floor to the L2 balconies
-      for (const s of [-1, 1]) { const st = O('Grand Staircase', 'deco'); slope(st, 4.5, DECK, -1.5, L2 - 0.3, s * (ZW - BW - 0.8), 0.75, 'carpet');
-        for (const dz of [-0.75, 0.75]) pipe(st, v3(4.5, DECK + 1, s * (ZW - BW - 0.8) + dz), v3(-1.5, L2 + 0.7, s * (ZW - BW - 0.8) + dz), 0.03, 'brass', NS); }
-      // the ceiling grid: 0.6 x 0.6 m openings, backlit (neon bars), between the L2 balcony (east) and the void; a vertical punch
-      { const gr = O('Ceiling Grid', 'deco'), n = 10, P = 0.66, gx0 = AX1 - BW - n * P, gz0 = -n * P / 2; for (let k = 0; k <= n; k++) { box(gr, v3(gx0 + n * P / 2, L2 - 0.03, gz0 + k * P), v3(n * P / 2 + 0.03, 0.03, 0.03), 'neonCyan', 0, 0, 0, { glow: true, noSurvey: true });
-          box(gr, v3(gx0 + k * P, L2 - 0.03, gz0 + n * P / 2), v3(0.03, 0.03, n * P / 2 + 0.03), 'neonCyan', 0, 0, 0, { glow: true, noSurvey: true }); }
-        for (const z of [gz0, gz0 + n * P]) pipe(gr, v3(gx0 + n * P, L2 - 0.03, z), v3(IX1(), L2 - 0.15, z), 0.03, 'brass', NS);
-        gapO('Ceiling Grid', v3(gx0 + n * P / 2, L2 - 0.03, gz0 + n * P / 2), v3(0, 1, 0), v3(1, 0, 0), n * P / 2 - 0.05, n * P / 2 - 0.05).gap.cells = P;
-        function IX1() { return AX1 - BW; } }
+      // the sweeping stairs climb along each side from the casino floor and land flush on the west balcony (owner: they
+      // ended in mid-air beside it); the slab's top meets the floor at the bottom and the balcony's top at L2
+      for (const s of [-1, 1]) { const st = O('Grand Staircase', 'deco'), z = s * (ZW - BW - 0.8), x0 = 0.6, x1 = AX0 + BW - 0.25, rise = (L2 - DECK) / (x0 - x1), cx = 0.12 / Math.cos(Math.atan(rise));
+        slope(st, x0 + 0.2, DECK - cx - 0.2 * rise, x1, L2 - cx, z, 0.75, 'carpet');
+        for (const dz of [-0.75, 0.75]) pipe(st, v3(x0, DECK + 0.95, z + dz), v3(AX0 + BW, L2 + 0.95, z + dz), 0.03, 'brass', NS); }
+      // the ceiling grid: 0.66 m openings, backlit neon bars, centred in the atrium in line with the L3 balcony rail (owner,
+      // 2026-11-18), hung from the skylight frame; an open square in the middle lets the chandelier hang through it, so
+      // the hoop dive stays clear. Its openings are four strips round that square (flying through the square isn't a
+      // grid pass).
+      { const gr = O('Ceiling Grid', 'deco'), N = 16, H = 4, P = 0.66, GY = L3 + 1.05, cx = (AX0 + AX1) / 2, gx0 = cx - N * P / 2, gz0 = -N * P / 2, G = { glow: true, noSurvey: true };
+        const inHole = k => k > H && k < N - H;
+        for (let k = 0; k <= N; k++) { const z = gz0 + k * P, x = gx0 + k * P;
+          for (const [a, b] of inHole(k) ? [[0, H], [N - H, N]] : [[0, N]]) {
+            box(gr, v3(gx0 + (a + b) * P / 2, GY, z), v3((b - a) * P / 2 + 0.03, 0.03, 0.03), 'neonCyan', 0, 0, 0, G);
+            box(gr, v3(x, GY, gz0 + (a + b) * P / 2), v3(0.03, 0.03, (b - a) * P / 2 + 0.03), 'neonCyan', 0, 0, 0, G); } }
+        for (const dx of [0, N]) for (const dz of [0, N]) pipe(gr, v3(gx0 + dx * P, GY, gz0 + dz * P), v3(gx0 + dx * P, ROOF - 0.3, gz0 + dz * P), 0.025, 'brass', NS);
+        const strip = (i0, i1, k0, k1) => gapO('Ceiling Grid', v3(gx0 + (i0 + i1) * P / 2, GY, gz0 + (k0 + k1) * P / 2), v3(0, 1, 0), v3(1, 0, 0), (i1 - i0) * P / 2 - 0.05, (k1 - k0) * P / 2 - 0.05).gap.cells = P;
+        strip(0, N, 0, H); strip(0, N, N - H, N); strip(0, H, H, N - H); strip(N - H, N, H, N - H); }
       // the chandelier: three tiered neon hoops hung on chains from the skylight frame, centres clear all the way down:
       // dive straight through all three; the smallest is 0.8 m inside. The whole thing is an over/under for powerloops.
-      { const ch = O('Neon Chandelier', 'overunder'), C = v3(1.5, 0, 0), tiers = [[2.1, 15.3, 'neonPink', 0.06], [1.3, 14.2, 'neonCyan', 0.05], [0.45, 13.1, 'neonLime', 0.05]];
+      { const ch = O('Neon Chandelier', 'overunder'), C = v3(2, 0, 0), tiers = [[2.1, 15.3, 'neonPink', 0.06], [1.3, 14.2, 'neonCyan', 0.05], [0.45, 13.1, 'neonLime', 0.05]];
         for (const [R, y, m, r] of tiers) { hoop(ch, v3(C.x, y, C.z), v3(0, 1, 0), R, r, R > 1 ? 24 : 14, m); gapO('Chandelier Hoop', v3(C.x, y, C.z), v3(0, 1, 0), v3(1, 0, 0), (R - r - 0.06) / Math.SQRT2, (R - r - 0.06) / Math.SQRT2); }
         for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + 0.4, A = (R, y) => v3(C.x + Math.cos(a) * R, y, C.z + Math.sin(a) * R);
           pipe(ch, A(2.1, 15.3), A(3.4, ROOF - 0.35), 0.015, 'brass', NS); pipe(ch, A(1.3, 14.2), A(2.1, 15.3), 0.012, 'brass', NS); pipe(ch, A(0.45, 13.1), A(1.3, 14.2), 0.012, 'brass', NS);
           for (const [R, y] of [[2.1, 15.3], [1.3, 14.2]]) ball(ch, A(R, y - 0.25), 0.09, k % 2 ? 'neonPurple' : 'neonMagenta', { glow: true }); }
         ch.round = { c: v3(C.x, 0, C.z), r: 2.2, under: 13.05, over: 15.36 }; ch.obstacle = { a: v3(C.x - 2.2, 0, C.z), b: v3(C.x + 2.2, 0, C.z), under: 13.05, over: 15.36 }; }
-      O('Chandelier Light', 'deco', { light: v3(1.5, 12, 0), lightColor: 0xff4fd0, lightPower: 40, lightRange: 24 });
+      O('Chandelier Light', 'deco', { light: v3(2, 12, 0), lightColor: 0xff4fd0, lightPower: 40, lightRange: 24 });
       // the skylight roof: a frame of beams with glass panes, four panes shattered (dive in from the roof)
       { const sk = O('Atrium Skylight', 'deco'), xs = [AX0, -3, 2, 7, AX1], zs = [-ZW, -4.5, 0, 4.5, ZW], broken = new Set(['1,1', '2,2', '1,2', '3,0']);
-        for (const x of xs) box(sk, v3(x, ROOF - 0.15, 0), v3(0.12, 0.15, ZW), 'brass'); for (const z of zs) box(sk, v3((AX0 + AX1) / 2, ROOF - 0.15, z), v3((AX1 - AX0) / 2, 0.15, 0.12), 'brass');
+        for (const x of xs) box(sk, v3(x, ROOF - 0.144, 0), v3(0.12, 0.15, ZW - 0.004), 'brass'); for (const z of zs) box(sk, v3((AX0 + AX1) / 2, ROOF - 0.147, z), v3((AX1 - AX0) / 2 - 0.004, 0.15, 0.12), 'brass');   // a few mm proud of the roof, the cross bars just under the long ones
         for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const cx = (xs[i] + xs[i + 1]) / 2, cz = (zs[j] + zs[j + 1]) / 2, hx = (xs[i + 1] - xs[i]) / 2 - 0.12, hz = (zs[j + 1] - zs[j]) / 2 - 0.12;
           if (broken.has(i + ',' + j)) { gapO('Shattered Skylight', v3(cx, ROOF - 0.15, cz), v3(0, 1, 0), v3(1, 0, 0), hx - 0.1, hz - 0.1);
             for (let k = 0; k < 4; k++) box(sk, v3(cx + (k % 2 ? 1 : -1) * (hx - 0.12), ROOF - 0.2, cz + (k < 2 ? 1 : -1) * (hz - 0.1)), v3(0.25, 0.01, 0.1), 'glassBlock', k, 0.3, 0, ND); }

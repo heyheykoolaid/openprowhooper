@@ -70,14 +70,24 @@ on top (the looser of the two per knob). The owner approves each change: the wee
 | judge pair | two pilots agreeing on a leaderboard run they watched and reviewed | 1.0 |
 | F flag | "that call was wrong", pressed while flying, never reviewed | 0.5 |
 | Q flag | "a trick was missed here", pressed while flying, never named | 0.3 |
+| inferred "not a trick" | Judge the Bot: the other calls in a one-trick bot flight (the judge looked only at the scripted trick) | 0.15 |
 | unreviewed call | every call nobody flagged or reviewed ("probably fine": losing one costs a little) | 0.1 |
+
+**Labels are weights, never verdicts** (the owner, 2026-11-18). Whoops make a lot of motion that looks like a trick and
+isn't, and pilots skip things, so one label never settles a question on its own, and **anything nobody decided is never a
+"no"**: an unreviewed call is a faint reason to keep it (0.1), a skipped Quick-check answer or an untouched review row is
+not sent at all, an unanswered maybe is nothing, and a guess made for the pilot (Judge the Bot's other calls) barely
+counts and is never a library counter-example. Only what a pilot actually decided (✓, ✗, a correction, a named added
+trick, deleting a call in review, F) counts as a verdict, and even then by its weight.
 
 A pilot is their chosen name (one person may fly from several browsers); no pilot carries more than 6 labels' worth
 on one trick. The learner tries the in-game learner's knobs (angle tolerance, short-reading rolls/flips, how early an
 over/under may be, slower rotations, more air) one notch at a time and keeps a notch only if the weighted score rises,
-no confirmed trick is lost, no rejected call comes back, the gain comes from at least 2 different pilots
+what it costs in labelled evidence (confirmed tricks lost + rejected calls back, weighted) is at most a quarter of what it
+gains (`TRADE`: a trade, not a veto), the gain comes from at least 2 different pilots
 (`--min-pilots`), and the synthetic benchmark does not drop. It also tightens: `floor[trick]` is the Watcher confidence
-a call needs, raised where pilots (2 or more) rejected calls under it and no confirmed call sits under it. The report
+a call needs, raised where pilots (2 or more) rejected calls under it and the confirmed calls under it weigh at most a quarter of
+the rejected ones. The report
 lists what changed, what was held back for want of pilots, per-trick agreement before → after, custom tricks pilots
 named (with what was measured: the start of a draft rule), and the still-missed list (the to-do list for rule work).
 `tools/signatures.js` and `tools/flights.js` re-fly with the community profile, as the game does.

@@ -11,7 +11,8 @@
 // more than 6 labels' worth on one trick. Every flight is re-flown through the CURRENT detector with the CURRENT community
 // profile, so the live evidence (what was called then) and the measured evidence (what the detector sees now) meet.
 // The learner then tries, one notch at a time, the same knobs the in-game learner uses (looser only) and keeps a notch
-// only if the weighted score goes up, no confirmed trick is lost, no rejected call comes back, and the gain comes from
+// only if the weighted score goes up, what it costs in labelled evidence (confirmed tricks lost, rejected calls back) is
+// at most a quarter of what it gains (labels are weights, not vetoes: TRADE), and the gain comes from
 // at least --min-pilots different pilots. It also TIGHTENS: a trick's Watcher-confidence floor rises when calls of it
 // below that confidence were rejected by at least --min-pilots pilots and no confirmed call sits under it. Last guard: the
 // synthetic benchmark (npm run bench) must not drop. Writes community/profile.json and community/REPORT.md with --write;
@@ -19,6 +20,7 @@
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const S = globalThis.Sim;
 const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=').slice(1).join('=') : d; };
+const TRADE = 0.25;   // a change may cost labelled evidence worth at most a quarter of what it gains (labels are weights, not vetoes)
 const WRITE = args.includes('--write'), MIN_P = +opt('min-pilots', 2), ROUNDS = +opt('rounds', 3), OUT = path.resolve(opt('out', path.join(ROOT, 'community')));
 const { W } = require('./evidence.js');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== '.git') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
@@ -56,15 +58,15 @@ function fly(run, community, wins) {
   return { events: events.sort((x, y) => x.t - y.t), loose };
 }
 function score(runs, flown, baseFlown) {
-  const out = { value: 0, hit: 0, want: 0, wrong: 0, lostConfirmed: [], gainAuthors: new Set(), per: {}, hits: [] };
+  const out = { value: 0, hit: 0, want: 0, wrong: 0, lostConfirmed: [], lostW: 0, gainW: 0, gainAuthors: new Set(), per: {}, hits: [] };
   const P = n => out.per[n] || (out.per[n] = { want: 0, hit: 0, not: 0, wrong: 0, calls: 0 });
   runs.forEach((run, i) => {
     const E = flown[i].events, B = baseFlown ? baseFlown[i].events : null, inSpan = (e, x) => e.t >= x.a - 0.7 && e.t <= x.b + 2.4, explained = new Set();
     for (const e of E) P(e.name).calls++;
     for (const x of run.ev) {
       if (x.kind === 'want') { out.want += x.w; P(x.name).want += x.w; const h = E.find(e => e.name === x.name && inSpan(e, x)); if (h) { explained.add(h); out.hit += x.w; out.value += x.w; P(x.name).hit += x.w; out.hits.push(x);
-          if (B && !B.some(e => e.name === x.name && inSpan(e, x))) out.gainAuthors.add(x.author); }
-        else if (B && B.some(e => e.name === x.name && inSpan(e, x)) && x.w >= 1) out.lostConfirmed.push(`${x.name} (${run.name || run.pilot})`); }
+          if (B && !B.some(e => e.name === x.name && inSpan(e, x))) { out.gainAuthors.add(x.author); out.gainW += x.w; } }
+        else if (B && B.some(e => e.name === x.name && inSpan(e, x))) { out.lostConfirmed.push(`${x.name} (${run.name || run.pilot})`); out.lostW += x.w; } }
       if (x.kind === 'not') { P(x.name).not += x.w; const h = E.find(e => e.name === x.name && inSpan(e, x)); if (h) { explained.add(h); out.wrong += x.w; out.value -= 1.5 * x.w; P(x.name).wrong += x.w; } }
       if (x.kind === 'miss') { const h = E.find(e => Math.abs(e.t - x.t) < 3 && !(B && B.some(b => b.name === e.name && Math.abs(b.t - e.t) < 0.4))); if (h) { explained.add(h); out.value += x.w; out.gainAuthors.add(x.author); } }
     }
@@ -107,7 +109,7 @@ function bench(profile) {
     let pick = null;
     for (const st of STEPS) { const cand = clone(cur); if (!st.step(cand)) continue;
       log(`  round ${round + 1}: trying ${st.what}`); const f = flyAll(cand), sc = score(runs, f, base);
-      const ok = sc.value > best.value + 0.05 && sc.wrong <= best.wrong + 1e-9 && sc.lostConfirmed.length === 0;
+      const cost = sc.lostW + Math.max(0, sc.wrong - s0.wrong), ok = sc.value > best.value + 0.05 && cost <= TRADE * sc.gainW + 1e-9;   // a trade, not a veto: labels are weights
       if (!ok) continue;
       if (sc.gainAuthors.size < MIN_P) { rejected.push(`${st.what}: helps ${[...sc.gainAuthors].join(', ') || 'nobody'} only (needs ${MIN_P} pilots)`); continue; }
       if (!pick || sc.value > pick.sc.value) pick = { st, cand, sc, f }; }
@@ -118,10 +120,12 @@ function bench(profile) {
   { const byTrick = {};
     runs.forEach((run, i) => { for (const e of flown[i].events) { const T = byTrick[e.name] || (byTrick[e.name] = { bad: [], good: [], plain: [] }), sp = x => e.t >= x.a - 0.7 && e.t <= x.b + 2.4;
       const no = run.ev.find(x => x.kind === 'not' && x.name === e.name && sp(x)), yes = run.ev.find(x => x.kind === 'want' && x.name === e.name && sp(x));
-      if (yes) T.good.push(e.conf); else if (no) T.bad.push({ c: e.conf, w: no.w, author: no.author }); else T.plain.push(e.conf); } });
-    for (const [name, T] of Object.entries(byTrick)) { if (!T.bad.length) continue; const maxGood = T.good.length ? Math.min(...T.good) : 1;
-      let pick = null; for (const f of [0.4, 0.5, 0.6, 0.7, 0.8]) { if (f > maxGood - 0.02) break; const dropped = T.bad.filter(b => b.c < f), who = new Set(dropped.map(b => b.author)); if (!dropped.length) continue;
-        const gain = dropped.reduce((s, b) => s + b.w * 1.5, 0) - T.plain.filter(c => c < f).length * W.keep;
+      if (yes) T.good.push({ c: e.conf, w: yes.w }); else if (no) T.bad.push({ c: e.conf, w: no.w, author: no.author }); else T.plain.push(e.conf); } });
+    for (const [name, T] of Object.entries(byTrick)) { if (!T.bad.length) continue;
+      let pick = null; for (const f of [0.4, 0.5, 0.6, 0.7, 0.8]) { const dropped = T.bad.filter(b => b.c < f), who = new Set(dropped.map(b => b.author)); if (!dropped.length) continue;
+        const goodW = T.good.filter(g => g.c < f).reduce((s, g) => s + g.w, 0), badW = dropped.reduce((s, b) => s + b.w, 0);   // confirmed calls the floor would drop: a cost, weighed
+        if (goodW > TRADE * badW + 1e-9) break;
+        const gain = badW * 1.5 - goodW - T.plain.filter(c => c < f).length * W.keep;
         if (gain > 0 && who.size >= MIN_P && (!pick || gain > pick.gain)) pick = { f, gain, n: dropped.length, who, plain: T.plain.filter(c => c < f).length };
         else if (gain > 0 && who.size < MIN_P) floorNotes.push(`${name} under ${Math.round(f * 100)}%: rejected by ${[...who].join(', ')} only (needs ${MIN_P} pilots)`); }
       if (pick && (cur.floor[name] || 0) < pick.f) { cur.floor[name] = pick.f; changes.push(`${name} needs ${Math.round(pick.f * 100)}% Watcher confidence (drops ${pick.n} rejected call${pick.n > 1 ? 's' : ''}, ${pick.plain} unreviewed)`); } } }

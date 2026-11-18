@@ -4,7 +4,11 @@
 // with ev = [{ kind: want | not | miss | custom, name, a, b, w, author, src }]. All of it is untrusted: parsed, never run.
 const fs = require('fs');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
-const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, keep: 0.1, cap: 6 };
+// Labels are weights, never verdicts that settle a question alone (owner, 2026-11-18: whoops make a lot of motion that looks
+// like a trick and isn't, and pilots skip things): a decided label counts by who gave it; a label nobody actually decided
+// (`inferred`, e.g. Judge the Bot's 'other calls in a one-trick flight') counts barely more than an unreviewed call; anything
+// unreviewed is not a 'no' at all (keep: a faint reason to keep what was called).
+const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, inferred: 0.15, keep: 0.1, cap: 6 };
 const worlds = {}, worldOf = (id, layout, official) => { const k = id + (layout ? JSON.stringify(layout) : '') + (official ? '|' + JSON.stringify(official) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground', was = S.officialEdits(m); S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); if (official !== undefined) S.setOfficialEdits(m, official && typeof official === 'object' ? official : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); S.setOfficialEdits(m, was); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
 const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
 // a pilot is their chosen name where they gave one (the same person flies from more than one browser, each with its own
@@ -41,7 +45,7 @@ async function load(files) {
       if (vote) { votes.push(item); continue; }
       labelled.push([a - 1, b + 2]);
       if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src });
-      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src });
+      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: l.inferred ? W.inferred : fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src, inferred: !!l.inferred });
       if (l.custom && actual) ev.push({ kind: 'custom', name: actual.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40), label: actual, a, b, author });
     }
     // judge votes count only where two different voters agree on the same call
