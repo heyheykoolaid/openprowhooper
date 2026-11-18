@@ -1315,7 +1315,8 @@ class TrickDetector {
         const r1 = rolls.length === 1 ? rolls[0] : null;   // a Mavvy Roll's roll is the one time it may go inverted
         const upright = !this.stayedUpright ? true : r1 ? this.stayedUpright(part[0].t, r1.t0 - 0.03) && this.stayedUpright(r1.t1 + 0.03, part[2].t)
           : this.stayedUpright(part[0].t, part[2].t);   // maverick: forward-looking the whole way (body or camera view)
-        if (!bigP.length && upright && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
+        const sideOver = part[1].kind === 'O' && part[1].latDot > 0.85 && Math.abs(part[1].fwdDot) < 0.3 && part[1].upY < -0.3;   // over the top sideways and upside-down: a Side Loop, never a maverick (owner's review of RodFPV)
+        if (!bigP.length && upright && !sideOver && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
           const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : (rolls.length === 0 ? 'Maverick Loop' : null);
           const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
           if (nm && better(cand, best)) best = cand;
@@ -1330,17 +1331,25 @@ class TrickDetector {
         const pick = (nm, cl, pp) => { const cand = { name: nm, toks, err: 0.12, obstacle: seq[0].name, obj: +id, clen: cl, part: pp, ct1: pp[pp.length - 1].t, draft: true }; if (better(cand, best)) best = cand; };
         if (lat.length >= 2 && !P.some(x => x.raw > 200) && lat.slice(-2).every(c => (c.spd ?? 9) >= 1.5)) {
           const pp = lat.slice(-3);
-          if (/UOU$/.test(lk) && R.some(x => Math.abs(x.raw - 360) < 80)) pick('Side Loop', 3, pp);
+          // (owner's review, 2026-11-18: side loops and jump ropes were called as each other) the book tells them apart by
+          // how the quad goes over the top: a Side Loop is UPSIDE-DOWN over it, rolling toward it all the way round (a slow,
+          // steady roll; back-to-back side loops roll on from one loop into the next, so there is no clean 360 token per
+          // loop); a Jump Rope stays upright; a Double Dutch flicks a fast 360 the other way at the peak.
+          const rate = x => x.raw / Math.max(0.05, x.t1 - x.t0), ov = lat.filter(c => c.kind === 'O').pop();
+          const uA = ov && seq.filter(c => c.kind === 'U' && c.t < ov.t).pop(), uB = ov && seq.find(c => c.kind === 'U' && c.t > ov.t), loopT = uA && uB ? uB.t - uA.t : 0;   // a Double Dutch's flick is quick, or at least short against the loop; a side loop rolls most of the way round
+          const fast = ov && R.find(x => x.t1 >= ov.t - 0.8 && x.t0 <= ov.t + 1.2 && x.raw <= 520 && ((x.raw >= 270 && rate(x) >= 330) || (x.raw >= 220 && loopT > 0 && x.t1 - x.t0 <= 0.45 * loopT)));
+          const sideLoop = /UOU$/.test(lk) && (() => { const o = pp[1]; return o.kind === 'O' && o.upY < -0.3 && !fast && (!this.sweptBetween || this.sweptBetween(pp[0].t, pp[2].t) >= 240); })();
+          if (sideLoop || (/UOU$/.test(lk) && !fast && pp[1].upY < 0 && R.some(x => Math.abs(x.raw - 360) < 80))) pick('Side Loop', 3, pp);
           else if (/U$/.test(lk) && (() => {   // Burrito: big roll before crossing over, rewind down the same side, finish under
             const rb = R.filter(x => x.raw >= 150).pop(); if (!rb) return false;
             const noOver = !lat.some(c => c.kind === 'O' && c.t > rb.t0 - 0.6);       // a Double Dutch rolls at the peak, over the object
             return noOver && lat.some(c => c.t < rb.t0) && (R.some(x => x !== rb && x.dir !== rb.dir && x.raw >= 60) || rb.raw >= 200);
           })()) pick('Burrito Roll', 2, lat.slice(-2));
-          else if (R.some(x => Math.abs(x.raw - 360) < 80)) pick('Double Dutch', 2, lat.slice(-2));
+          else if (fast || R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230)) pick('Double Dutch', 2, lat.slice(-2));   // the flick at the peak is fast; a slow roll all the way round is a side loop
           else if (Y.some(x => Math.abs(x.raw - 360) < 80)) pick('Cinnamon Roll', 2, lat.slice(-2));
           // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
           // roll or pitch (a Split-S has a 180 roll and a half loop) and both passes really are sideways
-          else if (/^(OU|UO)$/.test(lk.slice(-2)) && lat[lat.length - 1].t - lat[lat.length - 2].t < 3 && lat[lat.length - 1].dir !== lat[lat.length - 2].dir && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6)) pick('Jump Rope', 2, lat.slice(-2));   // one over + one under, there and back
+          else if (/^(OU|UO)$/.test(lk.slice(-2)) && lat[lat.length - 1].t - lat[lat.length - 2].t < 3 && lat[lat.length - 1].dir !== lat[lat.length - 2].dir && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6) && lat.slice(-2).every(c => c.kind !== 'O' || c.upY > 0.2)) pick('Jump Rope', 2, lat.slice(-2));   // upright over the top   // one over + one under, there and back
         }
       }
       // beginner switch: maverick over, stall, rewind back over, back under flying backward — no big rotation
@@ -2058,6 +2067,7 @@ class StreamDetector extends TrickDetector {
       const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen) ? HOLD_MAX + 1.4 : HOLD_MAX;
       if (!p.lap && t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
+      if (p.name === 'Jump Rope' && [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 200 && k.t0 >= p.t0 - 0.5)) { this.pend = this.pend.filter(x => x !== p); continue; }   // a big roll came during the wait: a Double Dutch / Burrito / Side Loop, not a plain jump
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
       // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
       // 'rollbacks' under the swing set were being called Whiplash)

@@ -577,6 +577,21 @@ weighs the rest 0.5 (the label on the real flight already counts 1). test/replic
 - Reviews sent from the board view in builds before the reviewer flow are judge votes (`judge: true`): they wait for a
   second pilot (Autismo's school run, 9 labels).
 
+## Side Loop vs Jump Rope vs Double Dutch (2026-11-18, owner: "a side loop (the whoop is inverted at the apex), a jump rope (the whoop stays upright)")
+The jump-rope family in `matchObstacle` now goes by how the quad crosses OVER (the over pass's `upY`) and by the roll:
+**Side Loop** = U, O upside-down (upY < -0.3), U with at least 240° swept between the unders and no flick; no clean 360 token
+needed (back-to-back side loops roll straight on from one loop into the next: Alligator Man33 round the Clappy footbridge
+rolled -450 then -310 across loops). **Double Dutch** = a flick near the top: 270-520° at 330°/s or more, or at least 220°
+lasting under 45 % of the loop (U before the over to U after it, any direction of pass), or the old ~360 roll at 230°/s or
+more; a slow roll all the way round (Side Loops ran 165-200°/s) is not one. **Jump Rope** = upright over the top (upY > 0.2),
+and a pending Jump Rope is dropped when a roll of 200° or more starts during its wait (it was being called next to every
+Double Dutch). A maverick never claims an over pass made sideways and upside-down (`sideOver`: Rod's Side Loop read as a
+Mavvy Roll). Re-flown over 121 shared flights: 9 rejected calls gone, 3 missed confirmed tricks found; 4 confirmed labels
+change, each upside-down over the top (Rod's own two "Jump Ropes", one Jump Rope and a mixed Double Dutch/Side Loop tile on
+Alligator Man33's run): by the owner's rule those are Side Loops. 12 new Burrito Rolls where Jump Rope / Double Dutch
+used to be: unreviewed, watch them. test/jumprope.js (synthetic: guards the behaviour; it does not reproduce the old
+failure, which needs real roll timing; the private flights are the evidence).
+
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
 "heavier, with a bit of latency" for a tester (a low frame rate reads the sticks late). Auto (default) starts Full and, if
