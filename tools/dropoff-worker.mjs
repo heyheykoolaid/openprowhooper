@@ -172,7 +172,8 @@ async function oneRun(request, env, fetchImpl, reply) {
 async function sameKey(a, b) { const h = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)))); const x = await h(a), y = await h(b); let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]; return d === 0; }
 async function official(request, env, fetchImpl, reply, origin, allowed) {
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
-  if (!env.OWNER_KEY || String(env.OWNER_KEY).length < 12) return reply(503, 'publishing is not set up (OWNER_KEY)');
+  if (!env.OWNER_KEY) return reply(503, 'publishing is not set up: add the secret OWNER_KEY in Cloudflare');
+  if (String(env.OWNER_KEY).length < 12) return reply(503, 'OWNER_KEY is too short: use at least 12 characters (a few random words)');
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000);
   const text = await request.text(); if (text.length > 450000) return reply(413, 'too large');
   let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
