@@ -1,0 +1,33 @@
+{
+ "format": "pro-whooper-mapedit/1",
+ "map": "playground",
+ "at": "2026-11-18T04:22:18.172Z",
+ "by": "heyheykoolaid",
+ "moved": {
+  "Graffiti Wall@-19.0,0.0": {
+   "dx": -0.39,
+   "dy": 0,
+   "dz": 0.12,
+   "ry": 0,
+   "s": 1
+  },
+  "Brick Building@0.0,-26.9": {
+   "dx": -0.19,
+   "dy": 0,
+   "dz": 0.02,
+   "ry": 0,
+   "s": 1
+  }
+ },
+ "removed": [],
+ "added": [
+  {
+   "asset": "Shrub",
+   "x": 5.68,
+   "y": 0,
+   "z": -8.93,
+   "ry": 189,
+   "s": 1.04
+  }
+ ]
+}
