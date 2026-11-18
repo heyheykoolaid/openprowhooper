@@ -79,7 +79,7 @@ const RECAP_VARIANTS = ['Powerloop (open air)', 'Inverted 360 Powerloop (open ai
 const recapCustom = () => (store.get('customTricks', []) || []).filter(x => typeof x === 'string').slice(0, 60);
 const recapCleanTrick = v => String(v || '').replace(/[\u0000-\u001f<>"&]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
 function recapAddCustom(v) { const n = recapCleanTrick(v); if (n.length < 2) return null; const L = recapCustom(); const have = [...ALL_TRICKS().map(x => nameOf(x)), ...RECAP_VARIANTS, ...L].find(x => x.toLowerCase() === n.toLowerCase()); if (have) return have; L.push(n); store.set('customTricks', L); return n; }
-const recapNames = () => { const base = ALL_TRICKS().map(x => nameOf(x)); return [...base, ...RECAP_VARIANTS.filter(v => !base.includes(v)), ...recapCustom().filter(v => !base.includes(v))]; };
+const recapNames = () => { const base = ALL_TRICKS().map(x => nameOf(x)); return abcSort([...base, ...RECAP_VARIANTS.filter(v => !base.includes(v)), ...recapCustom().filter(v => !base.includes(v))]); };
 const recapNewHtml = () => `<span class="rcNew"><input data-rcnew="1" maxlength="40" placeholder="or name a new trick…" onkeydown="event.stopPropagation(); if (event.key === 'Enter') this.nextElementSibling.click()"><button data-rc="newtrick" title="Use this name for the selected trick (it is remembered for next time)">Use</button></span>`;
 function recapVariant(name) { if (name && recapCustom().includes(name)) return { actual: name, custom: true };
   if (!name || !RECAP_VARIANTS.includes(name)) return { actual: name || null };

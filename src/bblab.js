@@ -91,13 +91,15 @@ function bbBaseName() { const d = new Date().toISOString().slice(0, 16).replace(
 async function bbSaveLocal() {
   const base = bbBaseName(); const files = [];
   if (bb.log) files.push({ name: base + '.bbl', data: new Blob([bb.log]) }); if (bb.diff) files.push({ name: base + '-diff.txt', data: new Blob([bb.diff]) });
+  const sheet = store.get('buildSheet', {});
+  if (files.length && Object.keys(sheet).length) files.push({ name: base + '-build.json', data: new Blob([JSON.stringify({ format: 'pro-whooper-blackbox/1', saved: new Date().toISOString(), fc: bb.info, gameCraft: { ...spec, names: params.names }, buildSheet: sheet }, null, 2)], { type: 'application/json' }) });
   for (const f of files) {
     try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: f.name }); const w = await h.createWritable(); await w.write(f.data); await w.close(); continue; } } catch (e) { if (e && e.name === 'AbortError') continue; }
     const ok = await saveFile(f.name, f.data); if (!ok) bb.msg = 'Saving files is blocked in this view — use the standalone game file.';
   }
   renderBB();
 }
-// ---- optional build questionnaire (sent with the upload; pre-filled from the Garage)
+// ---- optional build questionnaire (saved with the logs; pre-filled from the Garage)
 function questionnaire() {
   const P = S.PARTS, q = store.get('buildSheet', {});
   const v = (k, d) => q[k] ?? d ?? '';
@@ -121,19 +123,6 @@ function questionnaire() {
 }
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.q; if (k) { const q = store.get('buildSheet', {}); q[k] = e.target.value; store.set('buildSheet', q); } });
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('qs')) store.set('buildSheetOpen', e.target.open); }, true);
-function bbUpload(extraFiles) {
-  if (!gh.bbEnabled || !gh.token) { openOptions(); return; }
-  const base = bbBaseName(), sheet = store.get('buildSheet', {});
-  const meta = { format: 'pro-whooper-blackbox/1', uploaded: new Date().toISOString(), fc: bb.info, flash: bb.flash, gameCraft: { ...spec, names: params.names }, gameTune: tune, buildSheet: Object.keys(sheet).length ? sheet : null, files: [] };
-  const put = (name, bytes, msg) => { meta.files.push(name); ghState.queue.push({ path: `blackbox/${base}/${name}`, contentB64: bytesB64(bytes), message: msg, tries: 0 }); };
-  if (bb.log) put(base + '.bbl', bb.log, `blackbox: ${base}.bbl (${(bb.log.length / 1048576).toFixed(2)} MB)`);
-  if (bb.diff) put('diff-all.txt', new TextEncoder().encode(bb.diff), `blackbox: ${base} diff all`);
-  for (const f of extraFiles || []) put(f.name, f.bytes, `blackbox: ${base}/${f.name}`);
-  if (!meta.files.length) { bb.msg = 'Nothing to upload yet — download from the quad or pick log files first.'; renderBB(); return; }
-  ghState.queue.push({ path: `blackbox/${base}/build.json`, contentB64: bytesB64(new TextEncoder().encode(JSON.stringify(meta, null, 2))), message: `blackbox: ${base} build sheet`, tries: 0 });
-  bb.msg = `Uploading ${meta.files.length} file${meta.files.length > 1 ? 's' : ''} to ${gh.owner}/${gh.repo}/blackbox/${base}/…`; renderBB(); ghPump();
-}
-function bytesB64(bytes) { let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
 function renderBB() {
   const el = $('#bbBody'); if (!el) return;
   const c = !!bb.msp, f = bb.flash;
@@ -149,18 +138,16 @@ function renderBB() {
     <p class="note">Pick .bbl / .bfl / .bbs files (from Betaflight Configurator, an SD card, or the flash in mass-storage mode) and a diff as .txt.</p>
     <input type="file" id="bbFiles" multiple accept=".bbl,.bfl,.bbs,.txt,.csv">${bb.files.length ? ` <span class="note">${bb.files.map(x => esc(x.name)).join(', ')}</span>` : ''}
     ${questionnaire()}
-    <div class="row"><button id="bbReplayBtn" ${bb.log || bb.files.some(x => /\.(bbl|bfl|bbs)$/i.test(x.name)) ? '' : 'disabled'}>▶ Replay it in the sim</button><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button>
-      <button id="bbUpload" ${bb.log || bb.diff || bb.files.length ? '' : 'disabled'}>↑ Upload to GitHub</button><span id="ghStatus" class="ghs"></span></div>
-    <p class="note">${gh.bbEnabled && gh.token ? `Uploads go to <code>${gh.owner}/${gh.repo}/blackbox/</code>.` : (ghMenus() ? 'GitHub upload is off — turn on "Upload Blackbox logs" in Options.' : '')} Downloading doesn't erase anything on the quad.</p>`;
+    <div class="row"><button id="bbReplayBtn" ${bb.log || bb.files.some(x => /\.(bbl|bfl|bbs)$/i.test(x.name)) ? '' : 'disabled'}>▶ Replay it in the sim</button><button id="bbSave" ${bb.log || bb.diff ? '' : 'disabled'}>Save to this computer</button></div>
+    <p class="note">Downloading doesn't erase anything on the quad.</p>`;
   renderGhStatus();
 }
 document.addEventListener('click', e => {
   if (e.target.id === 'bbConnect') bbConnect(); if (e.target.id === 'bbDownload') bbDownload(); if (e.target.id === 'bbDiff') bbDiff();
-  if (e.target.id === 'bbSave') bbSaveLocal(); if (e.target.id === 'bbUpload') bbUpload(bb.files);
+  if (e.target.id === 'bbSave') bbSaveLocal();
   if (e.target.closest('[data-act="blackbox"]')) setTimeout(renderBB, 0);
 });
 document.addEventListener('change', async e => {
   if (e.target.id === 'bbFiles') { bb.files = await Promise.all([...e.target.files].map(async f => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }))); renderBB(); }
-  if (e.target.id === 'bbEnabled') { gh.bbEnabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); }
 });
 

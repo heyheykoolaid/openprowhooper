@@ -100,7 +100,7 @@ function renderJudge() {
     ${judge.phase === 'watch' ? `<div class="trLast">Watch the bot fly it… <kbd>R</kbd> replay · <kbd>S</kbd> slow-mo · <kbd>C</kbd> camera</div>` : ''}
     ${judge.phase === 'ask' ? `<div class="trLast">Did the bot fly a proper <b>${judge.name}</b>?</div>
       <div class="trBtns"><button data-j="clean">✓ Clean <kbd>1</kbd></button><button data-j="sloppy">≈ Sloppy, still the trick <kbd>2</kbd></button><button data-j="wrong">✗ Not this trick <kbd>3</kbd></button><button data-j="replay">⟲ Again <kbd>R</kbd></button></div>
-      <div class="trRow"><select id="jLike"><option value="">If ✗: it looked more like…</option><option>can't tell / not a trick</option>${ALL_TRICKS().map(x => `<option>${nameOf(x)}</option>`).join('')}</select></div>` : ''}
+      <div class="trRow"><select id="jLike"><option value="">If ✗: it looked more like…</option><option>can't tell / not a trick</option>${abcSort(ALL_TRICKS().map(x => nameOf(x))).map(n => `<option>${n}</option>`).join('')}</select></div>` : ''}
     ${judge.phase === 'reveal' ? `<div class="trLast">You: <b>${VERDICT[last.verdict]}</b>${last.lookedLike ? ` (looked like ${last.lookedLike})` : ''}<br>Detector: <b>${det}</b> ${detOK ? '✓' : '✗'}<br>${last.agree ? '<span class="jOk">You agree.</span>' : '<span class="nm">You disagree — this one is worth a look.</span>'}</div>
       <div class="trBtns"><button data-j="next">Next <kbd>Enter</kbd></button><button data-j="replay">⟲ Replay <kbd>R</kbd></button></div>` : ''}
     <div class="trRow"><select id="jWant"><option value="random">Trick: random</option>${MV.tricks.map(t => `<option ${t === judge.want ? 'selected' : ''}>${t}</option>`).join('')}</select></div>

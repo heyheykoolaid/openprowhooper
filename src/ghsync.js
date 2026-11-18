@@ -79,13 +79,7 @@ function openOptions() {
       <p><b>Why:</b> so Claude can pull the data whenever you ask, replay your real flights through the detector, see where it disagrees with you, and tune the trick rules to how pilots actually fly.</p>
       <p><b>What's not sent:</b> no personal details, no radio or device info, and never your access token. Free flying is only shared if you turn on flight telemetry above. Off by default — with it off, data stays in this browser and you can still export a file by hand.</p>
     </details>
-    <label class="chk big"><input type="checkbox" id="bbEnabled" ${gh.bbEnabled ? 'checked' : ''}> Upload Blackbox logs to GitHub</label>
-    <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
-      <p><b>What it does:</b> in <i>Blackbox Lab</i>, after you download the logs from your quad over USB (or pick log files from your computer), the ↑ Upload button sends them to <code>${gh.owner}/${gh.repo}</code> in the <code>blackbox/</code> folder — the raw log, your <code>diff all</code> settings, and the optional build sheet about your parts.</p>
-      <p><b>Why:</b> Blackbox logs show exactly how your real quad responds to your sticks. Claude can replay them against the sim to fit the motor, prop, weight and drag numbers so the sim flies like your whoop.</p>
-      <p><b>What's not sent:</b> nothing uploads until you press ↑ Upload; never your access token. The build sheet is optional.</p>
-    </details>
-    <div id="ghFields" class="${gh.enabled || gh.bbEnabled ? '' : 'hide'}">
+    <div id="ghFields" class="${gh.enabled ? '' : 'hide'}">
       <label>Repo owner<input id="ghOwner" value="${gh.owner}"></label>
       <label>Repo name<input id="ghRepo" value="${gh.repo}"></label>
       <label>Branch<input id="ghBranch" value="${gh.branch}"></label>
@@ -112,7 +106,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'optPerf') perfToggle(e.target.checked);
   if (e.target.id === 'optFx') { PERF.fx = e.target.checked; store.set('screenFx', PERF.fx); }
   if (e.target.id === 'optMaybe') store.set('maybeFlash', e.target.checked);
-  if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); renderGhStatus(); }
+  if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !gh.enabled); renderGhStatus(); }
   if (e.target.id === 'optVol') { store.set('vol', +e.target.value); if (window._master) window._master.gain.value = +e.target.value; const v = $('#vol'); if (v) v.value = e.target.value; }
 });
 document.addEventListener('input', e => { if (e.target.id === 'optMusic') { music.el.volume = +e.target.value; store.set('musicVol', music.el.volume); const m = $('#mVol'); if (m) m.value = e.target.value; } });

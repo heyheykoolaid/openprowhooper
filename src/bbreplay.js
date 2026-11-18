@@ -102,7 +102,7 @@ function brTimeline() {
 }
 const brLabelFor = d => br.labels.find(l => l.det && Math.abs(l.det.t - d.t) < 0.05 && l.det.name === d.name);
 function brRender() {
-  const el = $('#bbrSide'); if (!el) return; const names = ALL_TRICKS().map(x => nameOf(x)), SS = br.S;
+  const el = $('#bbrSide'); if (!el) return; const names = abcSort(ALL_TRICKS().map(x => nameOf(x))), SS = br.S;
   const logs = (br.logs || []).map((L, i) => `<option value="${i}" ${i === br.sel ? 'selected' : ''}>flight ${L.index} · ${L.dur.toFixed(1)} s${L.corrupt ? ' · ' + L.corrupt + ' bad frames skipped' : ''}</option>`).join('');
   const items = br.dets.map((d, i) => { const l = brLabelFor(d), cls = l ? (l.verdict === 'yes' ? 'ok' : 'bad') : '';
     return `<div class="rvItem ${cls}"><span class="t">${fmtT(d.t0)}–${fmtT(d.t)}</span><b>${d.name}</b> <small>${d.exec}${d.watch ? ' · watcher ' + Math.round(d.watch.conf * 100) + '%' : ''}</small>

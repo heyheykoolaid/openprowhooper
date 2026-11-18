@@ -73,6 +73,13 @@ Matrix 2 AIO; 35 logs, the long ones 0 and 27-34): hover 25-28 % motor, motor co
 answers in ~23 ms), hover gyro noise unfiltered sd 10-43 °/s with peaks at 320-350 Hz and a broad wobble under 20 Hz (the
 sim had none: the "lofty, shuddery" feel the pilot missed). Fitted the same day with the Feel Lab tools (below).
 
+Second log (2026-11-18, `blackbox/2026-11-18-choppoop/`, another pilot's similar whoop with 30000KV motors, BETAFPV G473
+board, Betaflight 2026.6 alpha, a near-stock tune: PIDs 45/80/30, stock 4.5 filters, master 100, no thrust linear; 9 logs):
+against the Air65 Champion build (0702 II 30000KV) roll / pitch lag 6-9.5 ms real vs 7.5-9 sim with no delay (the owner's quad,
+11-12 ms, is the laggier one), hover 32-41 % vs 33-45 % (weight 0.88: like every pilot's slider), unasked wobble 9-13 °/s
+real vs 3-4 sim; the joint fit again picks 3 ms and shake 0.7. Defaults not changed (the owner had just asked for less jitter):
+both logs say a real whoop wobbles 2-3x what the default sim does; the sliders cover it.
+
 ## Feel Lab: the sim's feel fitted to real Blackbox logs (src/feelfit.js, tools/feelfit.js, src/feellab.js; 2026-11-18)
 `FeelFit` (pure, Node and browser; a plain script after bbl.js) takes a decoded log, finds the longest flight (throttle chops
 under 2 s are the same flight), flies the log's sticks through the sim high in empty air with the pilot's build and tune
@@ -147,6 +154,11 @@ animation (in 24 in sections: a 2-section back rail and a 3-section front rail o
 front-left arm and leg, posts of 1 / 2.25 / 2 / 3.5 / 2 sections, a top bar; every pipe cut at a joint), its 9 checkpoints
 the openings the animation lights up; test/racegow.js checks it is raceable and that every pipe end meets the floor,
 another pipe, or is a free post top. The editor's palette: category tabs, then the blocks in their own tinted panel.
+
+## Blackbox Lab (src/bblab.js)
+Reads logs and `diff all` from the quad over USB (or picks log files), replays them, and saves them to the pilot's computer
+(with the optional build sheet as `<name>-build.json`). The GitHub upload button and its Options switch were removed
+(owner, 2026-11-18): pilots send logs to the owner by hand; they go in `blackbox/<date>-<craft>/`.
 
 ## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
 bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log
@@ -453,6 +465,8 @@ Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in 
 "never used" variable still needs a grep for assignments.
 
 ## Review list: picking, combos, deleting
+Every list of trick names a pilot picks from while labelling (SKITTLES review, Quick check, Video Review, Blackbox Replay,
+Judge the Bot, Pause & Ask, Trick Calibration) is alphabetical (`abcSort` in game.js; owner, 2026-11-18).
 List rows are clickable (`recapPick`: click, Ctrl-click, Shift-click range in time order; `recap.multi`). "Combo" gives
 the picked tricks one group number (`grp` on the call / flag; yellow frame and tag; labels carry `group`, `groupLen`);
 "＋ then" in a row or on the timeline adds the next trick and groups the two. Delete hides a trick from timeline and

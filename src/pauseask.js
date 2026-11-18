@@ -15,7 +15,7 @@ setInterval(() => {
 }, 120);
 function openAsk() {
   ask.open = true; ask.rows = ask.pending.splice(0); mode = 'paused';
-  const opts = ALL_TRICKS().map(x => `<option>${nameOf(x)}</option>`).join('');
+  const opts = abcSort(ALL_TRICKS().map(x => nameOf(x))).map(n => `<option>${n}</option>`).join('');
   $('#askBody').innerHTML = `<h2>Was that…</h2>` + ask.rows.map((r, i) => r.kind === 'trick'
       ? `<div class="askRow" data-i="${i}"><b>${r.name}</b>${r.obstacle ? ` <small>on ${r.obstacle}</small>` : ''} <small class="ex ${r.exec}">${r.exec}</small>
           <span class="askBtns"><button data-ask="yes" data-i="${i}" class="sel">✓ Yes</button><button data-ask="no" data-i="${i}">✗ No, it was…</button></span>

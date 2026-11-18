@@ -118,7 +118,7 @@ function renderTrain() {
       : `<div class="trTarget">Round ${cal.round} complete</div>`}
     <div class="trLast">This rep → <b>${det.length ? det.join(', ') : 'nothing detected yet'}</b>${dbg ? `<br><code>${dbg.toks || '—'}</code> · <code>${dbg.cross || 'no obstacle passes'}</code>` : ''}${dbg && dbg.near ? `<br><span class="nm">${dbg.near}</span>` : ''}</div>
     <div class="trBtns"><button data-tr="yes">✓ Got it <kbd>Y</kbd></button><button data-tr="no">✗ Redo <kbd>N</kbd></button><button data-tr="skip">Skip <kbd>K</kbd></button><button data-tr="undo">Undo <kbd>U</kbd></button><button data-tr="list">Checklist <kbd>L</kbd></button>${t && window.Maneuvers && window.Maneuvers.LIB[nameOf(t)] ? '<button data-tr="ghost">👻 Show me</button>' : ''}<button data-tr="pauseask" class="${ask.on ? 'on' : ''}">Pause &amp; ask: ${ask.on ? 'ON' : 'OFF'} <kbd>P</kbd></button></div>
-    <div class="trRow"><select id="trAs"><option value="">I did a different trick…</option>${ALL_TRICKS().map(x => `<option>${nameOf(x)}</option>`).join('')}</select></div>
+    <div class="trRow"><select id="trAs"><option value="">I did a different trick…</option>${abcSort(ALL_TRICKS().map(x => nameOf(x))).map(n => `<option>${n}</option>`).join('')}</select></div>
     ${train.msg ? `<div class="trMsg">${train.msg}</div>` : ''}
     <div class="trFoot"><button data-tr="upload" class="ghost">↑ Upload</button><button data-act="sync" class="ghost">GitHub ⚙</button><span id="ghStatus" class="ghs"></span></div>
     <div class="trFoot"><button data-tr="export" class="ghost">Export session</button><button data-tr="exportAll" class="ghost">Export all reps</button>${!t ? `<button data-tr="nextRound">Start round ${cal.round + 1}</button>` : ''}</div>

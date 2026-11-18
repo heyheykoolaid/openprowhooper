@@ -11,6 +11,8 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
 // the feel fitted from real Blackbox logs (Feel Lab, tools/feelfit.js): shake 1 and 3 ms of loop delay unless the pilot set them
 // Owner, 2026-11-18, after flying it: the fitted shake (1, 60 ms) with 3 ms of delay was too jittery. The defaults are now
 // close to the old sim with a hint of soft wobble on movement; pilots still on the first fitted values get the new ones.
+// trick names in the labelling lists: alphabetical (owner, 2026-11-18), ignoring case, numbers in order
+const abcSort = a => a.slice().sort((x, y) => String(x).localeCompare(String(y), undefined, { sensitivity: 'base', numeric: true }));
 const FEEL3 = { shake: 0.35, shakeTau: 0.2, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 };
 if (!store.get('feel3', false)) { if (tune.shake == null || (tune.shake === 1 && tune.loopDelayMs === 3)) Object.assign(tune, FEEL3); store.set('feel3', true); }
 for (const [k, v] of Object.entries(FEEL3)) if (tune[k] == null) tune[k] = v;
