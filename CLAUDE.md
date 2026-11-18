@@ -470,6 +470,9 @@ Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in 
 "never used" variable still needs a grep for assignments.
 
 ## Review list: picking, combos, deleting
+Quick check takes combos too (owner, 2026-11-18): "＋ then…" adds the other tricks of the combo to the call (`extra`, as SKITTLES
+mode's tiles), then the answer is given for the first. Judge the community has Hide / Show judged (`store 'jgHideDone'`).
+The main menu's title is smaller and a News box shows `news.txt` (build.py → `window.PW_NEWS`, plain text; empty = no box).
 The main menu's credits are one scrolling line (`#menuThanks .tkTrack`, `creditsTicker` in menus.js: text doubled for a seamless
 loop, ~40 px/s whatever its length, pauses on hover, still for prefers-reduced-motion). Add credits inside `.tkItem`.
 Every list of trick names a pilot picks from while labelling (SKITTLES review, Quick check, Video Review, Blackbox Replay,
@@ -693,6 +696,23 @@ Alligator Man33's run): by the owner's rule those are Side Loops. 12 new Burrito
 used to be: unreviewed, watch them. test/jumprope.js (synthetic: guards the behaviour; it does not reproduce the old
 failure, which needs real roll timing; the private flights are the evidence).
 
+## Big sweeping moves (2026-11-18, owner: open-air Mattys "didn't count"; "accommodate bigger / sweeping movements")
+The owner's sweeping open-air Mattys climb ~12 m while flipping forward over 3-4 s at 100-160 °/s: the slow parts fall under
+the token threshold, so the flip measured 120-160°. **Sweep witness** (`normalized`, after the revolution witness): a slow R / P
+token of 100-312° whose surroundings (up to `SWEEP_LOOK` 3 s either side, out to the most upright moment) go upright →
+upside-down → upright with 262-450° on that axis (the attitude log now carries per-axis integrals, cols 3-5), at least 60 %
+of all the rotation, no other R / P token sharing it, no stop in the middle (< 40 °/s for > 0.2 s away from the ends) and not
+two clear halves (Segmented Flips/Rolls: the benchmark caught that) is one full flip / roll (`rev`, `sweep`, sloppy).
+**Open Mattys** (`matchOpenLoop`) also accept the path turning the other way (up and over: ≥ 180°, climbing 3 m, 1.5 s or
+longer) when the quad ends flying backward (a powerloop ends forward). The owner's flight: 1 → 4 Mattys called; bench 96.6 %
+unchanged; re-flown over the 126 shared flights: Roll 433 → 492, Powerloop 155 → 179, Matty Flip 216 → 227, Flip 105 → 116 (slow
+sweeps, unlabelled: watch them), Stall Rewind 24 → 12 and Eject Roll 8 → 4 (the map-edge fix); the big-sweep path rule is for
+forward-flip Mattys only (it first made backflips while climbing into 13 Anti Mattys); test/sweep.js (synthetic sweeps, a big slow powerloop that must stay one, a slow half flip). The detector's
+`nearTall` now skips the map edge (a Stall Rewind / Eject Roll was called "on the Map Edge").
+**Half Matty Pendulum** (owner: "chain 3 half mattys together"; `pendulumStep`, `PENDULUM_GAP` 1.6 s): the third Half Matty in
+a row on the same object, nothing else in between, is called Half Matty Pendulum (draft). Not in the TPW book: `EXTRA_TRICKS`
+in sim.js adds it to the trick list with 1050 points (three Half Mattys at full value) until the owner sets them. test/pendulum.js.
+
 ## Burrito Roll vs Trippy Spin (2026-11-18, owner: "a burrito roll is not done while the whoop is looking up at a pole")
 The orbit tracker records when the quad holds the trippy pose while circling a pole (`this.circled`: rolled to knife-edge or
 past it, the orbit over 90°); a Burrito Roll is not called when at least 40% of its roll falls in such a stretch held for a
@@ -734,6 +754,14 @@ object or piece = meant to float, e.g. Sparks). Fixed: the Dirtbag flag wired to
 under the Steering Wheel Gate (below the hole), chains for both Pit Tire Rings, the pit sign's and finish banner's edges
 on their posts / stacks, two posts and a rail for DIRTBAG FOREVER; 0 floating groups. Dust motes are a soft round sprite
 (they drew as grey squares, big when near the lens).
+
+**Art pass 2** (2026-11-18): the start gantry's pillars are round (r 0.4, a base plate and a collar) under a beam that runs past
+them (its opening hu 3.3); the Chain Gates' chains meet the ring truss segment above (mid-segment the 24-gon's chord runs
+inside the circle); every neon `sign` in the map is solid (a thin leaf collider; "you should not be able to fly through the
+spider sugar sign"); the dust devils are a funnel of motes (`duskDevils` in worldview.js, from the swirl fields; the cone
+read as "a ghostly christmas tree"); brighter fill (hemisphere 2.9, bounce 1.5, sun 3.9: "quite dark"). **Dome Rib
+over/unders**: every metre of each rib no steeper than ~40° is an over/under at the rib's chord height, unders counting only
+3 m below it (192 of them, 15-23 m up; the bot's Powerloops and Mattys on a rib are called: test/maps.js).
 
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel

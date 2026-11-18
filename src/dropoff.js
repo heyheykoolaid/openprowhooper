@@ -373,7 +373,9 @@ function judgeRender() {
     <p class="note">Moments from today's posted runs where the game is unsure, or now calls something different from what it called during the run. Pick a map, open a moment, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
     <div class="lbCar"><button class="mapArrow" data-jg="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${LB.runs ? `${count(V)} run${count(V) === 1 ? '' : 's'} from other pilots today` : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-jg="next" aria-label="next map">›</button></div>
     <div class="mapDots">${ids.map(id => `<button data-jgmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${LB.runs ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}</div>
-    ${C.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${C.map((c, i) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>`
+    ${C.length ? (() => { const hide = store.get('jgHideDone', false), nDone = C.filter(c => JG.done[jgKey(c)]).length, rows = C.map((c, i) => [c, i]).filter(([c]) => !(hide && JG.done[jgKey(c)]));   // owner: a toggle for the judged ones
+      return `<div class="row jgTog"><button data-jg="hidedone" class="ghost" ${nDone ? '' : 'disabled'}>${hide ? `Show judged (${nDone})` : `Hide judged (${nDone})`}</button><span class="note">${C.length - nDone} still to judge</span></div>`
+        + (rows.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${rows.map(([c, i]) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>` : '<p class="note">All of these are judged. Thanks!</p>'); })()
       : `<p class="note">${esc(JG.msgs[V] || (JG.byMap[V] ? "Nothing to judge right now: every call in today's runs here still agrees, and the game is sure of each." : 'Loading…'))}</p>`}
     ${V !== MAP_ID && C.length ? `<p class="note">These were flown on ${esc(lbMapTitle(V))}: opening one switches your map there.</p>` : ''}
     <div class="row"><button data-jg="refresh">↻ Look again</button><button data-jg="close" class="primary">Back</button></div>`;
@@ -465,7 +467,7 @@ document.addEventListener('click', e => {
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu'); if (act && act.dataset.act === 'judge') judgeOpen();
   const jg = e.target.closest('[data-jg]'), jr = e.target.closest('[data-judge]');
   const jm = e.target.closest('[data-jgmap]'); if (jm) { JG.view = jm.dataset.jgmap; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); return; }
-  if (jg) { const a = jg.dataset.jg; if (a === 'close') { mode = 'menu'; show('#mainMenu'); } if (a === 'prev' || a === 'next') judgeView(a === 'next' ? 1 : -1); if (a === 'refresh') { delete JG.byMap[JG.view]; LB.runs = null; judgeLoad(JG.view); } return; }
+  if (jg) { const a = jg.dataset.jg; if (a === 'hidedone') { store.set('jgHideDone', !store.get('jgHideDone', false)); judgeRender(); return; } if (a === 'close') { mode = 'menu'; show('#mainMenu'); } if (a === 'prev' || a === 'next') judgeView(a === 'next' ? 1 : -1); if (a === 'refresh') { delete JG.byMap[JG.view]; LB.runs = null; judgeLoad(JG.view); } return; }
   if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };

@@ -154,6 +154,7 @@ function renderGarage() {
   const pidRow = ax => `<tr><td>${ax}</td>${['p', 'i', 'd', 'f'].map(k => `<td><input type=number data-pid="${ax}.${k}" value="${tune.pid[ax][k]}"></td>`).join('')}</tr>`;
   const profs = rateProfiles(), cur = tune.rateProfile || '';
   $('#gTune').innerHTML = `
+    <div class="row advRow"><button id="gAdvOpen">⚙ Advanced physics…</button><span class="note">${advSummary()}</span></div>
     <label>Rate profile<select id="gRP"><option value="">${cur ? '— pick —' : '— unsaved rates —'}</option>${profs.map(p => `<option value="${esc(p.name)}" ${p.name === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__default__">Game default (150 / 680 / 0.5)</option></select></label>
     <div class="row rpRow"><input id="gRPName" maxlength="24" placeholder="name these rates" value="${esc(cur)}" onkeydown="event.stopPropagation()"><button id="gRPSave">Save</button><button id="gRPDel" class="ghost" ${cur ? '' : 'disabled'}>Delete</button></div>
     <p class="note" id="gRPMsg">${cur ? `Flying "${esc(cur)}".` : 'Name your rates to keep them and switch between sets.'}</p>
@@ -172,7 +173,6 @@ function renderGarage() {
       <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
       <label class="chk" title="Betaflight's 3D mode: throttle stick in the middle is zero thrust, below the middle the motors spin backward so the quad can fly upside-down. Same as the 3 key while flying (1 acro, 2 angle)."><input type=checkbox data-t3d ${tune.flightMode === '3d' ? 'checked' : ''}> 3D mode (reversible motors)</label>
     </div>
-    <div class="row advRow"><button id="gAdvOpen">⚙ Advanced physics…</button><span class="note">${advSummary()}</span></div>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
     <button id="gReset" class="ghost">Reset tune to defaults</button>`;
   drawRateCurve(); garagePreviewRefresh(); if (ADV.open) renderAdv();
@@ -220,6 +220,8 @@ function creditsTicker() { const tr = $('#menuThanks .tkTrack'); if (!tr || tr.d
   tr.dataset.on = '1'; tr.appendChild(it.cloneNode(true)).setAttribute('aria-hidden', 'true');
   const set = () => { const w = it.getBoundingClientRect().width; if (w > 0) tr.style.setProperty('--tkDur', Math.max(15, w / 40).toFixed(1) + 's'); }; set(); addEventListener('resize', set); setTimeout(set, 1500); }
 creditsTicker();
+// the News box (news.txt, shipped by build.py as window.PW_NEWS; plain text, always escaped)
+{ const nw = String(window.PW_NEWS || '').trim(), el = $('#menuNews'); if (el && nw) { $('#menuNewsText').textContent = nw; el.classList.remove('hide'); } }
 // ============================================================ Advanced physics (a popup from the Garage)
 // Everything that shapes how the whoop flies beyond the parts and the PIDs, in tabs, with sliders and button rows rather
 // than drop-downs. The Betaflight tab uses Betaflight's own settings (src/sim.js FlightController; imported from a diff all
@@ -352,7 +354,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'gDiffBtn') { const r = S.importDiff($('#gDiff').value, tune); tune = Object.assign(tune, r.tune); saveTune(); renderGarage(); $('#gDiffMsg').textContent = r.found.length ? `Imported ${r.found.length} settings` : 'No Betaflight settings found'; }
-  if (e.target.id === 'gReset') { tune = S.defaultTune(); saveTune(); renderGarage(); }
+  if (e.target.id === 'gReset') { tune = Object.assign(S.defaultTune(), FEEL_DEF, { weightFeel: WEIGHT_DEF }); saveTune(); renderGarage(); }   // the game's feel defaults too (the physics' own defaults have no wobble)
 });
 
 // ---------------- controls

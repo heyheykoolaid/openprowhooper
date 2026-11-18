@@ -35,6 +35,9 @@ drop = drop if drop and drop.startswith('https://') else ''
 (root / 'dist').mkdir(exist_ok=True)
 (root / 'dist' / 'dropoff-check.html').write_text((root / 'tools' / 'dropoff-check.html').read_text().replace('/*DROPOFF*/""', json.dumps(drop)))
 t = t.replace('<script>/*DROPOFF_URL*/</script>', '<script>window.PW_DROPOFF=' + json.dumps(drop) + ';</script>')
+# the main menu's News box: one plain-text file (news.txt), shown escaped; empty or missing = no box
+news = (root / 'news.txt').read_text().strip() if (root / 'news.txt').exists() else ''
+t = t.replace('<script>/*NEWS*/</script>', '<script>window.PW_NEWS=' + json.dumps(news).replace('</', '<\\/') + ';</script>')
 tracks = [{'title': 'Ghostrider', 'artist': 'awesometexture2251', 'src': 'music/ghostrider.mp3', 'art': 'music/ghostrider.jpg', 'theme': True}]
 # the pilot's graffiti pieces (assets/graffiti/*.webp), embedded as data URLs in both builds
 art = [{'name': f.stem, 'src': 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode()} for f in sorted((root / 'assets' / 'graffiti').glob('*.webp'))]

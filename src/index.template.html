@@ -237,7 +237,8 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #mainMenu .panel, #toolsScreen .panel, #mapScreen .panel, #pause .panel { overflow-x: hidden; }
 details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExplain[open] > summary { margin-bottom: 6px; }
 #mainMenu .menuBtns > button { overflow: hidden; text-overflow: ellipsis; }
-#mainMenu .logo { font-size: clamp(44px, min(9vw, 13vh), 110px); }
+#mainMenu .logo { font-size: clamp(30px, min(6vw, 8.5vh), 70px); -webkit-text-stroke: 2px #111; text-shadow: 4px 4px 0 #e2312b, 7px 7px 0 #111; } #mainMenu .logoSub { font-size: 13px; letter-spacing: 7px; margin: 8px 0 26px 8px; }
+#menuNews { margin: 0 0 10px; padding: 7px 10px; border: 1px solid #ffd34d55; border-left: 4px solid #ffd34d; background: #ffd34d12; font: 12.5px/1.45 system-ui, sans-serif; color: #e8dfcc; text-align: left; } #menuNews b { font-family: 'Bungee', sans-serif; color: #ffd34d; font-weight: normal; letter-spacing: 1px; margin-right: 8px; }
 #mainMenu .menuBtns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
 .rpRow { margin: 4px 0; } .rpRow input { flex: 1; min-width: 0; }
 #telAsk { margin: 0 0 12px; padding: 10px 12px; background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid var(--cyan); font: 13px/1.5 var(--mono); color: #cfc6b4; } #telAsk p { margin: 0 0 8px; } #telAsk b { color: #fff; }
@@ -407,6 +408,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <h1 class="logo">Open Pro<br>Whooper</h1><div class="logoSub">PROJECT</div>
   <p class="sub">tiny whoop freestyle · <span id="menuMap">the playground</span> · v0.1 · best <b id="best">0</b></p>
   <div id="menuThanks" title="Credits: hover to pause"><div class="tkTrack"><span class="tkItem">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b> ✦ Music: <b>8BiT_</b> · Air65 frame: <b>BetaFPV</b> · Beast Brain canopy: <b>_tcmore</b> · The Murderdome: <b>Dirtbag FPV</b> (their logo on the start flag) and <b>Spider Sugar FPV</b> ✦ </span></div></div>
+  <div id="menuNews" class="hide"><b>NEWS</b><span id="menuNewsText"></span></div>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
   <p id="quickGoal" class="note" style="margin:-4px 0 8px"></p>
   <div class="menuBtns">
@@ -523,7 +525,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*BBL*/</script>
 <script>/*FEELFIT*/</script>
 <script>/*FLIGHTLOG*/</script>
-<script>/*DROPOFF_URL*/</script>
+<script>/*DROPOFF_URL*/</script><script>/*NEWS*/</script>
 <script>/*MANEUVERS*/</script>
 <script>/*VISION*/</script>
 <script>if (!window.THREE) __pwErr.push('The 3D engine (three.js) did not load.');</script>

@@ -484,9 +484,9 @@ function duskBackdrop() {
   for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, R = 200 + rnd() * 40, h = 6 + rnd() * 18, w = 14 + rnd() * 24; const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 5), i % 2 ? far : far2); m.position.set(Math.cos(a) * R, h / 2 - 2, Math.sin(a) * R); m.rotation.y = rnd() * 3; playRoot.add(m); }
   for (let i = 0; i < 14; i++) { const a = rnd() * Math.PI * 2, R = 150 + rnd() * 40, h = 20 + rnd() * 45, w = 5 + rnd() * 8; const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), far); m.position.set(Math.cos(a) * R, h / 2, Math.sin(a) * R); m.rotation.set((rnd() - 0.5) * 0.25, rnd() * 3, (rnd() - 0.5) * 0.25); playRoot.add(m); }
   // light: a hard low sun (long shadows through the broken roof) and a dim purple sky fill
-  playRoot.add(new THREE.HemisphereLight(0xc49aa8, 0x6a4a34, 2.0));
-  { const bounce = new THREE.DirectionalLight(0x9a7aa0, 0.9); bounce.position.set(60, 30, -30); playRoot.add(bounce); }   // dusk sky bounce from the east: the shade is dim, not black
-  const sun = new THREE.DirectionalLight(0xffa060, 3.4); sun.position.copy(sunDir).multiplyScalar(80); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+  playRoot.add(new THREE.HemisphereLight(0xd8b0b8, 0x8a6448, 2.9));   // owner: "quite dark": brighter fill
+  { const bounce = new THREE.DirectionalLight(0xb090b4, 1.5); bounce.position.set(60, 30, -30); playRoot.add(bounce); }   // dusk sky bounce from the east: the shade is dim, not black
+  const sun = new THREE.DirectionalLight(0xffa868, 3.9); sun.position.copy(sunDir).multiplyScalar(80); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
   const sh = sun.shadow.camera, R = 62; sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; sh.near = 1; sh.far = 220; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; playRoot.add(sun); playRoot.add(sun.target);
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.dirt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 50, guv.getY(i) * 50); playRoot.add(gnd);
   scene.fog = new THREE.Fog(0x5a3a32, 30, 190);
@@ -506,14 +506,30 @@ function duskBackdrop() {
   const moteTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
   // a soft round mote, not a square (a mote right by the lens used to draw as a big grey tile)
   DUSK.dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc890, size: 0.035, map: moteTex, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending })); DUSK.dust.frustumCulled = false; playRoot.add(DUSK.dust);
+  // dust devils (world.fields kind 'swirl'): a funnel of soft motes turning and rising, faster low down, wider up top (owner: the
+  // see-through cone read as "a weird ghostly christmas tree")
+  DUSK.devils = [];
+  for (const f of (world.fields || []).filter(q => q.kind === 'swirl')) { const M = 900, H = (f.h.y || 3) * 2.2, p2 = new Float32Array(M * 3), st = [];
+    for (let i = 0; i < M; i++) st.push({ th: rnd() * Math.PI * 2, y: rnd() * H, j: 0.75 + rnd() * 0.5 });
+    const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.BufferAttribute(p2, 3));
+    const pts = new THREE.Points(g2, new THREE.PointsMaterial({ color: 0xd4a070, size: 0.09, map: moteTex, transparent: true, opacity: 0.42, depthWrite: false })); pts.frustumCulled = false; playRoot.add(pts);
+    DUSK.devils.push({ f, H, st, pts, R: f.h.x || 2 }); }
+  duskDevils(0);
 }
+function duskDevils(dt) {
+  for (const D of DUSK.devils || []) { const a = D.pts.geometry.attributes.position, c = D.f.o, base = c.y - (D.f.h.y || 3);
+    D.st.forEach((q, i) => { const k = q.y / D.H, r = (0.25 + D.R * 0.9 * k * k + 0.2 * k) * q.j; q.th += dt * (5.5 - 3.5 * k) / q.j; q.y += dt * (0.8 + 0.6 * q.j); if (q.y > D.H) q.y = 0;
+      a.setXYZ(i, c.x + Math.cos(q.th) * r, base + q.y, c.z + Math.sin(q.th) * r); });
+    a.needsUpdate = true; }
+}
+
 function duskTick(dt) {
   DUSK.t += dt; const t = DUSK.t, f = 0.82 + 0.18 * Math.sin(t * 17) * Math.sin(t * 5.3 + 1);
   if (MAT.fire) { MAT.fire.color.setRGB(1, 0.42 * f + 0.05, 0.1 * f); MAT.fireCore.color.setRGB(1, 0.75 * f + 0.1, 0.3 * f); }
   if (MAT.emergency) { const on = (Math.sin(t * 3.2) > -0.2) ? 1 : 0.25; MAT.emergency.color.setRGB(on, 0.08 * on, 0.06 * on); }
   for (const s of DUSK.flick) { const k = Math.sin(t * 0.7 + s.p * 3) > 0.94 ? (Math.random() < 0.5 ? 0.15 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a short-circuit now and then
   for (const L of DUSK.lights || []) L.g.rotation.y = L.s.yaw + L.s.sweep * Math.sin(t * L.s.speed + L.s.phase);   // the searchlights sweep
-  if (MAT.dustDevil && MAT.dustDevil.map) MAT.dustDevil.map.offset.set(t * 1.8, t * 0.3);
+  duskDevils(dt);
   if (MAT.oilSlick) MAT.oilSlick.color.setHSL((0.75 + 0.1 * Math.sin(t * 0.5)) % 1, 0.25, 0.04);
   if (DUSK.dust) { const a = DUSK.dust.geometry.attributes.position; for (let i = 0; i < a.count; i += 7) { let x = a.getX(i) + dt * 0.25, y = a.getY(i) + Math.sin(t + i) * dt * 0.05; if (x > 46) x = -46; a.setXY(i, x, y); } a.needsUpdate = true; }
 }

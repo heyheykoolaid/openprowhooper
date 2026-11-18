@@ -933,6 +933,11 @@ class Drone {
 // Approach: rotation tokenizer (quarter-turn primitives per body axis, like the
 // spreadsheet's "Custom Trick Building Blocks") + obstacle crossing events + rules.
 const TRICK_DATA = root.TPW_TRICKS || [];
+// Tricks the owner named that the TPW book does not have (scored like book tricks; pts are the owner's to set, draft until then)
+const EXTRA_TRICKS = [
+  { cat: 'Matty Flips', name: 'Half Matty Pendulum', diff: 'Advanced', pts: 1050, extra: true,
+    desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' }];
+for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
 function trickPoints(name) { const t = TRICK_DATA.find(t => t.name.trim() === name); return t ? t.pts : 0; }
 
 // pattern tokens: Axis(R|P|Y) dir(+|-|a|b|-a|-b|*) deg  [i=inverted yaw] ; P+ = pitch back, R+ = roll right, Y+ = yaw right
@@ -1601,11 +1606,12 @@ class TrickDetector {
     return false;
   }
   nearTall(d, h) {
-    for (const o of this.world.objs) for (const pr of o.prims) {
+    for (const o of this.world.objs) { if (o.kind === 'edge') continue;   // the map's invisible edge is no structure (a Stall Rewind / Eject Roll "on the Map Edge")
+      for (const pr of o.prims) {
       if (pr.aabb.max.y < h) continue;
       const dx = Math.max(pr.aabb.min.x - d.pos.x, 0, d.pos.x - pr.aabb.max.x), dz = Math.max(pr.aabb.min.z - d.pos.z, 0, d.pos.z - pr.aabb.max.z);
       if (Math.hypot(dx, dz) < 2.5) return o.name;
-    }
+    } }
     return null;
   }
   emit(ev) { ev.t = this.time; this.out.push(ev);
@@ -1680,7 +1686,7 @@ function spansOverlap(A, B) { for (const x of A) for (const y of B) if (x.tok ==
 class StreamDetector extends TrickDetector {
   reset() {
     super.reset();
-    this.cur = [null, null, null]; this.toks = []; this.pend = []; this.crashSeen = false; this.nCross = 0; this.lastD = null;
+    this.cur = [null, null, null]; this.toks = []; this.pend = []; this.crashSeen = false; this.nCross = 0; this.lastD = null; this.hmChain = [];
     this.liveTaps = true; this.camTilt = this.camTilt ?? 20; this.live = null; this.lastTrippy = null;
     { const st = this.watcher && this.watcher.style; this.watcher = new Watcher(this); if (st) this.watcher.style = st; } this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
     this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
@@ -1941,7 +1947,11 @@ class StreamDetector extends TrickDetector {
       // loop that climbs 1.5 m and takes over a second counts from half a turn of path.
       if (loopFam && !(Math.abs(ps.sweep) >= 270 || (Math.abs(ps.sweep) >= 180 && ps.rise >= 1.5 && t1 - t0 >= 1.0))) continue;
       if (mattyFam && anyCross) continue;   // a Matty near any object waits for the object's own reading (over, then back under)
-      if (mattyFam && !(ps.sweep <= -120 && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
+      // a Matty's path goes forward -> down -> backward; a big sweeping one (owner, 2026-11-18: punch up ~12 m, flip forward over
+      // the top, fall back flying backward, 3-4 s) turns the path the other way round, up over the top, while the nose flips
+      // forward: allowed when it climbs 3 m and takes 1.5 s (a powerloop ends flying forward, so it never reads as one)
+      const fwdFlip = tr.pats.every(q => /P-/.test(q));   // the nose flips forward, against the path (not an Anti Matty: a backflip turns with the path, like a loop)
+      if (mattyFam && !((ps.sweep <= -120 || (fwdFlip && ps.sweep >= 180 && ps.rise >= 3 && t1 - t0 >= 1.5)) && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
       for (const pp of tr.parsed) { const m = matchTokens(pp, toks); if (!m) continue;
         if (loopFam && !this.loopSmooth(t0, t1, toks.length === 1 ? toks[0] : null)) continue;   // the loop monitor: a broken loop is not a loop
         const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
@@ -2084,8 +2094,10 @@ class StreamDetector extends TrickDetector {
     }
     if (!d.crashed) this.crashSeen = false;
     // attitude log for the revolution witness (see normalized): time, how upright, total rotation so far (any axis, degrees)
+    // …and the signed rotation so far on each pilot axis (roll, pitch, yaw: the sweep witness needs which axis turned)
     { let H = this.attLog || (this.attLog = []), l = H[H.length - 1]; if (l && t < l[0]) { H.length = 0; l = null; } this.totRot = (this.totRot || 0) + len(d.w) * R2D * dt;
-      if (!l || t - l[0] >= 0.01) { H.push([t, up.y, this.totRot]); if (H.length > 700) H.splice(0, 100); } }
+      const A = this.axRot || (this.axRot = [0, 0, 0]); for (let i = 0; i < 3; i++) A[i] += (rates[i] || 0) * dt;
+      if (!l || t - l[0] >= 0.01) { H.push([t, up.y, this.totRot, A[0], A[1], A[2]]); if (H.length > 1100) H.splice(0, 100); } }
     let finished = false; const loopCtx = this.crossLog.some(c => t - c.t < 4);
     for (let k = 0; k < 3; k++) {
       const r = trates[k], ar = Math.abs(r), c = this.cur[k];
@@ -2197,6 +2209,34 @@ class StreamDetector extends TrickDetector {
       if (u0 >= 0.45 && uMin <= -0.5 && u1 >= 0.45 && tot >= 262 && tot <= 450 && t.raw >= 0.6 * tot) {
         t.rev = true; t.off += Math.max(0, 330 - t.raw) * 0.5; t.raw = Math.max(t.raw, 322);
         fused = fused.filter(o => o === t || o.ax === t.ax || o.raw >= 170 || Math.min(o.t1, t.t1 + 0.3) - Math.max(o.t0, t.t0 - 0.3) < 0.5 * (o.t1 - o.t0)); } }
+    // Sweep witness (owner, 2026-11-18: big sweeping Mattys in open air, each climbing ~12 m over 3-4 s at 100-160 °/s, did
+    // not count; "can the game accommodate bigger / sweeping movements like a big sweeping half matty?"). The slow parts of a
+    // big sweep fall under the token threshold, so the measured flip is only 100-200° of it, and the revolution witness
+    // above only looks inside the token. This one looks up to SWEEP_LOOK s either side: upright → upside-down → upright
+    // again, one turn in total (from the attitude log), most of it on this token's axis, nothing else rolling or flipping
+    // in between: the whole sweep is one full flip / roll (rev, sweep; sloppy for the off-axis part; same-axis pieces of
+    // the same sweep fold into it).
+    for (const t of fused) { if (t.rev || (t.ax !== 'R' && t.ax !== 'P') || t.raw < 100 || t.raw >= 312 || !this.attLog) continue;
+      const H = this.attLog, ai = t.ax === 'R' ? 3 : 4; let i0 = -1, i1 = -1, uMin = 1;
+      for (let i = H.length - 1; i >= 0; i--) { const h = H[i]; if (h[0] > t.t0) continue; if (h[0] < t.t0 - SWEEP_LOOK) break; if (h[1] >= 0.45) { i0 = i; break; } }
+      for (let i = 0; i < H.length; i++) { const h = H[i]; if (h[0] < t.t1) continue; if (h[0] > t.t1 + SWEEP_LOOK) break; if (h[1] >= 0.45) { i1 = i; break; } }
+      if (i0 < 0 || i1 < 0) continue;
+      while (i0 > 0 && H[i0][1] < 0.97 && H[i0 - 1][1] >= H[i0][1] - 0.002 && t.t0 - H[i0 - 1][0] <= SWEEP_LOOK) i0--;   // out to the most upright moment either side
+      while (i1 < H.length - 1 && H[i1][1] < 0.97 && H[i1 + 1][1] >= H[i1][1] - 0.002 && H[i1 + 1][0] - t.t1 <= SWEEP_LOOK) i1++;
+      if (H[i1][0] - H[i0][0] > 7) continue;
+      for (let i = i0; i <= i1; i++) uMin = Math.min(uMin, H[i][1]);
+      const ts = H[i0][0], te = H[i1][0], tot = H[i1][2] - H[i0][2], onAx = Math.abs(H[i1][ai] - H[i0][ai]);
+      if (uMin > -0.5 || onAx < 262 || onAx > 450 || onAx < 0.6 * tot) continue;
+      if ([...this.toks, ...this.cur.filter(Boolean)].some(o => o !== t && o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < te && o.t1 > ts)) continue;   // a Split-S or a Juicy Flick shares the turn
+      // a sweep keeps turning: a stop in the middle (under 40 °/s for over 0.2 s, away from the slow ends) is a Segmented Flip / Roll
+      { let still = 0, worst = 0; const m0 = ts + 0.15 * (te - ts), m1 = te - 0.15 * (te - ts);
+        for (let i = i0 + 1; i <= i1; i++) { const h = H[i], g = H[i - 1], dtt = h[0] - g[0]; if (h[0] < m0 || h[0] > m1 || dtt <= 0) { still = 0; continue; }
+          if (Math.abs(h[ai] - g[ai]) / dtt < 40) { still += dtt; worst = Math.max(worst, still); } else still = 0; }
+        if (worst > 0.2) continue; }
+      // …and two clear halves on this axis with a gap between them are one too (a demo's pause is short and noisy)
+      if (out.some(o => o !== t && o.ax === t.ax && o.raw >= 140 && o.t0 < te && o.t1 > ts) && t.raw >= 140) continue;
+      t.rev = true; t.sweep = true; t.off += Math.max(0, 330 - t.raw) * 0.5; t.raw = Math.max(t.raw, 322); t.t0 = Math.min(t.t0, ts); t.t1 = Math.max(t.t1, te);
+      fused = fused.filter(o => o === t || o.ax !== t.ax || o.t0 < ts - 0.05 || o.t1 > te + 0.05); }
     if (fused !== out) { const keep = fused.slice(); out.length = 0; out.push(...keep); }
     for (const t of out) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / Math.max(1, t.raw); }
     return out;
@@ -2373,7 +2413,11 @@ class StreamDetector extends TrickDetector {
       cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - p.t0).toFixed(1)}s`).join(' '), result: [p.name], near, latency });
     if (near) this.emit({ name: 'near', near });
     this.pushReview(rv); this.watcher.learn(p, rv);
-    this.emit({ name: p.name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft, watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id) } });
+    // Half Matty Pendulum (owner, 2026-11-18): the third Half Matty in a row on the same object, each starting within
+    // PENDULUM_GAP of the last one's end and nothing else in between, is called as one Pendulum (scored once, not as a
+    // third halved Half Matty). Any other trick breaks the chain.
+    const pd = pendulumStep(this.hmChain, p), name = pd.name; this.hmChain = pd.chain;
+    this.emit({ name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft || name === 'Half Matty Pendulum', watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id) } });
   }
   pushReview(rv) { this.reviews.push(rv); if (this.reviews.length > 20) this.reviews.shift(); }
   drainReviews() { const r = this.reviews; this.reviews = []; return r; }
@@ -2660,6 +2704,13 @@ const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the sa
 const SWITCH_BONUS = [[21, 2.0], [18, 1.7], [15, 1.5], [12, 1.35], [9, 1.2], [6, 1.1], [3, 1.05]];
 const TOTW_MULT = [2, 1.5, 1];
 const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
+const SWEEP_LOOK = 3.0;   // s either side of a slow flip / roll the sweep witness looks for upright
+const PENDULUM_GAP = 1.6;   // s from one Half Matty's end to the next one's start, for the Pendulum
+function pendulumStep(chain, p) {
+  if (p.name !== 'Half Matty') return { name: p.name, chain: [] };
+  const ob = p.obstacle || null, H = (chain || []).filter(h => h.obstacle === ob), run = H.length && p.t0 - H[H.length - 1].t <= PENDULUM_GAP ? H : [];
+  return run.length >= 2 ? { name: 'Half Matty Pendulum', chain: [] } : { name: p.name, chain: [...run, { t: p.tDone, obstacle: ob }] };
+}
 class ScoreKeeper {
   constructor(totw) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.reset(); }
   reset() {
@@ -2933,6 +2984,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

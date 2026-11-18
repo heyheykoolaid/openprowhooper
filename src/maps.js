@@ -1181,7 +1181,8 @@
     let seed = 6669; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const SOFT = { e: 0.45, f: 0.3 }, HARD = { e: 0.12, f: 0.9, crash: 5 }, SLICK = { e: 0.1, f: 0.04 }, SAND = { e: 0.03, f: 1.1 }, PLATE = { e: 0.55, f: 0.4 };
     const surf = (o, S0, from = 0) => { for (let i = from; i < o.prims.length; i++) o.prims[i].surf = S0; return o; };
-    const sign = (o, c, w, h, ry, mat, both = true) => { o.vis.push({ shape: 'sign', c, w, h, ry, mat, glow: true }); if (both) o.vis.push({ shape: 'sign', c: v3(c.x - Math.sin(ry) * 0.02, c.y, c.z - Math.cos(ry) * 0.02), w, h, ry: ry + Math.PI, mat, glow: true }); };
+    const sign = (o, c, w, h, ry, mat, both = true) => { const sb = makeBox(c, v3(w / 2, h / 2, 0.035), ry); sb.leaf = true; o.prims.push(sb); o.vis.push({ shape: 'sign', c, w, h, ry, mat, glow: true });   // solid: a sign is a panel, not a hologram (owner: "you should not be able to fly through the spider sugar sign")
+      if (both) o.vis.push({ shape: 'sign', c: v3(c.x - Math.sin(ry) * 0.02, c.y, c.z - Math.cos(ry) * 0.02), w, h, ry: ry + Math.PI, mat, glow: true }); };
     const lamp = (name, at, col, pw, rg) => O(name, 'deco', { light: at, lightColor: col, lightPower: pw, lightRange: rg });
     const barrel = (x, z, lit, y = 0, name = 'Burning Barrel') => { const o = O(name, 'deco'); pipe(o, v3(x, y, z), v3(x, y + 0.9, z), 0.29, 'rustRed'); pipe(o, v3(x, y + 0.88, z), v3(x, y + 1.55, z), 0.24, 'fire', { noCollide: true, glow: true, cone: true });
       pipe(o, v3(x, y + 0.88, z), v3(x, y + 1.25, z), 0.14, 'fireCore', { noCollide: true, glow: true, cone: true }); if (lit) lamp('Barrel Fire', v3(x, y + 1.8, z), 0xff8a30, 5, 11); return o; };
@@ -1195,7 +1196,13 @@
         const h = low ? 3.6 : HW, ch = Math.PI * RW / N + 0.15, o = O('Dome Wall', 'wall', { wallNormal: v3(-Math.cos(a), 0, -Math.sin(a)) });
         box(o, v3(Math.cos(a) * (RW + 0.4), h / 2, Math.sin(a) * (RW + 0.4)), v3(ch, h / 2, 0.4), 'crackedConcrete', -a - Math.PI / 2); } }
     for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * Math.PI * 2, south = Math.sin(a) > -0.15, r1 = south ? 27 + 4 * rnd() : 17, o = O('Dome Rib', 'deco'); let pr = RW;
-      for (let r = RW - 6; r >= r1 - 0.01; r -= 6) { pipe(o, v3(Math.cos(a) * pr, ribY(pr), Math.sin(a) * pr), v3(Math.cos(a) * r, ribY(r), Math.sin(a) * r), 0.32, 'rustRed', { noSurvey: true }); pr = r; } }
+      for (let r = RW - 6; r >= r1 - 0.01; r -= 6) { pipe(o, v3(Math.cos(a) * pr, ribY(pr), Math.sin(a) * pr), v3(Math.cos(a) * r, ribY(r), Math.sin(a) * r), 0.32, 'rustRed', { noSurvey: true }); pr = r; }
+      // over/unders along the rib (owner: "these large things that stuck out wouldn't count"): every metre of it no steeper than
+      // ~40° (the ends by the wall stand nearly upright), at the rib's height there (it is drawn in 6 m chords of the curve, so
+      // the heights follow the chords); unders only count up to 3 m below it, so low flying across the floor never does.
+      const nSeg = Math.floor((RW - r1 + 0.01) / 6), rEnd = RW - 6 * nSeg, chordY = r => { const k = Math.min(nSeg - 1, Math.floor((RW - r) / 6)), ra = RW - 6 * k; return ribY(ra) + (ribY(ra - 6) - ribY(ra)) * (ra - r) / 6; };
+      for (let r = RW - 4; r - 1 >= rEnd - 0.01; r -= 1) { const ya = chordY(r), yb = chordY(r - 1); if (Math.abs(ya - yb) > 0.85) continue;
+        O('Dome Rib', 'overunder', { obstacle: { a: v3(Math.cos(a) * r, 0, Math.sin(a) * r), b: v3(Math.cos(a) * (r - 1), 0, Math.sin(a) * (r - 1)), under: Math.min(ya, yb) - 0.32, over: Math.max(ya, yb) + 0.32, floor: Math.min(ya, yb) - 3.3 } }); } }
     { const o = O('Dome Roof', 'deco'), bands = [[RW, 34], [34, 25], [25, 17.5]];
       for (let k = 0; k < 16; k++) { const a = (k + 1) / 16 * Math.PI * 2; if (Math.sin(a) > -0.3) continue;
         for (const [ro, ri] of bands) { if (rnd() < 0.22) continue; const rm = (ro + ri) / 2, yo = ribY(ro), yi = ribY(ri), L = Math.hypot(ro - ri, yi - yo) / 2, wt = Math.PI * rm / 16 + 0.05;
@@ -1208,11 +1215,11 @@
       searchlights.push({ at: v3(x, 0.95, z), yaw, el, sweep: 0.35 + (i % 3) * 0.12, speed: 0.12 + (i % 4) * 0.035, phase: i * 1.7 }); });
 
     // ---- 1 Blood Oath: the bus-chassis gantry, the skull flag, the dusty straight between burning barrels (flown east)
-    { const GX = -4, z0 = 29.4, z1 = 36.6, o = O('Blood Oath Gantry', 'overunder'); for (const z of [z0 - 0.3, z1 + 0.3]) box(o, v3(GX, 1.6, z), v3(0.5, 1.6, 0.3), 'busYellow');
-      box(o, v3(GX, 3.42, 33), v3(0.6, 0.22, 3.9), 'busYellow'); for (const dx of [-0.45, 0.45]) pipe(o, v3(GX + dx, 3.7, z0 - 0.3), v3(GX + dx, 3.7, z1 + 0.3), 0.07, 'rebar');
+    { const GX = -4, z0 = 29.4, z1 = 36.6, o = O('Blood Oath Gantry', 'overunder'); for (const z of [z0 - 0.3, z1 + 0.3]) { pipe(o, v3(GX, 0, z), v3(GX, 3.2, z), 0.4, 'busYellow'); pipe(o, v3(GX, 0, z), v3(GX, 0.14, z), 0.52, 'scrap', { noSurvey: true }); pipe(o, v3(GX, 3.06, z), v3(GX, 3.2, z), 0.5, 'scrap', { noSurvey: true }); }   // round pillars with a base plate and a collar under the beam
+      box(o, v3(GX, 3.42, 33), v3(0.6, 0.22, 4.25), 'busYellow'); for (const dx of [-0.45, 0.45]) pipe(o, v3(GX + dx, 3.7, z0 - 0.3), v3(GX + dx, 3.7, z1 + 0.3), 0.07, 'rebar');
       for (let z = z0; z <= z1; z += 1.2) box(o, v3(GX, 3.9, z), v3(0.5, 0.1, 0.05), 'scrap');   // seat frames welded on top
       surf(o, HARD); o.obstacle = { a: v3(GX, 0, z0), b: v3(GX, 0, z1), under: 3.2, over: 3.64 };
-      O('Blood Oath Gantry opening', 'gap', { gap: { c: v3(GX, 1.6, 33), n: v3(1, 0, 0), hu: 3.5, hv: 1.54, u: v3(0, 0, 1) } });
+      O('Blood Oath Gantry opening', 'gap', { gap: { c: v3(GX, 1.6, 33), n: v3(1, 0, 0), hu: 3.3, hv: 1.44, u: v3(0, 0, 1) } });
       const fl = O('Skull Flag', 'deco'); fl.vis.push({ shape: 'sign', c: v3(GX + 0.62, 2.62, 33), w: 2.4, h: 1.2, ry: Math.PI / 2, mat: 'skullFlag' }); for (const z of [31.85, 34.15]) pipe(fl, v3(GX + 0.6, 3.2, z), v3(GX + 0.63, 3.24, z), 0.015, 'rebar', { noCollide: true }); }   // the Dirtbag FPV flag, wired to the beam's face   // the Dirtbag FPV flag
     for (let x = -1; x <= 13; x += 3.5) for (const z of [28.6, 37.4]) barrel(x, z, z < 30 && (x === -1 || x === 9.5));
     zones.push({ shape: 'zone', mat: 'sand', c: v3(5, 0.006, 33), h: v3(10, 0, 4.5) });
@@ -1280,7 +1287,7 @@
         const o = O('Ring Truss', 'overunder', { obstacle: { a: v3(A.x, 0, A.z), b: v3(B.x, 0, B.z), under: YT - 0.18, over: YT + 0.18, floor: YT - 4 } }); pipe(o, A, B, 0.18, 'rustRed', { noSurvey: true }); }
       [0.125, 0.625, 1.125, 1.625].forEach((k, i) => { const a = k * Math.PI, c = v3(Math.cos(a) * RT, 0, Math.sin(a) * RT), t = v3(-Math.sin(a), 0, Math.cos(a)), u = v3(Math.cos(a), 0, Math.sin(a)), W = 0.9, Y0 = 3.4, Y1 = 5.2, o = O(`Chain Gate ${i + 1}`, 'overunder');
         const P = (s, y) => v3(c.x + u.x * s, y, c.z + u.z * s); pipe(o, P(-W, Y0), P(W, Y0), 0.05, 'rebar'); pipe(o, P(-W, Y1), P(W, Y1), 0.05, 'rebar'); pipe(o, P(-W, Y0), P(-W, Y1), 0.05, 'rebar'); pipe(o, P(W, Y0), P(W, Y1), 0.05, 'rebar');
-        for (const s of [-W, W]) pipe(o, P(s, Y1), P(s * 0.3, YT), 0.025, 'chain', { noSurvey: true }); surf(o, HARD);
+        { const rc = RT * Math.cos(Math.PI / 24) - 0.1; for (const s of [-W, W]) pipe(o, P(s, Y1), v3(Math.cos(a) * rc + t.x * s * 0.07, YT - 0.12, Math.sin(a) * rc + t.z * s * 0.07), 0.025, 'chain', { noSurvey: true }); } surf(o, HARD);   // to the truss segment above (mid-segment the chord runs inside the circle)
         o.obstacle = { a: P(-W, 0), b: P(W, 0), under: Y0 - 0.05, over: Y0 + 0.05 }; O(`Chain Gate ${i + 1} opening`, 'gap', { gap: { c: v3(c.x, (Y0 + Y1) / 2, c.z), n: t, hu: W - 0.11, hv: (Y1 - Y0) / 2 - 0.11, u } }); });
       const al = O('The Altar', 'deco'); disc(al, v3(0, 0.8, 0), 3, 0.8, 'scrap'); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; box(al, v3(Math.cos(a) * 3.2, 0.25, Math.sin(a) * 3.2), v3(0.5, 0.25, 0.35), 'rustRed', -a, 0, 0, { noSurvey: true }); }
       barrel(0, 0, false, 1.6, 'Altar Fire');
@@ -1290,7 +1297,7 @@
       zones.push({ shape: 'zone', mat: 'dirt', c: v3(0, 0.006, 0), h: v3(10, 0, 10) }); }
     { const o = O('Oil Slick', 'deco'); for (const [x, z, r] of [[-6, -8, 1.6], [7, 6, 1.3], [-20, 33, 1.5], [-15, 33.5, 1.1], [14, 31, 1.2]]) box(o, v3(x, 0.01, z), v3(r, 0.01, r * 0.7), 'oilSlick', rnd() * 3); surf(o, SLICK); }
     // dust devils: they push you round and up (world.fields), drawn as a spinning haze
-    for (const [x, z] of [[-17, -10], [17, -15]]) { const o = O('Dust Devil', 'deco'); pipe(o, v3(x, 0, z), v3(x, 6, z), 1.8, 'dustDevil', { noCollide: true, cone: true, alpha: true });
+    for (const [x, z] of [[-17, -10], [17, -15]]) { O('Dust Devil', 'deco');   // drawn as a funnel of dust motes by worldview.js (duskDevils), from the swirl field
       fields.push({ kind: 'swirl', o: v3(x, 3, z), m: [1, 0, 0, 0, 1, 0, 0, 0, 1], h: v3(2.2, 3, 2.2), accel: 9 }); }
 
     // ---- 6 The Chain-Link Labyrinth (west): a maze of soft chain-link on a 3 m grid, in at the north, out at the south

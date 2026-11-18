@@ -165,7 +165,7 @@
         if (p.asGate === 'yes') k.gate({ poly: [[-x0, 0.02], [-x0, p.oh], [x0, p.oh], [x0, 0.02]], invisible: true }); } },
     tunnel: { cat: 'Walls', layer: 'walls', solid: true, gateOpt: true, label: 'Tunnel', desc: 'A box tunnel to fly through', params: { len: [2, 0.4, 10, 0.1, 'Length', 'm'], w: [0.8, 0.3, 3, 0.05, 'Inside width', 'm'], h: [0.6, 0.3, 3, 0.05, 'Inside height', 'm'], mat: { v: 'wood', opts: ['drywall', 'wood', 'foam', 'concrete'], label: 'Material' }, asGate: { v: 'yes', opts: ['yes', 'no'], label: 'Entrance is a gate' } },
       surf: p => p.mat, build(e, k, p) { const m = 'rgWall_' + p.mat, t = 0.03, L = p.len / 2; k.box(v3(0, p.h + t, 0), v3(p.w / 2 + 2 * t, t, L), m); for (const s of [-1, 1]) k.box(v3(s * (p.w / 2 + t), (p.h + t) / 2, 0), v3(t, (p.h + t) / 2, L), m);
-        if (p.asGate === 'yes') { k.P.o = k.P.o; k.gate({ poly: [[-p.w / 2, 0.02], [-p.w / 2, p.h], [p.w / 2, p.h], [p.w / 2, 0.02]], invisible: true, zOff: L }); } } },
+        if (p.asGate === 'yes') { k.gate({ poly: [[-p.w / 2, 0.02], [-p.w / 2, p.h], [p.w / 2, p.h], [p.w / 2, 0.02]], invisible: true, zOff: L }); } } },
     platform: { cat: 'Walls', layer: 'walls', solid: true, label: 'Platform / drop-off', desc: 'A raised deck: fly off its edge', params: { w: [2, 0.4, 10, 0.1, 'Width', 'm'], d: [1.5, 0.4, 10, 0.1, 'Depth', 'm'], h: [0.8, 0.1, 3, 0.05, 'Height', 'm'], mat: { v: 'wood', opts: ['drywall', 'wood', 'foam', 'concrete'], label: 'Material' } },
       surf: p => p.mat, build(e, k, p) { k.box(v3(0, p.h / 2, 0), v3(p.w / 2, p.h / 2, p.d / 2), 'rgWall_' + p.mat); } },
     // floors and elevation

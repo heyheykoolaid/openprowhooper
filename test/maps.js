@@ -3,7 +3,7 @@
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); require('../src/maneuvers.js');
 const S = globalThis.Sim, MV = globalThis.Maneuvers;
 let ok = 0, n = 0; const check = (name, pass, extra = '') => { n++; if (pass) ok++; console.log(`${pass ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); };
-const OBJS = { school: ['Test Bar 2.2 m', 'Hall Beam'], playground: ['Test Bar 1.6 m', 'Swing Set'], clappy: ['Clappy Bars', 'Footbridge', 'Alley Walkway'], moose: ['Swing Set', 'Climbing Bars'], warehouse: ['Rack Beam', 'Catwalk', 'Crane Bridge'], ship: ['Sawhorse Barricade', 'Lifeboat', 'Crime Scene Tape'], murderdome: ['Blood Oath Gantry', 'Witness Me Finish', 'Chain Gate 1', 'Ring Truss'] };
+const OBJS = { school: ['Test Bar 2.2 m', 'Hall Beam'], playground: ['Test Bar 1.6 m', 'Swing Set'], clappy: ['Clappy Bars', 'Footbridge', 'Alley Walkway'], moose: ['Swing Set', 'Climbing Bars'], warehouse: ['Rack Beam', 'Catwalk', 'Crane Bridge'], ship: ['Sawhorse Barricade', 'Lifeboat', 'Crime Scene Tape'], murderdome: ['Blood Oath Gantry', 'Witness Me Finish', 'Chain Gate 1', 'Ring Truss', 'Dome Rib'] };
 for (const id of Object.keys(S.MAPS)) {
   const w = S.MAPS[id].build(), sv = w.survey || {};
   check(`${id}: builds with things to trick on`, w.objs.length > 50 && sv.overUnders > 20 && sv.poles > 5 && sv.gaps > 5, JSON.stringify(sv));
