@@ -9,6 +9,8 @@
 //   - refuses anything that looks like an access token;
 //   - limits each address to PER_IP_HOUR uploads an hour and everyone together to DAILY_CAP a day;
 //   - answers uploads with a bare ok / error, never with anything from the repo;
+//   - official map layouts: POST /official with the owner key (secret OWNER_KEY) writes maps/official/<map>.json to
+//     GAME_REPO (the game repo; GitHub Pages rebuilds). Nobody else can publish: see official() below.
 //   - community maps: a pilot's own map they choose to share (kind 'map', pro-whooper-map/1: name, pilot name, the
 //     official map it is built on, and its layer) is filed as maps/community/<base>/<time>.<pilot>.<name>.<by>.json. GET
 //     /maps?base= lists them (file names only), GET /map?base=&id= returns one, checked again on the way out.
@@ -71,13 +73,7 @@ function clean(kind, p) {
     // names the list can show as they are, a pilot id, which official map it is built on, and only the layer's own fields
     const nameOk = v => str(v, 40) && /^[A-Za-z0-9_.,'!&()+ -]{1,40}$/.test(v) && v.trim().length > 0;
     if (!nameOk(out.name) || !str(out.by, 24) || !/^[A-Za-z0-9_. -]{2,24}$/.test(out.by) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot) || !str(out.base, 24) || !/^[a-z0-9-]{1,24}$/.test(out.base)) return null;
-    const num = v => Number.isFinite(v) && Math.abs(v) <= 5000, M = out.moved, R = out.removed, A = out.added;
-    if (!M || typeof M !== 'object' || Array.isArray(M) || Object.keys(M).length > 5000 || !Object.entries(M).every(([k, m]) => k.length <= 80 && m && typeof m === 'object' && ['dx', 'dy', 'dz', 'ry', 's'].every(f => m[f] === undefined || num(m[f])) && Object.keys(m).length <= 5)) return null;
-    if (!Array.isArray(R) || R.length > 5000 || !R.every(k => str(k, 80))) return null;
-    if (!Array.isArray(A) || A.length > 3000 || !A.every(a => a && typeof a === 'object' && str(a.asset, 40) && ['x', 'y', 'z', 'ry', 's'].every(f => a[f] === undefined || num(a[f])) && Object.keys(a).length <= 6)) return null;
-    if (!optStr(out.at, 40) || JSON.stringify(out).length > 400000) return null;
-    out.moved = Object.fromEntries(Object.entries(M).map(([k, m]) => [k, { dx: +m.dx || 0, dy: +m.dy || 0, dz: +m.dz || 0, ry: +m.ry || 0, s: m.s === undefined ? 1 : +m.s }]));
-    out.added = A.map(a => ({ asset: a.asset, x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, ry: +a.ry || 0, s: a.s === undefined ? 1 : +a.s }));
+    const L = cleanLayer(out); if (!L || !optStr(out.at, 40) || JSON.stringify(out).length > 400000) return null; Object.assign(out, L);
   } else if (kind === 'video') {
     const F = out.frames; if (!Array.isArray(F) || F.length < 10 || F.length > 6000 || !F.every(r => Array.isArray(r) && r.length === 4 && r.every(Number.isFinite))) return null;
     if (!Array.isArray(out.labels) || out.labels.length > 600 || (out.marks != null && (!Array.isArray(out.marks) || out.marks.length > 2000)) || (out.detected != null && (!Array.isArray(out.detected) || out.detected.length > 2000))) return null;
@@ -90,6 +86,15 @@ function clean(kind, p) {
   return out;
 }
 
+// a map layer (pro-whooper-mapedit/1's moved / removed / added): only those fields, numbers only, sizes capped
+function cleanLayer(p) {
+  const num = v => Number.isFinite(v) && Math.abs(v) <= 5000, M = p.moved, R = p.removed, A = p.added;
+  if (!M || typeof M !== 'object' || Array.isArray(M) || Object.keys(M).length > 5000 || !Object.entries(M).every(([k, m]) => k.length <= 80 && m && typeof m === 'object' && ['dx', 'dy', 'dz', 'ry', 's'].every(f => m[f] === undefined || num(m[f])) && Object.keys(m).length <= 5)) return null;
+  if (!Array.isArray(R) || R.length > 5000 || !R.every(k => str(k, 80))) return null;
+  if (!Array.isArray(A) || A.length > 3000 || !A.every(a => a && typeof a === 'object' && str(a.asset, 40) && ['x', 'y', 'z', 'ry', 's'].every(f => a[f] === undefined || num(a[f])) && Object.keys(a).length <= 6)) return null;
+  return { moved: Object.fromEntries(Object.entries(M).map(([k, m]) => [k, { dx: +m.dx || 0, dy: +m.dy || 0, dz: +m.dz || 0, ry: +m.ry || 0, s: m.s === undefined ? 1 : +m.s }])),
+    removed: R.slice(), added: A.map(a => ({ asset: a.asset, x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, ry: +a.ry || 0, s: a.s === undefined ? 1 : +a.s })) };
+}
 const mem = new Map();   // best-effort counters for this machine: key -> { n, until }
 async function bump(env, key, ttl, limit, shared) {
   if (shared && env.LIMITS) { try { const n = +(await env.LIMITS.get(key)) || 0; if (n >= limit) return false; await env.LIMITS.put(key, String(n + 1), { expirationTtl: ttl }); return true; } catch { return false; } }   // can't count: don't accept
@@ -160,6 +165,31 @@ async function oneRun(request, env, fetchImpl, reply) {
     return reply(200, JSON.stringify(p), { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }); } catch { return reply(502, 'could not read the run'); }
 }
 
+// Official map layouts, published by the owner from the Map Editor. Only with the owner key (Cloudflare secret OWNER_KEY,
+// a passphrase the owner typed once into their game; compared by hash, in constant time); wrong guesses are slowed to 5
+// an hour per address. Committed as maps/official/<map>.json to GAME_REPO (default heyheykoolaid/openprowhooper, which
+// GitHub Pages builds from), so GITHUB_TOKEN needs Contents: Read and write there too. Nothing else can be written.
+async function sameKey(a, b) { const h = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)))); const x = await h(a), y = await h(b); let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]; return d === 0; }
+async function official(request, env, fetchImpl, reply, origin, allowed) {
+  if (!allowed.includes(origin)) return reply(403, 'not from the game');
+  if (!env.OWNER_KEY || String(env.OWNER_KEY).length < 12) return reply(503, 'publishing is not set up (OWNER_KEY)');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000);
+  const text = await request.text(); if (text.length > 450000) return reply(413, 'too large');
+  let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
+  if (!j || typeof j !== 'object' || typeof j.key !== 'string' || j.key.length > 200) return reply(400, 'bad request');
+  const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
+  if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
+  if (!str(j.map, 24) || !/^[a-z0-9-]{1,24}$/.test(j.map)) return reply(400, 'bad map');
+  const L = cleanLayer(j); if (!L) return reply(400, 'not a map layout');
+  const by = str(j.by, 24) && /^[A-Za-z0-9_. -]{1,24}$/.test(j.by) ? j.by : 'owner';
+  const file = { format: 'pro-whooper-mapedit/1', map: j.map, at: new Date().toISOString(), by, ...L }, repo = env.GAME_REPO || 'heyheykoolaid/openprowhooper', branch = env.GAME_BRANCH || 'main';
+  const url = `https://api.github.com/repos/${repo}/contents/maps/official/${j.map}.json`, H = { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' };
+  let sha; try { const g = await fetchImpl(`${url}?ref=${encodeURIComponent(branch)}`, { headers: H }); if (g.ok) { const b = await g.json(); sha = b && b.sha; } else if (g.status !== 404) return reply(502, `GitHub said ${g.status} reading the map (does the relay's token reach ${repo}?)`); } catch { return reply(502, 'could not reach GitHub'); }
+  const bytes = new TextEncoder().encode(JSON.stringify(file, null, 1)); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  let r; try { r = await fetchImpl(url, { method: 'PUT', headers: H, body: JSON.stringify({ message: `Official layout of ${j.map} (${Object.keys(L.moved).length} moved, ${L.removed.length} removed, ${L.added.length} added) by ${by}`, content: btoa(bin), branch, ...(sha ? { sha } : {}) }) }); } catch { return reply(502, 'could not reach GitHub'); }
+  if (!r.ok) return reply(502, `GitHub said ${r.status} (the relay's token needs Contents: Read and write on ${repo})`);
+  return reply(200, JSON.stringify({ ok: true, at: file.at }), { 'Content-Type': 'application/json' });
+}
 async function handle(request, env, fetchImpl = fetch) {
   const allowed = (env.ALLOW_ORIGINS || 'https://heyheykoolaid.github.io').split(',').map(s => s.trim()).filter(Boolean), origin = request.headers.get('Origin') || '';
   const cors = { 'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0], 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff' };
@@ -168,6 +198,7 @@ async function handle(request, env, fetchImpl = fetch) {
   if (env.ENABLED === '0' || !env.GITHUB_TOKEN || !env.GITHUB_REPO) return reply(503, 'closed');
   if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); return reply(405, 'POST only'); }
   if (request.method !== 'POST') return reply(405, 'POST only');
+  if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (+(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'too large');
   const text = await request.text(); if (text.length > MAX_BYTES) return reply(413, 'too large');
@@ -188,4 +219,4 @@ async function handle(request, env, fetchImpl = fetch) {
   return r.ok ? reply(200, 'ok') : reply(502, 'could not store it');
 }
 export default { fetch: (request, env) => handle(request, env) };
-export { handle, clean, boardFrom, scoreFile, mapsFrom, mapFile };
+export { handle, clean, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer };

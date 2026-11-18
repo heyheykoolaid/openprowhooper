@@ -3,7 +3,7 @@
 (async () => {
   const { handle } = await import('../tools/dropoff-worker.mjs');
   let ok = 0, n = 0; const check = (name, pass, extra = '') => { n++; if (pass) ok++; console.log(`${pass ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); };
-  const calls = [], gh = async (url, init) => { calls.push({ url, init }); return { ok: true }; };
+  const calls = [], gh = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200, json: async () => ({ sha: 'abc' }) }; };
   const env = () => ({ GITHUB_TOKEN: 'secret', GITHUB_REPO: 'o/r' }), GAME = 'https://heyheykoolaid.github.io';
   const post = (body, o = {}) => handle(new Request('https://drop/', { method: 'POST', headers: { Origin: o.origin ?? GAME, 'CF-Connecting-IP': o.ip || '1.1.1.' + (n + 1) }, body: typeof body === 'string' ? body : JSON.stringify(body) }), o.env || env(), gh);
   const flight = (extra = {}) => ({ format: 'pro-whooper-flight/1', id: 'x', started: '2026-11-17T00:00:00Z', pilot: 'p1', name: 'Tester', events: [{ t: 1, name: 'Flip' }], trace: { enc: 'cols-delta-varint/1+deflate', hz: 100, cols: ['t', 'x'], rows: 10, data: 'AAAA' }, ...extra });
@@ -74,5 +74,18 @@
     const L = mapsFrom(['1794972722171.abc1234.Um9kJ3MgcGFyaw.Um9kRlBW.json', '1794972000000.abc1234.Um9kJ3MgcGFyaw.Um9kRlBW.json', 'junk.json']);
     check('the list shows each pilot\'s map once (newest), with its name and maker', L.length === 1 && L[0].name === "Rod's park" && L[0].by === 'RodFPV' && L[0].at === 1794972722171);
     r = await handle(new Request('https://drop/map?base=moose&id=../../secrets', { headers: { Origin: GAME } }), env(), gh); check('reading a map needs a map file name', r.status === 400); }
+  { // official map layouts: only with the owner key, only maps/official/<map>.json in the game repo
+    const KEY = 'correct horse battery staple', oenv = () => ({ ...env(), OWNER_KEY: KEY }), lay = { moved: { 'Cedar@1,2': { dx: 1, dy: 0, dz: 0, ry: 0, s: 1 } }, removed: [], added: [{ asset: 'Pole', x: 1, y: 0, z: 1 }] };
+    const pub = (body, o = {}) => handle(new Request('https://drop/official', { method: 'POST', headers: { Origin: o.origin ?? GAME, 'CF-Connecting-IP': o.ip || '9.9.9.9' }, body: JSON.stringify(body) }), o.env || oenv(), gh);
+    const n0 = calls.length; let r = await pub({ key: 'guess', map: 'moose', ...lay }, { ip: '9.9.0.1' });
+    check('a wrong owner key is refused and nothing is written', r.status === 403 && calls.length === n0);
+    r = await pub({ key: KEY, map: 'moose', by: 'heyheykoolaid', ...lay, evil: 'x' }, { ip: '9.9.0.2' }); const put = calls.filter(c => c.init && c.init.method === 'PUT').pop();
+    check('the owner key publishes maps/official/<map>.json to the game repo', r.status === 200 && /repos\/heyheykoolaid\/openprowhooper\/contents\/maps\/official\/moose\.json$/.test(put.url), put && put.url);
+    const body = JSON.parse(atob(JSON.parse(put.init.body).content)); check('only the layout is written (no stray fields, no key)', body.format === 'pro-whooper-mapedit/1' && body.added.length === 1 && !('evil' in body) && !JSON.stringify(body).includes(KEY));
+    r = await pub({ key: KEY, map: '../../src', ...lay }, { ip: '9.9.0.3' }); check('a map name outside maps/official is refused', r.status === 400);
+    for (let i = 0; i < 5; i++) await pub({ key: 'nope' + i, map: 'moose', ...lay }, { ip: '9.9.0.4' });
+    r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.4' }); check('after 5 wrong keys an address waits an hour (even with the right key)', r.status === 429);
+    r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.5', env: env() }); check('without OWNER_KEY set, publishing is closed', r.status === 503);
+    r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.6', origin: 'https://evil.example' }); check('other websites cannot publish', r.status === 403); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

@@ -579,3 +579,11 @@ helping Open Pro Whooper, <name>!" (`procThanks`). Opening any review closes Jud
 The inverted yaw 180 happens while the quad keeps travelling over the top of the loop at the loop's own pace (it yaws
 across `a` = 0.3-0.55 rad either side of the top, smoothstep), then the Matty out; it used to hang almost still (0.1-0.4 m/s)
 at the top. Slowest point now 1.2-4.7 m/s; stress 30/30 on seeds 1-3.
+
+## Publishing official maps through the relay (owner key)
+`POST /official` on the relay (`official()` in tools/dropoff-worker.mjs; test/dropoff.js): body { key, map, by, moved,
+removed, added }; the key must match the Cloudflare secret `OWNER_KEY` (SHA-256, constant time; 5 wrong keys = an hour's
+wait per address); the layer goes through `cleanLayer`; the relay commits `maps/official/<map>.json` to `GAME_REPO`
+(default heyheykoolaid/openprowhooper), so its GITHUB_TOKEN needs Contents: write there. The Map Editor uses it when a
+relay is configured and the owner saved the key (`store 'ownerKey'`, `mePublishRelay`); otherwise the GitHub token in
+Options (`mePublish`, always to the game repo, `GAME_REPO` in mapedit.js). Setup steps: docs/DROPOFF-SETUP.md.

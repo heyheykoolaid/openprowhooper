@@ -74,3 +74,16 @@ the new file, Deploy. Variables and the secret stay as they are. The leaderboard
 (`/board`, `/run`) that only ever look inside the `leaderboard/` folder of the data repo; the token needs nothing new
 (Contents: read and write already covers it). Until the new code is deployed the game says the leaderboard cannot be
 reached, and everything else works as before.
+
+## Publishing official maps through the drop-off (owner only)
+The Map Editor's "Publish for everyone" (Official map mode, pilot name heyheykoolaid) can go through this relay instead
+of a GitHub token in the browser. The relay commits `maps/official/<map>.json` to the game repo; GitHub Pages rebuilds.
+1. The relay's GitHub token (`GITHUB_TOKEN`) needs **Contents: Read and write on `heyheykoolaid/openprowhooper`** as well as
+   the data repo (GitHub → Settings → Developer settings → Fine-grained tokens → the token → Edit → Repository access).
+2. Cloudflare → Workers & Pages → `prowhooper-dropoff` → Settings → Variables and Secrets → **Add** → type **Secret**,
+   name `OWNER_KEY`, value: a passphrase only you know (at least 12 characters; four or five random words is good).
+   Optional plain variables: `GAME_REPO` (default `heyheykoolaid/openprowhooper`), `GAME_BRANCH` (default `main`).
+3. Edit code → paste the current `tools/dropoff-worker.mjs` → Deploy.
+4. In the game: Map Editor → Official map → paste the same passphrase in "Owner key" → Save key → Publish for everyone.
+The key is checked by hash in constant time; five wrong keys make an address wait an hour. It is kept only in your
+browser (store 'ownerKey'). If it ever leaks, change the secret in Cloudflare (old key stops working at once).

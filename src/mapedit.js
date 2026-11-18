@@ -96,8 +96,21 @@ async function mePasteCode() {
 }
 // official layouts always go to the game repo (GitHub Pages builds from it), whatever repo Options names for uploads
 const GAME_REPO = 'heyheykoolaid/openprowhooper';
+// Publishing through the relay (tools/dropoff-worker.mjs POST /official): the owner key is a passphrase the owner set as
+// the Cloudflare secret OWNER_KEY and typed once here. Kept only in this browser (store 'ownerKey'); never exported or sent
+// anywhere but the relay. The relay checks it and commits maps/official/<map>.json to the game repo.
+async function mePublishRelay() {
+  const E = { ...ME.E, map: MAP_ID, at: new Date().toISOString(), by: pilotName() }; ME.pubMsg = 'Publishing through the drop-off…'; mePanels();
+  let ok = false, why = ''; try { const r = await fetch(lbBase() + '/official', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ key: store.get('ownerKey', ''), map: MAP_ID, by: pilotName(), moved: E.moved, removed: E.removed, added: E.added }) });
+    ok = r.ok; if (!ok) why = `${r.status}: ${(await r.text()).slice(0, 140)}`; } catch { why = 'the drop-off could not be reached'; }
+  if (!ok) { ME.pubMsg = `Not published (${why}). Your draft is kept.${/wrong owner key/.test(why) ? ' Check the owner key above (Forget key, then paste it again).' : /OWNER_KEY|404|405/.test(why) ? ' The drop-off needs the new code and the OWNER_KEY secret in Cloudflare.' : ''}`; mePanels(); flash(`<b>NOT PUBLISHED</b><small>${esc(why)}</small>`, 'warn'); return; }
+  const loc = store.get('officialLocal', {}) || {}; loc[MAP_ID] = E; store.set('officialLocal', loc); const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.E = meClean(E); ME.E.at = E.at;
+  ME.pubMsg = `Published ✓ ${new Date().toLocaleTimeString()}. GitHub Pages rebuilds the game for everyone in a few minutes; your game uses it now.`; mePanels();
+}
 async function mePublish() {
-  if (!ME.official || !ghMenus()) return; if (!gh.token) { ME.pubMsg = 'No GitHub token in this browser yet: paste it in the box above and press Save token, then publish.'; mePanels(); flash('<b>NO GITHUB TOKEN</b><small>paste it in the Map Editor panel (or Options)</small>', 'warn'); return; }
+  if (!ME.official || !ghMenus()) return;
+  if (lbBase() && store.get('ownerKey', '')) return mePublishRelay();
+  if (!gh.token) { ME.pubMsg = 'No owner key in this browser yet: paste it in the box above and press Save key, then publish.'; mePanels(); flash('<b>NO GITHUB TOKEN</b><small>paste it in the Map Editor panel (or Options)</small>', 'warn'); return; }
   const E = { ...ME.E, map: MAP_ID, at: new Date().toISOString(), by: pilotName() }, path = `/contents/maps/official/${MAP_ID}.json`; ME.pubMsg = 'Publishing…'; mePanels();
   try { const cur = await ghFetch(path + '?ref=main', {}, GAME_REPO), sha = cur.ok && cur.body && cur.body.sha;
     const r = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message: `Official layout of ${MAP_ID} (${Object.keys(E.moved).length} moved, ${E.removed.length} removed, ${E.added.length} added)`, content: b64(JSON.stringify(E, null, 1)), branch: 'main', ...(sha ? { sha } : {}) }) }, GAME_REPO);
@@ -165,7 +178,9 @@ function mePanels() {
   const own = ghMenus(), pub = mePublished();
   const modeH = own ? `<div class="row meMode"><button data-me="mode-own" class="${ME.official ? '' : 'on'}">Your maps</button><button data-me="mode-off" class="${ME.official ? 'on' : ''}">Official map</button></div>
     ${ME.official ? `<p class="note"><b>Editing the official ${esc(world.title || MAP_ID)}</b>: what every pilot flies. Your changes are a draft until you publish.${pub && pub.at ? ` Last published ${esc(new Date(pub.at).toLocaleString())}.` : ' Not published yet.'}</p>
-      ${gh.token ? `<p class="note">GitHub token: saved in this browser ✓ (publishes to ${GAME_REPO})</p>` : `<div class="meLocked"><p><b>GitHub token needed to publish.</b> A fine-grained token with Contents: Read and write on ${GAME_REPO}. It is kept only in this browser.</p><input id="meToken" type="password" autocomplete="off" placeholder="github_pat_…"><div class="row"><button data-me="savetoken">Save token</button></div></div>`}
+      ${lbBase() && store.get('ownerKey', '') ? `<p class="note">Owner key: saved in this browser ✓ (publishes through the drop-off) <button data-me="forgetkey" class="ghost">Forget key</button></p>` : gh.token && !lbBase() ? `<p class="note">GitHub token: saved in this browser ✓ (publishes to ${GAME_REPO})</p>`
+        : `<div class="meLocked"><p><b>Owner key needed to publish.</b> The passphrase you set as <code>OWNER_KEY</code> on the drop-off in Cloudflare. It is kept only in this browser.</p><input id="meOwnerKey" type="password" autocomplete="off" placeholder="owner key"><div class="row"><button data-me="savekey">Save key</button></div>
+          ${gh.token ? '<p class="note">(A GitHub token is saved too: it is used only if there is no owner key.)</p>' : ''}</div>`}
       <div class="row"><button data-me="publish" class="primary">Publish for everyone</button><button data-me="discard" class="ghost">Discard draft</button></div>${ME.pubMsg ? `<p class="note">${esc(ME.pubMsg)}</p>` : ''}` : ''}` : '';
   const baseT = esc(world.baseTitle || MAP_ID), mine = MY_MAPS.filter(m => m.base === MAP_ID && m !== MY_MAP);
   const ownH = ME.official ? '' : ME.locked ? `<div class="meLocked"><p>${COMM_MAP ? `<b>${esc(COMM_MAP.name)}</b> is ${esc(COMM_MAP.by)}'s map, built on ${baseT}. It can't be changed here, but you can make your own map from it (it starts as a copy).` : `<b>${baseT} is an official map.</b> Players can't change it. Make your own map from it: it is listed with ${baseT} in Maps, and the original stays as it is.`}</p>
@@ -279,6 +294,8 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-me]'); if (!b) return; const k = b.dataset.me;
   if (k === 'newmap') { meNewMap(($('#meNewName') || {}).value, COMM_MAP ? COMM_MAP.E : null); return; }   /* a community map is a template too */
   if (k === 'sharemap') { meShareMap(); return; }
+  if (k === 'savekey' && ghMenus()) { const v = (($('#meOwnerKey') || {}).value || '').trim(); if (v) { store.set('ownerKey', v); ME.pubMsg = 'Owner key saved in this browser. Now press Publish for everyone.'; } mePanels(); return; }
+  if (k === 'forgetkey') { store.set('ownerKey', ''); ME.pubMsg = 'Owner key removed from this browser.'; mePanels(); return; }
   if (k === 'savetoken' && ghMenus()) { const tk = (($('#meToken') || {}).value || '').trim(); if (tk) { gh.token = tk; saveGh(); ME.pubMsg = 'Token saved in this browser. Now press Publish for everyone.'; } mePanels(); return; }   /* the token stays in this browser only (saveGh: localStorage) */
   if (k === 'officialmap') { meLeaveMyMap(); return; }
   if (k === 'renamemap' && MY_MAP) { const n = prompt('Name of your map:', MY_MAP.name); if (n && n.trim()) { MY_MAP.name = n.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40); store.set('myMaps', MY_MAPS); world.title = MY_MAP.name; mePanels(); } return; }
