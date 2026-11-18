@@ -1342,8 +1342,8 @@ class TrickDetector {
         // pilot: Matty flips inside combos were still called Beginner Matty. Mid-combo the flip is often slow, broken up or
         // partly claimed by the trick before, so no single big pitch token is left. Go by how far the quad actually tumbled
         // between going over and coming back under: a beginner matty only nods (well under a half turn), a Matty goes round.
-        const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0;
-        const flipped = tumble >= 230 && !(this.cur && this.cur[1] && this.cur[1].raw > 45) && !toks.some(x => x.ax === 'R' && x.raw > 120) && !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) && !toks.some(x => x.ax === 'Y' && x.raw > 120);
+        const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0;   // and it must be FORWARD: the tail of a powerloop between the two passes (pilot review of RodFPV: Power Flip read as Matty + Power Flip) is the other way round
+        const flipped = tumble >= 230 && (!this.fwdSweptBetween || this.fwdSweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) >= 0.6 * tumble) && !(this.cur && this.cur[1] && this.cur[1].raw > 45) && !toks.some(x => x.ax === 'R' && x.raw > 120) && !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) && !toks.some(x => x.ax === 'Y' && x.raw > 120);
         // a Beginner Matty never goes inverted and never tumbles (pilot: a powerloop round the covered walkway was called one):
         // if it tumbled but the flip can't be read yet (rotation still going), say nothing and wait
         const gentle = tumble < 200 && (!this.stayedUpright || this.stayedUpright(p2[0].t - 0.3, p2[1].t));
@@ -1721,7 +1721,7 @@ class StreamDetector extends TrickDetector {
           // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
           // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
           // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
-          const dA = Math.abs(da) * R2D, pose = topVis && up.y < 0.35 && rolled;
+          const dA = Math.abs(da) * R2D, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
           if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
             ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; }
           else if (ob.poseT0 == null) ob.run = 0;
@@ -1878,6 +1878,9 @@ class StreamDetector extends TrickDetector {
   }
   fbIn(a, b) { return this.fb.filter(x => x.t >= a && x.t <= b); }
   sweptBetween(a, b) { const W = this.fbIn(a, b); let s = 0; for (let i = 1; i < W.length; i++) s += Math.acos(Math.max(-1, Math.min(1, dot(W[i - 1].up, W[i].up)))); return s * R2D; }
+  // the same, only the part that turned the nose DOWN (top toward the nose: a forward flip, a Matty) minus the part that
+  // turned it up (a powerloop's way round): a Matty's tumble is forward
+  fwdSweptBetween(a, b) { const W = this.fbIn(a, b); let s = 0; for (let i = 1; i < W.length; i++) { const u0 = W[i - 1].up, u1 = W[i].up, g = Math.acos(Math.max(-1, Math.min(1, dot(u0, u1)))); const dd = (u1.x - u0.x) * W[i - 1].f.x + (u1.y - u0.y) * W[i - 1].f.y + (u1.z - u0.z) * W[i - 1].f.z; s += dd >= 0 ? g : -g; } return s * R2D; }
   minUpBetween(a, b) { const W = this.fbIn(a, b); return W.length ? Math.min(...W.map(x => x.up.y)) : 1; }
   // the same, judged by the camera (what the pilot sees): with a 30° camera, a maverick's nose-down descent has the body
   // ~110° nose down while the view is still forward-looking

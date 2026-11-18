@@ -538,6 +538,24 @@ weighs the rest 0.5 (the label on the real flight already counts 1). test/replic
 - **Ground effect** (`heightAbove`) keeps its own list of boxes within 2 m (rebuilt after 1 m of travel): it ran over every
   collider in the world each physics step, which tripled Moose's physics time once its foliage was solid.
 
+## From the first Judge the community reviews (2026-11-18: 48 reviewer verdicts on RodFPV's and Alligator Man33's board runs)
+- **Matty's tumble must be forward** (`fwdSweptBetween`: the up vector's turn toward the nose minus away from it): the
+  mid-combo Matty fallback (over then under, no pitch token left) took the tail of a powerloop (P+, the other way round)
+  as the flip: a Power Flip read as Matty + Power Flip, and two rejected Mattys. The flip must be at least 60% forward.
+  Across the 118 shared flights 62 Matty calls went, no confirmed one among them; three rejected ones went.
+- **Nose-up trippies** (`pose` in the orbit code): the trippy look also counts with the nose more than ~45° up the pole
+  while the body rolls over 120°/s (circling nose-up IS a body roll). Rod's flagpole trippies (nose 55-75° up, up.y 0.25-0.55)
+  were cut every lap by the 0.9 s "look lost" exit into Roll / a one-lap trippy / Double Roll; now one 3.5-lap Trippy Spin.
+  Three of the owner's labelled trippies that were missed are found. test/orbits.js.
+- Still open (single reviewer or votes; see the to-do in tools/signatures.js): Cradle vs Juicy Flick (swing set),
+  Double Flip that was a Half Matty, Barani read as Split-S + Matty, Flip + Matty double call on a slow two-part Matty,
+  Invert Rewind / Segmented Flips/Rolls rejected, a Juicy Flick ending in a crash (41%), a 794° Double Roll over the
+  tolerance, Split-S into a wall dive called Dive (school), one-lap trippies (the review variant "Trippy Spin x1").
+  Review labels drawn as the default 1.5 s tile often end before the game's call (it waits ~1.4 s to see a roll end):
+  compare with a tail, not the bare span.
+- Reviews sent from the board view in builds before the reviewer flow are judge votes (`judge: true`): they wait for a
+  second pilot (Autismo's school run, 9 labels).
+
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
 "heavier, with a bit of latency" for a tester (a low frame rate reads the sticks late). Auto (default) starts Full and, if

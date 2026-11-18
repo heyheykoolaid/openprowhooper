@@ -27,4 +27,20 @@ for (const [speed, lean] of [[11, 66], [13, 72], [16, 76]]) { const got = fly(C,
 const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.round && o.prims.some(p => p.type === 'capsule' && p.r > 0.26 && p.r <= 0.6 && Math.abs(p.b.y - p.a.y) > 3));
 { const c = lone.round.c, got = fly(M, lap(c, 3.4, 2.2, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 3.4 / 8 + 2.5);
   check(`a trippy round a thick Moose tree (${lone.name}, trunk ${lone.prims.find(p => p.type === 'capsule').r.toFixed(2)} m) counts`, got.includes('Trippy Spin x2'), got.join(', ') || 'nothing'); }
+// nose up the pole and rolling all the way round (pilot review of RodFPV's flagpole trippies on the playground: nose
+// 55-75° up, rolling ~270°/s, climbing): one Trippy Spin of several laps, not Roll / one-lap trippy / Double Roll
+{ const P = S.MAPS.playground.build(), fp = P.objs.find(o => o.name === 'Flagpole'), cap = fp.prims.find(p => p.type === 'capsule'), c = { x: cap.a.x, z: cap.a.z };
+  const R = 2.5, w = 280 * D2R, laps = 3.5, T = laps * 2 * Math.PI / w, nose = 65 * D2R, g = 72 * D2R;   // circling nose-up shows on the body's roll axis (~250°/s); the top leans back so up.y holds at ~0.4
+  const gen = t => { const a = Math.min(t, T) * w, pos = v3(c.x + R * Math.cos(a), 1.8 + 0.5 * Math.min(t, T), c.z + R * Math.sin(a)), toC = norm(v3(c.x - pos.x, 0, c.z - pos.z)), tan = v3(-Math.sin(a), 0, Math.cos(a));
+    const f = norm(v3(tan.x * Math.cos(nose), Math.sin(nose), tan.z * Math.cos(nose))), back = v3(-tan.x * Math.sin(nose), Math.cos(nose), -tan.z * Math.sin(nose));
+    return { pos, q: basisQ(f, v3(toC.x * Math.cos(g) + back.x * Math.sin(g), back.y * Math.sin(g), toC.z * Math.cos(g) + back.z * Math.sin(g))) }; };
+  const got = fly(P, gen, T + 2.5), ts = got.filter(x => x === 'Trippy Spin x2').length;
+  check('nose-up rolling trippy round the playground flagpole is one Trippy Spin', ts === 1 && !got.some(x => /^(Roll|Double Roll|Triple Roll)$/.test(x)), got.join(', ') || 'nothing'); }
+// a Matty's tumble must be forward: fwdSweptBetween reads a forward (nose-down) flip as positive and a powerloop's way round
+// as negative (pilot review of RodFPV: the tail of a powerloop between an over and an under was called a Matty Flip)
+{ const P = S.MAPS.playground.build(); for (const [sgn, name] of [[1, 'forward flip'], [-1, 'backward loop']]) { const det = new S.TrickDetector(P), d = Object.create(S.Drone.prototype); d.armed = true; d.crashed = false;
+    const dt = 0.001, th = t => sgn * Math.min(1, Math.max(0, t - 0.3) / 1.0) * 2 * Math.PI; let pp = null;
+    for (let t = 0; t < 1.8; t += dt) { const a = th(t), f = v3(Math.cos(a), -Math.sin(a), 0), u = v3(Math.sin(a), Math.cos(a), 0), pos = v3(-30 + 2 * t, 6, 30); d.q = basisQ(f, u); d.pos = pos; d.vel = pp ? mul(sub(pos, pp), 1 / dt) : v3(2, 0, 0); pp = pos; d.w = v3(0, 0, 0); d.contactThisStep = false; det.update(d, dt); }
+    const fw = det.fwdSweptBetween(det.time - 1.7, det.time), sw = det.sweptBetween(det.time - 1.7, det.time);
+    check(`fwdSweptBetween: a ${name} reads ${sgn > 0 ? 'forward' : 'backward'}`, sw > 300 && sgn * fw > 0.8 * sw, `swept ${Math.round(sw)}°, forward ${Math.round(fw)}°`); } }
 console.log(`\n${ok}/${n} orbit checks`); if (ok !== n) process.exit(1);
