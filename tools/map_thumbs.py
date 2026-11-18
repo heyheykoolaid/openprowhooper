@@ -15,17 +15,18 @@ VIEWS = {
     'moose':      ([-22, 3.2, 10], [-34, 1.4, 0]),
 }
 EXTRA = {
-    'moose-play':   ('moose', [-24, 2.2, 9], [-34, 1.2, 0]),
-    'moose-lane':   ('moose', [-30, 2.0, 9], [10, 3, -2]),
-    'moose-tires':  ('moose', [30, 1.6, -8], [36, 0.5, -12]),
+    'clappy-underpass': ('clappy', [18.5, 1.6, 6], [18, 2.6, -6]),
+    #'moose-play':   ('moose', [-24, 2.2, 9], [-34, 1.2, 0]),
+    #'moose-lane':   ('moose', [-30, 2.0, 9], [10, 3, -2]),
+    #'moose-tires':  ('moose', [30, 1.6, -8], [36, 0.5, -12]),
     #'moose-sign':   ('moose', [-36, 2.0, -15], [-40, 1.2, -21]),
-    'moose-high':   ('moose', [-60, 30, 40], [0, 0, -5]),
-    'clappy-stairs': ('clappy', [3, 4, 3.5], [11, 3, -3.5]),
-    'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),
-    'clappy-tower':  ('clappy', [-1, 4, -1], [-6, 2.5, -5]),
-    'clappy-shops':  ('clappy', [-6, 9, 13], [-4, 5, 34]),
-    'warehouse-in':  ('warehouse', [-25, 5, 14], [10, 3, -8]),
-    'warehouse-up':  ('warehouse', [10, 6, 12], [-10, 8, -14]),
+    #'moose-high':   ('moose', [-60, 30, 40], [0, 0, -5]),
+    #'clappy-stairs': ('clappy', [3, 4, 3.5], [11, 3, -3.5]),
+    #'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),
+    #'clappy-tower':  ('clappy', [-1, 4, -1], [-6, 2.5, -5]),
+    #'clappy-shops':  ('clappy', [-6, 9, 13], [-4, 5, 34]),
+    #'warehouse-in':  ('warehouse', [-25, 5, 14], [10, 3, -8]),
+    #'warehouse-up':  ('warehouse', [10, 6, 12], [-10, 8, -14]),
 }
 
 async def shot(b, mid, view, size):

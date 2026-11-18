@@ -142,10 +142,13 @@
     for (const t of [-18, -6, 6, 18]) for (const [x, z] of [[t, -23.3], [t, 23.3], [-23.3, t], [23.3, t]]) { pipe(up, v3(x, 0, z), v3(x, 8, z), 0.12, 'wood'); pipe(up, v3(x - 0.7, 7.5, z), v3(x + 0.7, 7.5, z), 0.05, 'wood', { noCollide: true }); poles.push(v3(x, 7.5, z)); }
     { const w = O('Overhead Wires', 'deco'); for (const side of ['N', 'S', 'E', 'W']) { const P = poles.filter(p => side === 'N' ? p.z < -23 : side === 'S' ? p.z > 23 : side === 'E' ? p.x > 23 : p.x < -23).sort((a, b) => (a.x + a.z) - (b.x + b.z));
       for (let i = 1; i < P.length; i++) for (const dx of [-0.6, 0.6]) pipe(w, v3(P[i - 1].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i - 1].z + (side === 'N' || side === 'S' ? dx : 0)), v3(P[i].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i].z + (side === 'N' || side === 'S' ? dx : 0)), 0.008, 'rubberBlack', { noCollide: true }); } }
-    frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, 0, 3.2, 2.6, 'x', 'paintBlue'); frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
+    frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, -3, 3.2, 2.6, 'x', 'paintBlue');   /* east gate: under the footbridge (pilot, 2026-11-17) */ frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
     // the footbridge from the plaza's east edge over the street to the east rooftops (5 m up), on two pillars
     { const o = slabOU('Footbridge', v3(18, 5.0, -3), v3(6.2, 0.1, 1.2), 'concrete'); for (const x of [14.5, 21.5]) pipe(o, v3(x, 0, -3), v3(x, 4.9, -3), 0.22, 'concrete');
       for (const z of [-4.15, -1.85]) bar('Footbridge Rail', v3(12, 6.0, z), v3(24, 6.0, z), 0.03, 'galv');
+      // lights under the deck (the pilot found it too dark under there): three fittings along the underside, real lights
+      for (const x of [13.2, 18, 22.8]) { const l = O('Underpass Light', 'deco', { light: v3(x, 4.85, -3), lightColor: 0xfff1d6, lightPower: 22, lightRange: 14 });
+        box(l, v3(x, 4.86, -3), v3(0.6, 0.03, 0.12), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, 4.89, -3), v3(0.65, 0.015, 0.16), 'metal', 0, 0, 0, { noCollide: true }); }
       // stairs straight up from the plaza onto the bridge's west end (12 steps of 0.5 m, 0.37 m rise), with handrails
       const st = O('Footbridge Stairs', 'deco'), N = 12, run = 0.5, rise = (5.1 - Y) / N, x1 = 11.8;
       for (let i = 0; i < N; i++) { const top = Y + rise * (i + 1), x = x1 - (N - 1 - i) * run - run / 2; box(st, v3(x, top / 2, -3), v3(run / 2, top / 2, 0.9), 'concrete'); }
