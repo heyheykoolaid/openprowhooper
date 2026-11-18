@@ -9,7 +9,7 @@
     let grp = null;   // objects made inside together() are one piece in the map editor (a play unit and its roof and slide)
     const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; if (grp != null) o.grp = grp; objs.push(o); return o; };
     const together = fn => { const was = grp; grp = nid; try { return fn(); } finally { grp = was; } };
-    const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (opts.noSurvey) b.leaf = true; if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
+    const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (opts.noSurvey) b.leaf = true; if (!opts.noCollide) o.prims.push(b); if (!opts.noDraw) o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };   // noDraw: a collider nothing is drawn for (a smooth skin is drawn over it)
     const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) { const c = makeCapsule(a, b, r); if (opts.leafSolid || opts.noSurvey) c.leaf = true; o.prims.push(c); }   /* leaf: solid, but never a pole or an over/under of its own */ o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
     // a drawn cone's collision (conifer tiers): capsules stacked up the axis, each as wide as fits inside the cone at its
     // top (k: share of the drawn radius, the bough tips give), the lowest resting on the base; leaf: not a pole, not surveyed
@@ -879,13 +879,40 @@
     zones.push({ shape: 'zone', mat: 'deckWet', c: v3(0, 0.004, -19), h: v3(52, 0, 6.2) });   // wet sheen under the pier edge
     const pier = O('Pier', 'deco'); box(pier, v3(0, 0.75, -19), v3(52, 0.75, 6), 'concrete');
     for (let x = -48; x <= 48; x += 6) { pipe(pier, v3(x, 1.5, -13.4), v3(x, 2.1, -13.4), 0.18, 'darkMetal'); box(pier, v3(x + 3, 1.52, -13.2), v3(2.9, 0.02, 0.12), 'plasticYellow', 0, 0, 0, ND); }
-    const hull = O('Hull', 'wall'); box(hull, v3(-2, DECK / 2, 0), v3(46, DECK / 2, 11), 'hullWhite');
-    box(hull, v3(46.5, DECK / 2, 0), v3(2.5, DECK / 2, 7.5), 'hullWhite'); box(hull, v3(50.5, DECK / 2, 0), v3(1.5, DECK / 2, 3.6), 'hullWhite');
-    for (const s of [-1, 1]) { box(hull, v3(-2, 1.4, s * 11.02), v3(46, 0.45, 0.02), 'hullNavy', 0, 0, 0, ND); box(hull, v3(-2, 2.3, s * 11.02), v3(46, 0.06, 0.02), 'neonCyan', 0, 0, 0, GL);
-      for (let x = -46; x <= 42; x += 2.2) box(hull, v3(x, 4.2, s * 11.03), v3(0.22, 0.22, 0.02), 'windowLit', 0, 0, 0, GL); }
-    box(hull, v3(-2, DECK + 0.01, 0), v3(46, 0.01, 11), 'teakWet', 0, 0, 0, ND);
-    const hrail = O('Deck Rail', 'overunder'); hrail.railGlow = 'neonCyan'; for (const s of [-1, 1]) rail(hrail, v3(-47.5, 0, s * 10.85), v3(43.5, 0, s * 10.85), DECK + 1.05, 2.4);
-    rail(hrail, v3(-47.85, 0, -10.6), v3(-47.85, 0, 10.6), DECK + 1.05, 2.4);
+    // the hull, after a real cruise ship's profile (owner's reference photo, 2026-11-18): straight-sided midships, a sharp
+    // bow whose stem rakes forward as it rises, and a rounded stern. Built from thin slices that follow the outline (the
+    // physics world is boxes and capsules), the stripes, windows, deck and rail following the curve.
+    const HW = 11, BOW0 = 26, STERN0 = -44, STERN_L = 4.5, stemAt = y => 47 + 5 * Math.min(1, Math.max(0, y / DECK));   // the stem: 47 m at the waterline, 52 m at the deck
+    const hw = (x, y) => { if (x >= BOW0) { const L = stemAt(y) - BOW0, u = (x - BOW0) / L; return u >= 1 ? 0 : HW * Math.pow(1 - u * u, 0.6); }
+      if (x <= STERN0) { const u = (STERN0 - x) / STERN_L; return u >= 1 ? 0 : HW * Math.sqrt(1 - u * u); } return HW; };
+    const hull = O('Hull', 'wall'); box(hull, v3((STERN0 + BOW0) / 2, DECK / 2, 0), v3((BOW0 - STERN0) / 2, DECK / 2, HW), 'hullWhite');
+    const DX = 0.8, BAND = 1;
+    // what you hit: coarse slices (not drawn); what you see: a smooth skin of short plates turned along the outline, in
+    // 40 cm bands, so the curve and the rake read smooth (owner: "a bit more smoothed out and less blocky")
+    for (let x = BOW0; x < stemAt(DECK); x += DX) for (let y = 0; y < DECK - 1e-6; y += BAND) { const w = hw(x + DX / 2, y + BAND / 2); if (w > 0.05) box(hull, v3(x + DX / 2, y + BAND / 2, 0), v3(DX / 2 + 0.02, BAND / 2, w), 'hullWhite', 0, 0, 0, { noDraw: true }); }
+    for (let x = STERN0; x > STERN0 - STERN_L; x -= DX / 2) { const w = hw(x - DX / 4, 3); if (w > 0.05) box(hull, v3(x - DX / 4, DECK / 2, 0), v3(DX / 4 + 0.02, DECK / 2, w), 'hullWhite', 0, 0, 0, { noDraw: true }); }
+    { const SK = 0.4, skin = (y, hy, x0, x1, step) => { for (const s of [-1, 1]) for (let x = x0; x < x1 - 1e-6; x += step) { const xb = Math.min(x1, x + step), wa = hw(x, y), wb = hw(xb, y), dz = (wb - wa) * s, L = Math.hypot(xb - x, dz);
+          if (wa < 0.02 && wb < 0.02) continue; box(hull, v3((x + xb) / 2, y, s * ((wa + wb) / 2 - 0.05)), v3(L / 2 + 0.03, hy, 0.06), 'hullWhite', -Math.atan2(dz, xb - x), 0, 0, ND); } };
+      for (let y = SK / 2; y < DECK; y += SK) skin(y, SK / 2 + 0.005, BOW0 - 0.4, stemAt(y), 0.7);
+      skin(DECK / 2, DECK / 2, STERN0 - STERN_L, STERN0 + 0.4, 0.45); }
+    // the deck: one plank field midships, slices fore and aft
+    box(hull, v3((STERN0 + BOW0) / 2, DECK + 0.01, 0), v3((BOW0 - STERN0) / 2, 0.01, HW), 'teakWet', 0, 0, 0, ND);
+    for (let x = BOW0; x < stemAt(DECK); x += DX) { const w = hw(x + DX / 2, DECK) - 0.02; if (w > 0.05) box(hull, v3(x + DX / 2, DECK + 0.01, 0), v3(DX / 2 + 0.01, 0.01, w), 'teakWet', 0, 0, 0, ND); }
+    for (let x = STERN0; x > STERN0 - STERN_L; x -= DX / 2) { const w = hw(x - DX / 4, DECK) - 0.02; if (w > 0.05) box(hull, v3(x - DX / 4, DECK + 0.01, 0), v3(DX / 4 + 0.01, 0.01, w), 'teakWet', 0, 0, 0, ND); }
+    // a line along the hull side at height y, as short straight pieces turned to follow the curve
+    const along = (y, x0, x1, step, fn) => { for (let x = x0; x < x1 - 1e-6; x += step) { const xa = x, xb = Math.min(x1, x + step), wa = hw(xa, y), wb = hw(xb, y); if (wa < 0.3 && wb < 0.3) continue; fn(xa, xb, wa, wb); } };
+    const sideStrip = (y, hy, mat, opt, x0 = STERN0 - STERN_L, x1 = stemAt(y)) => { for (const s of [-1, 1]) along(y, x0, x1, 1.0, (xa, xb, wa, wb) => { const dx = xb - xa, dz = (wb - wa) * s, L = Math.hypot(dx, dz), ry = -Math.atan2(dz, dx);
+      box(hull, v3((xa + xb) / 2, y, s * ((wa + wb) / 2 + 0.02)), v3(L / 2 + 0.01, hy, 0.02), mat, ry, 0, 0, opt); }); };
+    sideStrip(1.4, 0.45, 'hullNavy', ND); sideStrip(2.3, 0.06, 'neonCyan', GL);
+    for (const s of [-1, 1]) for (let x = -46; x <= 42; x += 2.2) { const w = hw(x, 4.2), w2 = hw(x + 0.3, 4.2); if (w < 1.5) continue; const ry = -Math.atan2((w2 - w) * s, 0.3);
+      box(hull, v3(x, 4.2, s * (w + 0.03)), v3(0.22, 0.22, 0.02), 'windowLit', ry, 0, 0, GL); }
+    // the deck rail: straight midships, round the bow and the stern
+    const hrail = O('Deck Rail', 'overunder'); hrail.railGlow = 'neonCyan';
+    for (const s of [-1, 1]) rail(hrail, v3(STERN0, 0, s * (HW - 0.15)), v3(BOW0, 0, s * (HW - 0.15)), DECK + 1.05, 2.4);
+    { const pts = []; for (let x = BOW0; x <= stemAt(DECK) - 0.6; x += 1.6) pts.push([x, hw(x, DECK) - 0.15]); pts.push([stemAt(DECK) - 0.6, 0]);
+      for (const s of [-1, 1]) for (let i = 1; i < pts.length; i++) rail(hrail, v3(pts[i - 1][0], 0, s * pts[i - 1][1]), v3(pts[i][0], 0, s * Math.max(0, pts[i][1])), DECK + 1.05, 2.4); }
+    { const pts = []; for (let k = 0; k <= 8; k++) { const a = k / 8 * Math.PI / 2, x = STERN0 - Math.sin(a) * (STERN_L - 0.35); pts.push([x, Math.max(0, hw(x, DECK) - 0.15)]); }
+      for (const s of [-1, 1]) for (let i = 1; i < pts.length; i++) rail(hrail, v3(pts[i - 1][0], 0, s * pts[i - 1][1]), v3(pts[i][0], 0, s * pts[i][1]), DECK + 1.05, 2.4); }
     // the gangway from the pier up to the main deck (port side), and its rails
     { const g = O('Gangway', 'deco'); const x = -20, z0 = -13.2, z1 = -10.9, L = Math.hypot(z1 - z0, DECK - 1.5), a = Math.atan2(DECK - 1.5, z1 - z0);
       box(g, v3(x, (1.5 + DECK) / 2, (z0 + z1) / 2), v3(0.9, 0.06, L / 2), 'darkMetal', 0, -a, 0); for (const s of [-1, 1]) pipe(g, v3(x + s * 0.9, 2.5, z0), v3(x + s * 0.9, DECK + 1, z1), 0.03, 'brass', NS); }
@@ -1034,10 +1061,10 @@
         for (const y of [L2 + 1.9, L3 + 1.9]) box(at, v3((AX0 + AX1) / 2, y, s * (ZW + 0.11)), v3(9.5, 0.3, 0.01), 'windowLit', 0, 0, 0, GL); }
       gapO('Casino Door', v3(-0.5, DECK + 1.5, -ZW), v3(0, 0, 1), v3(1, 0, 0), 1.42, 1.42);
       // the casino floor: checkerboard dance floor, overturned poker tables, chips and cash, slot machines, glass blocks
-      const cas = O('Casino Floor', 'deco'); box(cas, v3(2, DECK + 0.012, 0), v3(5, 0.006, 5), 'checker', 0, 0, 0, ND);
+      const cas = O('Casino Floor', 'deco'); box(cas, v3(2, DECK + 0.028, 0), v3(5, 0.006, 5), 'checker', 0, 0, 0, ND);
       for (const [x, z, a] of [[-4.5, -4, 1.2], [-3.5, 4, 1.35], [7.5, -5.5, 1.1], [8, 5.2, 1.3]]) { const pt = O('Overturned Poker Table', 'deco'); box(pt, v3(x, DECK + 0.75, z), v3(0.9, 0.05, 0.75), 'feltGreen', 0.4, a, 0);
         pipe(pt, v3(x - 0.3, DECK, z + 0.5), v3(x - 0.3, DECK + 0.5, z + 0.9), 0.06, 'brass', NS);
-        for (let k = 0; k < 9; k++) box(pt, v3(x + Math.sin(k * 2.4) * (0.6 + k * 0.1), DECK + 0.015, z + Math.cos(k * 2.4) * (0.5 + k * 0.08)), v3(0.05, 0.008, k % 3 ? 0.05 : 0.09), k % 3 ? ['neonPink', 'neonCyan', 'neonYellow'][k % 3] : 'feltGreen', k, 0, 0, ND); }
+        for (let k = 0; k < 9; k++) box(pt, v3(x + Math.sin(k * 2.4) * (0.6 + k * 0.1), DECK + 0.042, z + Math.cos(k * 2.4) * (0.5 + k * 0.08)), v3(0.05, 0.008, k % 3 ? 0.05 : 0.09), k % 3 ? ['neonPink', 'neonCyan', 'neonYellow'][k % 3] : 'feltGreen', k, 0, 0, ND); }
       for (let x = -6; x <= 10; x += 1.6) for (const s of [-1, 1]) { if (s < 0 && x > -3 && x < 2) continue; const sm = O('Slot Machine', 'deco'); box(sm, v3(x, DECK + 0.8, s * (ZW - 0.45)), v3(0.4, 0.8, 0.35), 'carBlack'); box(sm, v3(x, DECK + 1.15, s * (ZW - 0.8)), v3(0.3, 0.2, 0.01), ['neonMagenta', 'neonLime', 'neonCyan'][Math.round(x) % 3 < 0 ? 0 : Math.round(x) % 3], 0, 0, 0, GL); }
       for (const z of [-6, 6]) { const gb = O('Glass Block Partition', 'overunder'); box(gb, v3(-2, DECK + 0.6, z), v3(1.8, 0.6, 0.08), 'glassBlock'); gb.obstacle = { a: v3(-3.8, 0, z), b: v3(-0.2, 0, z), under: DECK, over: DECK + 1.2 }; }
       // balconies all round at L2 and L3 (1.6 m), brass and neon rails on the inner edge
@@ -1083,7 +1110,7 @@
         gapO('Shattered Skylight', v3((a + b) / 2, L3 - T, 0), v3(0, 1, 0), v3(1, 0, 0), 1.15, 1.15);
         for (let k = 0; k < 6; k++) box(rf, v3(a + 0.15 + (k % 3) * 1.05, L3 - 0.05, (k < 3 ? -1 : 1) * 1.15), v3(0.22, 0.01, 0.08), 'glassBlock', k * 0.7, 0.4, 0, ND); }
       rail(rf, v3(LX0, 0, -ZW + 0.2), v3(LX1, 0, -ZW + 0.2), L3 + 1.05, 2.2); rail(rf, v3(LX0, 0, ZW - 0.2), v3(LX1, 0, ZW - 0.2), L3 + 1.05, 2.2);
-      box(lo, v3(23, DECK + 0.012, 0), v3(4.5, 0.006, 4.5), 'checker', 0, 0, 0, ND);
+      box(lo, v3(23, DECK + 0.028, 0), v3(4.5, 0.006, 4.5), 'checker', 0, 0, 0, ND);
       const bar2 = O('Lounge Bar', 'overunder'); box(bar2, v3(31.5, DECK + 0.55, 0), v3(0.4, 0.55, 5), 'glassBlock'); box(bar2, v3(31.5, DECK + 1.12, 0), v3(0.5, 0.03, 5.1), 'brass');
       bar2.obstacle = { a: v3(31.5, 0, -5), b: v3(31.5, 0, 5), under: DECK, over: DECK + 1.15 };
       const mb = O('Mirror Ball', 'overunder'); pipe(mb, v3(23, L3 - 0.3, -4), v3(23, 11.9, -4), 0.01, 'galv', NS); ball(mb, v3(23, 11.4, -4), 0.55, 'chrome');

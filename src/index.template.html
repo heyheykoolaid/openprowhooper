@@ -241,6 +241,7 @@ body.meOn #music { display: none !important; }
 #meLib h4, #meSide h4 { margin: 12px 0 4px; font: 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--acid); } #meLib .meGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 #meLib .meGrid button { padding: 5px 4px; font-size: 11px; min-width: 0; } #meLib .meGrid .meTile { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 3px; } #meLib .meTile img { width: 100%; aspect-ratio: 4 / 3; background: rgba(255,255,255,.06); border-radius: 2px; } #meLib .meTile span { font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; } #meQ { width: 100%; box-sizing: border-box; margin: 4px 0 6px; } #meLib .meGrid button.on, #meBar button.on { background: var(--acid); color: #111; }
 #meBar { position: absolute; left: 262px; right: 312px; bottom: 34px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: rgba(14,13,12,.9); border: 2px solid #0b0a09; width: max-content; max-width: calc(100% - 574px); }
+#meExit { position: absolute; left: 262px; top: 10px; z-index: 5; padding: 7px 14px; font: 700 14px var(--mono); background: rgba(14,13,12,.9); color: #fff; border: 2px solid var(--acid); cursor: pointer; } #meExit:hover { background: var(--acid); color: #000; }
 #meBar button { padding: 5px 10px; font-size: 12px; } #meBar .sep { width: 14px; } #meBar .mePlacing { margin-left: 12px; font: 12px var(--mono); color: var(--acid); }
 #meSide .meFields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; } #meSide .meFields label { display: flex; flex-direction: column; font: 11px var(--mono); } #meSide .meFields input { width: 100%; box-sizing: border-box; }
 #meSide .meLocked { border: 1px solid var(--acid); padding: 10px; margin: 8px 0 12px; background: rgba(214,255,60,.06); } #meSide .meLocked p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; } #meSide .meLocked input { width: 100%; box-sizing: border-box; margin: 4px 0 8px; }
@@ -406,7 +407,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="procModal" class="hide"></div><div id="fbToast"></div>
-<div id="mapEditUI" class="hide"><div id="meBar"></div><div id="meLib" class="rvSide"></div><div id="meSide" class="rvSide"></div><div id="meHint"></div></div>
+<div id="mapEditUI" class="hide"><button id="meExit" data-me="done" title="Leave the Map Editor (Esc)">✕ Exit</button><div id="meBar"></div><div id="meLib" class="rvSide"></div><div id="meSide" class="rvSide"></div><div id="meHint"></div></div>
 <div id="recapUI" class="hide"><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas><div id="recapBar"></div></div>
 <div id="warmBox" class="hide"></div>
 

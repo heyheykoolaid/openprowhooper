@@ -16,6 +16,9 @@ VIEWS = {
     'ship':       ([-52, 17, -34], [4, 9, 2]),
 }
 EXTRA = {
+    'ship-side':    ('ship', [0, 8, 70], [0, 5, 0]),
+    'ship-bow':     ('ship', [70, 10, 30], [42, 4, 0]),
+    'ship-casino':  ('ship', [-4, 8.5, 6], [3, 6, 0]),
     'clappy-underpass': ('clappy', [18.5, 1.6, 6], [18, 2.6, -6]),
     #'moose-play':   ('moose', [-24, 2.2, 9], [-34, 1.2, 0]),
     #'moose-lane':   ('moose', [-30, 2.0, 9], [10, 3, -2]),

@@ -363,7 +363,7 @@ addEventListener('keydown', e => {
   if (ctrl && e.code === 'KeyD') { e.preventDefault(); meDuplicate(); return; }
   if (ctrl && e.code === 'KeyG') { e.preventDefault(); if (e.shiftKey) meUngroup(); else meGroup(); return; }
   if (ctrl && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) meRedo(); else meUndo(); return; } if (ctrl && e.code === 'KeyY') { e.preventDefault(); meRedo(); return; }
-  if (e.code === 'Escape') { if (ME.place) { ME.place = null; meLibrary(); meToolbar(); } else { ME.sel.clear(); meSelBox(); mePanels(); } return; }
+  if (e.code === 'Escape') { if (ME.place) { ME.place = null; meLibrary(); meToolbar(); } else if (ME.sel.size) { ME.sel.clear(); meSelBox(); mePanels(); } else closeMapEditor(); return; }   // Esc backs out one step at a time: placing, then the selection, then the editor
   if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); meDelete(); return; }
   if (e.code === 'KeyG') { ME.tool = 'move'; meToolbar(); } if (e.code === 'KeyR') { ME.tool = 'rotate'; meToolbar(); } if (e.code === 'KeyS' && ME.sel.size) { ME.tool = 'scale'; meToolbar(); }
   if (e.code === 'KeyD' && ME.sel.size && !ctrl) meDuplicate(); if (e.code === 'KeyF') meFocus(); if (e.code === 'KeyT') ME.cam.pitch = 1.55;

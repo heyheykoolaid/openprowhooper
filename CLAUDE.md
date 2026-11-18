@@ -646,6 +646,8 @@ relay is configured and the owner saved the key (`store 'ownerKey'`, `mePublishR
 Options (`mePublish`, always to the game repo, `GAME_REPO` in mapedit.js). Setup steps: docs/DROPOFF-SETUP.md.
 
 ## Map Editor tools (2026-11-17, owner's request)
+- **Leaving**: an ✕ Exit button at the top left of the 3D view (`#meExit`, same as Done), and Esc backs out one step at a
+  time: placing an asset, then the selection, then the editor itself.
 - **Handles** (`MG`, `meGizUpdate`, `meGizPick` in mapedit.js): arrows move along X / Y / Z, a ring turns about the vertical
   (a layout turns pieces about Y only), a cube scales; shown for the current tool on the selection, constant size on
   screen; Shift snaps (0.5 m, 15°). An arrow seen end-on drags at a steady speed. Dragging the piece itself still slides it.
@@ -681,6 +683,12 @@ floodlights, the gangway, and the port crane whose boom leans over the lounge fo
 `noSurvey` (boxes too now). **tools/gapcheck.js** [map…] samples every gap's opening against every collider (5 cm clear;
 `gap.cells` = a lattice, its cell centres): the ship's 101 gaps are all open (a test in npm test). The other maps' gaps
 are drawn to the full width of their openings, so the checker flags their edges: the openings are fine.
+**Hull** (2026-11-18, after the owner's cruise-ship photo): straight-sided midships (x -44..26, 11 m half-width), a sharp bow
+whose stem rakes forward as it rises (47 m at the waterline, 52 m at the deck: `stemAt`, outline `hw(x, y)`), a rounded
+stern over its last 4.5 m. Collision is coarse slices drawn with `noDraw` (a kit box option: a collider with no look); what
+you see is a skin of short plates turned along the outline in 40 cm bands; deck, navy stripe, neon line, windows and the
+deck rail follow the same outline. The casino and lounge checker floors sit on top of the teak (they were 2 mm under it).
+`tools/map_thumbs.py --extra` saves ship-side / ship-bow / ship-casino check shots.
 Theme 'vice' (worldview.js `viceMats`, `viceBackdrop`, `viceTick`): indigo night, a striped synthwave sun on the water
 beyond the bow, the grid ring beyond 120 m, purple fog, a far shore of dark towers, black glossy water, bloom; police
 lights strobe red and blue in turns (lights with `o.strobe`, and the lightbar materials); hallucinations (translucent neon
