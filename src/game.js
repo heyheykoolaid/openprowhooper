@@ -9,7 +9,11 @@ const store = { get(k, d) { try { const v = localStorage.getItem('pw.' + k); ret
 let spec = store.get('spec', { ...S.PRESETS['Air65 Racing'] });
 let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
 // the feel fitted from real Blackbox logs (Feel Lab, tools/feelfit.js): shake 1 and 3 ms of loop delay unless the pilot set them
-if (tune.shake == null) tune.shake = 1; if (tune.loopDelayMs == null) tune.loopDelayMs = 3;
+// Owner, 2026-11-18, after flying it: the fitted shake (1, 60 ms) with 3 ms of delay was too jittery. The defaults are now
+// close to the old sim with a hint of soft wobble on movement; pilots still on the first fitted values get the new ones.
+const FEEL3 = { shake: 0.35, shakeTau: 0.2, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 };
+if (!store.get('feel3', false)) { if (tune.shake == null || (tune.shake === 1 && tune.loopDelayMs === 3)) Object.assign(tune, FEEL3); store.set('feel3', true); }
+for (const [k, v] of Object.entries(FEEL3)) if (tune[k] == null) tune[k] = v;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

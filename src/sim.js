@@ -776,11 +776,13 @@ class Drone {
     // ms (the 2-20 Hz wobble real hover logs show), growing with thrust, with prop wash and with speed; the FC fights it like
     // a real one. Its own random stream (seeded), so turning it off leaves every other number exactly as it was.
     const SH = +this.tune.shake || 0;
-    if (SH > 0 && this.armed && !this.crashed) { const T = this.turb || (this.turb = { a: [0, 0, 0], rng: makeRng(4711) }), tau = 0.06, k = Math.sqrt(2 * dt / tau);
-      const Tt = this.thrust.reduce((a, b) => a + Math.abs(b), 0), load = Math.min(2.5, Tt / (p.mass * G)), sp = len(this.vel);
-      const amp = SH * SHAKE_A * (0.25 + load) * (1 + 1.5 * this.washLevel) * (1 + sp / 10);
-      for (let i = 0; i < 3; i++) { let n = 0; for (let j = 0; j < 3; j++) n += T.rng(); T.a[i] += (-T.a[i] * dt / tau) + k * n * 0.577; }   // roughly Gaussian, unit variance
-      Tb.x += I.x * amp * T.a[0]; Tb.y += I.y * amp * T.a[1] * 0.15; Tb.z += I.z * amp * T.a[2]; }   // little on yaw: the sim's yaw authority is weak and real yaw tracks as well as the sim's (Feel Lab)
+    if (SH > 0 && this.armed && !this.crashed) { const T = this.turb || (this.turb = { a: [0, 0, 0], b: [0, 0, 0], rng: makeRng(4711) }), tau = Math.max(0.03, +this.tune.shakeTau || 0.06), k = Math.sqrt(2 * dt / tau);
+      // how much is going on: rotation and speed (owner: "a hint of wobble on movements"; a still hover stays nearly calm)
+      const Tt = this.thrust.reduce((a, b) => a + Math.abs(b), 0), load = Math.min(2.5, Tt / (p.mass * G)), sp = len(this.vel), rot = len(this.w) * R2D;
+      const busy = this.tune.shakeMove != null ? Math.min(1.5, rot / 500 + sp / 12) * this.tune.shakeMove + (1 - this.tune.shakeMove) : 1;
+      const amp = SH * SHAKE_A * (0.25 + load) * (1 + 1.5 * this.washLevel) * (1 + sp / 10) * busy;
+      for (let i = 0; i < 3; i++) { let n = 0; for (let j = 0; j < 3; j++) n += T.rng(); T.a[i] += (-T.a[i] * dt / tau) + k * n * 0.577; T.b[i] += (T.a[i] - T.b[i]) * Math.min(1, dt / (tau * 0.5)); }   // twice smoothed: no sharp edges
+      Tb.x += I.x * amp * T.b[0]; Tb.y += I.y * amp * T.b[1] * 0.15; Tb.z += I.z * amp * T.b[2]; }   // little on yaw: the sim's yaw authority is weak and real yaw tracks as well as the sim's (Feel Lab)
     const Iw = v3(I.x * w.x, I.y * w.y, I.z * w.z), gyro = cross(w, Iw);
     this.w = v3(w.x + (Tb.x - gyro.x) / I.x * dt, w.y + (Tb.y - gyro.y) / I.y * dt, w.z + (Tb.z - gyro.z) / I.z * dt);
     this.pos = add(this.pos, mul(this.vel, dt));

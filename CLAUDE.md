@@ -85,8 +85,12 @@ cruising): `measure`, `simulate`, `compare`, `suggest`, and `fit` (a grid over l
 when the pilot has none): `tune.shake` (Drone.step: a smoothed random angular kick per axis, ~60 ms, growing with thrust,
 prop wash and speed, little on yaw; `SHAKE_A` 30 rad/s² per unit; its own seeded random stream) and `tune.loopDelayMs` (the
 motors get the FC's commands that long ago: gyro filtering, DShot and the ESC). Plus a drawn-only camera buzz (play.js,
-scaled by shake and motor load). Garage → Advanced → physics feel has both sliders; "All back to the defaults" = shake
-100 %, 3 ms. **Fit on the owner's 4 long flights: loop delay 3 ms, shake 1 (= 0.5 × the first scale)**: roll / pitch lag
+scaled by shake and motor load). **Owner, after flying it (2026-11-18): "really jittery" — the defaults are now close to the old
+sim with a hint of soft wobble on movement** (`FEEL3` in game.js: shake 0.35, `shakeTau` 0.2 s (the wobble is smoothed twice,
+no sharp edges), `shakeMove` 1 (it grows with rotation rate and speed; a still hover stays nearly calm), loop delay 0, camera
+buzz `camBuzz` 0 (smoothed now, it hummed per frame before); pilots still on the first fitted values get them once, `store
+'feel3'`). Garage → Advanced → physics feel: Wobble, Wobble smoothness, Wobble on movement, Loop delay, Camera buzz; "All
+back to the defaults" = FEEL3. The Feel Lab's fit (shake 1, 3 ms) is what a real log measures, not the default. **Fit on the owner's 4 long flights: loop delay 3 ms, shake 1 (= 0.5 × the first scale)**: roll / pitch lag
 6-8 → 10-12 ms (theirs 10-12), tracking error 4-6 % → 6-10 % (theirs 8-11 %), unasked wobble matches; the 25-120 Hz
 ringing band matches too. Not measurable from a log: drag and coasting (no position). Motor steps to 63 % were rarely
 clean enough to time in freestyle logs (a hover with throttle blips would help). The game's **Feel Lab** (Tools & labs):

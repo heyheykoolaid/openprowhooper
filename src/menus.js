@@ -183,8 +183,12 @@ function renderGarage() {
     <details class="gAdv" ${FEEL.some(([k]) => (tune[k] ?? 1) !== 1) ? 'open' : ''}><summary>Advanced: physics feel</summary>
       <p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts; these change only how the physics feels, not the parts or the figures above. Drag a slider to try it while you fly next.</p>
       ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label title="${help}">${name} <b id="gFeelV-${k}">${v}%</b><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
-      <label title="Air that is never still: the wobble a light whoop has in its own air, and the fine buzz you see in the goggles. 100% is fitted from a real whoop's Blackbox logs (Tools & labs → Feel Lab); 0 is the old glassy-smooth sim">Shake <b id="gShakeV">${Math.round((tune.shake ?? 1) * 100)}%</b><input type=range id="gShake" min=0 max=300 step=10 value="${Math.round((tune.shake ?? 1) * 100)}"></label>
-      <label title="A real quad answers a few milliseconds late (gyro filtering, DShot, the ESC); the sim's flight controller used to answer at once, which feels locked-in. 3 ms is fitted from a real whoop's Blackbox logs">Loop delay <b id="gDelayV">${tune.loopDelayMs ?? 3} ms</b><input type=range id="gDelay" min=0 max=10 step=0.5 value="${tune.loopDelayMs ?? 3}"></label>
+      <h4 style="margin:10px 0 4px">Wobble and lag (fitted from a real whoop's Blackbox logs in the Feel Lab)</h4>
+      <label title="Air that is never still: a soft wobble a light whoop has in its own air. 0 = the old glassy-smooth sim; 100% = what the Feel Lab measured on a real whoop (jittery for most pilots)">Wobble <b id="gShakeV">${Math.round((tune.shake ?? 0.35) * 100)}%</b><input type=range id="gShake" min=0 max=150 step=5 value="${Math.round((tune.shake ?? 0.35) * 100)}"></label>
+      <label title="How slowly the wobble changes: smoother is a lazy float, sharper is a quick shudder">Wobble smoothness <b id="gTauV">${Math.round((tune.shakeTau ?? 0.2) * 1000)} ms</b><input type=range id="gTau" min=30 max=400 step=10 value="${Math.round((tune.shakeTau ?? 0.2) * 1000)}"></label>
+      <label title="100%: the wobble comes with movement (turns, speed) and a still hover stays calm; 0%: the same wobble all the time">Wobble on movement <b id="gMoveV">${Math.round((tune.shakeMove ?? 1) * 100)}%</b><input type=range id="gMove" min=0 max=100 step=10 value="${Math.round((tune.shakeMove ?? 1) * 100)}"></label>
+      <label title="A real quad answers a few milliseconds late (gyro filtering, DShot, the ESC). More is softer but makes the quad twitch; the Feel Lab measured about 3 ms on a real whoop">Loop delay <b id="gDelayV">${tune.loopDelayMs ?? 0} ms</b><input type=range id="gDelay" min=0 max=6 step=0.5 value="${tune.loopDelayMs ?? 0}"></label>
+      <label title="A fine hum of motor vibration on the FPV picture only (it does not move the quad)">Camera buzz <b id="gBuzzV">${Math.round((tune.camBuzz ?? 0) * 100)}%</b><input type=range id="gBuzz" min=0 max=200 step=10 value="${Math.round((tune.camBuzz ?? 0) * 100)}"></label>
       <div class="row"><button id="gFeelReset" class="ghost">All back to the defaults</button></div>
     </details>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
@@ -237,7 +241,7 @@ document.addEventListener('click', e => {
 });
 function saveTune() { detector.camTilt = tune.camTilt; drone.setParams(params, tune); store.set('tune', tune); resize(); buildDroneMesh(); }
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.feel; if (k) { const v = $('#gFeelV-' + k); if (v) v.textContent = e.target.value + '%'; } });
-document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; tune.shake = 1; tune.loopDelayMs = 3; saveTune(); renderGarage(); } });
+document.addEventListener('click', e => { if (e.target.id === 'gFeelReset') { for (const [k] of FEEL) tune[k] = 1; Object.assign(tune, FEEL3); saveTune(); renderGarage(); } });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'gPreset' && t.value) { spec = { ...S.PRESETS[t.value], ...(spec.look ? { look: spec.look } : {}), ...(spec.canopy ? { canopy: spec.canopy } : {}) }; applyParts(); }
@@ -253,8 +257,8 @@ document.addEventListener('change', e => {
   if (t.dataset.t) { tune[t.dataset.t] = +t.value / (+t.dataset.scale || 1); saveTune(); }
   if (t.id === 'gLinkHz') { tune.rcLinkHz = +t.value; saveTune(); }
   if (t.dataset.feel) { tune[t.dataset.feel] = +t.value / 100; saveTune(); }
-  if (t.id === 'gShake') { tune.shake = +t.value / 100; const b = $('#gShakeV'); if (b) b.textContent = t.value + '%'; saveTune(); }
-  if (t.id === 'gDelay') { tune.loopDelayMs = +t.value; const b = $('#gDelayV'); if (b) b.textContent = t.value + ' ms'; saveTune(); }
+  { const F = { gShake: ['shake', 100, '%'], gTau: ['shakeTau', 1000, ' ms'], gMove: ['shakeMove', 100, '%'], gDelay: ['loopDelayMs', 1, ' ms'], gBuzz: ['camBuzz', 100, '%'] }[t.id];
+    if (F) { tune[F[0]] = +t.value / F[1]; const b = $('#' + t.id + 'V'); if (b) b.textContent = t.value + F[2]; saveTune(); } }
   if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
   if (t.dataset.t3d !== undefined) { if (t.checked) { if (tune.flightMode !== '3d') store.set('mode2d', tune.flightMode || 'acro'); setFlightMode('3d'); } else setFlightMode(store.get('mode2d', 'acro') === 'angle' ? 'angle' : 'acro'); saveTune(); }
