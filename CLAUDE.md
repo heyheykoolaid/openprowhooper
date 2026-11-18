@@ -316,6 +316,21 @@ arming until B (`freshPack` in input.js; R keeps the pack). The game warns at 15
 mAh and % left (∞ when off). test/battery.js: an Air65 on 300 mAh, flown hard, lasts about 5 minutes then browns out.
 Fit the drain to a Blackbox log when one arrives (testers' real packs last about 3 minutes of freestyle).
 
+## Whoop feel calibration (2026-11-18; tools/feelcheck.js, test/feel.js)
+`node tools/feelcheck.js [preset…]` flies every preset through the target-feel tests of a whoop-sim spec the owner
+collected (AUW, thrust-to-weight 4.5-7, hover 25-40 %, motor lag 10-20 ms, yaw/roll rise, no coasting, ground cushion gone
+by ~1 prop diameter, pack fade, wash bobbing) and marks what is out of range. First run: motors 40-112 ms to answer a small
+throttle step and 0702s at 72-84 % of BetaFPV's published max thrust on the GF 1219S; pilots had been lowering Weight to
+75-90 % (tools/feel.js) to make up for it. Fixed from published data, not by feel: the three 0702s' winding resistance is
+fitted to 92 % of BetaFPV's figures (23000KV 0.55 → 0.236 Ω, 27000KV 0.42 → 0.318, 0702 II 30000KV 0.33 → 0.265; bench
+numbers run high), and prop inertia is m r² / 6 (hub- and root-heavy blades), not / 3.2. Air65 lag 49 → 23 ms (Freestyle
+12), 85 mm 2S 112 → 43, Air65 Racing TWR 4.3 → 4.7. Dry weights already match the published ones (Air65 17.0 g vs 17.25,
+Champion 16.6 vs 16.6): mass was never the problem. Pilots with a feel slider off 100 % are asked once (`physAsk` in
+dropoff.js, `store 'phys2Asked'`; the old values kept in `store 'feelBefore2'`) whether to try the new defaults.
+Not changed, no data: yaw reaches full rate in 35-95 ms (the spec says 120-160; no pilot has said yaw feels wrong); the
+1002 19000KV (75 mm 1S build) is still weak (TWR 3.4); battery drain (5.3 min to brown-out at ~55 % throttle; real packs
+~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model yet (a guess without a log).
+
 ## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
 Off by default (the sticks reach the FC instantly: crisper than a real quad; a pilot found identical Betaflight rates
 "harsh"). `tune.rcLinkHz` sends the sticks in packets, `tune.rcDelayMs` delays them, `tune.rcSmooth` is `sim` (40 Hz

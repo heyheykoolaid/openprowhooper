@@ -52,9 +52,9 @@ const PARTS = {
     whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, cells: 2, cap: [450, 650], mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
   },
   motors: { // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
-    m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.55, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
-    m0702se_27k: { name: '0702SE 27000KV', kv: 27000, mass: 1.9, rm: 0.42, i0: 0.15, bellJ: 2.6e-9, bearing: 1.15 },
-    m0702ii_30k: { name: '0702 II 30000KV', kv: 30000, mass: 1.9, rm: 0.33, i0: 0.16, bellJ: 2.6e-9, bearing: 1.0 },
+    m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.236, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
+    m0702se_27k: { name: '0702SE 27000KV', kv: 27000, mass: 1.9, rm: 0.318, i0: 0.15, bellJ: 2.6e-9, bearing: 1.15 },
+    m0702ii_30k: { name: '0702 II 30000KV', kv: 30000, mass: 1.9, rm: 0.265, i0: 0.16, bellJ: 2.6e-9, bearing: 1.0 },
     m0702ii_36k: { name: '0702 II 36000KV', kv: 36000, mass: 1.9, rm: 0.24, i0: 0.19, bellJ: 2.6e-9, bearing: 1.0 },
     // RCinPower EVO 0702 (pilot's build): 1.15 g without wires, dual NMB ball bearings, 9N12P 0.1 mm laminations; published
     // 41 g (31800KV) / 43 g (33800KV) at 4.2 V on HQ 1.2x1x3 at ~5.3-5.6 A, 135 mΩ (rotorama.com). Scaled like the other
@@ -155,7 +155,9 @@ function buildDrone(spec) {
   Ixx += mBat * ((bl * bl + bh * bh) / 12 + 0.01 * 0.01); Iyy += mBat * (bl * bl + bh * bh) / 12; Izz += mBat * (bh * bh * 2 / 12 + 0.01 * 0.01);
   const D = pr.d / 1000, A = Math.PI * D * D / 4;
   const kvRad = mo.kv * 2 * Math.PI / 60;
-  const propJ = (pr.mass / 1000) * (D / 2) * (D / 2) / 3.2;
+  // a whoop prop's mass sits mostly in its hub and the thick roots of the blades (the chord and thickness taper to the tip):
+  // about m r² / 6, not the uniform rod's / 3 (2026-11-18: with / 3.2 a throttle step took 40-110 ms, real whoop motors 10-30)
+  const propJ = (pr.mass / 1000) * (D / 2) * (D / 2) / 6;
   const motors = pts.map(([x, y, z], i) => ({
     pos: v3(x, 0.004, z),
     // props-in quad X: front-right & rear-left spin CCW from above (+Y), others CW

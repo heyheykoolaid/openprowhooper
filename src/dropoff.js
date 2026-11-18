@@ -158,6 +158,23 @@ function pilotAsk() {
   setTimeout(() => $('#pilotNameIn') && $('#pilotNameIn').focus(), 30);
 }
 // then recommend the Pilot Warm-up to anyone who has no profile yet (once; it stays on the main menu)
+// Physics update 2 (2026-11-18): the motors now match BetaFPV's published thrust and spin up 2x faster, so pilots who had
+// lowered Weight (or raised Motor) to make up for it would overshoot. Asked once, only if a feel slider is off 100 %.
+const FEEL_NAMES = { weightFeel: 'Weight', dragFeel: 'Drag', washFeel: 'Prop wash', motorFeel: 'Motor response', sagFeel: 'Battery sag', groundFeel: 'Ground effect' };
+function physAsk() {
+  if (store.get('phys2Asked', false)) return;
+  const off = Object.keys(S.FEEL_KEYS).filter(k => Number.isFinite(+tune[k]) && Math.abs(+tune[k] - 1) > 0.001);
+  if (!off.length) { store.set('phys2Asked', true); return; }
+  const el = $('#pilotModal'); el.classList.remove('hide');
+  el.innerHTML = `<div class="fbPanel"><h3>The whoop physics got an update</h3>
+    <p>The motors now match the thrust BetaFPV publishes for them and spin up about twice as fast, like real ones. Most pilots had turned the weight down to make up for exactly this, so your settings may now feel too light or twitchy:</p>
+    <p><b>${off.map(k => `${FEEL_NAMES[k] || k} ${Math.round(+tune[k] * 100)}%`).join(' · ')}</b></p>
+    <p class="note">You can change them any time in the Garage → Advanced.</p>
+    <div class="row"><button data-phys="reset" class="primary">Try the new defaults (all 100%)</button><button data-phys="keep">Keep my settings</button></div></div>`;
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-phys]'); if (!b) return;
+  if (b.dataset.phys === 'reset') { store.set('feelBefore2', feelSnap()); for (const k of Object.keys(S.FEEL_KEYS)) tune[k] = 1; saveTune(); }
+  store.set('phys2Asked', true); $('#pilotModal').classList.add('hide'); });
 function pilotWarmAsk() {
   if (store.get('pilot', null) || store.get('warmAsked', false)) return;
   const el = $('#pilotModal'); el.classList.remove('hide');
@@ -202,7 +219,7 @@ addEventListener('pagehide', () => telCapture('closed'));
 // anything still waiting is tried again now and then (telPump keeps to its back-off)
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { if (!pilotName()) pilotAsk(); else pilotWarmAsk(); telPump(); }, 1200);
+setTimeout(async () => { if (!pilotName()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
 
