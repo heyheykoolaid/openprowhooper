@@ -7,7 +7,7 @@
   $('#loading').classList.add('hide'); show('#mainMenu');
   requestAnimationFrame(frame);
 })();
-window.__pw = { drone, detector, get score() { return score; }, startFly, S, rec: rc => recordTrace(rc), ghost: (n, o) => startGhost(n, o), judge: t => startJudge(t), review: { payload: () => rvPayload(), get state() { return rv; } } };
+window.__pw = { drone, detector, perf: PERF, mapcode: { of: E => meCodeOf(E), read: s => meCodeRead(s) }, get score() { return score; }, startFly, S, rec: rc => recordTrace(rc), ghost: (n, o) => startGhost(n, o), judge: t => startJudge(t), review: { payload: () => rvPayload(), get state() { return rv; } } };
 
 // ============================================================ music player (overlay on everything)
 const music = (() => {

@@ -593,13 +593,14 @@ function surveyObstacles(world, opts = {}) {
     if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.auto) continue;
     if (o.obstacle && !o.round) {                                             // job 1
       const { under, over } = o.obstacle; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
-      for (const p of o.prims) { const a = p.aabb; if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue; if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); n++; }
+      for (const p of o.prims) { if (p.leaf) continue; const a = p.aabb; if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue; if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); n++; }
       if (n && Math.min(x1 - x0, z1 - z0) >= 0.6 && Math.max(x1 - x0, z1 - z0) <= 12) { o.round = { c: v3((x0 + x1) / 2, 0, (z0 + z1) / 2), r: Math.max(x1 - x0, z1 - z0) / 2, box: { hx: (x1 - x0) / 2, hz: (z1 - z0) / 2 }, under, over }; report.slabs++; }
       continue;
     }
     if (o.obstacle || o.round) continue;
     const autos = [], edges = [];                                             // jobs 2 and 3
     for (const p of o.prims) {
+      if (p.leaf) continue;   // foliage (maps.js coneSolid / leafSolid) is never an over/under bar of its own
       const a = p.aabb, bot = a.min.y, top = a.max.y, cx = (a.min.x + a.max.x) / 2, cz = (a.min.z + a.max.z) / 2, sx = a.max.x - a.min.x, sz = a.max.z - a.min.z;
       if (p.type === 'box' ? !flatBox(p) : p.type === 'capsule' ? Math.abs(p.b.y - p.a.y) > 0.3 * len(sub(p.b, p.a)) : true) continue;
       if (top - bot > maxThick || Math.max(sx, sz) < 0.4) continue;
@@ -622,7 +623,7 @@ function surveyObstacles(world, opts = {}) {
   }
   world.objs.push(...made);
   report.overUnders = world.objs.filter(o => o.obstacle).length; report.gaps = world.objs.filter(o => o.gap).length;
-  report.poles = world.objs.reduce((n, o) => n + (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall' ? 0 : o.kind === 'pilot' ? 1 : o.prims.filter(q => q.type === 'capsule' && q.r <= 0.25 && q.r >= 0.012 && len(sub(q.b, q.a)) >= 1.2 && Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8).length), 0);
+  report.poles = world.objs.reduce((n, o) => n + (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall' ? 0 : o.kind === 'pilot' ? 1 : o.prims.filter(q => q.type === 'capsule' && !q.leaf && q.r <= (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) && q.r >= 0.012 && len(sub(q.b, q.a)) >= 1.2 && Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8).length), 0);
   report.walls = world.objs.filter(o => o.kind === 'wall' || o.kind === 'building').length;
   world.survey = report; return world;
 }
@@ -790,9 +791,14 @@ class Drone {
   }
 
   heightAbove() {
-    let h = this.pos.y;
-    for (const pr of this.world.prims) {
-      if (pr.type !== 'box') continue;
+    // only boxes whose footprint is within NEAR_M2 of the quad (rebuilt after NEAR_M of travel): this runs every physics step,
+    // and a map with solid foliage has thousands of shapes (Moose: 4000; the full loop tripled its physics time)
+    let h = this.pos.y; const WP = this.world.prims, H = this._hb;
+    if (!H || H.w !== WP || H.n !== WP.length || Math.max(Math.abs(this.pos.x - H.x), Math.abs(this.pos.z - H.z)) > NEAR_M) {
+      const list = []; for (const pr of WP) { if (pr.type !== 'box') continue; const a = pr.aabb; if (this.pos.x + NEAR_M2 < a.min.x || this.pos.x - NEAR_M2 > a.max.x || this.pos.z + NEAR_M2 < a.min.z || this.pos.z - NEAR_M2 > a.max.z) continue; list.push(pr); }
+      this._hb = { w: WP, n: WP.length, x: this.pos.x, z: this.pos.z, list };
+    }
+    for (const pr of this._hb.list) {
       const a = pr.aabb; if (this.pos.x < a.min.x || this.pos.x > a.max.x || this.pos.z < a.min.z || this.pos.z > a.max.z) continue;
       if (a.max.y <= this.pos.y + 0.01) h = Math.min(h, this.pos.y - a.max.y);
     }
@@ -1603,7 +1609,7 @@ class StreamDetector extends TrickDetector {
       if (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall') continue;
       if (o.kind === 'pilot') { const c = o.prims.find(p => p.type === 'sphere').c; this.poles.push({ id: o.id * 100, objId: o.id, name: 'the pilot', x: c.x, z: c.z, y0: 0, y1: 1.8, point: y => v3(c.x, clamp(y, 0, 1.8), c.z) }); continue; }
       o.prims.forEach((p, i) => {
-        if (p.type !== 'capsule' || p.r > 0.25 || p.r < 0.012) return;   // not chains
+        if (p.type !== 'capsule' || p.leaf || p.r > (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) || p.r < 0.012) return;   // not chains; a tree's trunk may be thick (pilot: no trippy round Moose's lone trees)
         const ab = sub(p.b, p.a), L = len(ab); if (L < 1.2 || Math.abs(ab.y) / L < 0.8) return;
         const lo = p.a.y < p.b.y ? p.a : p.b, hi = p.a.y < p.b.y ? p.b : p.a, y0 = lo.y, y1 = hi.y;
         const pt = y => { const f = clamp((y - y0) / (y1 - y0), 0, 1); return v3(lo.x + (hi.x - lo.x) * f, y0 + (y1 - y0) * f, lo.z + (hi.z - lo.z) * f); };
@@ -1702,18 +1708,24 @@ class StreamDetector extends TrickDetector {
         // from far to close to far (pilot: cradles were being called orbits)
         { const w = Math.abs(da) * R2D; ob.as += w * dist; ob.as2 += w * dist * dist; ob.aw += w; }
         { const vr = (d.vel.x * dx + d.vel.z * dz) / Math.max(dist, 1e-3), vh2 = d.vel.x * d.vel.x + d.vel.z * d.vel.z; ob.pl += Math.sqrt(vh2) * dt; ob.pt += Math.sqrt(Math.max(0, vh2 - vr * vr)) * dt; }   // how much of the way was ROUND the pole rather than toward/away from it
-        ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
-        const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)); if (vi.ang < 55) ob.view++;
+        // which way the quad leans: a trippy is ROLLED (its top toward the pole); a fast orbit leans just as far by pitching
+        // its nose down at the pole (pilots: RodFPV's orbits round Clappy's sakura trees at 10-16 m/s ran pitch -65..-75°,
+        // roll 10-40°, and were called Trippy Spin)
+        const rolled = !(f.y < -0.6 && up.y > -0.15);   // not 'nose well below the horizon while still right-way-up' (inverted trippies and nose-up-the-pole ones are fine)
+        ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15 && rolled) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
+        // in view: level with the quad, or lower down the trunk (a fast orbit looks down at the pole: pilot RodFPV)
+        const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)), inView = vi.ang < 55 || [-1, -2].some(dy => d.pos.y + dy >= P.y0 - 0.2 && this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)).ang < 55);
+        if (inView) ob.view++;
         { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
           const topVis = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < 75; }); if (topVis) ob.top++;   // pole held in the top half of the screen
           // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
           // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
           // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
-          const dA = Math.abs(da) * R2D, pose = topVis && up.y < 0.35;
+          const dA = Math.abs(da) * R2D, pose = topVis && up.y < 0.35 && rolled;
           if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
             ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; }
           else if (ob.poseT0 == null) ob.run = 0;
-          if (up.y > 0.35 && vi.ang < 55) ob.oAcc += dA; }
+          if (up.y > 0.35 && inView) ob.oAcc += dA; }
         ob.roll += rates[0] * dt;
         const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
         if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin x2') { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; continue; }

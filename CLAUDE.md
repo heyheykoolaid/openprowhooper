@@ -170,8 +170,8 @@ over them, the pilot's Clappy and HeyHey pieces on North Shops 2), and the Trick
 a 60 x 40 x 12 m shell (walls kind 'wall', three Roll-up Door gaps south, four Skylight gaps in the roof), Steel
 Columns (poles), three rows of pallet racks (Rack Beams at 1.6/3.2/4.8/6.4 m, Rack Bay gaps), Containers (stacks of up
 to three) and a Container Tunnel, a Mezzanine with an Office under it, two Catwalks, a Crane Bridge, a Conveyor, crate
-stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 18 High-bay Lights (11 of them real point lights,
-`o.light` with `lightColor`, `lightPower` 60, `lightRange` 30) hang under roof trusses; the industrial theme dims the fog and
+stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 18 High-bay Lights (all 18 are real point lights,
+`o.light` with `lightColor`, `lightPower` 60, `lightRange` 30; see Map lights below) hang under roof trusses; the industrial theme dims the fog and
 brightens the hemisphere (1.9: the pilot found the first version far too dark). Detail pass (2026-11-17): Clappy's
 buildings have windows, floor bands, parapets, rooftop units, water tanks (over/unders) and stair huts (`MAT.glass`);
 the footbridge stairs climb from the plaza onto its west end; balance beams stand on posts; the ladder has rails.
@@ -515,3 +515,41 @@ weighs the rest 0.5 (the label on the real flight already counts 1). test/replic
 - Slide Disarm (TPW, 200): disarm on the move, slide across the ground or any object's surface (at least 0.75 m),
   re-arm before it stops (0.6 s grace) and fly away. The slide keeps a combo alive (`busy()`); test/slide.js flies it
   with the real physics. A whoop stops quickly: about 3 m of slide from 8 m/s.
+
+## Orbits vs trippies, tree trunks, solid foliage (2026-11-17, RodFPV / Autismo / tcmore)
+- **Trippy pose** (`sense`, `rolled`): a lap counts toward Trippy Spin only if the quad is not "nose well below the horizon
+  while still right-way-up" (`f.y < -0.6 && up.y > -0.15`). Fast orbits (10-16 m/s round Clappy's sakura trees) lean ~70°
+  by pitching the nose down at the pole and were called Trippy Spin; rolled, inverted and nose-up-the-pole trippies are
+  unchanged. "In view" for orbits also checks 1 and 2 m lower down the pole (a fast orbit looks down at it). test/orbits.js.
+- **Thick trunks are poles**: kind 'tree' / 'pole' capsules up to 0.6 m radius (Moose's lone cedar is 0.55 m; trippies
+  round it said nothing). Other kinds keep the 0.25 m limit.
+- **Foliage collides** (maps.js kit): `coneSolid(o, a, b, R)` gives a drawn cone (conifer tier) a stack of capsules plus
+  three level spokes per band, all inside the drawn cone (~74% of it solid, the bough tips give; the lowest piece rests on
+  the cone's base so "under" stays where it is drawn). `ball` / `pipe` with `{ leafSolid: true }` collide too. Every such
+  collider is marked `leaf`: never a pole, never surveyed as an over/under (`{ noSurvey: true }` does the same for trim
+  like roof purlins). `moveObject` keeps the mark. Moose's conifers, maples, birches, shrubs and bracken are solid now
+  (they were drawn non-solid); Clappy's sakura already were.
+- **tools/mapaudit.js** [map…] [--all]: per map, drawn volume nothing collides with, colliders nothing is drawn on, trunks
+  the detector would not take as poles, over/unders with no air under them, gaps too small to fly. Run it after building or
+  changing a map.
+- **Ground effect** (`heightAbove`) keeps its own list of boxes within 2 m (rebuilt after 1 m of travel): it ran over every
+  collider in the world each physics step, which tripled Moose's physics time once its foliage was solid.
+
+## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
+Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
+"heavier, with a bit of latency" for a tester (a low frame rate reads the sticks late). Auto (default) starts Full and, if
+4 s of flying (after 2 s) run under 50 fps on a map with more than 4 lamps, drops to Few once and says so (`lightsAuto` in
+play.js, real time). Few = 4 lamps spread over the map, brighter and further-reaching; Off = none.
+
+## Game feel in shared flights (`summary.feel`, tools/feel.js)
+Every shared flight carries `summary.feel`: the six physics sliders, battery life, flight mode, radio link, smoothing,
+camera tilt/FOV and rates type at the end of the run, plus `atStart` when they changed during it (`feelSnap` in recap.js,
+`recap.feel0`). Older flights have the same values in `tune`. `node tools/feel.js <data folder>` prints, per pilot, per
+map and over time, what pilots really fly with (first read: every pilot lowered weight to 75-90%; two cut prop wash hard).
+
+## Map codes (Map Editor: "Copy map code" / "Paste map code"; tools/mapcode.js)
+A layout as one line: `PWMAP1-<map>-<deflated JSON, base64url>` (a few hundred characters for ordinary edits). Pasting one
+goes through `meClean` like a layout file (known fields, clamped numbers, library assets only) into the personal layout,
+or into the official draft in Official mode. `node tools/mapcode.js <code> --official` writes it as
+maps/official/<map>.json (then build, `npm test`, commit): the fallback when publishing from the game fails. A failed
+publish now flashes the reason (usually a token without Contents: write on the game repo) and keeps the draft.

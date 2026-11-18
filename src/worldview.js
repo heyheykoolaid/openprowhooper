@@ -315,7 +315,23 @@ function buildObjects(merge = MERGE_STATIC) {
     m.userData.oid = o.id; if (!merge) objRoot.add(m); else staticAdd(m, v);
   }
   staticFlush();
-  if (world.theme !== 'vapor') for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, o.lightPower || 6, o.lightRange || 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); l.userData.oid = o.id; objRoot.add(l); }
+  mapLightsBuild();
+}
+// The map's own lamps as real point lights. Every one adds work to every lit pixel (three.js lights each pixel once per
+// light): More Warehouse's 11 made the game feel heavy and laggy on a tester's machine (low frame rate = sticks read late).
+// Options → Graphics → Map lights: full, few (4, brighter, spread over the map), off; auto starts full and drops to few once
+// if the first seconds of flying run under 50 fps (lightsAuto in play.js).
+function mapLightsBuild() {
+  for (const l of objRoot.children.filter(c => c.isPointLight)) objRoot.remove(l);
+  if (world.theme === 'vapor') return;
+  const all = world.objs.filter(o => o.light), mode = PERF.lights === 'auto' ? (PERF.lightsAuto || 'full') : PERF.lights;
+  if (mode === 'off') return;
+  let pick = all, boost = 1;
+  if (mode === 'few' && all.length > 4) { pick = []; const left = all.slice(); pick.push(left.splice(0, 1)[0]);   // farthest-point picks: spread over the map
+    while (pick.length < 4 && left.length) { let bi = 0, bd = -1; left.forEach((o, i) => { const d = Math.min(...pick.map(q => Math.hypot(q.light.x - o.light.x, q.light.z - o.light.z))); if (d > bd) { bd = d; bi = i; } }); pick.push(left.splice(bi, 1)[0]); }
+    boost = Math.min(2.2, Math.sqrt(all.length / 4)); }
+  for (const o of pick) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, (o.lightPower || 6) * boost, (o.lightRange || 12) * Math.sqrt(boost), 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); l.userData.oid = o.id; objRoot.add(l); }
+  scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 }
 // ============================================================ build world meshes
 function buildScene() {

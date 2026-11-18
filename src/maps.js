@@ -10,14 +10,23 @@
     const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; if (grp != null) o.grp = grp; objs.push(o); return o; };
     const together = fn => { const was = grp; grp = nid; try { return fn(); } finally { grp = was; } };
     const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
-    const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) o.prims.push(makeCapsule(a, b, r)); o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
-    const ball = (o, c, r, mat, opts = {}) => { if (!opts.noCollide) o.prims.push(makeSphere(c, r)); o.vis.push({ shape: 'sphere', c, r, mat, ...opts }); };
+    const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) { const c = makeCapsule(a, b, r); if (opts.leafSolid || opts.noSurvey) c.leaf = true; o.prims.push(c); }   /* leaf: solid, but never a pole or an over/under of its own */ o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
+    // a drawn cone's collision (conifer tiers): capsules stacked up the axis, each as wide as fits inside the cone at its
+    // top (k: share of the drawn radius, the bough tips give), the lowest resting on the base; leaf: not a pole, not surveyed
+    // Each band also gets three level spokes (60° apart) out to the boughs' edge: a vertical stack alone leaves the wide rim
+    // of each tier (most of a cone's volume) flyable. All of it stays inside the drawn cone.
+    const coneSolid = (o, a, b, R, k = 0.95, n = 5) => { const H = b.y - a.y, ca = H / Math.hypot(H, R), rho = y => k * R * (1 - (y - a.y) / H), push = c => { c.leaf = true; o.prims.push(c); };
+      for (let i = 0; i < n; i++) { const sa = 0.9 * i / n, sb = 0.9 * (i + 1) / n, r = rho(a.y + H * sb) * ca, ya = a.y + H * sa + r, yb = Math.max(ya, a.y + H * sb);
+        push(makeCapsule(v3(a.x, ya, a.z), v3(a.x, yb, a.z), r));
+        const hb = Math.min(0.45, H * 0.9 / n / 2), ym = a.y + H * sa + hb, L = rho(ym) - hb / ca;
+        if (L > hb) for (let j = 0; j < 3; j++) { const t = j * Math.PI / 3, dx = Math.cos(t) * L, dz = Math.sin(t) * L; push(makeCapsule(v3(a.x - dx, ym, a.z - dz), v3(a.x + dx, ym, a.z + dz), hb)); } } };
+    const ball = (o, c, r, mat, opts = {}) => { if (!opts.noCollide) { const b = makeSphere(c, r); if (opts.leafSolid) b.leaf = true; o.prims.push(b); } o.vis.push({ shape: 'sphere', c, r, mat, ...opts }); };
     // a glowing strip: seen, never hit
     const neon = (o, c, h, mat = 'neonPink', ry = 0) => box(o, c, h, mat, ry, 0, 0, { noCollide: true, glow: true });
     // a flat round slab (drawn as a disc, collides as a box a little inside its rim)
     const disc = (o, c, r, th, mat) => { o.prims.push(makeBox(c, v3(r * 0.74, th, r * 0.74))); o.vis.push({ shape: 'disc', c, r, th, mat }); };
     const done = (extra) => { const all = []; for (const o of objs) for (const p of o.prims) { p.owner = o.id; all.push(p); } return { objs, prims: all, ...extra }; };
-    return { objs, O, box, pipe, ball, neon, disc, done, together };
+    return { objs, O, box, pipe, ball, neon, disc, done, together, coneSolid };
   }
   // the pilot figure (the same person as on the playground): legs to fly between, a head to fly over, a face to punch
   function addPilot(K, PX, PZ) {
@@ -236,11 +245,11 @@
     const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); neon(col, v3(x, 1.2, z), v3(0.21, 0.08, 0.21), 'plasticYellow'); }
     // lights: three rows of high-bay fittings under the trusses (strong: the pilot found the first version far too dark)
     for (const x of [-25, -15, -5, 5, 15, 25]) for (const z of [-13, -1, 11]) { const l = O('High-bay Light', 'deco', (x + z) % 2 === 0 || z === -1 ? { light: v3(x, H - 1.0, z), lightColor: 0xeef5ff, lightPower: 60, lightRange: 30 } : {});
-      box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal', 0, 0, 0, { noCollide: true }); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H - 0.3, z), 0.01, 'chain', { noCollide: true }); }
+      box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal'); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H - 0.3, z), 0.01, 'chain', { noCollide: true }); }
     // the roof structure: a truss every 6 m (top and bottom chords and diagonals), purlins along the hall
     { const tr = O('Roof Truss', 'deco'); for (let x = -27; x <= 27; x += 6) { pipe(tr, v3(x, H - 0.3, -Z), v3(x, H - 0.3, Z), 0.07, 'galv'); pipe(tr, v3(x, H - 1.6, -Z + 1), v3(x, H - 1.6, Z - 1), 0.05, 'galv');
-        for (let z = -Z + 1; z < Z - 1; z += 3) pipe(tr, v3(x, H - 1.6, z), v3(x, H - 0.3, z + 1.5), 0.025, 'galv', { noCollide: true }); }
-      for (const z of [-15, -9, 3, 9, 15]) pipe(tr, v3(-X, H - 0.25, z), v3(X, H - 0.25, z), 0.04, 'galv', { noCollide: true }); }
+        for (let z = -Z + 1; z < Z - 1; z += 3) pipe(tr, v3(x, H - 1.6, z), v3(x, H - 0.3, z + 1.5), 0.025, 'galv', { noSurvey: true }); }
+      for (const z of [-15, -9, 3, 9, 15]) pipe(tr, v3(-X, H - 0.25, z), v3(X, H - 0.25, z), 0.04, 'galv', { noSurvey: true }); }
     // wall pilasters every 6 m, a strip of high windows along the long walls, a fire exit sign, a few pallets
     { const pw = O('Wall Pilaster', 'deco'); for (let x = -27; x <= 27; x += 6) box(pw, v3(x, H / 2, -Z + 0.12), v3(0.18, H / 2, 0.12), 'paintBlue'); for (let z = -15; z <= 15; z += 6) for (const sx of [-1, 1]) box(pw, v3(sx * (X - 0.12), H / 2, z), v3(0.12, H / 2, 0.18), 'paintBlue');
       const hw = O('High Windows', 'deco'); box(hw, v3(0, 9.6, -Z + 0.02), v3(X - 1, 0.7, 0.02), 'glass', 0, 0, 0, { noCollide: true }); for (const sx of [-1, 1]) box(hw, v3(sx * (X - 0.02), 9.6, 0), v3(0.02, 0.7, Z - 1), 'glass', 0, 0, 0, { noCollide: true });
@@ -537,23 +546,22 @@
   // The park's makers (trees, picnic tables, houses, pickups): used by buildMoose and by the map editor's asset library.
   // trees / houses collect what was made (buildMoose spaces its groves with them).
   function natureKit(K, rr, rnd, trees = [], houses = []) {
-    const { O, box, pipe, ball } = K;
+    const { O, box, pipe, ball, coneSolid } = K;
     const conifer = (x, z, h, r, kind) => { const o = O(kind === 'cedar' ? 'Cedar' : 'Hemlock', r <= 0.25 ? 'pole' : 'tree'), base = h * (kind === 'cedar' ? rr(0.16, 0.26) : rr(0.22, 0.32)), R = Math.min(3.2, h * 0.13 + r * 1.2);
       pipe(o, v3(x, 0, z), v3(x, h * 0.55, z), r, 'cedarBark'); pipe(o, v3(x, h * 0.55, z), v3(x, h * 0.92, z), r * 0.6, 'cedarBark', { noCollide: true });
       pipe(o, v3(x, 0, z), v3(x, 0.5 + r, z), r * 1.7, 'cedarBark', { cone: true, noCollide: true });   // the flare at the foot
       const leaf = kind === 'cedar' ? 'cedarLeaf' : 'hemlockLeaf', n = 3;
-      for (let i = 0; i < n; i++) { const y0 = base + (h - base) * i / n * 0.85, y1 = Math.min(h, y0 + (h - base) * 0.55); pipe(o, v3(x, y0, z), v3(x, y1, z), R * (1 - i * 0.26), leaf, { cone: true, noCollide: true }); }
-      o.prims.push(S.makeCapsule(v3(x, base + 0.8, z), v3(x, h * 0.85, z), R * 0.32));
+      for (let i = 0; i < n; i++) { const y0 = base + (h - base) * i / n * 0.85, y1 = Math.min(h, y0 + (h - base) * 0.55), Ri = R * (1 - i * 0.26); pipe(o, v3(x, y0, z), v3(x, y1, z), Ri, leaf, { cone: true, noCollide: true }); coneSolid(o, v3(x, y0, z), v3(x, y1, z), Ri); }
+      { const c = S.makeCapsule(v3(x, h * 0.55, z), v3(x, h * 0.92, z), r * 0.6); c.leaf = true; o.prims.push(c); }   // the upper trunk inside the crown
       o.round = { c: v3(x, 0, z), r: R, under: base, over: h }; o.obstacle = { a: v3(x - R, 0, z), b: v3(x + R, 0, z), under: base, over: h };
       trees.push({ x, z, r: Math.max(R * 0.5, 1.2) }); return o; };
     const birch = (x, z, h) => { const o = O('Birch', 'pole'), lx = rr(-0.6, 0.6), lz = rr(-0.6, 0.6);
       pipe(o, v3(x, 0, z), v3(x + lx, h, z + lz), 0.11, 'birchBark');
-      for (let i = 0; i < 4; i++) ball(o, v3(x + lx * 0.8 + rr(-1, 1), h * rr(0.62, 0.95), z + lz * 0.8 + rr(-1, 1)), rr(0.9, 1.4), 'birchLeaf', { noCollide: true });
+      for (let i = 0; i < 4; i++) ball(o, v3(x + lx * 0.8 + rr(-1, 1), h * rr(0.62, 0.95), z + lz * 0.8 + rr(-1, 1)), rr(0.9, 1.4), 'birchLeaf', { leafSolid: true });
       trees.push({ x, z, r: 1.4 }); return o; };
     const shade = (x, z, h) => { const o = O('Maple', 'tree'), base = h * 0.32, R = h * 0.28;
-      pipe(o, v3(x, 0, z), v3(x, base + 1, z), 0.28, 'bark'); pipe(o, v3(x, base, z), v3(x + 1.2, base + 2, z + 0.5), 0.14, 'bark', { noCollide: true }); pipe(o, v3(x, base, z), v3(x - 1, base + 2.2, z - 0.6), 0.14, 'bark', { noCollide: true });
-      for (const [a, b, c, s] of [[0, 0.75, 0, 1], [0.9, 0.62, 0.5, 0.75], [-0.9, 0.6, -0.4, 0.8], [0.2, 0.55, -1, 0.7]]) ball(o, v3(x + a * R, h * b, z + c * R), R * 0.62 * s, 'mapleLeaf', { noCollide: true });
-      o.prims.push(S.makeSphere(v3(x, h * 0.68, z), R * 0.45));
+      pipe(o, v3(x, 0, z), v3(x, base + 1, z), 0.28, 'bark'); pipe(o, v3(x, base, z), v3(x + 1.2, base + 2, z + 0.5), 0.14, 'bark', { leafSolid: true }); pipe(o, v3(x, base, z), v3(x - 1, base + 2.2, z - 0.6), 0.14, 'bark', { leafSolid: true });
+      for (const [a, b, c, s] of [[0, 0.75, 0, 1], [0.9, 0.62, 0.5, 0.75], [-0.9, 0.6, -0.4, 0.8], [0.2, 0.55, -1, 0.7]]) ball(o, v3(x + a * R, h * b, z + c * R), R * 0.62 * s, 'mapleLeaf', { leafSolid: true });
       o.round = { c: v3(x, 0, z), r: R, under: base + 0.6, over: h }; o.obstacle = { a: v3(x - R, 0, z), b: v3(x + R, 0, z), under: base + 0.6, over: h };
       trees.push({ x, z, r: R * 0.6 }); return o; };
     const picnic = (x, z, ry) => { const o = O('Picnic Table', 'deco'), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, y, z - u * s + w * c);
@@ -614,7 +622,7 @@
     for (const [x, z, gw] of [[-6, -20, 1.0], [18, 18.5, 1.3]]) together(() => { conifer(x - gw / 2 - 0.22, z, 24, 0.22, 'cedar'); conifer(x + gw / 2 + 0.22, z, 22, 0.22, 'hemlock');
       O('Trunk Gap', 'gap', { gap: { c: v3(x, 1.4, z), n: v3(0, 0, 1), hu: gw / 2, hv: 1.4, u: v3(1, 0, 0) } }); });
     // understory: low shrubs, rusty bracken in the east, mossy logs and a few stumps
-    { for (let k = 0; k < 70; k++) { const x = rr(-PX + 1, PX - 1), z = rr(-PZ + 1, PZ - 1); if (inLane(x, z, 1) || !free(x, z)) continue; const sh = O(x > 24 ? 'Bracken' : 'Shrub', 'deco'); ball(sh, v3(x, 0.25, z), rr(0.35, 0.7), x > 24 ? 'bracken' : 'shrub', { noCollide: true }); } }
+    { for (let k = 0; k < 70; k++) { const x = rr(-PX + 1, PX - 1), z = rr(-PZ + 1, PZ - 1); if (inLane(x, z, 1) || !free(x, z)) continue; const sh = O(x > 24 ? 'Bracken' : 'Shrub', 'deco'); ball(sh, v3(x, 0.25, z), rr(0.35, 0.7), x > 24 ? 'bracken' : 'shrub', { leafSolid: true }); } }
     { for (const [x, z, a, l] of [[-8, 18, 0.4, 3.2], [12, -21, 1.2, 2.6], [32, 14, 2.4, 4]]) pipe(O('Mossy Log', 'deco'), v3(x, 0.22, z), v3(x + Math.cos(a) * l, 0.2, z + Math.sin(a) * l), 0.22, 'mossLog'); }
     { for (const [x, z, r] of [[-20, 4.5, 0.4], [9, -5, 0.35], [-2, 12.5, 0.45], [24, 2.5, 0.3]]) pipe(O('Stump', 'deco'), v3(x, 0, z), v3(x, 0.35, z), r, 'cedarBark'); }
     // ---- the playground (west end): a timber border round wood chips
@@ -698,7 +706,7 @@
     const c = Math.cos(ry), sn = Math.sin(ry), R = p => ({ x: p.x * c + p.z * sn, y: p.y, z: -p.x * sn + p.z * c });
     const T = p => { const q = R({ x: (p.x - pv.x) * s, y: (p.y - pv.y) * s, z: (p.z - pv.z) * s }); return v3(pv.x + q.x + d.x, pv.y + q.y + d.y, pv.z + q.z + d.z); };
     const Y = y => pv.y + (y - pv.y) * s + d.y, D = v => { const q = R(v); return v3(q.x, q.y, q.z); };
-    o.prims = o.prims.map(p => { const n = p.type === 'box' ? makeBox(T(p.c), v3(p.h.x * s, p.h.y * s, p.h.z * s), p.euler[1] + ry, p.euler[0], p.euler[2]) : p.type === 'capsule' ? makeCapsule(T(p.a), T(p.b), p.r * s) : p.type === 'sphere' ? makeSphere(T(p.c), p.r * s) : p; n.owner = o.id; return n; });
+    o.prims = o.prims.map(p => { const n = p.type === 'box' ? makeBox(T(p.c), v3(p.h.x * s, p.h.y * s, p.h.z * s), p.euler[1] + ry, p.euler[0], p.euler[2]) : p.type === 'capsule' ? makeCapsule(T(p.a), T(p.b), p.r * s) : p.type === 'sphere' ? makeSphere(T(p.c), p.r * s) : p; n.owner = o.id; if (p.leaf) n.leaf = true; return n; });
     o.vis = o.vis.map(v => { const n = { ...v }; if (v.c) n.c = T(v.c); if (v.a) n.a = T(v.a); if (v.b) n.b = T(v.b); if (v.h) n.h = v3(v.h.x * s, v.h.y * s, v.h.z * s); if (v.r != null) n.r = v.r * s; if (v.th != null) n.th = v.th * s; if (v.euler) n.euler = [v.euler[0], v.euler[1] + ry, v.euler[2]]; return n; });
     if (o.obstacle) o.obstacle = { ...o.obstacle, a: T(o.obstacle.a), b: T(o.obstacle.b), under: Y(o.obstacle.under), over: Y(o.obstacle.over) };
     if (o.round) { const r = { ...o.round, c: T(o.round.c), r: o.round.r * s, under: Y(o.round.under), over: Y(o.round.over) }; delete r.box; o.round = r; }
@@ -711,7 +719,7 @@
     'Hemlock': (K, N) => N.conifer(0, 0, 22, 0.24, 'hemlock'), 'Birch': (K, N) => N.birch(0, 0, 12), 'Maple': (K, N) => N.shade(0, 0, 11),
     'Sakura Tree': K => { const tr = K.O('Sakura Tree', 'pole'); tr.round = { c: v3(0, 0, 0), r: 1.8, under: 2.2, over: 5.0 }; tr.obstacle = { a: v3(-1.8, 0, 0), b: v3(1.8, 0, 0), under: 2.2, over: 5.0 };
       K.pipe(tr, v3(0, 0, 0), v3(0, 2.9, 0), 0.14, 'bark'); K.ball(tr, v3(0, 3.7, 0), 1.4, 'blossom'); K.ball(tr, v3(0.9, 3.2, 0.4), 0.9, 'blossom'); K.ball(tr, v3(-0.8, 3.4, -0.5), 1.0, 'blossom'); },
-    'Shrub': K => K.ball(K.O('Shrub', 'deco'), v3(0, 0.25, 0), 0.6, 'shrub', { noCollide: true }), 'Bracken': K => K.ball(K.O('Bracken', 'deco'), v3(0, 0.25, 0), 0.6, 'bracken', { noCollide: true }),
+    'Shrub': K => K.ball(K.O('Shrub', 'deco'), v3(0, 0.25, 0), 0.6, 'shrub', { leafSolid: true }), 'Bracken': K => K.ball(K.O('Bracken', 'deco'), v3(0, 0.25, 0), 0.6, 'bracken', { leafSolid: true }),
     'Stump': K => K.pipe(K.O('Stump', 'deco'), v3(0, 0, 0), v3(0, 0.35, 0), 0.4, 'cedarBark'), 'Mossy Log': K => K.pipe(K.O('Mossy Log', 'deco'), v3(-1.6, 0.22, 0), v3(1.6, 0.2, 0), 0.22, 'mossLog'),
     'Boulder': K => K.ball(K.O('Boulder', 'deco'), v3(0, 0.25, 0), 0.6, 'concrete'),
     'Picnic Table': (K, N) => N.picnic(0, 0, 0),

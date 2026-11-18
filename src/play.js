@@ -133,9 +133,19 @@ let flightTime = 0, acc = 0, lastT = performance.now(), frames = 0, fpsT = 0;
 const DT = 1 / 1000;
 const tmpQ = new THREE.Quaternion(), tiltQ = new THREE.Quaternion();
 const chasePos = new THREE.Vector3(0, 1, 14);
+// Map lights on auto: measure 4 s of flying (after 2 s to settle); under 50 fps with more than 4 lamps → few, once, and say so
+const LA = { t: 0, n: 0 };
+function lightsAuto(dt) {
+  if (PERF.lights !== 'auto' || PERF.lightsAuto || mode !== 'fly' || !drone.armed) return;
+  if (!world.objs.filter(o => o.light).length || world.objs.filter(o => o.light).length <= 4) { PERF.lightsAuto = 'full'; return; }
+  const now = performance.now() / 1000; if (!LA.t0) LA.t0 = now; LA.t = now - LA.t0;   /* real time: dt is capped at 0.1 s a frame */
+  if (LA.t < 2) return; LA.n++; if (LA.t < 6) return;
+  const fps = LA.n / (LA.t - 2); PERF.lightsAuto = fps < 50 ? 'few' : 'full';
+  if (PERF.lightsAuto === 'few') { mapLightsBuild(); flash(`<b>LIGHTING REDUCED</b><small>${Math.round(fps)} fps here · Options → Graphics → Map lights</small>`, 'warn'); }
+}
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
+  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
   if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;

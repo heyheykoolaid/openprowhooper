@@ -37,15 +37,40 @@ function meMode(official) {   // switch between the pilot's own layout and the o
   ME.E.map = MAP_ID; ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands under this layer
   meRebuild(false); meLibrary(); mePanels();
 }
+// ---- map codes: a whole layout as one short line to paste anywhere (Discord, a message), e.g. PWMAP1-moose-eNq…
+// The layer (moved / removed / added) as JSON, deflated, base64url. Reading one goes through meClean like a layout file:
+// only known fields and library assets, numbers clamped. A code never carries anything that runs.
+const ME_CODE = /^PWMAP1-([a-z0-9_]{1,24})-([A-Za-z0-9_-]{4,200000})$/;
+async function meZip(bytes, Stream) { const st = new Stream('deflate-raw'), w = st.writable.getWriter(); w.write(bytes); w.close(); const parts = [], r = st.readable.getReader(); let n = 0;
+  for (;;) { const { done, value } = await r.read(); if (done) break; parts.push(value); n += value.length; if (n > 4e6) throw new Error('too big'); } const out = new Uint8Array(n); let o = 0; for (const q of parts) { out.set(q, o); o += q.length; } return out; }
+async function meCodeOf(E) { const j = JSON.stringify({ format: 'pro-whooper-mapedit/1', map: MAP_ID, moved: E.moved, removed: E.removed, added: E.added }), z = await meZip(new TextEncoder().encode(j), CompressionStream);
+  let bin = ''; for (let i = 0; i < z.length; i += 0x8000) bin += String.fromCharCode.apply(null, z.subarray(i, i + 0x8000));
+  return `PWMAP1-${MAP_ID}-` + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+async function meCodeRead(str) { const m = ME_CODE.exec(String(str || '').trim().replace(/\s+/g, '')); if (!m) return null;
+  const b = atob(m[2].replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((m[2].length + 3) % 4)), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+  const j = JSON.parse(new TextDecoder().decode(await meZip(a, DecompressionStream))); if (!j || j.format !== 'pro-whooper-mapedit/1') return null; return { map: m[1], E: j }; }
+async function meCopyCode() {
+  if (!meHas(ME.E)) { flash('<b>NOTHING TO SHARE</b><small>this layout is the map as built</small>', 'near'); return; }
+  const code = await meCodeOf(ME.E); let ok = false; try { await navigator.clipboard.writeText(code); ok = true; } catch {}
+  if (ok) flash(`<b>MAP CODE COPIED</b><small>${code.length} characters · paste it anywhere; others use "Paste map code" on ${esc(S.MAPS[MAP_ID].title || MAP_ID)}</small>`); else prompt('Map code (copy it):', code);
+}
+async function mePasteCode() {
+  let txt = ''; try { txt = await navigator.clipboard.readText(); } catch {} if (!ME_CODE.test((txt || '').trim())) txt = prompt('Paste a map code (PWMAP1-…):', '') || ''; if (!txt.trim()) return;
+  let got = null; try { got = await meCodeRead(txt); } catch {} if (!got) { flash('<b>NOT A MAP CODE</b><small>it starts with PWMAP1-</small>', 'near'); return; }
+  if (got.map !== MAP_ID) { flash(`<b>CODE FOR ANOTHER MAP</b><small>it is for ${esc(S.MAPS[got.map] ? S.MAPS[got.map].title || got.map : got.map)}: switch map first</small>`, 'warn'); return; }
+  if (meHas(ME.E) && !confirm('Replace the layout in the editor with the one in this code? (Undo brings yours back.)')) return;
+  mePush(); ME.E = meClean(got.E); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); flash(`<b>MAP CODE LOADED</b><small>${Object.keys(ME.E.moved).length} moved · ${ME.E.removed.length} removed · ${ME.E.added.length} added${ME.official ? ' · into the official draft' : ''}</small>`);
+}
 async function mePublish() {
   if (!ME.official || !ghMenus()) return; if (!gh.token) { flash('<b>NO GITHUB TOKEN</b><small>add one in Options (Contents: Read and write on the game repo)</small>', 'warn'); return; }
   const E = { ...ME.E, map: MAP_ID, at: new Date().toISOString(), by: pilotName() }, path = `/contents/maps/official/${MAP_ID}.json`; ME.pubMsg = 'Publishing…'; mePanels();
   try { const cur = await ghFetch(path + '?ref=' + encodeURIComponent(gh.branch)), sha = cur.ok && cur.body && cur.body.sha;
     const r = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message: `Official layout of ${MAP_ID} (${Object.keys(E.moved).length} moved, ${E.removed.length} removed, ${E.added.length} added)`, content: b64(JSON.stringify(E, null, 1)), branch: gh.branch, ...(sha ? { sha } : {}) }) });
-    if (!r.ok) { ME.pubMsg = `Not published (${r.status}${r.body && r.body.message ? ': ' + r.body.message : ''}). The token needs Contents: Read and write on ${gh.owner}/${gh.repo}.`; mePanels(); return; }
+    if (!r.ok) { ME.pubMsg = `Not published (${r.status}${r.body && r.body.message ? ': ' + r.body.message : ''}). The token needs Contents: Read and write on ${gh.owner}/${gh.repo}. Your draft is kept; "Copy map code" gives it as one line to send instead.`; mePanels();
+      flash(`<b>NOT PUBLISHED</b><small>GitHub said ${r.status}: the token in Options can't write to ${esc(gh.owner + '/' + gh.repo)}</small>`, 'warn'); return; }
     const loc = store.get('officialLocal', {}) || {}; loc[MAP_ID] = E; store.set('officialLocal', loc); const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.E = meClean(E); ME.E.at = E.at;
     ME.pubMsg = `Published ✓ ${new Date().toLocaleTimeString()}. GitHub Pages rebuilds the game for everyone in a minute or two; your game uses it now.`; }
-  catch { ME.pubMsg = 'Not published: GitHub could not be reached from here.'; }
+  catch { ME.pubMsg = 'Not published: GitHub could not be reached from here. Your draft is kept.'; flash('<b>NOT PUBLISHED</b><small>GitHub could not be reached</small>', 'warn'); }
   mePanels();
 }
 // rebuild the world from the generated map + the layer, in place (drone, detector and the race code hold this object)
@@ -108,6 +133,7 @@ function mePanels() {
       <div class="row"><button data-me="publish" class="primary">Publish for everyone</button><button data-me="discard" class="ghost">Discard draft</button></div>${ME.pubMsg ? `<p class="note">${esc(ME.pubMsg)}</p>` : ''}` : ''}` : '';
   el.innerHTML = `<h3>MAP EDITOR <small>${esc(world.title || MAP_ID)}</small></h3>${modeH}${selH}
     <h4>Layout</h4><p class="note">${nMoved} moved · ${E.removed.length} removed · ${E.added.length} added${world.edits && world.edits.lost ? ` · <span class="bad">${world.edits.lost} no longer match the map</span>` : ''}. ${ME.official ? 'A draft, kept in this browser until you publish.' : 'Saved as you go, in this browser.'}</p>
+    <div class="row"><button data-me="copycode" title="The whole layout as one line of text to paste anywhere">Copy map code</button><button data-me="pastecode" title="Load a layout someone shared as a map code">Paste map code</button></div>
     <div class="row"><button data-me="export">Export</button><button data-me="import">Import…</button><button data-me="resetall" class="ghost">Reset map</button></div>
     <h4>Reference image</h4><p class="note">Lay a photo or satellite view on the ground and place trees over it. It stays on this computer and goes away when you leave.</p>
     <div class="row"><button data-me="refload">${R ? 'Change image…' : 'Load image…'}</button>${R ? `<label class="chk"><input type="checkbox" id="meRefOn" ${R.mesh.visible ? 'checked' : ''}> show</label>` : ''}</div>
@@ -212,6 +238,7 @@ document.addEventListener('click', e => {
   if (k === 'reset1') { const p = mePiece([...ME.sel][0]); if (p) { mePush(); delete ME.E.moved[p.key]; meCommit(); } }
   if (k === 'resetall' && confirm('Put every piece of this map back where it was and remove everything you added?')) { mePush(); ME.E = meEmpty(); ME.sel.clear(); meCommit(); }
   if (k === 'export') saveFile(`layout-${MAP_ID}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(ME.E, null, 1));
+  if (k === 'copycode') meCopyCode(); if (k === 'pastecode') mePasteCode();
   if (k === 'import') $('#meFile').click(); if (k === 'refload') $('#meRefFile').click();
   if (k === 'fly') closeMapEditor('fly'); if (k === 'done') closeMapEditor();
   if (k === 'mode-own' && ME.official) meMode(false); if (k === 'mode-off' && !ME.official) meMode(true); if (k === 'publish') mePublish();
