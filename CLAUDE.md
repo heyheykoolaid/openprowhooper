@@ -232,6 +232,14 @@ detector and race code keep it; `detector.reset()` re-reads poles and clears the
 Map Editor". A reference image (photo / satellite) can be laid on the ground to trace from: session only, never saved
 or sent. Flights flown on a layout carry it in `summary.layout`; tools/evidence.js, signatures.js and flights.js re-fly
 them on it (`worldOf(map, layout)`). Edited layouts can't post to the daily board or watch board runs. test/mapedit.js.
+**Official layouts** (owner only: pilot name heyheykoolaid + the GitHub token from Options with Contents: write): the
+editor's "Official map" mode edits `maps/official/<map>.json` (`pro-whooper-mapedit/1` plus `at`, `by`), applied to
+EVERY pilot under their own layout (`S.setOfficialEdits`; build.py ships them as `window.PW_OFFICIAL`; in Node maps.js
+reads the folder, so tests and tools see what the game does). Changes are a draft (`store 'officialDraft'`) until
+"Publish for everyone" commits the file through the GitHub API (`mePublish`: GET for the sha, then PUT); the owner's game
+uses it at once (`store 'officialLocal'`, newer than the shipped one by `at`) and GitHub Pages rebuilds for everyone.
+Layers stack: pieces an earlier layer added are baked (`o.baked`) before the next applies. Flights record the official
+layout they were flown on (`summary.official`); the tools re-fly them on it. Pull before pushing: the owner commits here.
 
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of
@@ -418,7 +426,8 @@ NAMES and returns each pilot's best per map; `GET /run?day=&id=` returns one pos
 name; cleaned again on the way out). Nothing outside `leaderboard/` can be read. The board screen is a carousel of maps
 (`LB.view`, ← →, thumbnails from `PW_MAPTHUMBS`), one table per map. Scores are client-reported (not
 verified): the posted replay is how a run can be checked. In the game: main menu "Daily leaderboard", click a run for
-its sheet, "Watch the run" plays it in the replay viewer as a guest (`recap.guest`: never saved, reviewed or shared;
+its sheet, ▶ next to each run (`lbPlay`) watches it at once (from another map, or with the pilot's own layout loaded, it asks, then
+reloads into the right map, `store 'lbPending'` / `'layoutOffOnce'`), "Watch the run" plays it in the replay viewer as a guest (`recap.guest`: never saved, reviewed or shared;
 only on the map it was flown on). Board text is other people's: always `esc()`. The relay must be redeployed in
 Cloudflare when `tools/dropoff-worker.mjs` changes (docs/DROPOFF-SETUP.md).
 

@@ -142,7 +142,7 @@
     for (const t of [-18, -6, 6, 18]) for (const [x, z] of [[t, -23.3], [t, 23.3], [-23.3, t], [23.3, t]]) { pipe(up, v3(x, 0, z), v3(x, 8, z), 0.12, 'wood'); pipe(up, v3(x - 0.7, 7.5, z), v3(x + 0.7, 7.5, z), 0.05, 'wood', { noCollide: true }); poles.push(v3(x, 7.5, z)); }
     { const w = O('Overhead Wires', 'deco'); for (const side of ['N', 'S', 'E', 'W']) { const P = poles.filter(p => side === 'N' ? p.z < -23 : side === 'S' ? p.z > 23 : side === 'E' ? p.x > 23 : p.x < -23).sort((a, b) => (a.x + a.z) - (b.x + b.z));
       for (let i = 1; i < P.length; i++) for (const dx of [-0.6, 0.6]) pipe(w, v3(P[i - 1].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i - 1].z + (side === 'N' || side === 'S' ? dx : 0)), v3(P[i].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i].z + (side === 'N' || side === 'S' ? dx : 0)), 0.008, 'rubberBlack', { noCollide: true }); } }
-    frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, -3, 3.2, 2.6, 'x', 'paintBlue');   /* east gate: under the footbridge (pilot, 2026-11-17) */ frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
+    frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, 8, 3.2, 2.6, 'x', 'paintBlue');   /* east gate: down the street, clear of the footbridge (pilot, 2026-11-17) */ frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
     // the footbridge from the plaza's east edge over the street to the east rooftops (5 m up), on two pillars
     { const o = slabOU('Footbridge', v3(18, 5.0, -3), v3(6.2, 0.1, 1.2), 'concrete'); for (const x of [14.5, 21.5]) pipe(o, v3(x, 0, -3), v3(x, 4.9, -3), 0.22, 'concrete');
       for (const z of [-4.15, -1.85]) bar('Footbridge Rail', v3(12, 6.0, z), v3(24, 6.0, z), 0.03, 'galv');
@@ -733,7 +733,8 @@
   };
   // apply a layer to a freshly built map (before the Surveyor)
   function applyMapEdits(w, E) {
-    if (!E || typeof E !== 'object') return w; const pieces = mapPieces(w); for (const p of pieces) for (const id of p.ids) w.objs[id].editKey = p.key;   // the key stays with a piece wherever it is moved
+    if (!E || typeof E !== 'object') return w; for (const o of w.objs) if (o.added) { delete o.added; delete o.addIdx; o.baked = true; }   // what an earlier layer added is part of the map now
+    const pieces = mapPieces(w); for (const p of pieces) for (const id of p.ids) w.objs[id].editKey = p.key;   // the key stays with a piece wherever it is moved
     const byKey = new Map(pieces.map(p => [p.key, p])), num = (v, d, lo, hi) => Number.isFinite(+v) ? Math.max(lo, Math.min(hi, +v)) : d;
     const find = key => { if (byKey.has(key)) return byKey.get(key); const m = /^(.*)@(-?[\d.]+),(-?[\d.]+)$/.exec(String(key)); if (!m) return null;   // the map code moved it a little since
       let best = null, bd = 0.6; for (const p of pieces) if (p.name === m[1]) { const d = Math.hypot(p.pivot.x - +m[2], p.pivot.z - +m[3]); if (d < bd) { bd = d; best = p; } } return best; };
@@ -752,8 +753,17 @@
   }
   let MAP_EDITS = {};   // per map id, set by the game (store 'mapEdits') before it builds; empty in the Node tests
   S.setMapEdits = (id, E) => { if (E && typeof E === 'object') MAP_EDITS[id] = E; else delete MAP_EDITS[id]; };
+  // The official layout of each map (maps/official/<id>.json, published from the Map Editor by the project owner): applied
+  // to everyone, under their own layout. build.py ships them (window.PW_OFFICIAL); in Node they are read from the folder,
+  // so the tests and tools see the maps as the game does. A flight records the official layout it was flown on.
+  const OFFICIAL = {};
+  S.setOfficialEdits = (id, E) => { if (E && typeof E === 'object') OFFICIAL[id] = E; else delete OFFICIAL[id]; };
+  S.officialEdits = id => OFFICIAL[id] || null;
+  if (typeof window !== 'undefined' && window.PW_OFFICIAL && typeof window.PW_OFFICIAL === 'object') for (const [k, v] of Object.entries(window.PW_OFFICIAL)) OFFICIAL[k] = v;
+  else if (typeof require === 'function' && typeof __dirname === 'string') { try { const fs = require('fs'), path = require('path'), dir = path.join(__dirname, '..', 'maps', 'official');
+    for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (f.endsWith('.json')) { try { OFFICIAL[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { /* a broken file is skipped */ } } } catch { /* no folder */ } }
   S.mapPieces = mapPieces; S.applyMapEdits = applyMapEdits; S.ASSETS = Object.keys(ASSETS);
-  const edited = (id, w) => MAP_EDITS[id] ? applyMapEdits(w, MAP_EDITS[id]) : w;
+  const edited = (id, w) => { if (OFFICIAL[id]) { applyMapEdits(w, OFFICIAL[id]); w.official = w.edits; } if (MAP_EDITS[id]) applyMapEdits(w, MAP_EDITS[id]); else if (OFFICIAL[id]) w.edits = null; return w; };
 
   // Every map is closed in (pilot, 2026-11-17: "proper bounding boxes"): invisible walls round everything that was built
   // (its colliders' extent and the declared bounds, plus 6 m) and a ceiling 20 m above the tallest thing (at least 35 m

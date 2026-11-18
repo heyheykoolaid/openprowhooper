@@ -15,7 +15,10 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
 // the map: chosen on the main menu, remembered, built once at start-up (changing it reloads the page)
 const MAP_ID = S.MAPS[store.get('map', 'moose')] ? store.get('map', 'moose') : 'moose';   // Moose Knuckle Park is the default (pilot, 2026-11-17)
 // the pilot's own layout of this map from the Map Editor (store 'mapEdits': { mapId: layer }), applied before the build
-let MAP_EDITS = (() => { const all = store.get('mapEdits', {}), E = all && all[MAP_ID]; return E && ((E.moved && Object.keys(E.moved).length) || (E.removed && E.removed.length) || (E.added && E.added.length)) ? E : null; })();
+let MAP_EDITS = (() => { if (store.get('layoutOffOnce', false)) { store.set('layoutOffOnce', false); return null; }   // watching a board run: the standard map, this once
+  const all = store.get('mapEdits', {}), E = all && all[MAP_ID]; return E && ((E.moved && Object.keys(E.moved).length) || (E.removed && E.removed.length) || (E.added && E.added.length)) ? E : null; })();
+{ const loc = (store.get('officialLocal', {}) || {})[MAP_ID], ship = S.officialEdits(MAP_ID);   // the owner's just-published layout, until the rebuilt game has it
+  if (loc && (!ship || String(loc.at || '') > String(ship.at || ''))) S.setOfficialEdits(MAP_ID, loc); }
 S.setMapEdits(MAP_ID, MAP_EDITS);
 const world = S.MAPS[MAP_ID].build();
 let params = S.buildDrone(spec);

@@ -5,7 +5,7 @@
 // with each piece, and the Surveyor runs again after each change. A reference image (a photo or satellite view) can be
 // laid on the ground to trace real tree positions; it stays in this browser session only. Runs flown on an edited layout
 // carry it in summary.layout (dropoff.js) and cannot be posted to the daily board. (Concatenated into the game module.)
-const ME = { E: null, sel: new Set(), tool: 'move', place: null, vary: true, undo: [], redo: [], cam: { t: new THREE.Vector3(0, 0, 0), yaw: 0.6, pitch: 0.75, dist: 40 }, drag: null, pieces: [], byOid: new Map(), base: new Map(), testing: false, ref: null };
+const ME = { official: false, E: null, sel: new Set(), tool: 'move', place: null, vary: true, undo: [], redo: [], cam: { t: new THREE.Vector3(0, 0, 0), yaw: 0.6, pitch: 0.75, dist: 40 }, drag: null, pieces: [], byOid: new Map(), base: new Map(), testing: false, ref: null };
 const meCam = new THREE.PerspectiveCamera(55, 1, 0.05, 900);
 const ME_ASSETS = {
   Trees: ['Cedar', 'Big Cedar', 'Young Cedar', 'Hemlock', 'Birch', 'Maple', 'Sakura Tree'],
@@ -25,10 +25,33 @@ function meClean(E) {   // a layer from a file or storage: only known fields, sa
   for (const a of (Array.isArray(E.added) ? E.added : []).slice(0, 3000)) if (a && S.ASSETS.includes(a.asset)) out.added.push({ asset: a.asset, x: n(a.x, 0, -500, 500), y: n(a.y, 0, -50, 100), z: n(a.z, 0, -500, 500), ry: n(a.ry, 0, -3600, 3600), s: n(a.s, 1, 0.1, 10) });
   return out;
 }
-function meSave() { const all = store.get('mapEdits', {}) || {}; if (meHas(ME.E)) all[MAP_ID] = ME.E; else delete all[MAP_ID]; store.set('mapEdits', all); MAP_EDITS = meHas(ME.E) ? ME.E : null; }
+function meSave() {
+  if (ME.official) { const d = store.get('officialDraft', {}) || {}; d[MAP_ID] = ME.E; store.set('officialDraft', d); return; }   // the owner's draft of the official map: kept, not published
+  const all = store.get('mapEdits', {}) || {}; if (meHas(ME.E)) all[MAP_ID] = ME.E; else delete all[MAP_ID]; store.set('mapEdits', all); MAP_EDITS = meHas(ME.E) ? ME.E : null; }
+// ---- the official map (owner only: pilot name heyheykoolaid, and a GitHub token that can write to the game repo)
+const mePublished = () => { const loc = (store.get('officialLocal', {}) || {})[MAP_ID], ship = window.PW_OFFICIAL && window.PW_OFFICIAL[MAP_ID]; return loc && (!ship || String(loc.at || '') > String(ship.at || '')) ? loc : ship || null; };
+function meMode(official) {   // switch between the pilot's own layout and the official map
+  meSave(); ME.official = !!official && ghMenus(); ME.sel.clear(); ME.undo = []; ME.redo = [];
+  if (ME.official) { const draft = (store.get('officialDraft', {}) || {})[MAP_ID]; ME.E = meClean(draft || mePublished()); S.setMapEdits(MAP_ID, null); S.setOfficialEdits(MAP_ID, null); }
+  else { ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); S.setMapEdits(MAP_ID, null); S.setOfficialEdits(MAP_ID, mePublished()); }
+  ME.E.map = MAP_ID; ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands under this layer
+  meRebuild(false); meLibrary(); mePanels();
+}
+async function mePublish() {
+  if (!ME.official || !ghMenus()) return; if (!gh.token) { flash('<b>NO GITHUB TOKEN</b><small>add one in Options (Contents: Read and write on the game repo)</small>', 'warn'); return; }
+  const E = { ...ME.E, map: MAP_ID, at: new Date().toISOString(), by: pilotName() }, path = `/contents/maps/official/${MAP_ID}.json`; ME.pubMsg = 'Publishing…'; mePanels();
+  try { const cur = await ghFetch(path + '?ref=' + encodeURIComponent(gh.branch)), sha = cur.ok && cur.body && cur.body.sha;
+    const r = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message: `Official layout of ${MAP_ID} (${Object.keys(E.moved).length} moved, ${E.removed.length} removed, ${E.added.length} added)`, content: b64(JSON.stringify(E, null, 1)), branch: gh.branch, ...(sha ? { sha } : {}) }) });
+    if (!r.ok) { ME.pubMsg = `Not published (${r.status}${r.body && r.body.message ? ': ' + r.body.message : ''}). The token needs Contents: Read and write on ${gh.owner}/${gh.repo}.`; mePanels(); return; }
+    const loc = store.get('officialLocal', {}) || {}; loc[MAP_ID] = E; store.set('officialLocal', loc); const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.E = meClean(E); ME.E.at = E.at;
+    ME.pubMsg = `Published ✓ ${new Date().toLocaleTimeString()}. GitHub Pages rebuilds the game for everyone in a minute or two; your game uses it now.`; }
+  catch { ME.pubMsg = 'Not published: GitHub could not be reached from here.'; }
+  mePanels();
+}
 // rebuild the world from the generated map + the layer, in place (drone, detector and the race code hold this object)
 function meRebuild(merge) {
-  S.setMapEdits(MAP_ID, meHas(ME.E) ? ME.E : null); const nw = S.MAPS[MAP_ID].build();
+  if (ME.official) { S.setOfficialEdits(MAP_ID, meHas(ME.E) ? ME.E : null); S.setMapEdits(MAP_ID, null); } else S.setMapEdits(MAP_ID, meHas(ME.E) ? ME.E : null);
+  const nw = S.MAPS[MAP_ID].build();
   for (const k of Object.keys(world)) delete world[k]; Object.assign(world, nw); drone.world = world; detector.reset();
   buildObjects(merge); ME.pieces = S.mapPieces(world); ME.byOid = new Map(); for (const p of ME.pieces) for (const id of p.ids) ME.byOid.set(id, p);
   const keep = new Set(ME.pieces.map(meId)); for (const id of [...ME.sel]) if (!keep.has(id)) ME.sel.delete(id); meSelBox();
@@ -54,12 +77,14 @@ function meRedo() { if (!ME.redo.length) return; ME.undo.push(JSON.stringify(ME.
 
 function openMapEditor() {
   ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); ME.E.map = MAP_ID; ME.sel.clear(); ME.place = null; ME.undo = []; ME.redo = []; ME.testing = false;
-  S.setMapEdits(MAP_ID, null); ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands on the generated map
+  ME.official = false; S.setMapEdits(MAP_ID, null); ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands under the official layout
   mode = 'mapedit'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#mapEditUI').classList.remove('hide'); document.body.classList.add('bbr', 'meOn');
   const B = world.bounds || { x: [-40, 40], z: [-40, 40] }; ME.cam.t.set((B.x[0] + B.x[1]) / 2 * 0.5, 0, (B.z[0] + B.z[1]) / 2 * 0.5); ME.cam.dist = Math.min(110, Math.max(45, (B.x[1] - B.x[0]) * 0.55)); ME.cam.pitch = 1.05; /* start on a high overview */ meRebuild(false); meLibrary(); mePanels(); meHint();
 }
 function closeMapEditor(to) {
-  ME.drag = null; ME.place = null; meSave(); meRebuild(true); $('#mapEditUI').classList.add('hide'); document.body.classList.remove('bbr', 'meOn'); if (ME.box) { scene.remove(ME.box); ME.box = null; }
+  ME.drag = null; ME.place = null; meSave();
+  if (to !== 'fly' && ME.official) { ME.official = false; S.setOfficialEdits(MAP_ID, mePublished()); ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); }
+  meRebuild(true); $('#mapEditUI').classList.add('hide'); document.body.classList.remove('bbr', 'meOn'); if (ME.box) { scene.remove(ME.box); ME.box = null; }
   if (ME.ref) ME.ref.mesh.visible = false; drone.reset(world.spawn);
   if (to === 'fly') { ME.testing = true; startFly(false); } else { ME.testing = false; mode = 'menu'; show('#mainMenu'); }
 }
@@ -77,8 +102,12 @@ function mePanels() {
       <div class="row"><button data-me="dup" title="D">Duplicate</button><button data-me="del" title="Delete">Remove</button>${p.addIdx == null && E.moved[p.key] ? '<button data-me="reset1">Put back</button>' : ''}</div>`; }
   else if (ps.length > 1) selH = `<h4>${ps.length} pieces picked</h4><div class="row"><button data-me="del">Remove all</button></div>`;
   const R = ME.ref;
-  el.innerHTML = `<h3>MAP EDITOR <small>${esc(world.title || MAP_ID)}</small></h3>${selH}
-    <h4>Layout</h4><p class="note">${nMoved} moved · ${E.removed.length} removed · ${E.added.length} added${world.edits && world.edits.lost ? ` · <span class="bad">${world.edits.lost} no longer match the map</span>` : ''}. Saved as you go, in this browser.</p>
+  const own = ghMenus(), pub = mePublished();
+  const modeH = own ? `<div class="row meMode"><button data-me="mode-own" class="${ME.official ? '' : 'on'}">Your layout</button><button data-me="mode-off" class="${ME.official ? 'on' : ''}">Official map</button></div>
+    ${ME.official ? `<p class="note"><b>Editing the official ${esc(world.title || MAP_ID)}</b>: what every pilot flies. Your changes are a draft until you publish.${pub && pub.at ? ` Last published ${esc(new Date(pub.at).toLocaleString())}.` : ' Not published yet.'}</p>
+      <div class="row"><button data-me="publish" class="primary">Publish for everyone</button><button data-me="discard" class="ghost">Discard draft</button></div>${ME.pubMsg ? `<p class="note">${esc(ME.pubMsg)}</p>` : ''}` : ''}` : '';
+  el.innerHTML = `<h3>MAP EDITOR <small>${esc(world.title || MAP_ID)}</small></h3>${modeH}${selH}
+    <h4>Layout</h4><p class="note">${nMoved} moved · ${E.removed.length} removed · ${E.added.length} added${world.edits && world.edits.lost ? ` · <span class="bad">${world.edits.lost} no longer match the map</span>` : ''}. ${ME.official ? 'A draft, kept in this browser until you publish.' : 'Saved as you go, in this browser.'}</p>
     <div class="row"><button data-me="export">Export</button><button data-me="import">Import…</button><button data-me="resetall" class="ghost">Reset map</button></div>
     <h4>Reference image</h4><p class="note">Lay a photo or satellite view on the ground and place trees over it. It stays on this computer and goes away when you leave.</p>
     <div class="row"><button data-me="refload">${R ? 'Change image…' : 'Load image…'}</button>${R ? `<label class="chk"><input type="checkbox" id="meRefOn" ${R.mesh.visible ? 'checked' : ''}> show</label>` : ''}</div>
@@ -185,6 +214,8 @@ document.addEventListener('click', e => {
   if (k === 'export') saveFile(`layout-${MAP_ID}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(ME.E, null, 1));
   if (k === 'import') $('#meFile').click(); if (k === 'refload') $('#meRefFile').click();
   if (k === 'fly') closeMapEditor('fly'); if (k === 'done') closeMapEditor();
+  if (k === 'mode-own' && ME.official) meMode(false); if (k === 'mode-off' && !ME.official) meMode(true); if (k === 'publish') mePublish();
+  if (k === 'discard' && confirm('Throw away your draft of the official map and go back to the published one?')) { const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.official = false; meMode(true); }
 });
 document.addEventListener('change', e => {
   if (mode !== 'mapedit') return; const t = e.target;

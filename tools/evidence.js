@@ -5,7 +5,7 @@
 const fs = require('fs');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
 const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, keep: 0.1, cap: 6 };
-const worlds = {}, worldOf = (id, layout) => { const k = id + (layout ? JSON.stringify(layout) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground'; S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
+const worlds = {}, worldOf = (id, layout, official) => { const k = id + (layout ? JSON.stringify(layout) : '') + (official ? '|' + JSON.stringify(official) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground', was = S.officialEdits(m); S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); if (official !== undefined) S.setOfficialEdits(m, official && typeof official === 'object' ? official : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); S.setOfficialEdits(m, was); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
 const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
 // a pilot is their chosen name where they gave one (the same person flies from more than one browser, each with its own
 // random id), else that id
@@ -15,7 +15,7 @@ async function load(files) {
   for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
     const items = j.format === 'pro-whooper-telemetry-bundle/1' && Array.isArray(j.items) ? j.items.map(x => x && x.payload).filter(Boolean) : [j];
     for (const p of items) {
-      if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, layout: p.summary && typeof p.summary === 'object' ? p.summary.layout || null : null, replica: p.mode === 'replica' ? !!(p.summary && p.summary.replica && p.summary.replica.faithful === true) : null, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
+      if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, layout: p.summary && typeof p.summary === 'object' ? p.summary.layout || null : null, official: p.summary && typeof p.summary === 'object' && p.summary.official ? p.summary.official : undefined, replica: p.mode === 'replica' ? !!(p.summary && p.summary.replica && p.summary.replica.faithful === true) : null, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
       if (p.format === 'pro-whooper-score/1' && str(p.flight) && p.trace && !flights.has(p.flight)) flights.set(p.flight, { id: p.flight, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: null, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: [], src: 'leaderboard' });
       if (p.format === 'pro-whooper-flight-labels/1' && str(p.flight) && Array.isArray(p.labels)) labelFiles.push(p);
     } }
@@ -54,7 +54,7 @@ async function load(files) {
     for (const e of fl.events) { if (!e || !Number.isFinite(+e.t) || covered(+e.t)) continue; const name = str(e.name);
       if (e.flagged) ev.push({ kind: 'not', name, a: +e.t0 || +e.t - 1.5, b: +e.t, w: W.flag, author: fl.pilot, src: 'F flag' }); }
     for (const m of fl.missed) if (m && Number.isFinite(+m.t) && !covered(+m.t)) ev.push({ kind: 'miss', t: +m.t, w: W.q, author: fl.pilot, src: 'Q flag' });
-    runs.push({ id: fl.id, pilot: fl.pilot, name: fl.name, map: fl.map, src: fl.src, rows, world: worldOf(fl.map, fl.layout), camTilt: fl.camTilt, own, ev, live: fl.events, T0, T1 });
+    runs.push({ id: fl.id, pilot: fl.pilot, name: fl.name, map: fl.map, src: fl.src, rows, world: worldOf(fl.map, fl.layout, fl.official), camTilt: fl.camTilt, own, ev, live: fl.events, T0, T1 });
   }
   // a pilot may not carry more than W.cap labels' worth on any one trick
   const per = {}; for (const r of runs) for (const e of r.ev) if (e.kind === 'want' || e.kind === 'not') { const k = e.author + '|' + e.name; (per[k] = per[k] || []).push(e); }

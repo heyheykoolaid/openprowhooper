@@ -44,7 +44,7 @@ function telCapture(reason) {
     missed: recap.flags.map(f => ({ t: f.t })) };
   const stamp = telStamp(recap);
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS;   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
 
 // ---- "Processing…": the heavy moments (packing and sending a flight, learning from a review) happen behind a short
@@ -230,7 +230,7 @@ async function lbLoad(day) {
   try { const r = await fetch(`${lbBase()}/board?day=${day}`); if (!r.ok) throw 0; const j = await r.json(); LB.runs = Array.isArray(j.runs) ? j.runs.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score)).slice(0, 100) : []; LB.msg = ''; }
   catch { LB.runs = null; LB.msg = 'Could not reach the leaderboard just now.'; }
 }
-const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td></tr>`).join('');
+const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td><td class="lbPlayC">${e.id ? `<button class="lbPlay" data-lbplay="${esc(e.id)}" data-lbmap="${esc(e.map || '')}" title="Watch this run">▶</button>` : ''}</td></tr>`).join('');
 function lbResultsBox() {
   const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
   const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
@@ -263,7 +263,7 @@ function lbRender() {
     <p class="note">Best 2:00 Session per pilot. Today's board only: a new one starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
     <div class="lbCar"><button class="mapArrow" data-lb="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${LB.runs ? `${runs.length} pilot${runs.length === 1 ? '' : 's'} today` : LB.msg ? 'board not reachable' : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-lb="next" aria-label="next map">›</button></div>
     <div class="mapDots">${ids.map(id => `<button data-lbmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${LB.runs ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}<button data-lb="refresh" class="lbRefresh" title="Refresh">↻</button></div>
-    <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || `No runs posted on ${lbMapTitle(V)} today. Fly a 2:00 Session there and post it from the results screen.`)}</p>`}</div>
+    <div class="lbCols"><div>${runs.length ? `<table class="lbT"><tr><th>#</th><th>Pilot</th><th>Score</th><th></th></tr>${lbRows(runs, 100, pilotName())}</table>` : `<p class="note">${esc(LB.msg || `No runs posted on ${lbMapTitle(V)} today. Fly a 2:00 Session there and post it from the results screen.`)}</p>`}</div>
     <div id="lbRun">${R ? lbRunHtml(R) : '<p class="note">Pick a run.</p>'}</div></div>
     <div class="row"><button data-lb="close" class="primary">Back</button></div>`;
 }
@@ -343,6 +343,18 @@ function judgeClip(i) {
   try { guestOpen(c.rows, [{ t: c.t, t0: c.t - 1.5, name: c.name, exec: '' }], { name: c.of, flight: c.flight, source: 'judge', ref: c.id, clip: jgKey(c) }, true); const it = recapItems()[0]; if (it) recapPlay(it); renderRecap(); }
   catch { JG.msg = 'That run could not be opened.'; judgeRender(); }
 }
+// ▶ next to a run on the board: watch it straight away. A run flown on another map (or on the standard map while the
+// pilot has their own layout loaded) asks first, then reloads into the right map and carries on (store 'lbPending').
+async function lbPlay(id, map) {
+  if (!/^[A-Za-z0-9_-]{10,140}$/.test(id) || !S.MAPS[map]) return; const day = LB.day || lbToday();
+  if (map !== MAP_ID || MAP_EDITS) {
+    const q = map !== MAP_ID ? `Watching this run will change your map to ${S.MAPS[map].title}. Is that okay?` : 'Watching this run uses the standard map, so your own layout (Map Editor) is switched off until the next reload. It is kept. Is that okay?';
+    if (!confirm(q)) return; store.set('lbPending', { id, day, map }); if (map !== MAP_ID) store.set('map', map); else store.set('layoutOffOnce', true);
+    procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); }); return; }
+  LB.view = map; await lbPick(id); await lbWatch();
+}
+setTimeout(async () => { const P = store.get('lbPending', null); if (!P) return; store.set('lbPending', null); if (P.map !== MAP_ID) return;
+  lbOpen('menu'); LB.view = P.map; LB.day = P.day; await lbPick(P.id); await lbWatch(); }, 1500);
 async function lbWatch() {
   const R = LB.open; if (!R || !R.run || !R.run.trace || R.run.map !== MAP_ID) return;
   try { guestOpen(await FlightLog.unpack(R.run.trace), R.run.events, { name: R.run.name, flight: R.run.flight || R.id, source: 'board', ref: R.id }, false); }
@@ -395,6 +407,7 @@ document.addEventListener('click', e => {
 setTimeout(async () => { const f = store.get('deskPending', null); if (!f) return; store.set('deskPending', null); if (!ghMenus() || !gh.token) return; deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); if (desk.info[f]) deskPick(f); }, 1500);
 
 document.addEventListener('click', e => {
+  { const pb = e.target.closest('[data-lbplay]'); if (pb) { lbPlay(pb.dataset.lbplay, pb.dataset.lbmap); return; } }
   const b = e.target.closest('[data-lb]'), row = e.target.closest('[data-lbrun]');
   if (b) { const a = b.dataset.lb; if (a === 'post') lbPost(); if (a === 'open') lbOpen(); if (a === 'refresh') lbLoad(lbToday()).then(lbRender);
     if (a === 'watch') lbWatch(); if (a === 'prev' || a === 'next') lbView(a === 'next' ? 1 : -1);

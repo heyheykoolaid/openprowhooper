@@ -243,7 +243,7 @@ body.meOn #music { display: none !important; }
 #meBar { position: absolute; left: 0; right: 0; top: 0; height: 40px; display: flex; gap: 6px; align-items: center; padding: 4px 10px; background: rgba(14,13,12,.92); border-bottom: 2px solid #0b0a09; }
 #meBar button { padding: 5px 10px; font-size: 12px; } #meBar .sep { width: 14px; } #meBar .mePlacing { margin-left: 12px; font: 12px var(--mono); color: var(--acid); }
 #meSide .meFields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; } #meSide .meFields label { display: flex; flex-direction: column; font: 11px var(--mono); } #meSide .meFields input { width: 100%; box-sizing: border-box; }
-#meSide .meEnd { margin-top: 16px; } #meSide .bad { color: #ff7a5c; }
+#meSide .meEnd { margin-top: 16px; } #meSide .meMode button.on { background: var(--acid); color: #111; } #meSide .bad { color: #ff7a5c; }
 #meHint { position: absolute; left: 210px; right: 300px; bottom: 0; height: 24px; padding: 4px 10px; font: 11px var(--mono); color: #cfc6b4; background: rgba(14,13,12,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #recapUI { position: absolute; inset: 0; pointer-events: none; } #recapUI > * { pointer-events: auto; }
 #recapSide { position: absolute; right: 0; top: 0; bottom: 0; width: 350px; overflow: auto; background: #12141aee; padding: 10px 12px; color: #eee; font-size: 13px; }
@@ -255,7 +255,7 @@ body.meOn #music { display: none !important; }
 #recapNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
 #recapBar { position: absolute; left: 12px; right: 362px; bottom: 10px; background: #12141aee; border: 1px solid #2c2f3a; padding: 8px 10px; color: #eee; font: 13px system-ui, sans-serif; }
 .lbT { width: 100%; border-collapse: collapse; font: 13px var(--mono); } .lbT td, .lbT th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #ffffff18; } .lbT td:nth-child(3) { text-align: right; font-weight: 700; }
-.lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
+.lbT .lbPlay { padding: 1px 9px; font-size: 12px; min-width: 0; } .lbT td.lbPlayC { width: 30px; text-align: right; } .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
 .deskList { max-height: 58vh; overflow: auto; margin-top: 8px; } .deskList tr[data-deskfile] { cursor: pointer; } .deskList tr[data-deskfile]:hover { background: #ffffff14; }
 .lbCols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; max-height: 56vh; } .lbCols > div { overflow: auto; } .lbSheet { font: 12px var(--mono); padding-left: 26px; }
 #lbBox { margin-top: 14px; border-top: 1px solid #ffffff22; padding-top: 8px; } #lbBox h3 small, #lbPanel h3 small { font-weight: 400; opacity: .7; }
@@ -510,6 +510,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*TRACKS*/</script>
 <script>/*ART*/</script>
 <script>/*MAPTHUMBS*/</script>
+<script>/*OFFICIAL*/</script>
 <script>/*TRICKS*/</script>
 <script>/*SIM*/</script>
 <script>/*MAPS*/</script>
