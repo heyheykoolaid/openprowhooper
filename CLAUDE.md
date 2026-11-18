@@ -77,8 +77,11 @@ Second log (2026-11-18, `blackbox/2026-11-18-choppoop/`, another pilot's similar
 board, Betaflight 2026.6 alpha, a near-stock tune: PIDs 45/80/30, stock 4.5 filters, master 100, no thrust linear; 9 logs):
 against the Air65 Champion build (0702 II 30000KV) roll / pitch lag 6-9.5 ms real vs 7.5-9 sim with no delay (the owner's quad,
 11-12 ms, is the laggier one), hover 32-41 % vs 33-45 % (weight 0.88: like every pilot's slider), unasked wobble 9-13 °/s
-real vs 3-4 sim; the joint fit again picks 3 ms and shake 0.7. Defaults not changed (the owner had just asked for less jitter):
-both logs say a real whoop wobbles 2-3x what the default sim does; the sliders cover it.
+real vs 3-4 sim; the joint fit again picks 3 ms and shake 0.7. Then the owner: "adjust to the real quad": **the game's defaults are now fitted to this whoop** (`FEEL_DEF`,
+`WEIGHT_DEF` in game.js): wobble 2.25 at `shakeTau` 0.1 s, on movement (sim 6.5 / 7.2 °/s 2-20 Hz, real 8.7 / 6.5; tracking
+error 5.3 / 4.8 % vs 7.6 / 6), no loop delay (lag 8.1 / 7.8 vs 7.7 / 7.8 ms), Weight 90 % (hover 37 % real vs 39 % sim).
+Pilots still on FEEL3 get them once (`store 'feel4'`), Weight 100 % becomes 90 % once; the physics (Node) is unchanged.
+Presets in Wobble and lag: "Laggier whoop (+3 ms)" (the owner's Air2), "Calm" (= FEEL3).
 
 ## Feel Lab: the sim's feel fitted to real Blackbox logs (src/feelfit.js, tools/feelfit.js, src/feellab.js; 2026-11-18)
 `FeelFit` (pure, Node and browser; a plain script after bbl.js) takes a decoded log, finds the longest flight (throttle chops

@@ -169,17 +169,17 @@ function pilotAsk() {
 const FEEL_NAMES = { weightFeel: 'Weight', dragFeel: 'Drag', washFeel: 'Prop wash', motorFeel: 'Motor response', sagFeel: 'Battery sag', groundFeel: 'Ground effect' };
 function physAsk() {
   if (store.get('phys2Asked', false)) return;
-  const off = Object.keys(S.FEEL_KEYS).filter(k => Number.isFinite(+tune[k]) && Math.abs(+tune[k] - 1) > 0.001);
+  const off = Object.keys(S.FEEL_KEYS).filter(k => Number.isFinite(+tune[k]) && Math.abs(+tune[k] - (k === 'weightFeel' ? WEIGHT_DEF : 1)) > 0.001);
   if (!off.length) { store.set('phys2Asked', true); return; }
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>The whoop physics got an update</h3>
     <p>The motors now match the thrust BetaFPV publishes for them and spin up about twice as fast, like real ones. Most pilots had turned the weight down to make up for exactly this, so your settings may now feel too light or twitchy:</p>
     <p><b>${off.map(k => `${FEEL_NAMES[k] || k} ${Math.round(+tune[k] * 100)}%`).join(' · ')}</b></p>
     <p class="note">You can change them any time in the Garage → Advanced.</p>
-    <div class="row"><button data-phys="reset" class="primary">Try the new defaults (all 100%)</button><button data-phys="keep">Keep my settings</button></div></div>`;
+    <div class="row"><button data-phys="reset" class="primary">Try the new defaults</button><button data-phys="keep">Keep my settings</button></div></div>`;
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-phys]'); if (!b) return;
-  if (b.dataset.phys === 'reset') { store.set('feelBefore2', feelSnap()); for (const k of Object.keys(S.FEEL_KEYS)) tune[k] = 1; saveTune(); }
+  if (b.dataset.phys === 'reset') { store.set('feelBefore2', feelSnap()); for (const k of Object.keys(S.FEEL_KEYS)) tune[k] = 1; tune.weightFeel = WEIGHT_DEF; saveTune(); }
   store.set('phys2Asked', true); $('#pilotModal').classList.add('hide'); });
 function pilotWarmAsk() {
   if (store.get('pilot', null) || store.get('warmAsked', false) || anonOn()) return;   // no name chosen: no Warm-up prompt either (owner)

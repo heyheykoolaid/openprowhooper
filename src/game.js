@@ -15,7 +15,14 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
 const abcSort = a => a.slice().sort((x, y) => String(x).localeCompare(String(y), undefined, { sensitivity: 'base', numeric: true }));
 const FEEL3 = { shake: 0.35, shakeTau: 0.2, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 };
 if (!store.get('feel3', false)) { if (tune.shake == null || (tune.shake === 1 && tune.loopDelayMs === 3)) Object.assign(tune, FEEL3); store.set('feel3', true); }
-for (const [k, v] of Object.entries(FEEL3)) if (tune[k] == null) tune[k] = v;
+// Owner, 2026-11-18: "adjust to the real quad": fitted to a second pilot's 30000KV whoop (7 flights, Air65 Champion build):
+// wobble 2.25 at 0.1 s on movement gives its 2-20 Hz wobble (sim 6.5 / 7.2 °/s, real 8.7 / 6.5) and tracking error; its lag
+// (7.7 / 7.8 ms) needs no extra delay; it hovers like 0.9 of the build's weight. Pilots still on FEEL3 (or the first fit) get
+// these once; anyone who moved a slider keeps their own.
+const FEEL_DEF = { shake: 2.25, shakeTau: 0.1, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 }, WEIGHT_DEF = 0.9;
+if (!store.get('feel4', false)) { const on3 = Object.entries(FEEL3).every(([k, v]) => tune[k] === v);
+  if (on3) Object.assign(tune, FEEL_DEF); if (tune.weightFeel == null || tune.weightFeel === 1) tune.weightFeel = WEIGHT_DEF; store.set('feel4', true); }
+for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];
