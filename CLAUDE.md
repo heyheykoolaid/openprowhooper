@@ -192,10 +192,12 @@ bear-resistant bins, the routed park sign and a carved cedar moose; steep-roofed
 ridges, Mt Begbie (SW) and Mt Mackenzie (E), unfogged and pre-hazed; cool sky, softer high sun, grass ground plane.
 Muted materials only (no bright primary plastic). No Trick Park on this map (the pilot's brief: a compact park).
 
-**Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls 6 m beyond every
-collider and the declared bounds, and a ceiling 20 m above the tallest thing (at least 35 m). One object, kind 'edge':
-the Surveyor skips it, and the detector never counts it as a tap, wall ride, over/under or pole. `w.bounds` is then the
-closed-in area (the sun's shadow box uses it) and `w.ceiling` its height. The Node tests' base `buildPlayground()` has none.
+**Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls `EDGE_OUT` 25 m
+beyond every collider and the declared bounds, and a ceiling `EDGE_UP` 40 m above the tallest thing (at least 60 m):
+generous, they only stop endless flying (a tester's powerloop out through the warehouse skylight hit the first, tighter
+ones). Keep them inside the 240 m ground plane. One object, kind 'edge': the Surveyor skips it, and the detector never
+counts it as a tap, wall ride, over/under or pole. `w.edges` is where the walls are, `w.ceiling` their height, and
+`w.bounds` the built area plus 6 m (the sun's shadow box uses it). The Node tests' base `buildPlayground()` has none.
 
 ## Performance (2026-11-17, testers reported heavy CPU) — the overlay is Options → Graphics or F3
 - **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,
