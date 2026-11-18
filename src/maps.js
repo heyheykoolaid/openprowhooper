@@ -9,7 +9,7 @@
     let grp = null;   // objects made inside together() are one piece in the map editor (a play unit and its roof and slide)
     const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; if (grp != null) o.grp = grp; objs.push(o); return o; };
     const together = fn => { const was = grp; grp = nid; try { return fn(); } finally { grp = was; } };
-    const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
+    const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (opts.noSurvey) b.leaf = true; if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
     const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) { const c = makeCapsule(a, b, r); if (opts.leafSolid || opts.noSurvey) c.leaf = true; o.prims.push(c); }   /* leaf: solid, but never a pole or an over/under of its own */ o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
     // a drawn cone's collision (conifer tiers): capsules stacked up the axis, each as wide as fits inside the cone at its
     // top (k: share of the drawn radius, the bough tips give), the lowest resting on the base; leaf: not a pole, not surveyed
@@ -569,10 +569,10 @@
       const lerp = (a, b, f) => v3(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f), stems = [];
       if (!split) stems.push({ foot: v3(x, 0, z), top: v3(x + lx, h, z + lz), r: 0.12 });
       else { const a = spot(z, x) * Math.PI * 2, sx = 0.9 + 0.5 * spot(x + 1, z), d = v3(Math.cos(a), 0, Math.sin(a)), fork = v3(x, 0.35, z); pipe(o, v3(x, 0, z), fork, 0.15, 'birchBark');
-        for (const k of [-1, 1]) stems.push({ foot: fork, top: v3(x + lx * 0.5 + d.x * sx * k * 1.3, h * (k < 0 ? 0.97 : 0.86), z + lz * 0.5 + d.z * sx * k * 1.3), r: 0.095 });
-        const Y = Math.min(stems[0].top.y, stems[1].top.y), y0 = Y * 0.3, y1 = Y * 0.55, at = (st, y) => lerp(st.foot, st.top, (y - st.foot.y) / (st.top.y - st.foot.y));
+        for (const k of [-1, 1]) stems.push({ foot: fork, top: v3(x + lx * 0.5 + d.x * sx * k * 2.1, h * (k < 0 ? 0.97 : 0.86), z + lz * 0.5 + d.z * sx * k * 2.1), r: 0.095 });   /* a V wide enough to fly between the stems */
+        const Y = Math.min(stems[0].top.y, stems[1].top.y), y0 = Y * 0.17, y1 = Y * 0.31,   /* below the lowest branches (they start at 0.34) */ at = (st, y) => lerp(st.foot, st.top, (y - st.foot.y) / (st.top.y - st.foot.y));
         const A0 = at(stems[0], y0), B0 = at(stems[1], y0), w0 = Math.hypot(A0.x - B0.x, A0.z - B0.z);
-        o.gapAfter = { c: v3((A0.x + B0.x) / 2, (y0 + y1) / 2, (A0.z + B0.z) / 2), n: v3(-d.z, 0, d.x), hu: Math.max(0.15, w0 / 2 - 0.12), hv: (y1 - y0) / 2, u: d }; }
+        const hu = w0 / 2 - 0.095 - 0.07; if (hu >= 0.12) o.gapAfter = { c: v3((A0.x + B0.x) / 2, (y0 + y1) / 2, (A0.z + B0.z) / 2), n: v3(-d.z, 0, d.x), hu, hv: (y1 - y0) / 2 - 0.05, u: d }; }   /* the V is narrowest at the bottom: measured there, less both trunks and a margin */
       for (const st of stems) { const mid = lerp(st.foot, st.top, 0.55); mid.x += rg(-0.15, 0.15); mid.z += rg(-0.15, 0.15);   // a slight bow, tapering
         pipe(o, st.foot, mid, st.r, 'birchBark'); pipe(o, mid, st.top, st.r * 0.62, 'birchBark', { leafSolid: true });
         const at = f => f < 0.55 ? lerp(st.foot, mid, f / 0.55) : lerp(mid, st.top, (f - 0.55) / 0.45), nb = split ? 7 : 9, ph = rg(0, Math.PI * 2);
@@ -800,7 +800,7 @@
   // name, copied exactly as it stands in its map (shapes, looks, tags, lights) and set down at the origin. Not the ground,
   // the shells of buildings and halls, map edges, or anything over 40 m across. Built once, on first use, from the maps as
   // generated (no layouts), so it never depends on anyone's edits. Hand-made assets above keep their names.
-  const RAW = { moose: () => buildMoose(), school: () => buildSchool(), clappy: () => buildClappy(), warehouse: () => buildWarehouse(), playground: () => addPlaygroundExtras(S.buildPlayground()) };
+  const RAW = { moose: () => buildMoose(), school: () => buildSchool(), clappy: () => buildClappy(), warehouse: () => buildWarehouse(), ship: () => buildShip(), playground: () => addPlaygroundExtras(S.buildPlayground()) };
   let CATALOG = null;
   function catalog() {
     if (CATALOG) return CATALOG; CATALOG = { byMap: {} };
@@ -838,11 +838,298 @@
     w.objs.push(o); w.bounds = B; w.edges = { x: [x0, x1], z: [z0, z1] }; w.ceiling = H; return w;
   }
 
+  // ================================================================ SHIP DRUGS
+  // The pilot's brief: a gaudy 1980s cruise ship in a night-time police raid (Miami Vice, vaporwave, a fever dream). 1 unit = 1 m.
+  // x runs aft (-48) to bow (+52), z across the ship (port -, the pier side; starboard +). Water is the ground (y 0); the
+  // main deck (top of the hull) is y 6; the superstructure has three storeys: L1 6-9.7, L2 10-13.7, L3 14-17.7, roof 18.
+  //  - Aft open deck: the raid perimeter (sawhorses, luggage carts, crime-scene tape at 1.2 m, contraband pallets with
+  //    0.4 x 0.4 m tunnels); the Hold (L1, x -30..-8): seized cargo and more tunnels.
+  //  - L2 west: the Breached Cabins: a wavy Memphis corridor, ten staterooms with doors blown to 0.45 m gaps, glassless
+  //    mirror frames between rooms, balconies outside.
+  //  - Roof west: the Lido Deck: the drained pool (deep end 4 m), the spiral slide tube (1.0 m inside), diving boards,
+  //    lifeguard tower, DJ truss.
+  //  - Middle: the Grand Atrium (x -8..12, three storeys): casino floor, balconies, sweeping stairs, the chandelier's tiered
+  //    neon hoops (smallest 0.8 m inside), a 0.6 x 0.6 m backlit grid, a skylight roof with shattered panes.
+  //  - Forward: the Starlight Lounge (double height) under shattered skylights, the bow deck; starboard lifeboats hang 0.5 m
+  //    off the windows; on the pier: police cruisers, floodlights, sodium lamps, the gangway, and the port crane whose boom
+  //    leans over the lounge for dives straight down through the skylights.
+  function buildShip() {
+    const { add, sub, mul, norm, cross } = S;
+    const K = kit(), { O, box, pipe, ball, neon } = K, { bar } = parts(K), zones = [];
+    const NS = { noSurvey: true }, ND = { noCollide: true }, GL = { noCollide: true, glow: true };
+    // a wall along x (at z = fixed) or along z (at x = fixed) from u0 to u1, y0..y1, with rectangular holes {a, b, y0, y1}
+    const wallH = (o, axis, fixed, u0, u1, y0, y1, t, holes, mat, opts = NS) => {
+      const seg = (a, b, ya, yb) => { if (b - a < 0.01 || yb - ya < 0.01) return; const cu = (a + b) / 2, cy = (ya + yb) / 2, hu = (b - a) / 2, hy = (yb - ya) / 2;
+        if (axis === 'x') box(o, v3(cu, cy, fixed), v3(hu, hy, t / 2), mat, 0, 0, 0, opts); else box(o, v3(fixed, cy, cu), v3(t / 2, hy, hu), mat, 0, 0, 0, opts); };
+      const cuts = [...new Set([u0, u1, ...holes.flatMap(h => [h.a, h.b])])].filter(x => x >= u0 && x <= u1).sort((p, q) => p - q);
+      for (let i = 0; i + 1 < cuts.length; i++) { const a = cuts[i], b = cuts[i + 1], m = (a + b) / 2, hs = holes.filter(h => h.a <= m && h.b >= m).sort((p, q) => p.y0 - q.y0);
+        let y = y0; for (const h of hs) { seg(a, b, y, h.y0); y = Math.max(y, h.y1); } seg(a, b, y, y1); } };
+    const gapO = (name, c, n, u, hu, hv) => O(name, 'gap', { gap: { c, n, u, hu, hv } });
+    // a ring of capsules (a hoop) round centre c in the plane across normal n; R = centre line radius, r = tube radius
+    const hoop = (o, c, n, R, r, segs, mat, opts = { glow: true, noSurvey: true }) => { const nn = norm(n), a = Math.abs(nn.y) < 0.9 ? v3(0, 1, 0) : v3(1, 0, 0), u = norm(cross(a, nn)), w = cross(nn, u);
+      const P = k => { const t = k / segs * Math.PI * 2; return v3(c.x + (u.x * Math.cos(t) + w.x * Math.sin(t)) * R, c.y + (u.y * Math.cos(t) + w.y * Math.sin(t)) * R, c.z + (u.z * Math.cos(t) + w.z * Math.sin(t)) * R); };
+      for (let k = 0; k < segs; k++) pipe(o, P(k), P(k + 1), r, mat, opts); return { u, w }; };
+    const rail = (o, a, b, y, posts = 1.2) => { pipe(o, v3(a.x, y, a.z), v3(b.x, y, b.z), 0.03, 'brass'); const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / posts));
+      for (let i = 0; i <= n; i++) { const f = i / n; pipe(o, v3(a.x + (b.x - a.x) * f, y - 1.0, a.z + (b.z - a.z) * f), v3(a.x + (b.x - a.x) * f, y, a.z + (b.z - a.z) * f), 0.018, 'brass', NS); }
+      neon(o, v3((a.x + b.x) / 2, y - 0.08, (a.z + b.z) / 2), v3(Math.abs(b.x - a.x) / 2 + 0.01, 0.012, Math.abs(b.z - a.z) / 2 + 0.01), o.railGlow || 'neonPink'); };
+    const slope = (o, x0, y0, x1, y1, z, hw, mat) => { const L = Math.hypot(x1 - x0, y1 - y0), a = Math.atan2(y1 - y0, x1 - x0); box(o, v3((x0 + x1) / 2, (y0 + y1) / 2, z), v3(L / 2, 0.12, hw), mat, 0, 0, a); };
+    const DECK = 6, L2 = 10, L3 = 14, ROOF = 18, T = 0.15;
+
+    // ---------------------------------------------------------------- the harbour, the pier, the hull
+    zones.push({ shape: 'zone', mat: 'deckWet', c: v3(0, 0.004, -19), h: v3(52, 0, 6.2) });   // wet sheen under the pier edge
+    const pier = O('Pier', 'deco'); box(pier, v3(0, 0.75, -19), v3(52, 0.75, 6), 'concrete');
+    for (let x = -48; x <= 48; x += 6) { pipe(pier, v3(x, 1.5, -13.4), v3(x, 2.1, -13.4), 0.18, 'darkMetal'); box(pier, v3(x + 3, 1.52, -13.2), v3(2.9, 0.02, 0.12), 'plasticYellow', 0, 0, 0, ND); }
+    const hull = O('Hull', 'wall'); box(hull, v3(-2, DECK / 2, 0), v3(46, DECK / 2, 11), 'hullWhite');
+    box(hull, v3(46.5, DECK / 2, 0), v3(2.5, DECK / 2, 7.5), 'hullWhite'); box(hull, v3(50.5, DECK / 2, 0), v3(1.5, DECK / 2, 3.6), 'hullWhite');
+    for (const s of [-1, 1]) { box(hull, v3(-2, 1.4, s * 11.02), v3(46, 0.45, 0.02), 'hullNavy', 0, 0, 0, ND); box(hull, v3(-2, 2.3, s * 11.02), v3(46, 0.06, 0.02), 'neonCyan', 0, 0, 0, GL);
+      for (let x = -46; x <= 42; x += 2.2) box(hull, v3(x, 4.2, s * 11.03), v3(0.22, 0.22, 0.02), 'windowLit', 0, 0, 0, GL); }
+    box(hull, v3(-2, DECK + 0.01, 0), v3(46, 0.01, 11), 'teakWet', 0, 0, 0, ND);
+    const hrail = O('Deck Rail', 'overunder'); hrail.railGlow = 'neonCyan'; for (const s of [-1, 1]) rail(hrail, v3(-47.5, 0, s * 10.85), v3(43.5, 0, s * 10.85), DECK + 1.05, 2.4);
+    rail(hrail, v3(-47.85, 0, -10.6), v3(-47.85, 0, 10.6), DECK + 1.05, 2.4);
+    // the gangway from the pier up to the main deck (port side), and its rails
+    { const g = O('Gangway', 'deco'); const x = -20, z0 = -13.2, z1 = -10.9, L = Math.hypot(z1 - z0, DECK - 1.5), a = Math.atan2(DECK - 1.5, z1 - z0);
+      box(g, v3(x, (1.5 + DECK) / 2, (z0 + z1) / 2), v3(0.9, 0.06, L / 2), 'darkMetal', 0, -a, 0); for (const s of [-1, 1]) pipe(g, v3(x + s * 0.9, 2.5, z0), v3(x + s * 0.9, DECK + 1, z1), 0.03, 'brass', NS); }
+
+    // ---------------------------------------------------------------- police raid on the pier
+    const car = (x, z, ry, n) => { const o = O('Police Cruiser', 'deco'), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, 1.5 + y, z - u * s + w * c);
+      box(o, P(0, 0.55, 0), v3(2.35, 0.32, 0.92), n % 2 ? 'carWhite' : 'carBlack', ry); box(o, P(-0.2, 1.08, 0), v3(1.25, 0.24, 0.84), 'carBlack', ry);
+      box(o, P(-0.2, 1.36, -0.3), v3(0.18, 0.06, 0.32), 'policeRed', ry); box(o, P(-0.2, 1.36, 0.3), v3(0.18, 0.06, 0.32), 'policeBlue', ry);
+      for (const u of [-1.5, 1.5]) for (const w of [-0.95, 0.95]) pipe(o, P(u, 0.32, w * 0.85), P(u, 0.32, w * 1.05), 0.32, 'rubberBlack', NS);
+      for (const w of [-1, 1]) for (const u of [0.55, -0.6]) box(o, P(u + 0.35, 0.72, w * 1.45), v3(0.55, 0.36, 0.03), n % 2 ? 'carWhite' : 'carBlack', ry + w * 1.05);   // doors flung open
+      return o; };
+    [[-42, -20.5, 0.15], [-33, -21, -0.2], [-12, -20.8, 0.3], [-3, -21.2, -0.1], [8, -20.6, 0.25], [17, -21, -0.3], [27, -20.8, 0.1]].forEach(([x, z, ry], i) => car(x, z, ry, i));
+    for (const [x, z, col] of [[-38, -20.5, 'red'], [-8, -21, 'blue'], [12, -21, 'red'], [-25, -20.5, 'blue']]) O('Lightbar', 'deco', { light: v3(x, 3.4, z), lightColor: col === 'red' ? 0xff003c : 0x0088ff, lightPower: 45, lightRange: 22, strobe: col });
+    // sodium dock lamps, tripod floodlights, evidence cones, tape round the cars
+    for (const x of [-30, 0, 30]) { const l = O('Dock Lamp', 'pole', { light: v3(x, 8.2, -16), lightColor: 0xffa040, lightPower: 55, lightRange: 28 });
+      pipe(l, v3(x, 1.5, -16), v3(x, 8.4, -16), 0.12, 'darkMetal'); pipe(l, v3(x, 8.4, -16), v3(x, 8.4, -14.6), 0.06, 'darkMetal', NS); box(l, v3(x, 8.25, -14.6), v3(0.35, 0.12, 0.25), 'sodium', 0, 0, 0, GL); }
+    const tripod = (x, y, z, aim) => { const o = O('Floodlight', 'deco'); for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; pipe(o, v3(x + Math.cos(a) * 0.7, y, z + Math.sin(a) * 0.7), v3(x, y + 2.6, z), 0.03, 'darkMetal', NS); }
+      box(o, v3(x, y + 2.85, z), v3(0.45, 0.32, 0.18), 'darkMetal', aim); box(o, v3(x + Math.sin(aim) * 0.19, y + 2.85, z + Math.cos(aim) * 0.19), v3(0.4, 0.27, 0.01), 'uvChalk', aim, 0, 0, GL); return o; };
+    tripod(-36, 1.5, -15.5, 0.2); tripod(4, 1.5, -15.5, -0.3); tripod(-44, DECK, 7, 2.2); tripod(-33, DECK, -7.5, 0.6);
+    const cone = (x, y, z, n) => { const o = O('Evidence Cone', 'deco'); pipe(o, v3(x, y, z), v3(x, y + 0.32, z), 0.14, 'coneOrange', { cone: true }); box(o, v3(x, y + 0.04, z), v3(0.16, 0.04, 0.16), 'plasticYellow'); return o; };
+    [[-40, 1.5, -17.5], [-28, 1.5, -18], [-16, 1.5, -17], [0, 1.5, -17.6], [14, 1.5, -18], [-40, DECK, -3], [-35, DECK, 4.5], [-2, DECK, -4], [6, DECK, 3]].forEach(([x, y, z], i) => cone(x, y, z, i + 1));
+    const tape = (name, a, b, y) => { const o = O(name, 'overunder'), L = Math.hypot(b.x - a.x, b.z - a.z), ry = Math.atan2(-(b.z - a.z), b.x - a.x);
+      box(o, v3((a.x + b.x) / 2, y, (a.z + b.z) / 2), v3(L / 2, 0.035, 0.004), 'tape', ry); for (const p of [a, b]) pipe(o, v3(p.x, y - 1.2 + (y - 1.2 < 2 ? 0 : 0), p.z), v3(p.x, y + 0.05, p.z), 0.03, 'darkMetal');
+      o.obstacle = { a: v3(a.x, 0, a.z), b: v3(b.x, 0, b.z), under: y - 0.035, over: y + 0.035 }; return o; };
+    tape('Crime Scene Tape', v3(-46, 0, -14.2), v3(-20.5, 0, -14.2), 1.5 + 1.2); tape('Crime Scene Tape', v3(-19.5, 0, -14.2), v3(6, 0, -14.2), 1.5 + 1.2);
+
+    // ---------------------------------------------------------------- aft deck: the raid perimeter and cargo
+    zones.push({ shape: 'zone', mat: 'hazard', c: v3(-39, DECK + 0.02, 0), h: v3(0.3, 0, 9) });
+    for (const x of [-46, -40, -34]) tape('Crime Scene Tape', v3(x, 0, -9.6), v3(x, 0, 9.6), DECK + 1.2);   // exactly 1.2 m up: under it, Matty back over
+    const sawhorse = (x, z, ry) => { const o = O('Sawhorse Barricade', 'overunder'), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, DECK + y, z - u * s + w * c);
+      box(o, P(0, 1.0, 0), v3(1.2, 0.1, 0.03), 'hazard', ry); box(o, P(0, 0.55, 0), v3(1.1, 0.05, 0.02), 'sawhorse', ry, 0, 0, NS);
+      for (const u of [-1.0, 1.0]) for (const w of [-0.3, 0.3]) pipe(o, P(u, 0, w), P(u, 0.95, 0), 0.025, 'sawhorse', NS);
+      const e0 = P(-1.2, 0, 0), e1 = P(1.2, 0, 0); o.obstacle = { a: v3(e0.x, 0, e0.z), b: v3(e1.x, 0, e1.z), under: DECK + 0.9, over: DECK + 1.1 }; return o; };
+    for (const [x, z, ry] of [[-43, -6, 0.1], [-43, 0, -0.05], [-43, 6, 0.08], [-37, -3.5, 0.15], [-37, 3.5, -0.1], [-31.5, -7, 0], [-31.5, 7, 0]]) sawhorse(x, z, Math.PI / 2 + ry);
+    const cart = (x, y, z, ry) => { const o = O('Luggage Cart', 'overunder'), c = Math.cos(ry), s = Math.sin(ry), P = (u, yy, w) => v3(x + u * c + w * s, y + yy, z - u * s + w * c);
+      box(o, P(0, 0.3, 0), v3(0.8, 0.04, 0.45), 'brass', ry); for (const u of [-0.75, 0.75]) for (const w of [-0.4, 0.4]) pipe(o, P(u, 0.3, w), P(u, 1.75, w), 0.025, 'brass', NS);
+      pipe(o, P(-0.75, 1.75, 0), P(0.75, 1.75, 0), 0.03, 'brass'); pipe(o, P(-0.75, 1.75, -0.4), P(-0.75, 1.75, 0.4), 0.025, 'brass', NS); pipe(o, P(0.75, 1.75, -0.4), P(0.75, 1.75, 0.4), 0.025, 'brass', NS);
+      for (const u of [-0.6, 0.6]) pipe(o, P(u, 0.1, -0.45), P(u, 0.1, 0.45), 0.09, 'rubberBlack', NS); box(o, P(0.2, 0.55, 0), v3(0.35, 0.22, 0.28), 'lifeboat', ry + 0.2); return o; };
+    cart(-45, DECK, -2.5, 0.3); cart(-40.5, DECK, 7.5, -0.5); cart(-35, DECK, -8, 1.2); cart(-28, DECK + 0, -10.1 + 0.3, 0);
+    // contraband pallets with a 0.4 x 0.4 m tunnel through each (x-ways): line them up and thread them
+    const pallet = (x, z, y, tiers, ry = 0) => { const o = O('Contraband Pallet', 'deco'), along = Math.abs(Math.sin(ry)) > 0.7;
+      for (let k = 0; k < tiers; k++) { const b = y + k * 1.0, H = (cx, cy, cz, hx, hy, hz, m) => box(o, along ? v3(x + cz, cy, z + cx) : v3(x + cx, cy, z + cz), along ? v3(hz, hy, hx) : v3(hx, hy, hz), m);
+        H(0, b + 0.075, 0, 0.6, 0.075, 0.6, 'oldWood'); H(0, b + 0.35, -0.4, 0.6, 0.2, 0.2, 'contraband'); H(0, b + 0.35, 0.4, 0.6, 0.2, 0.2, 'contraband'); H(0, b + 0.775, 0, 0.6, 0.225, 0.6, 'contraband');
+        gapO('Pallet Tunnel', v3(x, b + 0.35, z), along ? v3(0, 0, 1) : v3(1, 0, 0), along ? v3(1, 0, 0) : v3(0, 0, 1), 0.14, 0.14); }
+      return o; };
+    for (const [x, z, t] of [[-46.5, 4, 1], [-44.3, 4, 2], [-42.1, 4, 1], [-46.5, -5, 2], [-44.3, -5, 1], [-42.1, -5, 1]]) pallet(x, z, DECK, t);
+
+    // ---------------------------------------------------------------- the superstructure shell (west x -30..-8, atrium -8..12, forward 12..34)
+    const SX0 = -30, SX1 = 34, ZW = 9, shell = O('Superstructure', 'wall'), WT = 0.2;
+    // aft wall (x -30): L1 cargo door 6 x 3, L2 corridor window 2.4 x 2.4, L3 closed
+    wallH(shell, 'z', SX0, -ZW, ZW, DECK, ROOF, WT, [{ a: -3, b: 3, y0: DECK, y1: DECK + 3 }, { a: -1.2, b: 1.2, y0: L2, y1: L2 + 2.4 }], 'hullWhite');
+    gapO('Cargo Door', v3(SX0, DECK + 1.5, 0), v3(1, 0, 0), v3(0, 0, 1), 2.92, 1.42); gapO('Corridor Window', v3(SX0, L2 + 1.2, 0), v3(1, 0, 0), v3(0, 0, 1), 1.04, 1.12);
+    // the forward wall (x 34): the bow opening into the Starlight Lounge, 4 x 4 m
+    wallH(shell, 'z', SX1, -ZW, ZW, DECK, L3, WT, [{ a: -2, b: 2, y0: DECK, y1: DECK + 4 }], 'hullWhite'); gapO('Bow Doors', v3(SX1, DECK + 2, 0), v3(1, 0, 0), v3(0, 0, 1), 1.92, 1.92);
+    // floors and roofs
+    const slab = (name, x0, x1, z0, z1, y, mat = 'hullWhite', kind = 'deco') => { const o = O(name, kind); box(o, v3((x0 + x1) / 2, y - T, (z0 + z1) / 2), v3((x1 - x0) / 2, T, (z1 - z0) / 2), mat, 0, 0, 0, NS); return o; };
+    slab('Hold Ceiling', SX0, -8, -ZW, ZW, L2); slab('Cabin Deck Ceiling', SX0, -8, -ZW, ZW, L3);
+    // roof over the west section with the pool cut out of it (pool x -27..-13, z -5..5)
+    slab('Lido Deck', SX0, -27, -ZW, ZW, ROOF, 'teakWet'); slab('Lido Deck', -13, -8, -ZW, ZW, ROOF, 'teakWet'); slab('Lido Deck', -27, -13, -ZW, -5, ROOF, 'teakWet'); slab('Lido Deck', -27, -13, 5, ZW, ROOF, 'teakWet');
+    // west outer walls: L1 hold (port door), L2 cabins (balcony doors, built with the cabins), L3 closed
+    for (const s of [-1, 1]) { wallH(shell, 'x', s * ZW, SX0, -8, DECK, L2 - 0.3, WT, s < 0 ? [{ a: -21, b: -19, y0: DECK, y1: DECK + 2.5 }] : [], 'hullWhite'); wallH(shell, 'x', s * ZW, SX0, -8, L3 - 0.3, ROOF, WT, [], 'hullWhite');
+      box(shell, v3(-19, L3 + 1.5, s * (ZW + 0.11)), v3(11, 0.05, 0.01), 'neonMagenta', 0, 0, 0, GL); }
+    gapO('Hold Side Door', v3(-20, DECK + 1.25, -ZW), v3(0, 0, 1), v3(1, 0, 0), 0.92, 1.17);
+
+    // ---------------------------------------------------------------- the Hold (L1 west): seized cargo, lines of tunnels
+    { const hold = O('Hold Floor', 'deco'); box(hold, v3(-19, DECK + 0.01, 0), v3(11, 0.01, ZW), 'deckWet', 0, 0, 0, ND); }
+    for (const z of [-6, -3, 3, 6]) for (const x of [-27, -24.6, -22.2, -15, -12.6, -10.2]) pallet(x, z, DECK, (Math.abs(x + z) % 3) < 1 ? 2 : 1);
+    cart(-18.5, DECK, -7.4, 0.2); cart(-19.5, DECK, 7.2, -0.3);
+    O('Hold Lamp', 'deco', { light: v3(-19, L2 - 0.6, 0), lightColor: 0xffa040, lightPower: 30, lightRange: 18 });
+
+    // ---------------------------------------------------------------- L2 west: the Breached Cabins
+    { const cor = O('Cabin Corridor', 'wall'), CW = 1.2, Y0 = L2, Y1 = L3 - 0.3, x0 = SX0, x1 = -8, n = 5, CL = (x1 - x0) / n;
+      box(cor, v3((x0 + x1) / 2, L2 + 0.01, 0), v3((x1 - x0) / 2, 0.01, CW), 'carpet', 0, 0, 0, ND);   // loud carpet
+      for (const s of [-1, 1]) {
+        // the corridor wall, drawn wavy (short panels nudged on a sine), with a doorway into each cabin
+        for (let i = 0; i < n; i++) { const cx = x0 + CL * (i + 0.5), dA = cx - 0.45, dB = cx + 0.45;
+          for (let u = x0 + CL * i; u < x0 + CL * (i + 1) - 1e-6; u += 1.1) { const a = u, b = Math.min(u + 1.1, x0 + CL * (i + 1)), z = s * (CW + 0.06 + 0.05 * Math.sin(a * 2.3 + s));
+            const pieces = b <= dA || a >= dB ? [[a, b]] : [[a, Math.min(b, dA)], [Math.max(a, dB), b]];
+            for (const [p0, p1] of pieces) if (p1 - p0 > 0.01) box(cor, v3((p0 + p1) / 2, (Y0 + Y1) / 2, z), v3((p1 - p0) / 2, (Y1 - Y0) / 2, 0.06), s < 0 ? 'memphis' : 'memphisPink', 0, 0, 0, NS);
+            if (a < dB && b > dA) box(cor, v3(cx, (Y0 + 2.1 + Y1) / 2, s * (CW + 0.06)), v3(0.45, (Y1 - Y0 - 2.1) / 2, 0.06), s < 0 ? 'memphis' : 'memphisPink', 0, 0, 0, NS); }
+          // the door, blown half off its hinges: a 0.45 m leaf hanging at an angle, 0.45 m clear beside it
+          const dr = O('Breached Door', 'deco'); box(dr, v3(dA + 0.2 + 0.03, Y0 + 1.0, s * (CW + 0.06) + s * 0.07), v3(0.2, 0.98, 0.025), 'doorWood', s * 0.28);   /* leaf edge ~1 cm short of the centre: 0.46 m clear */
+          box(dr, v3(cx + 0.2, Y0 + 0.12, s * (CW + 1.3)), v3(0.42, 0.04, 0.9), 'doorWood', 0.4, 0, 0.12);   // the other leaf, on the floor inside
+          gapO('Breached Doorway', v3(dB - 0.23, Y0 + 1.05, s * (CW + 0.06)), v3(0, 0, 1), v3(1, 0, 0), 0.16, 0.95); }
+        // walls between cabins, each with a glassless mirror frame (0.8 x 0.6 m) to fly through to the next room
+        for (let i = 1; i < n; i++) { const x = x0 + CL * i, zm = s * 5; wallH(cor, 'z', x, s < 0 ? -ZW : CW + 0.1, s < 0 ? -(CW + 0.1) : ZW, Y0, Y1, 0.12, [{ a: zm - 0.4, b: zm + 0.4, y0: Y0 + 1.3, y1: Y0 + 1.9 }], 'memphis');
+          for (const [dz, dy, hz, hy] of [[0, 0.33, 0.47, 0.035], [0, -0.33, 0.47, 0.035], [0.44, 0, 0.035, 0.33], [-0.44, 0, 0.035, 0.33]]) box(cor, v3(x, Y0 + 1.6 + dy, zm + dz), v3(0.08, hy, hz), 'mirrorFrame', 0, 0, 0, ND);
+          gapO('Mirror Frame', v3(x, Y0 + 1.6, zm), v3(1, 0, 0), v3(0, 0, 1), 0.34, 0.24); }
+        // the outer wall: a balcony door in every cabin, balconies with brass rails outside
+        const holes = []; for (let i = 0; i < n; i++) { const cx = x0 + CL * (i + 0.5); holes.push({ a: cx - 0.5, b: cx + 0.5, y0: Y0, y1: Y0 + 2.1 }); gapO('Balcony Door', v3(cx, Y0 + 1.06, s * ZW), v3(0, 0, 1), v3(1, 0, 0), 0.44, 0.97); }
+        wallH(shell, 'x', s * ZW, x0, x1, Y0, Y1, WT, holes, 'hullWhite');
+        const bal = O('Cabin Balcony', 'deco'); box(bal, v3((x0 + x1) / 2, L2 - 0.12, s * (ZW + 0.8)), v3((x1 - x0) / 2, 0.12, 0.8), 'teakWet');
+        const br = O('Balcony Rail', 'overunder'); br.railGlow = 'neonCyan'; rail(br, v3(x0, 0, s * (ZW + 1.55)), v3(x1, 0, s * (ZW + 1.55)), L2 + 1.05, 1.1);
+        for (let i = 1; i < n; i++) box(bal, v3(x0 + CL * i, L2 + 0.55, s * (ZW + 0.8)), v3(0.03, 0.55, 0.75), 'glassBlock');
+        // inside each cabin: a bed, an overturned lamp, chalk outlines and spilled powder glowing under UV
+        for (let i = 0; i < n; i++) { const cx = x0 + CL * (i + 0.5), cz = s * 6.5, c2 = O('Stateroom', 'deco'); box(c2, v3(cx - 0.9, L2 + 0.3, cz), v3(0.95, 0.3, 1.0), 'memphisPink');
+          box(c2, v3(cx + 0.9, L2 + 0.012, s * 3.6), v3(0.5, 0.004, 0.22), 'uvChalk', 0.7, 0, 0, GL); ball(c2, v3(cx + 1.3, L2 + 0.02, s * 4.5), 0.25, 'uvChalk', { noCollide: true, glow: true }); } }
+      // the corridor's UV: chalk outlines of bodies on the carpet, evidence tags
+      for (const x of [-26, -17.5, -11]) { box(cor, v3(x, L2 + 0.025, 0.1), v3(0.6, 0.004, 0.25), 'uvChalk', 0.4, 0, 0, GL); box(cor, v3(x + 0.8, L2 + 0.03, -0.5), v3(0.08, 0.02, 0.05), 'plasticYellow', 0, 0, 0, ND); }
+      O('Corridor Light', 'deco', { light: v3(-19, L3 - 0.8, 0), lightColor: 0xff4fd0, lightPower: 18, lightRange: 14 }); }
+
+    // ---------------------------------------------------------------- roof west: the Lido Deck and the empty pool
+    { const pool = O('Empty Pool', 'deco'), PX0 = -27, PX1 = -13, PZ = 5, PB = L3;   // deep end floor at y 14 (4 m deep), shallow end ramps up to 16.8
+      for (const s of [-1, 1]) box(pool, v3((PX0 + PX1) / 2, (PB + ROOF) / 2, s * (PZ + 0.1)), v3((PX1 - PX0) / 2, (ROOF - PB) / 2, 0.1), 'poolTile');
+      for (const x of [PX0 - 0.1, PX1 + 0.1]) box(pool, v3(x, (PB + ROOF) / 2, 0), v3(0.1, (ROOF - PB) / 2, PZ), 'poolTile');
+      box(pool, v3(-20, PB + 0.01, 0), v3(7, 0.01, PZ), 'poolTile', 0, 0, 0, ND); slope(pool, PX0, 16.8, -19, PB + 0.2, 0, PZ, 'poolTile');
+      for (const s of [-1, 1]) box(pool, v3(-20, PB + 0.5, s * (PZ - 0.01)), v3(7, 0.03, 0.01), 'neonCyan', 0, 0, 0, GL);
+      box(pool, v3(-16, PB + 0.012, 1.2), v3(0.7, 0.004, 0.3), 'uvChalk', -0.5, 0, 0, GL); }
+    O('Pool Glow', 'deco', { light: v3(-17, 16.5, 0), lightColor: 0x55f6ff, lightPower: 25, lightRange: 16 });
+    // diving boards at the deep end (1 m and 3 m), the lifeguard tower, the DJ truss
+    { const d = O('Diving Platform', 'overunder'); pipe(d, v3(-11.5, ROOF, -2.5), v3(-11.5, ROOF + 3.1, -2.5), 0.22, 'concrete'); box(d, v3(-13.4, ROOF + 1.0, -2.5), v3(2.2, 0.06, 0.3), 'brass');
+      box(d, v3(-13.9, ROOF + 3.0, -2.5), v3(2.7, 0.08, 0.35), 'hullWhite'); d.obstacle = { a: v3(-15.6, 0, -2.5), b: v3(-11.2, 0, -2.5), under: ROOF + 0.94, over: ROOF + 1.06 }; }
+    { const lg = O('Lifeguard Tower', 'overunder'); for (const [dx, dz] of [[-0.6, -0.5], [0.6, -0.5], [-0.6, 0.5], [0.6, 0.5]]) pipe(lg, v3(-20 + dx * 1.3, ROOF, -7.4 + dz * 1.3), v3(-20 + dx, ROOF + 2.4, -7.4 + dz), 0.05, 'hullWhite', NS);
+      box(lg, v3(-20, ROOF + 2.45, -7.4), v3(0.7, 0.05, 0.6), 'lifeboat'); box(lg, v3(-20, ROOF + 2.9, -7.9), v3(0.7, 0.4, 0.05), 'lifeboat'); box(lg, v3(-20, ROOF + 3.6, -7.4), v3(0.8, 0.04, 0.7), 'neonMagenta', 0, 0, 0, { glow: true });
+      lg.obstacle = { a: v3(-20.7, 0, -7.4), b: v3(-19.3, 0, -7.4), under: ROOF + 2.4, over: ROOF + 2.5 }; }
+    { const dj = O('DJ Truss', 'overunder'), y1 = ROOF + 4;
+      for (const x of [-25, -18]) for (const [dx, dz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) pipe(dj, v3(x + dx, ROOF, 7.2 + dz), v3(x + dx, y1, 7.2 + dz), 0.025, 'galv', NS);
+      for (const dy of [0, 0.4]) for (const dz of [-0.2, 0.2]) pipe(dj, v3(-25, y1 - dy, 7.2 + dz), v3(-18, y1 - dy, 7.2 + dz), 0.03, 'galv', dy || dz < 0 ? NS : {});
+      for (let x = -24.5; x < -18; x += 0.7) pipe(dj, v3(x, y1, 7.0), v3(x + 0.35, y1 - 0.4, 7.4), 0.015, 'galv', NS);
+      box(dj, v3(-21.5, ROOF + 0.55, 7.2), v3(1.4, 0.5, 0.45), 'carBlack'); box(dj, v3(-21.5, ROOF + 1.07, 7.2), v3(1.3, 0.02, 0.4), 'neonLime', 0, 0, 0, GL);
+      dj.obstacle = { a: v3(-25, 0, 7.2), b: v3(-18, 0, 7.2), under: y1 - 0.43, over: y1 + 0.03 }; }
+    for (const [x, z] of [[-28.5, -7], [-28.5, -3], [-28.5, 3], [-11.5, 6.5]]) { const ch = O('Sun Lounger', 'deco'); box(ch, v3(x, ROOF + 0.3, z), v3(0.35, 0.05, 0.95), 'neonPink'); box(ch, v3(x, ROOF + 0.15, z), v3(0.3, 0.15, 0.9), 'hullWhite'); }
+    // the spiral waterslide: a translucent neon tube, 1.0 m inside (hoops 0.55 m to the centre line, 0.05 thick), from the
+    // tower (y 25) round two turns, then straight down into the deep end. Fly it straight through.
+    { const tw = O('Slide Tower', 'deco'), TX = -10.5, TZ = 6.2, TOP = 25;
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pipe(tw, v3(TX + dx, ROOF, TZ + dz), v3(TX + dx, TOP, TZ + dz), 0.08, 'neonCyan', { glow: true });
+      box(tw, v3(TX, TOP - 0.1, TZ), v3(1.2, 0.1, 1.2), 'teakWet'); for (let y = ROOF + 0.5; y < TOP; y += 0.6) pipe(tw, v3(TX + 1.05, y, TZ - 0.5), v3(TX + 1.05, y, TZ + 0.5), 0.02, 'brass', NS);
+      const sl = O('Spiral Slide', 'deco'), R = 2.6, cx = TX, cz = TZ, turns = 2, yTop = TOP - 0.4, yBot = 20.2, L = turns * Math.PI * 2, pts = [];
+      for (let t = 0; t <= L + 1e-6; t += 0.32) pts.push(v3(cx + Math.cos(t + Math.PI) * R, yTop - (yTop - yBot) * t / L, cz + Math.sin(t + Math.PI) * R));
+      const last = pts[pts.length - 1], end = v3(-15.5, PB_END(), 1.8); for (let f = 0.12; f <= 1.0001; f += 0.12) pts.push(v3(last.x + (end.x - last.x) * f, last.y + (end.y - last.y) * f, last.z + (end.z - last.z) * f));
+      function PB_END() { return 15.0; }
+      pts.forEach((p, i) => { const q = pts[Math.min(pts.length - 1, i + 1)], pr = pts[Math.max(0, i - 1)], n = norm(sub(q, pr));
+        if (i % 2 === 0) hoop(sl, p, n, 0.55, 0.05, 10, 'neonPink'); if (i < pts.length - 1) pipe(sl, p, q, 0.6, 'slideTube', { noCollide: true, alpha: true });
+        if (i === 1 || i === Math.floor(pts.length / 2) || i === pts.length - 2) { const u = norm(cross(Math.abs(n.y) < 0.9 ? v3(0, 1, 0) : v3(1, 0, 0), n)); gapO('Slide Tube', p, n, u, 0.3, 0.3); } }); }
+
+    // ---------------------------------------------------------------- the Grand Atrium (x -8..12): casino floor, balconies, chandelier, grid
+    { const AX0 = -8, AX1 = 12, BW = 1.6, at = O('Atrium Walls', 'wall');
+      // west wall (to the hold, the corridor and the pool): L1 doorway 2.5 x 3, L2 corridor end 2.4 x 2.6
+      wallH(at, 'z', AX0, -ZW, ZW, DECK, ROOF, WT, [{ a: -1.25, b: 1.25, y0: DECK, y1: DECK + 3 }, { a: -1.2, b: 1.2, y0: L2, y1: L2 + 2.6 }], 'hullWhite');
+      gapO('Hold Doorway', v3(AX0, DECK + 1.5, 0), v3(1, 0, 0), v3(0, 0, 1), 1.17, 1.42);
+      // east wall (to the lounge): L1 arch 3 x 3, L2 window onto the lounge 6 x 3
+      wallH(at, 'z', AX1, -ZW, ZW, DECK, ROOF, WT, [{ a: -1.5, b: 1.5, y0: DECK, y1: DECK + 3 }, { a: -3, b: 3, y0: L2, y1: L2 + 3 }], 'hullWhite');
+      gapO('Lounge Arch', v3(AX1, DECK + 1.5, 0), v3(1, 0, 0), v3(0, 0, 1), 1.42, 1.42); gapO('Lounge Window', v3(AX1, L2 + 1.5, 0), v3(1, 0, 0), v3(0, 0, 1), 2.92, 1.42);
+      // side walls: port has a 3 m door to the deck walk on L1; both have lit window bands (the lifeboats hang off starboard)
+      for (const s of [-1, 1]) { wallH(at, 'x', s * ZW, AX0, AX1, DECK, ROOF, WT, s < 0 ? [{ a: -2, b: 1, y0: DECK, y1: DECK + 3 }] : [], 'hullWhite');
+        for (const y of [L2 + 1.9, L3 + 1.9]) box(at, v3((AX0 + AX1) / 2, y, s * (ZW + 0.11)), v3(9.5, 0.3, 0.01), 'windowLit', 0, 0, 0, GL); }
+      gapO('Casino Door', v3(-0.5, DECK + 1.5, -ZW), v3(0, 0, 1), v3(1, 0, 0), 1.42, 1.42);
+      // the casino floor: checkerboard dance floor, overturned poker tables, chips and cash, slot machines, glass blocks
+      const cas = O('Casino Floor', 'deco'); box(cas, v3(2, DECK + 0.012, 0), v3(5, 0.006, 5), 'checker', 0, 0, 0, ND);
+      for (const [x, z, a] of [[-4.5, -4, 1.2], [-3.5, 4, 1.35], [7.5, -5.5, 1.1], [8, 5.2, 1.3]]) { const pt = O('Overturned Poker Table', 'deco'); box(pt, v3(x, DECK + 0.75, z), v3(0.9, 0.05, 0.75), 'feltGreen', 0.4, a, 0);
+        pipe(pt, v3(x - 0.3, DECK, z + 0.5), v3(x - 0.3, DECK + 0.5, z + 0.9), 0.06, 'brass', NS);
+        for (let k = 0; k < 9; k++) box(pt, v3(x + Math.sin(k * 2.4) * (0.6 + k * 0.1), DECK + 0.015, z + Math.cos(k * 2.4) * (0.5 + k * 0.08)), v3(0.05, 0.008, k % 3 ? 0.05 : 0.09), k % 3 ? ['neonPink', 'neonCyan', 'neonYellow'][k % 3] : 'feltGreen', k, 0, 0, ND); }
+      for (let x = -6; x <= 10; x += 1.6) for (const s of [-1, 1]) { if (s < 0 && x > -3 && x < 2) continue; const sm = O('Slot Machine', 'deco'); box(sm, v3(x, DECK + 0.8, s * (ZW - 0.45)), v3(0.4, 0.8, 0.35), 'carBlack'); box(sm, v3(x, DECK + 1.15, s * (ZW - 0.8)), v3(0.3, 0.2, 0.01), ['neonMagenta', 'neonLime', 'neonCyan'][Math.round(x) % 3 < 0 ? 0 : Math.round(x) % 3], 0, 0, 0, GL); }
+      for (const z of [-6, 6]) { const gb = O('Glass Block Partition', 'overunder'); box(gb, v3(-2, DECK + 0.6, z), v3(1.8, 0.6, 0.08), 'glassBlock'); gb.obstacle = { a: v3(-3.8, 0, z), b: v3(-0.2, 0, z), under: DECK, over: DECK + 1.2 }; }
+      // balconies all round at L2 and L3 (1.6 m), brass and neon rails on the inner edge
+      for (const y of [L2, L3]) { const bl = O(y === L2 ? 'Atrium Balcony L2' : 'Atrium Balcony L3', 'deco'); bl.railGlow = y === L2 ? 'neonCyan' : 'neonPink';
+        box(bl, v3((AX0 + AX1) / 2, y - 0.15, ZW - BW / 2), v3((AX1 - AX0) / 2, 0.15, BW / 2), 'carpet'); box(bl, v3((AX0 + AX1) / 2, y - 0.15, -ZW + BW / 2), v3((AX1 - AX0) / 2, 0.15, BW / 2), 'carpet');
+        box(bl, v3(AX0 + BW / 2, y - 0.15, 0), v3(BW / 2, 0.15, ZW - BW), 'carpet'); box(bl, v3(AX1 - BW / 2, y - 0.15, 0), v3(BW / 2, 0.15, ZW - BW), 'carpet');
+        const IX0 = AX0 + BW, IX1 = AX1 - BW, IZ = ZW - BW;
+        rail(bl, v3(IX0, 0, IZ), v3(IX1, 0, IZ), y + 1.05); rail(bl, v3(IX0, 0, -IZ), v3(IX1, 0, -IZ), y + 1.05);
+        rail(bl, v3(IX0, 0, -IZ), v3(IX0, 0, y === L2 ? -1.4 : IZ), y + 1.05); if (y === L2) rail(bl, v3(IX0, 0, 1.4), v3(IX0, 0, IZ), y + 1.05); rail(bl, v3(IX1, 0, -IZ), v3(IX1, 0, IZ), y + 1.05); }
+      // sweeping stairs up the side walls, casino floor to the L2 balconies
+      for (const s of [-1, 1]) { const st = O('Grand Staircase', 'deco'); slope(st, 4.5, DECK, -1.5, L2 - 0.3, s * (ZW - BW - 0.8), 0.75, 'carpet');
+        for (const dz of [-0.75, 0.75]) pipe(st, v3(4.5, DECK + 1, s * (ZW - BW - 0.8) + dz), v3(-1.5, L2 + 0.7, s * (ZW - BW - 0.8) + dz), 0.03, 'brass', NS); }
+      // the ceiling grid: 0.6 x 0.6 m openings, backlit (neon bars), between the L2 balcony (east) and the void; a vertical punch
+      { const gr = O('Ceiling Grid', 'deco'), n = 10, P = 0.66, gx0 = AX1 - BW - n * P, gz0 = -n * P / 2; for (let k = 0; k <= n; k++) { box(gr, v3(gx0 + n * P / 2, L2 - 0.03, gz0 + k * P), v3(n * P / 2 + 0.03, 0.03, 0.03), 'neonCyan', 0, 0, 0, { glow: true, noSurvey: true });
+          box(gr, v3(gx0 + k * P, L2 - 0.03, gz0 + n * P / 2), v3(0.03, 0.03, n * P / 2 + 0.03), 'neonCyan', 0, 0, 0, { glow: true, noSurvey: true }); }
+        for (const z of [gz0, gz0 + n * P]) pipe(gr, v3(gx0 + n * P, L2 - 0.03, z), v3(IX1(), L2 - 0.15, z), 0.03, 'brass', NS);
+        gapO('Ceiling Grid', v3(gx0 + n * P / 2, L2 - 0.03, gz0 + n * P / 2), v3(0, 1, 0), v3(1, 0, 0), n * P / 2 - 0.05, n * P / 2 - 0.05).gap.cells = P;
+        function IX1() { return AX1 - BW; } }
+      // the chandelier: three tiered neon hoops hung on chains from the skylight frame, centres clear all the way down:
+      // dive straight through all three; the smallest is 0.8 m inside. The whole thing is an over/under for powerloops.
+      { const ch = O('Neon Chandelier', 'overunder'), C = v3(1.5, 0, 0), tiers = [[2.1, 15.3, 'neonPink', 0.06], [1.3, 14.2, 'neonCyan', 0.05], [0.45, 13.1, 'neonLime', 0.05]];
+        for (const [R, y, m, r] of tiers) { hoop(ch, v3(C.x, y, C.z), v3(0, 1, 0), R, r, R > 1 ? 24 : 14, m); gapO('Chandelier Hoop', v3(C.x, y, C.z), v3(0, 1, 0), v3(1, 0, 0), (R - r - 0.06) / Math.SQRT2, (R - r - 0.06) / Math.SQRT2); }
+        for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + 0.4, A = (R, y) => v3(C.x + Math.cos(a) * R, y, C.z + Math.sin(a) * R);
+          pipe(ch, A(2.1, 15.3), A(3.4, ROOF - 0.35), 0.015, 'brass', NS); pipe(ch, A(1.3, 14.2), A(2.1, 15.3), 0.012, 'brass', NS); pipe(ch, A(0.45, 13.1), A(1.3, 14.2), 0.012, 'brass', NS);
+          for (const [R, y] of [[2.1, 15.3], [1.3, 14.2]]) ball(ch, A(R, y - 0.25), 0.09, k % 2 ? 'neonPurple' : 'neonMagenta', { glow: true }); }
+        ch.round = { c: v3(C.x, 0, C.z), r: 2.2, under: 13.05, over: 15.36 }; ch.obstacle = { a: v3(C.x - 2.2, 0, C.z), b: v3(C.x + 2.2, 0, C.z), under: 13.05, over: 15.36 }; }
+      O('Chandelier Light', 'deco', { light: v3(1.5, 12, 0), lightColor: 0xff4fd0, lightPower: 40, lightRange: 24 });
+      // the skylight roof: a frame of beams with glass panes, four panes shattered (dive in from the roof)
+      { const sk = O('Atrium Skylight', 'deco'), xs = [AX0, -3, 2, 7, AX1], zs = [-ZW, -4.5, 0, 4.5, ZW], broken = new Set(['1,1', '2,2', '1,2', '3,0']);
+        for (const x of xs) box(sk, v3(x, ROOF - 0.15, 0), v3(0.12, 0.15, ZW), 'brass'); for (const z of zs) box(sk, v3((AX0 + AX1) / 2, ROOF - 0.15, z), v3((AX1 - AX0) / 2, 0.15, 0.12), 'brass');
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const cx = (xs[i] + xs[i + 1]) / 2, cz = (zs[j] + zs[j + 1]) / 2, hx = (xs[i + 1] - xs[i]) / 2 - 0.12, hz = (zs[j + 1] - zs[j]) / 2 - 0.12;
+          if (broken.has(i + ',' + j)) { gapO('Shattered Skylight', v3(cx, ROOF - 0.15, cz), v3(0, 1, 0), v3(1, 0, 0), hx - 0.1, hz - 0.1);
+            for (let k = 0; k < 4; k++) box(sk, v3(cx + (k % 2 ? 1 : -1) * (hx - 0.12), ROOF - 0.2, cz + (k < 2 ? 1 : -1) * (hz - 0.1)), v3(0.25, 0.01, 0.1), 'glassBlock', k, 0.3, 0, ND); }
+          else box(sk, v3(cx, ROOF - 0.15, cz), v3(hx, 0.02, hz), 'glassBlock', 0, 0, 0, NS); } } }
+
+    // ---------------------------------------------------------------- forward: the Starlight Lounge, double height, shattered skylights
+    { const lo = O('Starlight Lounge', 'wall'), LX0 = 12, LX1 = SX1;
+      for (const s of [-1, 1]) { wallH(lo, 'x', s * ZW, LX0, LX1, DECK, L3, WT, [], 'hullWhite'); for (const y of [DECK + 2, L2 + 1.5]) box(lo, v3((LX0 + LX1) / 2, y, s * (ZW + 0.11)), v3(10.5, 0.3, 0.01), 'windowLit', 0, 0, 0, GL); }
+      // roof (y 14) with two shattered skylights under the crane's boom (2.5 x 2.5 m)
+      const rf = O('Sun Deck', 'deco'), holes = [[18.75, 21.25], [26.75, 29.25]];
+      box(rf, v3(15.375, L3 - T, 0), v3(3.375, T, ZW), 'teakWet', 0, 0, 0, NS); box(rf, v3(24, L3 - T, 0), v3(2.75, T, ZW), 'teakWet', 0, 0, 0, NS); box(rf, v3(31.625, L3 - T, 0), v3(2.375, T, ZW), 'teakWet', 0, 0, 0, NS);
+      for (const [a, b] of holes) { for (const s of [-1, 1]) box(rf, v3((a + b) / 2, L3 - T, s * (ZW + 1.25) / 2), v3((b - a) / 2, T, (ZW - 1.25) / 2), 'teakWet', 0, 0, 0, NS);
+        gapO('Shattered Skylight', v3((a + b) / 2, L3 - T, 0), v3(0, 1, 0), v3(1, 0, 0), 1.15, 1.15);
+        for (let k = 0; k < 6; k++) box(rf, v3(a + 0.15 + (k % 3) * 1.05, L3 - 0.05, (k < 3 ? -1 : 1) * 1.15), v3(0.22, 0.01, 0.08), 'glassBlock', k * 0.7, 0.4, 0, ND); }
+      rail(rf, v3(LX0, 0, -ZW + 0.2), v3(LX1, 0, -ZW + 0.2), L3 + 1.05, 2.2); rail(rf, v3(LX0, 0, ZW - 0.2), v3(LX1, 0, ZW - 0.2), L3 + 1.05, 2.2);
+      box(lo, v3(23, DECK + 0.012, 0), v3(4.5, 0.006, 4.5), 'checker', 0, 0, 0, ND);
+      const bar2 = O('Lounge Bar', 'overunder'); box(bar2, v3(31.5, DECK + 0.55, 0), v3(0.4, 0.55, 5), 'glassBlock'); box(bar2, v3(31.5, DECK + 1.12, 0), v3(0.5, 0.03, 5.1), 'brass');
+      bar2.obstacle = { a: v3(31.5, 0, -5), b: v3(31.5, 0, 5), under: DECK, over: DECK + 1.15 };
+      const mb = O('Mirror Ball', 'overunder'); pipe(mb, v3(23, L3 - 0.3, -4), v3(23, 11.9, -4), 0.01, 'galv', NS); ball(mb, v3(23, 11.4, -4), 0.55, 'chrome');
+      mb.round = { c: v3(23, 0, -4), r: 0.6, under: 10.85, over: 11.95 }; mb.obstacle = { a: v3(22.4, 0, -4), b: v3(23.6, 0, -4), under: 10.85, over: 11.95 };
+      for (const z of [-5.5, 5.5]) { const gb = O('Glass Block Partition', 'overunder'); box(gb, v3(17, DECK + 0.75, z), v3(2, 0.75, 0.08), 'glassBlock'); gb.obstacle = { a: v3(15, 0, z), b: v3(19, 0, z), under: DECK, over: DECK + 1.5 }; }
+      for (const z of [-8.7, 8.7]) box(lo, v3(23, L2 + 2.6, z), v3(10.5, 0.04, 0.04), z < 0 ? 'neonMagenta' : 'neonCyan', 0, 0, 0, GL);
+      O('Lounge Light', 'deco', { light: v3(24, 11.5, 0), lightColor: 0x55f6ff, lightPower: 32, lightRange: 20 }); }
+    // the bow deck: winches, a mast to orbit, navigation lights
+    { const bw = O('Anchor Winch', 'overunder'); for (const s of [-1, 1]) { box(bw, v3(42, DECK + 0.5, s * 3), v3(0.9, 0.5, 0.6), 'craneYellow'); pipe(bw, v3(42, DECK + 0.6, s * 3 - 0.8), v3(42, DECK + 0.6, s * 3 + 0.8), 0.25, 'darkMetal', NS); } }
+    { const m = O('Bow Mast', 'pole'); pipe(m, v3(46, DECK, 0), v3(46, DECK + 12, 0), 0.14, 'hullWhite'); pipe(m, v3(46, DECK + 9, -1.4), v3(46, DECK + 9, 1.4), 0.05, 'hullWhite', NS);
+      ball(m, v3(46, DECK + 12.2, 0), 0.18, 'neonLime', { noCollide: true, glow: true }); for (const s of [-1, 1]) ball(m, v3(46, DECK + 9, s * 1.45), 0.12, s < 0 ? 'policeRed' : 'neonLime', { noCollide: true, glow: true }); }
+
+    // ---------------------------------------------------------------- starboard lifeboats, 0.5 m off the windows
+    for (const x0 of [-3, 5.5, 17.5, 26.5]) { const lb = O('Lifeboat', 'overunder'), y0 = L2 + 1.0, bz = ZW + WT / 2 + 0.5 + 0.95;   // inner side 0.5 m from the wall's face
+      box(lb, v3(x0, y0 + 0.5, bz), v3(2.9, 0.5, 0.95), 'lifeboat'); box(lb, v3(x0, y0 + 1.15, bz), v3(2.3, 0.18, 0.8), 'hullWhite'); box(lb, v3(x0, y0 + 0.02, bz), v3(2.6, 0.04, 0.6), 'hullNavy');
+      for (const s of [-1, 1]) { const px = x0 + s * 3.3; pipe(lb, v3(px, DECK, ZW + 1.6), v3(px, y0 + 2.5, ZW + 1.6), 0.09, 'hullWhite'); pipe(lb, v3(px, y0 + 2.5, ZW + 1.6), v3(px, y0 + 2.5, bz), 0.07, 'hullWhite', NS);
+        pipe(lb, v3(px, y0 + 2.5, bz), v3(x0 + s * 2.6, y0 + 1.3, bz), 0.012, 'galv', ND); }
+      lb.obstacle = { a: v3(x0 - 2.9, 0, bz), b: v3(x0 + 2.9, 0, bz), under: y0, over: y0 + 1.33 };
+      gapO('Lifeboat Squeeze', v3(x0, y0 + 0.66, ZW + WT / 2 + 0.25), v3(1, 0, 0), v3(0, 0, 1), 0.19, 0.6); }
+
+    // ---------------------------------------------------------------- the port crane on the pier, its boom leaning over the bow
+    { const cr = O('Port Crane', 'pole'), BX = 40, BZ = -20, top = 30;
+      for (const [dx, dz] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) pipe(cr, v3(BX + dx, 1.5, BZ + dz), v3(BX + dx * 0.55, top, BZ + dz * 0.55), 0.22, 'craneYellow');
+      for (let y = 4; y < top; y += 4) for (const [a, b] of [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]]) { const k = 2.2 - 0.45 * 2.2 * (y - 1.5) / (top - 1.5) * 1.0;
+        pipe(cr, v3(BX + a[0] * k, y, BZ + a[1] * k), v3(BX + b[0] * k, y + 4 > top ? top : y + 2, BZ + b[1] * k), 0.06, 'craneYellow', NS); }
+      box(cr, v3(BX, top + 1.6, BZ), v3(3, 1.6, 2.6), 'craneYellow'); box(cr, v3(BX + 3.05, top + 1.9, BZ), v3(0.02, 0.6, 1.8), 'windowLit', 0, 0, 0, GL);
+      // the boom: two chords and lacing, from the cab out over the lounge's skylights, its tip at (28, 22.5, 1)
+      const b0 = v3(BX - 1, top + 2.6, BZ + 1), b1 = v3(26, 23.2, 1.2), side = norm(cross(sub(b1, b0), v3(0, 1, 0)));
+      const bm = O('Crane Boom', 'overunder');
+      for (const s of [-1, 1]) pipe(bm, add(b0, mul(side, s * 0.7)), add(b1, mul(side, s * 0.45)), 0.14, 'craneYellow');
+      for (let f = 0; f < 1; f += 0.06) { const p = add(b0, mul(sub(b1, b0), f)), q = add(b0, mul(sub(b1, b0), f + 0.06)); pipe(bm, add(p, mul(side, -0.6)), add(q, mul(side, 0.6)), 0.04, 'craneYellow', NS); }
+      bm.obstacle = { a: v3(b0.x, 0, b0.z), b: v3(b1.x, 0, b1.z), under: b1.y - 0.2, over: b1.y + 0.2 };
+      const hk = O('Crane Hook', 'deco'); pipe(hk, b1, v3(b1.x, 17.2, b1.z), 0.02, 'galv'); box(hk, v3(b1.x, 16.7, b1.z), v3(0.35, 0.45, 0.25), 'hazard'); }
+
+    // ---------------------------------------------------------------- the main deck walks along both sides; a sign
+    { const sg = O('Ship Drugs Sign', 'deco'); box(sg, v3(-8, ROOF + 1.6, 0), v3(0.1, 1.4, 5.5), 'carBlack');
+      for (const [dz, m] of [[-4, 'neonMagenta'], [-1.3, 'neonCyan'], [1.3, 'neonLime'], [4, 'neonPurple']]) box(sg, v3(-7.88, ROOF + 1.6, dz), v3(0.02, 1.1, 1.0), m, 0, 0, 0, GL); }
+
+    return K.done({ id: 'ship', title: 'Ship Drugs', theme: 'vice', zones, spawn: { pos: v3(-23, 1.53, -17.5), yaw: Math.PI }, bounds: { x: [-56, 58], z: [-28, 16] } });
+  }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet neighbourhood park in Arrow Heights, Revelstoke: groves of tall cedar and hemlock with grassy lanes between them, a weathered swing set and small play unit, picnic tables in the shade, a half-buried tire tunnel among the birch, and the Selkirks beyond the rooftops.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },
     school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('school', buildSchool()))) },
     clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('clappy', buildClappy()))) },
     warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, high-bay-lit logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => closeIn(S.surveyObstacles(edited('warehouse', buildWarehouse()))) },
+    ship: { id: 'ship', title: 'Ship Drugs', blurb: 'A gaudy 1980s cruise ship in a night-time police raid: a three-storey neon atrium with a hooped chandelier and a backlit grid, breached cabins and a wavy corridor, a drained pool with a spiral slide tube, contraband tunnels, lifeboats, and a port crane over shattered skylights.', build: () => closeIn(S.surveyObstacles(edited('ship', buildShip()))) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('playground', Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })))) },
   };
   S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose;

@@ -23,6 +23,7 @@ const checks = [
   ['trick library (signatures, Watcher vote, maybe calls)', () => { const o = run('library.js'); const m = o.match(/(\d+)\/(\d+) library checks/); return m && m[1] === m[2] ? null : o; }],
   ['community profile (every pilot\'s flying, under the pilot\'s own)', () => { const o = run('community.js'); const m = o.match(/(\d+)\/(\d+) community checks/); return m && m[1] === m[2] ? null : o; }],
   ['learning from review labels (looser only, never against a label)', () => { const o = run('learn.js'); const m = o.match(/(\d+)\/(\d+) learning checks/); return m && m[1] === m[2] ? null : o; }],
+  ['Ship Drugs: every gap is really open (5 cm clear of every collider)', () => { const o = run('../tools/gapcheck.js', ['ship']); const m = o.match(/(\d+)\/(\d+) gaps clear/); return m && m[1] === m[2] ? null : o; }],
   ['Orbits vs trippies round real trees (fast nose-down orbits, thick trunks)', () => { const o = run('orbits.js'); const m = o.match(/(\d+)\/(\d+) orbit checks/); return m && m[1] === m[2] ? null : o; }],
   ['Battery life, brown-out and which packs fit which whoop', () => { const o = run('battery.js'); const m = o.match(/(\d+)\/(\d+) battery checks/); return m && m[1] === m[2] ? null : o; }],
   ['Map Editor layer: move, turn, scale, remove, add; tags and colliders follow', () => { const o = run('mapedit.js'); const m = o.match(/(\d+)\/(\d+) map edit checks/); return m && m[1] === m[2] ? null : o; }],

@@ -146,6 +146,91 @@ function vaporMats() {
   MAT.vChromeFloor = new THREE.MeshStandardMaterial({ map: TX.vTile, color: 0xcfc2ff, roughness: 0.12, metalness: 0.92, envMapIntensity: 1.1 });
   MAT.vGrid = new THREE.MeshStandardMaterial({ map: TX.vGrid, emissiveMap: TX.vGridE, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.25 });
 }
+// ---- Ship Drugs (theme 'vice'): a gaudy 1980s cruise ship in a night-time police raid. Materials first.
+function viceMats() {
+  let c, g; const S2 = (hex, o = {}) => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.5, metalness: 0.05, ...o }), B = hex => new THREE.MeshBasicMaterial({ color: hex, toneMapped: false });
+  // loud geometric carpet: zig-zags, triangles and Memphis squiggles on deep purple
+  [c, g] = cnv(256, 256); g.fillStyle = '#1c0b38'; g.fillRect(0, 0, 256, 256); g.lineWidth = 7;
+  for (let y = 0; y < 256; y += 64) { g.strokeStyle = ['#ff3fd0', '#55f6ff', '#b6ff3c', '#b26bff'][y / 64]; g.beginPath(); for (let x = 0; x <= 256; x += 32) g.lineTo(x, y + 18 + ((x / 32) % 2 ? 22 : 0)); g.stroke(); }
+  for (let i = 0; i < 26; i++) { g.fillStyle = ['#ff3fd0', '#55f6ff', '#fff36a', '#b6ff3c'][i % 4]; const x = rnd() * 256, y = rnd() * 256, r = 6 + rnd() * 8; g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y + r); g.lineTo(x - r, y + r); g.closePath(); g.fill(); }
+  TX.carpet = tex(c); MAT.carpet = S2(0xffffff, { map: TX.carpet, roughness: 0.95 });
+  // Memphis wallpaper: pastel teal with pink squiggles and black confetti (the corridors' walls; drawn wavy in maps.js)
+  [c, g] = cnv(256, 256); g.fillStyle = '#7fe0d0'; g.fillRect(0, 0, 256, 256); g.lineWidth = 6; g.strokeStyle = '#ff6fb8';
+  for (let y = 20; y < 256; y += 48) { g.beginPath(); for (let x = 0; x <= 256; x += 4) g.lineTo(x, y + Math.sin(x / 14 + y) * 8); g.stroke(); }
+  for (let i = 0; i < 70; i++) { g.fillStyle = i % 3 ? '#1b1030' : '#fff36a'; g.fillRect(rnd() * 256, rnd() * 256, 3 + rnd() * 9, 3); }
+  TX.memphis = tex(c); MAT.memphis = S2(0xffffff, { map: TX.memphis, roughness: 0.7 });
+  [c, g] = cnv(256, 256); g.fillStyle = '#f6a8d0'; g.fillRect(0, 0, 256, 256); g.strokeStyle = '#2b1550'; g.lineWidth = 5; for (let i = 0; i < 9; i++) { g.beginPath(); const x = rnd() * 256, y = rnd() * 256; g.arc(x, y, 10 + rnd() * 16, 0, Math.PI * 1.3); g.stroke(); }
+  for (let i = 0; i < 40; i++) { g.fillStyle = ['#55f6ff', '#1b1030', '#fff36a'][i % 3]; g.save(); g.translate(rnd() * 256, rnd() * 256); g.rotate(rnd() * 3); g.fillRect(-6, -2, 12, 4); g.restore(); }
+  TX.memphisPink = tex(c); MAT.memphisPink = S2(0xffffff, { map: TX.memphisPink, roughness: 0.7 });
+  // checkerboard dance floor and pool tiles: glossy, so the neon smears across them
+  [c, g] = cnv(256, 256); for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = (x + y) % 2 ? '#111018' : '#eae6f2'; g.fillRect(x * 64, y * 64, 64, 64); } TX.checker = tex(c); MAT.checker = S2(0xffffff, { map: TX.checker, roughness: 0.12, metalness: 0.2 });
+  [c, g] = cnv(256, 256); g.fillStyle = '#7fd8e6'; g.fillRect(0, 0, 256, 256); g.strokeStyle = '#e8fbff'; g.lineWidth = 3; for (let i = 0; i <= 256; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 256); g.moveTo(0, i); g.lineTo(256, i); g.stroke(); }
+  speckle(g, 256, 256, 1500, ['rgba(40,90,110,0.25)']); TX.poolTile = tex(c); MAT.poolTile = S2(0xffffff, { map: TX.poolTile, roughness: 0.2 });
+  [c, g] = cnv(128, 128); g.fillStyle = '#9fd6ff'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#e6f6ff'; g.lineWidth = 4; for (let i = 0; i <= 128; i += 32) { g.strokeRect(i, 0, 0, 128); g.strokeRect(0, i, 128, 0); } TX.glassBlock = tex(c);
+  MAT.glassBlock = new THREE.MeshStandardMaterial({ map: TX.glassBlock, transparent: true, opacity: 0.55, roughness: 0.15, metalness: 0.1 });
+  // the ship, the deck, the raid
+  MAT.hullWhite = S2(0xeceff2, { roughness: 0.35 }); MAT.hullNavy = S2(0x13183a, { roughness: 0.4 }); MAT.deckWet = S2(0x2a2a33, { roughness: 0.14, metalness: 0.35 });
+  [c, g] = cnv(256, 256); g.fillStyle = '#6a4a32'; g.fillRect(0, 0, 256, 256); for (let i = 0; i < 256; i += 16) { g.fillStyle = i % 32 ? '#5e412b' : '#73513a'; g.fillRect(0, i, 256, 14); } TX.teak = tex(c); MAT.teakWet = S2(0xffffff, { map: TX.teak, roughness: 0.18, metalness: 0.15 });
+  MAT.brass = S2(0xd4a64a, { metalness: 0.9, roughness: 0.28 }); MAT.lifeboat = S2(0xff6a1a, { roughness: 0.5, emissive: 0x6a2000, emissiveIntensity: 0.6 }); MAT.craneYellow = S2(0xf0b81e, { roughness: 0.55, metalness: 0.3, emissive: 0x4a3400, emissiveIntensity: 0.5 });   /* safety colours stay readable at night */ MAT.rust = S2(0x5a3a2a, { roughness: 0.9 });
+  MAT.contraband = S2(0xf4f4f4, { roughness: 0.1, metalness: 0.05 }); MAT.feltGreen = S2(0x0f6a3a, { roughness: 0.95 }); MAT.carBlack = S2(0x101014, { metalness: 0.6, roughness: 0.25 }); MAT.carWhite = S2(0xe8e8ea, { metalness: 0.5, roughness: 0.3 });
+  MAT.doorWood = S2(0x8a5a3a, { roughness: 0.6 }); MAT.mirrorFrame = S2(0xe0c070, { metalness: 0.8, roughness: 0.3 }); MAT.sawhorse = S2(0xf2f2f2, { roughness: 0.6 }); MAT.coneOrange = S2(0xff7a1a);
+  [c, g] = cnv(256, 32); g.fillStyle = '#ffd400'; g.fillRect(0, 0, 256, 32); g.fillStyle = '#111'; g.font = 'bold 22px sans-serif'; for (let x = 0; x < 256; x += 128) g.fillText('CRIME SCENE', x + 4, 24); TX.tape = tex(c); MAT.tape = new THREE.MeshBasicMaterial({ map: TX.tape, toneMapped: false });
+  [c, g] = cnv(64, 64); g.fillStyle = '#ffd400'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#111'; for (let i = -64; i < 128; i += 22) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 11, 0); g.lineTo(i - 53, 64); g.lineTo(i - 64, 64); g.fill(); } TX.hazard = tex(c); MAT.hazard = S2(0xffffff, { map: TX.hazard });
+  MAT.slideTube = new THREE.MeshStandardMaterial({ color: 0x66f0ff, transparent: true, opacity: 0.22, roughness: 0.1, metalness: 0.1, depthWrite: false, emissive: 0x2288aa, emissiveIntensity: 0.6 });
+  // glowing: neon tubes, police lights, sodium lamps, UV chalk (all on the bloom layer)
+  MAT.neonLime = B(0xb6ff3c); MAT.neonMagenta = B(0xff2fb8); MAT.policeRed = B(0xff003c); MAT.policeBlue = B(0x0088ff); MAT.sodium = B(0xffa040); MAT.uvChalk = B(0xe8f4ff); MAT.windowLit = B(0xffd9a0);
+  MAT.holo = new THREE.MeshBasicMaterial({ color: 0xff6fe8, transparent: true, opacity: 0.45, toneMapped: false, depthWrite: false });
+}
+// The night harbour: indigo sky, a striped synthwave sun sitting on the water beyond the bow, the grid running out to it,
+// purple haze, a far shore of dark towers, black glossy water, and hallucinations drifting over the ship (visual only).
+const VICE = { strobes: [], hallu: [], t: 0 };
+function viceBackdrop() {
+  const stops = [[0, '#05030f'], [0.32, '#120a34'], [0.45, '#3a1460'], [0.5, '#a0287a'], [0.52, '#ff5f8a'], [0.54, '#2a0f4a'], [1, '#05040c']];
+  const [sc, sg] = cnv(16, 512), gr = sg.createLinearGradient(0, 0, 0, 512); for (const [o, c] of stops) gr.addColorStop(o, c); sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512);
+  const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
+  playRoot.add(new THREE.Mesh(new THREE.SphereGeometry(320, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false })));
+  // what wet decks, chrome and brass reflect: the same night with the sun and the police lights in it
+  const [ec, eg] = cnv(256, 128), eg2 = eg.createLinearGradient(0, 0, 0, 128); for (const [o, c] of stops) eg2.addColorStop(o, c); eg.fillStyle = eg2; eg.fillRect(0, 0, 256, 128);
+  for (const [x, col] of [[40, '#ff003c'], [70, '#0088ff'], [190, '#ffa040'], [128, '#ff6fb8']]) { const rg = eg.createRadialGradient(x, 66, 1, x, 66, 18); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)'); eg.fillStyle = rg; eg.fillRect(0, 0, 256, 128); }
+  const envT = new THREE.CanvasTexture(ec); envT.colorSpace = THREE.SRGBColorSpace; envT.mapping = THREE.EquirectangularReflectionMapping; scene.environment = envT;
+  scene.fog = new THREE.Fog(0x2a1040, 40, 210);
+  const [uc, ug] = cnv(256, 256), ugr = ug.createLinearGradient(0, 0, 0, 256); ugr.addColorStop(0, '#ffe45c'); ugr.addColorStop(0.5, '#ff6a6a'); ugr.addColorStop(1, '#d01fa0'); ug.fillStyle = ugr; ug.beginPath(); ug.arc(128, 128, 126, 0, 7); ug.fill();
+  ug.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 8; i++) ug.fillRect(0, 132 + i * 15, 256, 2 + i * 1.5);
+  const sunDir = new THREE.Vector3(0.95, 0.07, 0.3).normalize(), sunM = new THREE.Mesh(new THREE.CircleGeometry(70, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(uc), transparent: true, fog: false, toneMapped: false, depthWrite: false }));
+  sunM.material.map.colorSpace = THREE.SRGBColorSpace; sunM.position.copy(sunDir).multiplyScalar(295); sunM.lookAt(0, 10, 0); sunM.layers.enable(1); playRoot.add(sunM);
+  playRoot.add(new THREE.HemisphereLight(0x6a5cff, 0x1a0820, 0.75));
+  const moon = new THREE.DirectionalLight(0x9a8cff, 0.9); moon.position.set(-40, 60, 30); moon.castShadow = true; moon.shadow.mapSize.set(2048, 2048);
+  { const B = world.bounds || { x: [-60, 60], z: [-40, 40] }, R = Math.max(40, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4, sh = moon.shadow.camera; sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; sh.near = 1; sh.far = 220; }
+  moon.shadow.bias = -0.0005; moon.shadow.normalBias = 0.03; playRoot.add(moon); playRoot.add(moon.target);
+  // the harbour: black glossy water, and the grid running out to the sun beyond 120 m
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), MAT.water || (MAT.water = new THREE.MeshStandardMaterial({ color: 0x05060f, roughness: 0.06, metalness: 0.85, envMapIntensity: 1.4 })));
+  water.rotation.x = -Math.PI / 2; water.receiveShadow = true; water.renderOrder = -10; playRoot.add(water);
+  const grid = new THREE.Mesh(new THREE.RingGeometry(120, 340, 64, 1), MAT.vGrid.clone()); grid.material.transparent = true; grid.material.opacity = 0.5; grid.material.depthWrite = false; grid.rotation.x = -Math.PI / 2; grid.position.y = 0.02;
+  const guv = grid.geometry.attributes.uv, gp = grid.geometry.attributes.position; for (let i = 0; i < guv.count; i++) guv.setXY(i, gp.getX(i) / 4, gp.getY(i) / 4); grid.layers.enable(1); playRoot.add(grid);
+  // the far shore: dark towers with a few lit windows, all round beyond the haze
+  const tower = new THREE.MeshBasicMaterial({ color: 0x0a0618, fog: false }), lit = new THREE.MeshBasicMaterial({ color: 0xff8ad8, fog: false, toneMapped: false });
+  for (let i = 0; i < 46; i++) { const a = i / 46 * Math.PI * 2 + rnd() * 0.08; if (Math.abs(a - 0.31) < 0.25) continue; const R = 230 + rnd() * 40, h = 14 + rnd() * 45, w = 8 + rnd() * 12, m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), tower);
+    m.position.set(Math.cos(a) * R, h / 2, Math.sin(a) * R); playRoot.add(m); for (let k = 0; k < 4; k++) { const wnd = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), lit); wnd.position.set(m.position.x - Math.cos(a) * (w / 2 + 0.1), 4 + rnd() * (h - 6), m.position.z - Math.sin(a) * (w / 2 + 0.1) + (rnd() - 0.5) * w * 0.6); wnd.lookAt(0, wnd.position.y, 0); wnd.layers.enable(1); playRoot.add(wnd); } }
+  // hallucinations over the ship: translucent neon pills, wireframe palms, geometric eyes; they drift (viceTick), and are not solid
+  VICE.hallu = []; const H = (m, x, y, z, spin) => { m.position.set(x, y, z); m.layers.enable(1); playRoot.add(m); VICE.hallu.push({ m, y, ph: rnd() * 6.28, spin }); };
+  for (let i = 0; i < 9; i++) { const pill = new THREE.Group(), col = [0xff2fb8, 0x55f6ff, 0xb6ff3c, 0xb26bff][i % 4], half = mat => new THREE.Mesh(new THREE.CapsuleGeometry(1.2, 2.4, 6, 12), mat);
+    const a = half(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, toneMapped: false, depthWrite: false })); pill.add(a); pill.rotation.z = rnd() * 3; H(pill, -40 + i * 11 + rnd() * 4, 30 + rnd() * 12, -14 + rnd() * 28, 0.25 + rnd() * 0.3); }
+  const wire = col => new THREE.LineBasicMaterial({ color: col, toneMapped: false, transparent: true, opacity: 0.8 });
+  for (let i = 0; i < 5; i++) { const palm = new THREE.Group(), m = wire([0xb6ff3c, 0x55f6ff, 0xff2fb8][i % 3]);
+    const trunk = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.35, 0.6, 9, 6, 4)), m); trunk.position.y = 4.5; trunk.rotation.z = 0.12; palm.add(trunk);
+    for (let k = 0; k < 7; k++) { const fr = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ConeGeometry(0.9, 5.5, 4, 3)), m); fr.position.set(0.5, 9, 0); fr.rotation.set(Math.PI / 2 + 0.6, k / 7 * Math.PI * 2, 0); fr.translateY(2.6); palm.add(fr); }
+    H(palm, -45 + i * 22 + rnd() * 6, 26 + rnd() * 6, (i % 2 ? 22 : -26) + rnd() * 4, 0.08); }
+  for (let i = 0; i < 4; i++) { const eye = new THREE.Group(), white = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1), new THREE.MeshBasicMaterial({ color: 0xeef2ff, transparent: true, opacity: 0.6, toneMapped: false, depthWrite: false })),
+      iris = new THREE.Mesh(new THREE.CircleGeometry(1.0, 6), new THREE.MeshBasicMaterial({ color: [0xff2fb8, 0x55f6ff][i % 2], toneMapped: false })), pupil = new THREE.Mesh(new THREE.CircleGeometry(0.45, 6), new THREE.MeshBasicMaterial({ color: 0x05030f }));
+    iris.position.z = 2.15; pupil.position.z = 2.17; eye.add(white, iris, pupil); H(eye, -30 + i * 24, 38 + rnd() * 6, (i % 2 ? -6 : 8), 0.05); VICE.hallu[VICE.hallu.length - 1].eye = true; }
+}
+// every frame on the ship: police lights strobe (red and blue in turns), hallucinations bob, turn and watch the quad
+function viceTick(dt, at) {
+  VICE.t += dt; const t = VICE.t, red = Math.floor(t * 4) % 2 === 0, flash = (t * 8) % 1 < 0.5;
+  if (MAT.policeRed) MAT.policeRed.color.setHex(red && flash ? 0xff003c : 0x2a0008); if (MAT.policeBlue) MAT.policeBlue.color.setHex(!red && flash ? 0x0088ff : 0x001428);
+  for (const L of VICE.strobes) L.l.intensity = L.base * ((L.blue ? !red : red) && flash ? 1 : 0.05);
+  for (const h of VICE.hallu) { h.m.position.y = h.y + Math.sin(t * 0.4 + h.ph) * 1.6; if (h.eye && at) h.m.lookAt(at); else h.m.rotation.y += dt * h.spin; }
+}
 function vaporBackdrop() {
   // sky: indigo overhead, magenta, then a hot pink-orange band at the horizon
   const stops = [[0, '#0d0530'], [0.3, '#35107a'], [0.44, '#a4288f'], [0.5, '#ff5fa2'], [0.535, '#ffb07a'], [0.56, '#5a1f7a'], [1, '#12063a']];
@@ -243,7 +328,7 @@ function mats() {
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
-  vaporMats();
+  vaporMats(); viceMats();
 }
 function boxGeo(h, density = 0.5) {
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
@@ -334,7 +419,7 @@ function mapLightsBuild() {
   if (mode === 'few' && all.length > 4) { pick = []; const left = all.slice(); pick.push(left.splice(0, 1)[0]);   // farthest-point picks: spread over the map
     while (pick.length < 4 && left.length) { let bi = 0, bd = -1; left.forEach((o, i) => { const d = Math.min(...pick.map(q => Math.hypot(q.light.x - o.light.x, q.light.z - o.light.z))); if (d > bd) { bd = d; bi = i; } }); pick.push(left.splice(bi, 1)[0]); }
     boost = Math.min(2.2, Math.sqrt(all.length / 4)); }
-  for (const o of pick) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, (o.lightPower || 6) * boost, (o.lightRange || 12) * Math.sqrt(boost), 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); l.userData.oid = o.id; objRoot.add(l); }
+  VICE.strobes = []; for (const o of pick) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, (o.lightPower || 6) * boost, (o.lightRange || 12) * Math.sqrt(boost), 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); l.userData.oid = o.id; objRoot.add(l); if (o.strobe) VICE.strobes.push({ l, base: l.intensity, blue: o.strobe === 'blue' }); }
   scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 }
 // ============================================================ build world meshes
@@ -342,7 +427,8 @@ function buildScene() {
   const VAPOR = world.theme === 'vapor';
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
-  if (VAPOR) vaporBackdrop(); else {
+  const VICE_ = world.theme === 'vice';
+  if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
   if (PNW) { gr.addColorStop(0, '#6f93b8'); gr.addColorStop(0.42, '#a9bfcf'); gr.addColorStop(0.6, '#cfd8da'); gr.addColorStop(0.72, '#a9b4ab'); gr.addColorStop(1, '#55604f'); }
@@ -371,7 +457,7 @@ function buildScene() {
     const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; if (z.ry) m.rotation.z = z.ry; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
   }
   buildObjects();
-  if (VAPOR) return;
+  if (VAPOR || VICE_) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
   if (PNW) { scene.fog = new THREE.Fog(0xb4c0bc, 45, 190); pnwBackdrop(); }

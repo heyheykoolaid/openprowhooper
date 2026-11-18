@@ -208,8 +208,9 @@ function frame(now) {
   }
   if (mode === 'review') { reviewTick(); return; }
   const rT0 = pf ? performance.now() : 0;
+  if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   renderer.render(scene, cam);
-  if (BLOOM.on && world.theme === 'vapor' && !race.on) bloomRender(cam);
+  if (BLOOM.on && (world.theme === 'vapor' || world.theme === 'vice') && !race.on) bloomRender(cam);
   if (PERF.fx) fxRender();
   if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();

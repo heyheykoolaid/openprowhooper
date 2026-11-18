@@ -607,3 +607,25 @@ Options (`mePublish`, always to the game repo, `GAME_REPO` in mapedit.js). Setup
   clump at every tip); **Split Birch**: two stems from one foot in a V, its opening a gap (`Split Birch opening`); a Moose
   birch is split when `spot(x, z) < 0.35` (a hash: the map's random draws, and every other tree's place, are unchanged:
   checked by comparing every piece key). Maple: a limb into every leaf clump.
+
+## Ship Drugs (`ship`, `buildShip` in maps.js, theme 'vice'; 2026-11-17, from the pilot's design brief)
+A gaudy 1980s cruise ship in a night-time police raid. 1 unit = 1 m; x runs aft (-48) to bow (+52), z across (port -,
+the pier side). Water is the ground (y 0); the main deck is y 6; storeys L1 6-9.7, L2 10-13.7, L3 14-17.7, roof 18.
+Zones: the aft deck raid perimeter (sawhorses, luggage carts, crime-scene tape exactly 1.2 m up, contraband pallets with
+0.4 x 0.4 m tunnels) and the Hold (L1 west, more tunnel lines); the Breached Cabins (L2 west: a wavy Memphis corridor, ten
+staterooms with doors blown to 0.46 m gaps, glassless mirror frames 0.8 x 0.6 between rooms, balconies); the Lido Deck
+(roof west: the drained pool, 4 m deep end, a spiral slide tube 1.0 m inside that you can fly through, diving boards,
+lifeguard tower, DJ truss); the Grand Atrium (x -8..12, three storeys: casino floor, balconies, sweeping stairs, the
+chandelier's three tiered neon hoops stacked for a vertical dive, the smallest 0.8 m inside, a backlit 0.6 x 0.6 m grid,
+a skylight with shattered panes); the Starlight Lounge (forward, double height) under two shattered skylights; starboard
+lifeboats hanging 0.5 m off the windows; on the pier police cruisers (doors open, strobing lightbars), sodium lamps,
+floodlights, the gangway, and the port crane whose boom leans over the lounge for dives. Walls with openings are built by
+`wallH` (columns between hole edges, so stacked openings work); trim that should not be an over/under carries
+`noSurvey` (boxes too now). **tools/gapcheck.js** [map…] samples every gap's opening against every collider (5 cm clear;
+`gap.cells` = a lattice, its cell centres): the ship's 101 gaps are all open (a test in npm test). The other maps' gaps
+are drawn to the full width of their openings, so the checker flags their edges: the openings are fine.
+Theme 'vice' (worldview.js `viceMats`, `viceBackdrop`, `viceTick`): indigo night, a striped synthwave sun on the water
+beyond the bow, the grid ring beyond 120 m, purple fog, a far shore of dark towers, black glossy water, bloom; police
+lights strobe red and blue in turns (lights with `o.strobe`, and the lightbar materials); hallucinations (translucent neon
+pills, wireframe palms, geometric eyes that turn to watch the quad) drift overhead, visual only. 12 real lights: Map
+lights Auto drops to Few on slow machines.
