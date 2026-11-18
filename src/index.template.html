@@ -194,7 +194,12 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 #rgEd h4 { margin: 12px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .85; }
 #rgEd label { display: block; margin: 4px 0; } #rgEd input[type=number], #rgEd input:not([type]), #rgEd select { width: 100%; box-sizing: border-box; } #rgEd input[type=range] { width: 70%; } #rgEd output { font-family: var(--mono); font-size: 11px; margin-left: 4px; }
 #rgEd .chk { font-size: 12px; display: inline-block; margin-right: 6px; } #rgEd .chk input { width: auto; } #rgEd .hint { font-size: 11px; opacity: .7; line-height: 1.4; }
-#rgEd .edCats { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; } #rgEd .edLib { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; } #rgEd .edLib button { text-align: left; white-space: normal; }
+#rgEd .edCats { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; } #rgEd .edCats button { font-size: 11px !important; }
+#rgEd .edLibHead { margin: 8px 0 0; padding: 6px 8px 2px; border-top: 2px solid #ffd34d88; background: #2b3b4a; border-radius: 6px 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9fd8ff; }
+#rgEd .edLib { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 6px 8px 10px; background: #2b3b4a; border-left: 3px solid #59d3e8; border-radius: 0 0 6px 6px; margin-bottom: 10px; }
+#rgEd .edLib button { text-align: left; white-space: normal; background: #13232f !important; color: #d7f1ff !important; border: 1px solid #59d3e866 !important; box-shadow: none !important; transform: none !important; text-transform: none !important; font-style: normal !important; font-weight: 500 !important; }
+#rgEd .edLib button.on { background: #59d3e8 !important; color: #08131a !important; }
+#rgEd h4 { border-top: 1px solid #fff2; padding-top: 8px; }
 #rgEd .edLayers div { display: flex; gap: 4px; align-items: center; } #rgEd .edLayers span { flex: 1; text-transform: capitalize; }
 #rgEd .edXYZ { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; } #rgEd .edXYZ label { font-size: 11px; margin: 0; }
 #rgEd .edRoute { padding-left: 22px; margin: 4px 0; } #rgEd .edRoute li { display: flex; gap: 3px; align-items: center; } #rgEd .edRoute li a { flex: 1; cursor: pointer; } #rgEd .edRoute li.on a { color: #ffd34d; }
@@ -384,7 +389,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="mainMenu" class="screen hide"><div class="panel" style="max-width:560px">
   <h1 class="logo">Open Pro<br>Whooper</h1><div class="logoSub">PROJECT</div>
   <p class="sub">tiny whoop freestyle · <span id="menuMap">the playground</span> · v0.1 · best <b id="best">0</b></p>
-  <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b><br>Music: <b>8BiT_</b> · Air65 frame: <b>BetaFPV</b> · Beast Brain canopy: <b>_tcmore</b></p>
+  <p id="menuThanks">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b><br>Music: <b>8BiT_</b> · Air65 frame: <b>BetaFPV</b> · Beast Brain canopy: <b>_tcmore</b> · The Murderdome: <b>Dirtbag FPV</b> (their logo on the start flag) and <b>Spider Sugar FPV</b></p>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
   <p id="quickGoal" class="note" style="margin:-4px 0 8px"></p>
   <div class="menuBtns">

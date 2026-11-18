@@ -145,7 +145,7 @@ function lightsAuto(dt) {
 }
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
+  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); resAutoTick(); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
   if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;
@@ -209,8 +209,9 @@ function frame(now) {
   if (mode === 'review') { reviewTick(); return; }
   const rT0 = pf ? performance.now() : 0;
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
+  if (world.theme === 'dusk') duskTick(Math.min(0.1, dt || 0.016));
   renderer.render(scene, cam);
-  if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice')) bloomRender(cam);   // racing: the gates' LEDs glow
+  if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk')) bloomRender(cam);   // racing: the gates' LEDs glow
   if (PERF.fx) fxRender();
   if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();
@@ -239,9 +240,16 @@ function perfFrame(now, fT0, tPh, tDe, tR) {
     <br>physics ${f(A.phys)} ms (${(A.steps / n).toFixed(0)} steps)${A.drop ? ` · <span class="bad">${A.drop} catch-up drops</span>` : ''} · tricks ${f(A.det)} ms · draw ${f(A.rend)} ms · other ${f(A.frame - A.phys - A.det - A.rend)} ms
     <br>${Math.round(A.calls / n)} draw calls · ${(A.tris / n / 1000).toFixed(0)}k triangles · ${info.geometries} geometries · ${info.textures} textures · longest gap ${A.gap.toFixed(0)} ms
     <br>${cv.width}×${cv.height} px (×${pr.toFixed(2)}) · shadows ${renderer.shadowMap.enabled ? 'on' : 'off'} · screen fx ${PERF.fx ? 'on' : 'off'} · ${document.fullscreenElement || (innerWidth === screen.width && innerHeight === screen.height) ? 'fullscreen' : 'windowed'} ${screen.width}×${screen.height} · neon glow ${BLOOM.on && world.theme === 'vapor' ? 'on' : 'off'} · scenery ${PERF.staticPieces} pieces in ${PERF.staticMeshes} meshes
+    <br>GPU ${esc(GPU || 'unknown')}${GPU_SOFT ? ' · <span class="bad">SOFTWARE: the browser\'s hardware acceleration is off</span>' : ''} · resolution ${PERF.resAuto ? 'auto ' : ''}${Math.round(PERF.res * 100)}%
     <br>${esc(world.title || world.id || '')} · ${world.objs.length} objects · ${world.prims.length} colliders · JS heap ${mem} · mode ${esc(mode)}`;
   Object.assign(A, { phys: 0, det: 0, rend: 0, frame: 0, n: 0, worst: 0, steps: 0, calls: 0, tris: 0, gap: 0, drop: 0 });
 }
+// Auto resolution (Options → Graphics → Render resolution → Auto): every 2 s of flying, under 50 fps steps it down by 10 %
+// (to 50 % at least), over 58 fps steps it back up by 5 % (to 100 %): sharp when the machine keeps up, smooth when not
+const RA = { t0: 0, n: 0 };
+function resAutoTick() { if (!PERF.resAuto || mode !== 'fly') { RA.t0 = 0; return; } const now = performance.now(); if (!RA.t0) { RA.t0 = now; RA.n = 0; return; } RA.n++;
+  if (now - RA.t0 < 2000) return; const fps = RA.n * 1000 / (now - RA.t0); RA.t0 = now; RA.n = 0; let r = PERF.res;
+  if (fps < 50 && r > 0.5) r = Math.max(0.5, r - 0.1); else if (fps > 58 && r < 1) r = Math.min(1, r + 0.05); if (r !== PERF.res) { PERF.res = +r.toFixed(2); perfApply(); } }
 function perfToggle(on) { PERF.on = on; store.set('perfHud', on); renderer.info.autoReset = !on; $('#perfHud').classList.toggle('hide', !on); PERF.shown = performance.now(); }
 function perfApply() {   // render resolution and shadows, live
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res); resize();

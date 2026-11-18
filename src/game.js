@@ -48,7 +48,12 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 // Performance (2026-11-17, testers reported heavy CPU): the diagnostic overlay (Options → Graphics, or F3) and two graphics
 // settings: render resolution (a share of the screen's pixels) and shadows. PERF collects the timings play.js measures.
 const PERF = { fx: store.get('screenFx', true), on: store.get('perfHud', false), res: store.get('renderScale', 1), shadows: store.get('shadows', true), lights: store.get('mapLights', 'auto'), acc: { phys: 0, det: 0, rend: 0, frame: 0, ui: 0, steps: 0, n: 0, worst: 0 }, shown: 0, staticPieces: 0, staticMeshes: 0 };
+PERF.resAuto = PERF.res === 'auto'; if (PERF.resAuto) PERF.res = 1;   // Auto: the game lowers the resolution when the frame rate drops (resAutoTick in play.js)
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res);
+// which GPU the browser draws with. Software (SwiftShader, llvmpipe, "Basic Render") means hardware acceleration is off: a
+// tester's Ryzen + GeForce PC ran at 45 fps with the CPU at 73% and the GeForce idle until they turned it on.
+const GPU = (() => { try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); return String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 120); } catch { return ''; } })();
+const GPU_SOFT = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(GPU);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = PERF.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;

@@ -41,6 +41,9 @@ art = [{'name': f.stem, 'src': 'data:image/webp;base64,' + base64.b64encode(f.re
 # thumbnails for the Maps carousel (assets/maps/<id>.webp, rendered by tools/map_thumbs.py)
 thumbs = {f.stem: 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted((root / 'assets' / 'maps').glob('*.webp'))}
 t = t.replace('<script>/*MAPTHUMBS*/</script>', '<script>window.PW_MAPTHUMBS=' + json.dumps(thumbs) + ';</script>')
+# club flags and logos for one map each (assets/flags/*.webp; the Murderdome's start flag is the Dirtbag FPV logo)
+flags = {f.stem: 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted((root / 'assets' / 'flags').glob('*.webp'))}
+t = t.replace('<script>/*MAPTHUMBS*/</script>', '').replace('window.PW_MAPTHUMBS=', 'window.PW_FLAGS=' + json.dumps(flags) + ';window.PW_MAPTHUMBS=', 1)
 # official map layouts (maps/official/<id>.json, published from the Map Editor): applied for everyone (maps.js)
 official = {}
 for f in sorted((root / 'maps' / 'official').glob('*.json')) if (root / 'maps' / 'official').exists() else []:

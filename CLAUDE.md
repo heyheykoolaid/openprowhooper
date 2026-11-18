@@ -68,6 +68,10 @@ checks it on local demo GIF frames. Uploaded reviews are labelled real-world dat
 the pilot's labels, and tune like calibration data. Expect the camera tilt and lens settings to matter.
 
 ## When asked to look at Blackbox logs
+First log from the owner (2026-11-18, `blackbox/2026-11-17-bum-darts/`: Air2 frame, C03, Beast Brain, RCINPower EVO 31800KV,
+Matrix 2 AIO; 35 logs, the long ones 0 and 27-34): hover 25-28 % motor, motor command → eRPM lag 4-7 ms (the sim's Air65
+answers in ~23 ms), hover gyro noise unfiltered sd 10-43 °/s with peaks at 320-350 Hz and a broad wobble under 20 Hz (the
+sim has none: the "lofty, shuddery" feel the pilot misses). Not fitted yet.
 `blackbox/<date>-<craft>/` holds the raw `.bbl` (Betaflight onboard flash dump), `diff-all.txt`, and `build.json`
 (FC info, the game's craft/tune at upload, and the optional pilot build sheet: parts, all-up weight, prop condition,
 notes on how the sim felt). Decode the `.bbl` with Betaflight's `blackbox_decode` (or the blackbox-tools/orangebox
@@ -88,8 +92,8 @@ allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad ho
 ## RaceGOW racing (src/racegow.js, src/raceedit.js) — redesigned 2026-11-18, racing only (no trick scoring)
 On: main menu "RaceGOW racing" (`RACEGOW_ON` in menus.js). **racegow.js** (window.RG, pure, test/racegow.js) is the track
 format `pro-whooper-track/2` (`newTrack`, `cleanTrack` for anything untrusted, `trackHash` = the geometry, leaderboards key
-on it; `/1` tracks convert), two rule presets (`indoor`: IGOW-style gates 25-160 cm; `racegow`: white PVC in one section
-size, 24 in minimum), venues (a room from `ROOMS`, the sized `empty` volume, or a map: `venue.kind 'map'`, raced on that
+on it; `/1` tracks convert), one kind of track (owner, 2026-11-18: "combine the two": IGOW-style whoop gates, furniture and rooms mix with white
+PVC in one section size per track, 24 in minimum; `preset` is always 'racegow', older 'indoor' tracks open the same), venues (a room from `ROOMS`, the sized `empty` volume, or a map: `venue.kind 'map'`, raced on that
 map, the game reloads into it: `rgGoToMap`, `store 'rgPending'`), the `CATALOG` of building blocks (gates square / round /
 triangle / diamond / hex, split, checkpoint, start/finish gantry, point-to-point finish, PVC gate / hurdle / pipe, flags,
 arrows, plaques with auto-face, parametric furniture, walls / half walls / arches / tunnels / platforms in drywall, wood,
@@ -112,6 +116,12 @@ soft hit), next-gate panel and arrow (options), dark zones lower the exposure, g
 lap in pink) with trails, bests per track hash in `store 'rg.best.<hash>'`. Sharing: track codes (`PWTRACK2-…`), files,
 and the relay: kind `track` → tracks/, kind `racetime` (best lap + ghost) → racetimes/<hash>/, GET /tracks, /track,
 /raceboard, /ghost (test/dropoff.js). **The relay must be redeployed in Cloudflare** for sharing and boards to work.
+Checkpoints can count "both ways"; the Start / Finish can be an invisible line in an opening of a PVC structure.
+`RG.SAMPLES` are given to every pilot once (`store 'rg.samples'`): **RaceGOW 5 - Track 8**, read from the event's track
+animation (in 24 in sections: a 2-section back rail and a 3-section front rail one section in front, cross members, a
+front-left arm and leg, posts of 1 / 2.25 / 2 / 3.5 / 2 sections, a top bar; every pipe cut at a joint), its 9 checkpoints
+the openings the animation lights up; test/racegow.js checks it is raceable and that every pipe end meets the floor,
+another pipe, or is a free post top. The editor's palette: category tabs, then the blocks in their own tinted panel.
 
 ## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
 bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log
@@ -353,9 +363,11 @@ Not changed, no data: yaw reaches full rate in 35-95 ms (the spec says 120-160; 
 ~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model yet (a guess without a log).
 
 ## Keyboard assist, pause button, 3D checkbox (2026-11-18)
-Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls → Keyboard): `fc.modeOverride =
-'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and height hold (W / S climb and
-sink, released = hover; a PI on vertical speed in input.js). The HUD has a pause button for touch screens (`#hudPause`).
+Keyboard is Mode 2 (owner, 2026-11-18): the arrows are the left stick (↑ ↓ throttle, ← → yaw), W A S D the right stick
+(pitch, roll), full stick range. Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls →
+Keyboard): `fc.modeOverride = 'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and
+height hold (↑ ↓ climb and sink, released = hover; a PI on vertical speed in input.js). Disarmed, ↑ still raises the
+throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`).
 The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 
 ## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
@@ -618,6 +630,39 @@ change, each upside-down over the top (Rod's own two "Jump Ropes", one Jump Rope
 Alligator Man33's run): by the owner's rule those are Side Loops. 12 new Burrito Rolls where Jump Rope / Double Dutch
 used to be: unreviewed, watch them. test/jumprope.js (synthetic: guards the behaviour; it does not reproduce the old
 failure, which needs real roll timing; the private flights are the evidence).
+
+## Burrito Roll vs Trippy Spin (2026-11-18, owner: "a burrito roll is not done while the whoop is looking up at a pole")
+The orbit tracker records when the quad holds the trippy pose while circling a pole (`this.circled`: rolled to knife-edge or
+past it, the orbit over 90°); a Burrito Roll is not called when at least 40% of its roll falls in such a stretch held for a
+second or more (a burrito's own roll only passes through the pose; an ordinary banked orbit does not count). The demos
+agree: the Burrito demo is one ~330° roll over 2.3 s, briefly upside-down; the trippies roll on, nose up the pole.
+Re-flown on the 40 shared flights with Burrito calls; the owner's confirmed Burrito at 59 s (flight mwl7xvvorug3, next to
+an orbit) is kept.
+
+## The Murderdome (`murderdome`, `buildMurderdome` in maps.js, theme 'dusk'; 2026-11-18, from the pilot's design brief)
+A blood-and-rust whoop pit in a ruined sports dome under a permanent wasteland dusk (the spirit of the Dirtbag FPV club and
+Spider Sugar FPV, credited on the main menu and in the README). Main map in the carousel (not a RaceGOW track). x east, z
+south; dome wall at r 44 (broken, low in places), 16 ribs (snapped over the south half), roof panels only over the north;
+the low sun (west-south-west) comes in through the caved-in south and middle. One circuit, clockwise from the south:
+1 Blood Oath (bus-chassis gantry at x -4 with the start flag, the straight east between burning barrels), 2 Scrap Canyon
+(x 22..26, north: containers outside, crushed cars inside, four rebar gates, two low ceilings, candy chains and pool toys),
+3 War Rig Climb (z -24, west: a ramp onto the trailer skeleton, the cab with window gaps and the steering-wheel ring, sand
+to land on, bouncy scrap plates), 4 Dirtbag Lounge (north: couches, the couch tunnel, pool table, crawl tables, pinball,
+fridges, bandana flags, DIRTBAG FOREVER), 5 the Murder Dome proper (a banked dirt bowl r 10..15 open N/E/S/W, four scrap
+pylons (poles) with a ring truss at 11 m and four chain-hung gates, the Altar with its fire and the SPIDER SUGAR sign),
+6 the Chain-Link Labyrinth (west: a seeded maze on a 3 m grid, 5 x 8 cells, in at the north, out at the south), 7 the Pit
+(a deck 3.2 m up with a 3 m hole; under it a red-lit room, two tire rings, a swinging-tire gauntlet, wires, a door south),
+8 Witness Me (a gentle ramp east to the exhaust-stack finish at x -10). Surfaces (`prim.surf`, the RaceGOW hook): chain-
+link, foam junk, candy and tires soft (duct bounce), rebar, car frames, fridges and the cab hard (crash over 5 m/s), oil
+slicks slippery, sand dead, scrap plates bouncy. Two dust devils (`world.fields`, kind 'swirl' in `Drone.step`: shoves you
+round and up). worldview.js `duskMats` (rust, scrap, plate, cracked concrete, oil carpet, dirt, candy, fire, emergency,
+light shafts, dust devil, neon signs from canvas text, the flag), `duskBackdrop` (bruised orange-purple sky, a big low sun,
+far ridges and wrecked towers, hemisphere + a purple bounce light, dusty fog, drifting dust), `duskTick` (fire flicker,
+neon short-circuits, emergency blink, oil sheen, dust). The start flag is the Dirtbag FPV logo (`assets/flags/dirtbag.webp`,
+`window.PW_FLAGS`, added at the pilot's request for this game only; a plain skull until it loads). A vis shape `sign` (a
+flat textured plane) is new in `visMesh`. 13 real lights (Map lights Auto drops to Few on slow machines). Not in (static
+world): swaying gates, destructible props, confetti, kill-cam pads, the dirtbag radio. test/maps.js covers it (the bot's
+Powerloops and Mattys on the gantry, the finish and a chain gate); `tools/map_thumbs.py --extra --only=md` saves check shots.
 
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel

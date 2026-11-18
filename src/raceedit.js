@@ -138,6 +138,7 @@ const rgBestKey = t => 'rg.best.' + RG.trackHash(t);
 const rgBest = t => store.get(rgBestKey(t), {});
 // the old RaceGOW tracks (pro-whooper-track/1) come across once
 (function rgMigrate() { if (store.get('rg.migrated', false)) return; const old = store.get('race.tracks', {}); for (const t of Object.values(old)) { try { const n = RG.cleanTrack(t); n.name = n.name + ' (old)'; rgSave(n); } catch { } } store.set('rg.migrated', true); })();
+(function rgSamples() { const have = store.get('rg.samples', []); RG.SAMPLES.forEach((f, i) => { if (have.includes(i)) return; try { rgSave(RG.cleanTrack(f())); have.push(i); } catch { } }); store.set('rg.samples', have); })();
 // track codes: one line, deflated JSON in base64url (like map codes)
 async function rgCode(t) { const j = JSON.stringify(RG.cleanTrack(t)); const s = new Blob([j]).stream().pipeThrough(new CompressionStream('deflate-raw')), b = new Uint8Array(await new Response(s).arrayBuffer());
   let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return 'PWTRACK2-' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -277,7 +278,7 @@ function openRaceMenu() { mode = 'menu'; drone.armed = false; $('#hud').classLis
 function rgCard(t, own) {
   const B = rgBest(t), B0 = RG.buildTrack(t, t.venue.kind === 'map' && rgMapOk(t) ? world : null), est = RG.estimate(B0), id = esc(t.id);
   const venue = t.venue.kind === 'map' ? `on ${esc((S.MAPS[t.venue.map] || {}).title || t.venue.map)}` : esc(RG.ROOMS[t.venue.room].label);
-  return `<div class="rCard"><h3>${esc(t.name)}</h3><small>${esc(RG.PRESETS[t.preset].label)} · ${venue} · ${Math.max(0, B0.seq.length - 1)} gates${est.lap ? ` · ~${est.lap} s · difficulty ${est.difficulty}` : ''}${t.by ? ' · by ' + esc(t.by) : ''}</small>
+  return `<div class="rCard"><h3>${esc(t.name)}</h3><small>${venue} · ${Math.max(0, B0.seq.length - 1)} gates${est.lap ? ` · ~${est.lap} s · difficulty ${est.difficulty}` : ''}${t.by ? ' · by ' + esc(t.by) : ''}</small>
     <div class="rBest">Best lap ${fmtLap(B.lap)}${B.ta && B.ta[race.opts.laps] ? ` · ${race.opts.laps} laps ${fmtLap(B.ta[race.opts.laps].total)}` : ''}</div>
     <div class="row"><button class="primary" data-rgt="race:${id}">Race</button><button data-rgt="edit:${id}">${own ? 'Edit' : 'Edit a copy'}</button><button data-rgt="board:${id}">Leaderboard</button><button data-rgt="code:${id}">Copy code</button><button data-rgt="export:${id}">Export</button>${own ? `<button data-rgt="share:${id}">Share</button><button data-rgt="del:${id}">Delete</button>` : `<button data-rgt="keep:${id}">Save a copy</button>`}</div>
     <div class="rgBoard" id="rgb-${id}"></div></div>`;
@@ -292,10 +293,9 @@ function rgRenderMenu() {
       <b>Help</b><label><input type="checkbox" id="rgArr" ${o.arrow ? 'checked' : ''}> next-gate arrow</label><label><input type="checkbox" id="rgPan" ${o.panel ? 'checked' : ''}> next-gate panel</label></div>
     ${rgUI.msg ? `<p class="hint" style="color:#ffd34d">${esc(rgUI.msg)}</p>` : ''}
     <div class="rTracks">${cards}</div>
-    <div class="rTop" style="margin-top:12px"><b>New track</b><select id="rgNewPreset">${Object.entries(RG.PRESETS).map(([k, P]) => `<option value="${k}" title="${esc(P.desc)}">${esc(P.label)}</option>`).join('')}</select>
-      <select id="rgNewVenue">${venues}</select><span id="rgNewSize" class="hide">size <input id="rgSx" type="number" value="10" min="3" max="60" style="width:52px"> × <input id="rgSz" type="number" value="8" min="3" max="60" style="width:52px"> m, ceiling <input id="rgSh" type="number" value="3" min="2" max="20" style="width:44px"> m</span>
+    <div class="rTop" style="margin-top:12px"><b>New track</b><select id="rgNewVenue">${venues}</select><span id="rgNewSize" class="hide">size <input id="rgSx" type="number" value="10" min="3" max="60" style="width:52px"> × <input id="rgSz" type="number" value="8" min="3" max="60" style="width:52px"> m, ceiling <input id="rgSh" type="number" value="3" min="2" max="20" style="width:44px"> m</span>
       <button class="primary" data-rgt="new">Build it</button><span class="sp"></span><input id="rgCodeIn" placeholder="Paste a track code" style="width:200px"><button data-rgt="paste">Open code</button><label class="ghost">Import file <input type="file" id="rgImport" accept=".json,application/json" hidden></label><button data-rgt="import">Import…</button></div>
-    <p class="hint">RaceGOW is racing only: gates in order, the right way, clock running. Respawn (R) puts you back at the start. Indoor tracks use IGOW-style gates (40 cm whoop gates); RaceGOW tracks are white PVC in one section size.</p>`;
+    <p class="hint">RaceGOW is racing only: gates in order, the right way, clock running. Respawn (R) puts you back at the start. Mix anything on one track: IGOW-style whoop gates, furniture, walls, and white RaceGOW PVC (one section size per track, 24 in minimum; checkpoints in the openings of the structure).</p>`;
 }
 function rgFlash(t) { rgUI.msg = t; rgRenderMenu(); setTimeout(() => { if (rgUI.msg === t) { rgUI.msg = ''; if (!$('#rgScreen').classList.contains('hide')) rgRenderMenu(); } }, 4000); }
 document.addEventListener('change', e => {
@@ -319,7 +319,7 @@ document.addEventListener('click', async e => {
   if (a === 'paste') { try { const n = await rgUncode($('#rgCodeIn').value); if (rgTracks()[n.id]) n.id = RG.uid('t'); rgSave(n); rgUI.tab = 'mine'; rgFlash(`Opened "${n.name}"`); } catch (err) { rgFlash('That is not a track code (' + err.message + ')'); } }
   if (a === 'import') $('#rgImport').click();
   if (a === 'new') { const [k, v] = $('#rgNewVenue').value.split(':'), venue = k === 'map' ? { kind: 'map', map: v } : { kind: 'room', room: v, ...(v === 'empty' ? { size: { x: +$('#rgSx').value || 10, z: +$('#rgSz').value || 8, h: +$('#rgSh').value || 3 } } : {}) };
-    const n = RG.cleanTrack(RG.newTrack({ preset: $('#rgNewPreset').value, venue, name: 'New ' + (k === 'map' ? S.MAPS[v].title : RG.ROOMS[v].label) + ' track', by: pilotName() })); edOpen(n); }
+    const n = RG.cleanTrack(RG.newTrack({ venue, name: 'New ' + (k === 'map' ? S.MAPS[v].title : RG.ROOMS[v].label) + ' track', by: pilotName() })); edOpen(n); }
   if (a === 'share' && t) rgShare(t);
   if (a === 'board' && t) rgBoard(t);
   if (a === 'get') rgCommGet(id);
@@ -383,7 +383,7 @@ function edRebuild() {
 // the overlays: selection boxes, the flow line (coloured by the speed the line allows), the collision view, the path being drawn
 function edOverlays() {
   for (const id of ed.sel) { const m = ed.meshes.get(id); if (!m) continue; const h = new THREE.BoxHelper(m, 0xffd34d); h.userData.ownMat = true; ed.extras.add(h); }
-  if (ed.showFlow) for (const l of RG.flow(ed.B)) { const k = Math.min(1, l.speed / (RG.PRESETS[ed.track.preset].speed * 1.2)), col = new THREE.Color().setHSL(0.33 * k, 1, 0.5);
+  if (ed.showFlow) for (const l of RG.flow(ed.B)) { const k = Math.min(1, l.speed / (RG.PRESETS.racegow.speed * 1.2)), col = new THREE.Color().setHSL(0.33 * k, 1, 0.5);
     const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(l.a.x, l.a.y, l.a.z), new THREE.Vector3(l.b.x, l.b.y, l.b.z)]), new THREE.LineDashedMaterial({ color: col, dashSize: 0.15, gapSize: 0.08 })); ln.computeLineDistances(); ln.userData.ownMat = true; ed.extras.add(ln);
     if (l.turn > 100) { const s = rgText(Math.round(l.turn) + '°', '#ff9a5a', 0.08); s.position.set(l.b.x, l.b.y + 0.5, l.b.z); ed.extras.add(s); } }
   if (ed.showCol) for (const pr of ed.B.prims) { const col = pr.surf === RG.SURF.soft ? 0x39ff6a : pr.surf === RG.SURF.hard ? 0xff3344 : 0xffa33a; let m;
@@ -515,7 +515,7 @@ function edAct(a) {
     else RG.mirror(ed.track, ids, axis, about); ed.sel = new Set(ids); edRebuild(); edPanels(); }
   if (k === 'mirrorTrack') { edPush(); RG.mirror(ed.track, ed.track.elements.map(x => x.id), v, 0); edRebuild(); edPanels(); }
   if (k === 'path') { ed.place = null; ed.path = { pts: [] }; edHint('Path: click points along the line you want to fly, Enter to place gates along it, Esc to stop'); edPanels(); }
-  if (k === 'pathDone' && ed.path) { const P = ed.path; ed.path = null; if (P.pts.length >= 2) { edPush(); const ns = RG.pathGates(P.pts, +$('#edPathGap').value || 2, $('#edPathType').value, ed.track.preset === 'racegow' ? {} : { size: +$('#edPathSize').value || 0.4 });
+  if (k === 'pathDone' && ed.path) { const P = ed.path; ed.path = null; if (P.pts.length >= 2) { edPush(); const ns = RG.pathGates(P.pts, +$('#edPathGap').value || 2, $('#edPathType').value, RG.CATALOG[$('#edPathType').value].pvc ? {} : { size: +$('#edPathSize').value || 0.4 });
       for (const n of ns) edClamp(n); ed.track.elements.push(...ns); ed.track.route = [...RG.routeOf(ed.track).map(x => x.id).filter(id => !ns.some(n => n.id === id)), ...ns.map(n => n.id)]; ed.sel = new Set(ns.map(x => x.id)); edHint(`Placed ${ns.length} gates`); }
     edRebuild(); edPanels(); }
   if (k === 'place') edStartPlace(v);
@@ -535,8 +535,8 @@ function edAct(a) {
 let edHintT = 0; function edHint(t) { const el = $('#edHint2'); if (el) el.textContent = t; edHintT = performance.now(); }
 // ---- panels
 function edPanels() {
-  const T = ed.track; if (!T) return; const cats = RG.CATS.filter(c => T.preset === 'racegow' || c !== 'RaceGOW PVC'), q = ed.search.trim().toLowerCase();
-  const lib = Object.values(RG.CATALOG).filter(C => q ? (C.label + ' ' + C.desc + ' ' + C.cat).toLowerCase().includes(q) : C.cat === ed.cat).filter(C => !C.pvc || T.preset === 'racegow');
+  const T = ed.track; if (!T) return; const cats = RG.CATS, q = ed.search.trim().toLowerCase();
+  const lib = Object.values(RG.CATALOG).filter(C => q ? (C.label + ' ' + C.desc + ' ' + C.cat).toLowerCase().includes(q) : C.cat === ed.cat);
   $('#edTopBar').innerHTML = `<button data-ea="exit" title="Back to the track list (Esc)">✕ Exit</button><input id="edName" value="${esc(T.name)}" maxlength="40" title="Track name">
     <span class="edGroup">${['persp', 'top', 'split'].map((v, i) => `<button class="${ed.view === v ? 'on' : ''}" data-ea="view:${v}" title="${['Perspective', 'Top (orthographic)', 'Both side by side'][i]} (${i + 1})">${['3D', 'Top', 'Split'][i]}</button>`).join('')}</span>
     <span class="edGroup">Snap ${[[0, 'free'], [0.01, '1 cm'], [0.05, '5 cm'], [0.1, '10 cm']].map(([v, l]) => `<button class="${ed.snap === v ? 'on' : ''}" data-ea="snap:${v}">${l}</button>`).join('')} <select id="edASnap" title="Angle snap">${[0, 15, 45, 90].map(a => `<option value="${a}" ${ed.aSnap === a ? 'selected' : ''}>${a ? a + '°' : 'free °'}</option>`).join('')}</select><button class="${ed.magnet ? 'on' : ''}" data-ea="magnet" title="Magnetic: things sit on top of what is under them">Magnet</button></span>
@@ -545,9 +545,9 @@ function edPanels() {
     <span class="edGroup"><button class="${ed.showFlow ? 'on' : ''}" data-ea="flow" title="The racing line between gates, coloured by the speed it allows">Flow</button><button class="${ed.showCol ? 'on' : ''}" data-ea="col" title="Show colliders: green soft, red hard, orange solid">Collision</button></span>
     <span class="sp"></span><button data-ea="code">Copy code</button><button data-ea="save">Save</button><button class="primary" data-ea="test" title="Fly it now (T); B comes back">Test fly</button>`;
   $('#edLeftP').innerHTML = `<input id="edSearch" placeholder="Search blocks…" value="${esc(ed.search)}"><div class="edCats">${cats.map(c => `<button class="${!q && ed.cat === c ? 'on' : ''}" data-ea="cat:${c}">${c}</button>`).join('')}</div>
-    <div class="edLib">${lib.map(C => `<button class="${ed.place && ed.place.type === C.type ? 'on' : ''}" data-ea="place:${C.type}" title="${esc(C.desc)}">${esc(C.label)}</button>`).join('') || '<p class="hint">Nothing matches.</p>'}</div>
-    ${ed.path ? `<h4>Path tool</h4><label>Gate <select id="edPathType">${Object.values(RG.CATALOG).filter(C => C.gate && !C.start && !C.finish && (T.preset === 'racegow' ? C.pvc : !C.pvc)).map(C => `<option value="${C.type}">${esc(C.label)}</option>`).join('')}</select></label>
-      <label>Every <input id="edPathGap" type="number" value="2" step="0.25" min="0.5"> m</label><label>Height <input id="edPathY" type="number" value="0.6" step="0.05" min="0.1"> m</label>${T.preset === 'racegow' ? '' : '<label>Opening <input id="edPathSize" type="number" value="0.4" step="0.05" min="0.25"> m</label>'}<button class="primary" data-ea="pathDone">Place gates (Enter)</button>` : ''}
+    <div class="edLibHead">${q ? 'Matches' : esc(ed.cat)}</div><div class="edLib">${lib.map(C => `<button class="${ed.place && ed.place.type === C.type ? 'on' : ''}" data-ea="place:${C.type}" title="${esc(C.desc)}">${esc(C.label)}</button>`).join('') || '<p class="hint">Nothing matches.</p>'}</div>
+    ${ed.path ? `<h4>Path tool</h4><label>Gate <select id="edPathType">${Object.values(RG.CATALOG).filter(C => C.gate && !C.start && !C.finish && C.type !== 'checkpoint').map(C => `<option value="${C.type}">${esc(C.label)}</option>`).join('')}</select></label>
+      <label>Every <input id="edPathGap" type="number" value="2" step="0.25" min="0.5"> m</label><label>Height <input id="edPathY" type="number" value="0.6" step="0.05" min="0.1"> m</label><label>Opening (whoop gates) <input id="edPathSize" type="number" value="0.4" step="0.05" min="0.25"> m</label><button class="primary" data-ea="pathDone">Place gates (Enter)</button>` : ''}
     <h4>Layers</h4><div class="edLayers">${RG.LAYERS.map(L => `<div><span>${L}</span><button class="${ed.hidden.has(L) ? '' : 'on'}" data-ea="layer:hide,${L}" title="Show / hide">👁</button><button class="${ed.locked.has(L) ? 'on' : ''}" data-ea="layer:lock,${L}" title="Lock (cannot be picked)">🔒</button></div>`).join('')}</div>
     <p class="hint">Drag: orbit · right / middle drag: pan · wheel: zoom · WASD QE: move · 1 2 3: views · [ ]: turn · gamepad sticks work too</p>`;
   edRight();
@@ -566,10 +566,10 @@ function edInspector() {
 function edInspectorLive() { const L = [...ed.sel].map(edEl).filter(Boolean); if (L.length !== 1) return; for (const k of ['x', 'y', 'z', 'ry', 'rx', 'rz', 's']) { const i = document.querySelector(`#edInsp [data-ef="${k}"]`); if (i && document.activeElement !== i) i.value = +L[0][k].toFixed(3); } }
 function edRight() {
   const T = ed.track, R = RG.routeOf(T), chk = ed.chk || { checks: [], estimate: {} }, ic = { pass: '✓', warn: '⚠', fail: '✗', note: 'ℹ' };
-  $('#edRightP').innerHTML = `<h4>Track</h4><p class="hint">${esc(RG.PRESETS[T.preset].label)} · ${T.venue.kind === 'map' ? 'on ' + esc(S.MAPS[T.venue.map].title) : esc(RG.ROOMS[T.venue.room].label)}</p>
+  $('#edRightP').innerHTML = `<h4>Track</h4><p class="hint">${T.venue.kind === 'map' ? 'on ' + esc(S.MAPS[T.venue.map].title) : esc(RG.ROOMS[T.venue.room].label)}</p>
     <label>Laps (time attack) <input type="number" id="edLaps" min="1" max="20" value="${T.laps}"></label>
     ${T.venue.kind === 'room' ? `<label>Lighting <select id="edLight">${Object.entries(RG.LIGHTING).map(([k, l]) => `<option value="${k}" ${T.lighting === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
-    ${T.preset === 'racegow' ? `<label>Section size (in) <input type="number" id="edSec" min="24" max="96" step="1" value="${Math.round(T.section / 0.0254)}"></label>` : ''}
+    <label>PVC section size (in) <input type="number" id="edSec" min="24" max="96" step="1" value="${Math.round(T.section / 0.0254)}"></label>
     <label>Tags <span class="edTags">${RG.TAGS.map(g => `<label class="chk"><input type="checkbox" data-etag="${g}" ${T.tags.includes(g) ? 'checked' : ''}>${g}</label>`).join('')}</span></label>
     <h4>Selection</h4><div id="edInsp"></div>
     <h4>Route <small>${R.length} gates</small> <button data-ea="routeRev" title="Fly it the other way round">Reverse</button></h4><ol class="edRoute">${R.map((g, i) => `<li class="${ed.sel.has(g.id) ? 'on' : ''}"><a data-ea="sel:${g.id}">${esc(g.name || RG.CATALOG[g.type].label)}${g.sector ? ' ⏱' : ''}</a><button data-ea="routeUp:${g.id}" ${i ? '' : 'disabled'}>↑</button><button data-ea="routeDown:${g.id}" ${i < R.length - 1 ? '' : 'disabled'}>↓</button></li>`).join('')}</ol>

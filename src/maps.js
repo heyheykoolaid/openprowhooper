@@ -1162,13 +1162,187 @@
 
     return K.done({ id: 'ship', title: 'Ship Drugs', theme: 'vice', zones, spawn: { pos: v3(-23, 1.53, -17.5), yaw: Math.PI }, bounds: { x: [-56, 58], z: [-28, 16] } });
   }
+
+  // =============================================================== The Murderdome
+  // A blood-and-rust whoop pit in the ruins of an old sports dome (the pilot's brief, 2026-11-18; Spider Sugar FPV and the
+  // Dirtbag FPV club's spirit). One continuous circuit inside the dome, clockwise from the south: 1 Blood Oath (the start:
+  // a bus-chassis gantry, a skull flag, a dusty straight between burning barrels), 2 Scrap Canyon (a narrow corridor of
+  // containers and crushed cars, rebar gates, low ceilings, hanging candy chains), 3 War Rig Climb (a ramp up a semi-truck
+  // skeleton, through the cab and its steering-wheel ring, off the roof onto sand), 4 Dirtbag Lounge (couches, a couch
+  // tunnel, a pool table, a pinball machine, fridges, bandana flags), 5 the Murder Dome proper (a banked dirt bowl, gates
+  // hung on chains from a ring truss, the Altar with its fire and the Spider Sugar sign), 6 the Chain-Link Labyrinth (a
+  // maze of soft chain-link), 7 the Pit (a hole in a raised deck into a red-lit room with tire rings and a swinging-tire
+  // gauntlet), 8 Witness Me (the finish straight to two exhaust stacks). The roof is caved in over the south and the middle:
+  // the low dusk sun comes through it. x east, z south. Surfaces: chain-link and foam junk are soft (duct bounce), rebar and
+  // car frames hard, oil slicks slippery, sand dead. Two dust devils shove you round (world.fields, kind 'swirl').
+  // Not in (the physics world is static): swaying gates, destructible props, confetti, kill-cams, the dirtbag radio.
+  function buildMurderdome() {
+    const K = kit(), { O, box, pipe, ball, disc } = K, { frame } = parts(K), zones = [], fields = [];
+    let seed = 6669; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const SOFT = { e: 0.45, f: 0.3 }, HARD = { e: 0.12, f: 0.9, crash: 5 }, SLICK = { e: 0.1, f: 0.04 }, SAND = { e: 0.03, f: 1.1 }, PLATE = { e: 0.55, f: 0.4 };
+    const surf = (o, S0, from = 0) => { for (let i = from; i < o.prims.length; i++) o.prims[i].surf = S0; return o; };
+    const sign = (o, c, w, h, ry, mat, both = true) => { o.vis.push({ shape: 'sign', c, w, h, ry, mat, glow: true }); if (both) o.vis.push({ shape: 'sign', c: v3(c.x - Math.sin(ry) * 0.02, c.y, c.z - Math.cos(ry) * 0.02), w, h, ry: ry + Math.PI, mat, glow: true }); };
+    const lamp = (name, at, col, pw, rg) => O(name, 'deco', { light: at, lightColor: col, lightPower: pw, lightRange: rg });
+    const barrel = (x, z, lit, y = 0, name = 'Burning Barrel') => { const o = O(name, 'deco'); pipe(o, v3(x, y, z), v3(x, y + 0.9, z), 0.29, 'rustRed'); pipe(o, v3(x, y + 0.88, z), v3(x, y + 1.55, z), 0.24, 'fire', { noCollide: true, glow: true, cone: true });
+      pipe(o, v3(x, y + 0.88, z), v3(x, y + 1.25, z), 0.14, 'fireCore', { noCollide: true, glow: true, cone: true }); if (lit) lamp('Barrel Fire', v3(x, y + 1.8, z), 0xff8a30, 5, 11); return o; };
+    const ring = (name, c, r, n, rp, mat, S0) => { const o = O(name, 'overunder'), N = 14, nx = n.x, nz = n.z, ux = -nz, uz = nx;   // a round gate standing up, its axis n (horizontal)
+      for (let i = 0; i < N; i++) { const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, P = a => v3(c.x + ux * Math.cos(a) * r, c.y + Math.sin(a) * r, c.z + uz * Math.cos(a) * r); pipe(o, P(a0), P(a1), rp, mat); }
+      if (S0) surf(o, S0); const q = (r - rp - 0.05) * 0.62; O(name + ' opening', 'gap', { gap: { c, n: v3(nx, 0, nz), hu: q, hv: q, u: v3(ux, 0, uz) } }); return o; };
+    const RW = 44, HW = 7, ribY = r => HW + 17 * Math.sqrt(Math.max(0, 1 - (r / RW) ** 2));
+
+    // ---- the dome: a broken outer wall, ribs (snapped over the south half), roof panels left only over the north
+    { const N = 32; for (let i = 0; i < N; i++) { const a = (i + 0.5) / N * Math.PI * 2, gap = i % 11 === 5, low = i % 7 === 3; if (gap) continue;
+        const h = low ? 3.6 : HW, ch = Math.PI * RW / N + 0.15, o = O('Dome Wall', 'wall', { wallNormal: v3(-Math.cos(a), 0, -Math.sin(a)) });
+        box(o, v3(Math.cos(a) * (RW + 0.4), h / 2, Math.sin(a) * (RW + 0.4)), v3(ch, h / 2, 0.4), 'crackedConcrete', -a - Math.PI / 2); } }
+    for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * Math.PI * 2, south = Math.sin(a) > -0.15, r1 = south ? 27 + 4 * rnd() : 17, o = O('Dome Rib', 'deco'); let pr = RW;
+      for (let r = RW - 6; r >= r1 - 0.01; r -= 6) { pipe(o, v3(Math.cos(a) * pr, ribY(pr), Math.sin(a) * pr), v3(Math.cos(a) * r, ribY(r), Math.sin(a) * r), 0.32, 'rustRed', { noSurvey: true }); pr = r; } }
+    { const o = O('Dome Roof', 'deco'), bands = [[RW, 34], [34, 25], [25, 17.5]];
+      for (let k = 0; k < 16; k++) { const a = (k + 1) / 16 * Math.PI * 2; if (Math.sin(a) > -0.3) continue;
+        for (const [ro, ri] of bands) { if (rnd() < 0.22) continue; const rm = (ro + ri) / 2, yo = ribY(ro), yi = ribY(ri), L = Math.hypot(ro - ri, yi - yo) / 2, wt = Math.PI * rm / 16 + 0.05;
+          box(o, v3(Math.cos(a) * rm, (yo + yi) / 2, Math.sin(a) * rm), v3(wt, 0.1, L), 'rustRed', Math.PI / 2 - a, Math.atan2(yi - yo, ro - ri), 0, { noSurvey: true }); } } }
+    // light shafts through the broken roof (seen, never hit), lined up on the low sun
+    { const o = O('Dusk Light Shafts', 'deco'), d = (() => { const x = 0.86, y = -0.3, z = -0.42, l = Math.hypot(x, y, z); return v3(x / l, y / l, z / l); })();
+      for (const [x, z, w] of [[6, 4, 1.4], [11, -6, 0.9], [15, 9, 1.6], [-1, 12, 1.1], [19, 19, 1.3], [4, 24, 1.0], [24, -1, 0.8], [-8, 2, 1.2]]) { const L = 24, c = v3(x - d.x * L, -d.y * L, z - d.z * L);
+        box(o, c, v3(w, w * 0.6, L), 'shaft', Math.atan2(-d.x, -d.z), Math.asin(-d.y), 0, { noCollide: true, alpha: true }); } }
+
+    // ---- 1 Blood Oath: the bus-chassis gantry, the skull flag, the dusty straight between burning barrels (flown east)
+    { const GX = -4, z0 = 29.4, z1 = 36.6, o = O('Blood Oath Gantry', 'overunder'); for (const z of [z0 - 0.3, z1 + 0.3]) box(o, v3(GX, 1.6, z), v3(0.5, 1.6, 0.3), 'busYellow');
+      box(o, v3(GX, 3.42, 33), v3(0.6, 0.22, 3.9), 'busYellow'); for (const dx of [-0.45, 0.45]) pipe(o, v3(GX + dx, 3.7, z0 - 0.3), v3(GX + dx, 3.7, z1 + 0.3), 0.07, 'rebar');
+      for (let z = z0; z <= z1; z += 1.2) box(o, v3(GX, 3.9, z), v3(0.5, 0.1, 0.05), 'scrap');   // seat frames welded on top
+      surf(o, HARD); o.obstacle = { a: v3(GX, 0, z0), b: v3(GX, 0, z1), under: 3.2, over: 3.64 };
+      O('Blood Oath Gantry opening', 'gap', { gap: { c: v3(GX, 1.6, 33), n: v3(1, 0, 0), hu: 3.5, hv: 1.54, u: v3(0, 0, 1) } });
+      const fl = O('Skull Flag', 'deco'); fl.vis.push({ shape: 'sign', c: v3(GX + 0.65, 2.6, 33), w: 2.4, h: 1.2, ry: Math.PI / 2, mat: 'skullFlag' }); }   // the Dirtbag FPV flag
+    for (let x = -1; x <= 13; x += 3.5) for (const z of [28.6, 37.4]) barrel(x, z, z < 30 && (x === -1 || x === 9.5));
+    zones.push({ shape: 'zone', mat: 'sand', c: v3(5, 0.006, 33), h: v3(10, 0, 4.5) });
+
+    // ---- 2 Scrap Canyon: a hard left into a 4 m corridor (flown north), containers on the outside, crushed cars inside
+    { const X0 = 22, X1 = 26, zs = [23.5, 17.3, 11.1, 4.9, -1.3, -7.5];
+      for (const z of zs) { for (const lv of [0, 1]) { const o = O('Shipping Container', 'wall', { wallNormal: v3(-1, 0, 0) }); box(o, v3(X1 + 1.25, 1.3 + lv * 2.62, z), v3(1.22, 1.3, 3.05), lv ? 'scrap' : 'rustRed'); }
+        if (Math.round(z) % 2) { const o = O('Shipping Container', 'wall', { wallNormal: v3(1, 0, 0) }); box(o, v3(X0 - 1.25, 1.3, z), v3(1.22, 1.3, 3.05), 'scrap'); }
+        else { const o = O('Crushed Cars', 'wall', { wallNormal: v3(1, 0, 0) }); for (let i = 0; i < 4; i++) box(o, v3(X0 - 1.1 + (rnd() - 0.5) * 0.2, 0.36 + i * 0.7, z + (rnd() - 0.5) * 0.6), v3(1.0, 0.34, 2.2), i % 2 ? 'carBlack' : 'rustRed', (rnd() - 0.5) * 0.15, 0, (rnd() - 0.5) * 0.08); surf(o, HARD); } }
+      [20, 11.6, 3.6, -4.4].forEach((z, i) => { const g = frame(`Rebar Gate ${i + 1}`, (X0 + X1) / 2, z, 3.0, i % 2 ? 1.5 : 2.1, 'x', 'rebar'); surf(g, HARD);
+        for (const s of [-1, 1]) box(g, v3((X0 + X1) / 2 + s * 1.6, 0.9, z - 0.1), v3(0.16, 0.08, 0.01), 'plate', 0, 0, (rnd() - 0.5) * 0.3, { noCollide: true }); });   // license plates
+      for (const zc of [15.9, -0.2]) { const o = O('Canyon Low Ceiling', 'overunder'); box(o, v3((X0 + X1) / 2, 1.42, zc), v3(2.05, 0.06, 1.0), 'plate'); }
+      for (const zb of [22, 8, -2.6]) { const o = O('Candy Chain Beam', 'deco'); pipe(o, v3(X0 - 1.6, 3.7, zb), v3(X1 + 1.6, 3.7, zb), 0.08, 'rebar', { noSurvey: true });
+        const c = O('Candy Chains', 'deco'); for (let i = 0; i < 4; i++) { const x = X0 + 0.5 + i * 1.0, y0 = 1.7 + rnd() * 0.6, m = i % 2 ? 'candyPink' : 'candyYellow';
+          pipe(c, v3(x, 3.62, zb), v3(x, y0, zb), 0.035, m, { noSurvey: true }); if (i % 2 === 0) ball(c, v3(x, y0 - 0.25, zb), 0.25, i % 4 ? 'candyPink' : 'flamingo'); } surf(c, SOFT); }
+      const sg = O('Send It Sign', 'deco'); sign(sg, v3(X1 + 0.02, 4.2, 9), 3.2, 0.8, -Math.PI / 2, 'signSendIt', false);
+      lamp('Canyon Work Lamp', v3(24, 3.4, 15), 0xffc07a, 7, 12); lamp('Canyon Work Lamp', v3(24, 3.4, -1), 0xff9ad8, 6, 12);
+      zones.push({ shape: 'zone', mat: 'plate', c: v3((X0 + X1) / 2, 0.006, 8), h: v3(2, 0, 17) }); }
+
+    // ---- 3 War Rig Climb (flown west along z = -24): a ramp up onto the trailer skeleton, through the cab and its steering
+    // wheel, off the roof; a sand patch to land on (dead), scrap plates round it (they bounce you)
+    { const Z = -24, o = O('War Rig Ramp', 'deco'); box(o, v3(19.5, 0.7, Z), v3(1.2, 0.05, 2.65), 'plate', Math.PI / 2, -Math.atan2(1.4, 5), 0, { noSurvey: true }); surf(o, PLATE);
+      const tr = O('War Rig Trailer', 'overunder'); for (const dz of [-0.9, 0.9]) box(tr, v3(13, 1.35, Z + dz), v3(4, 0.12, 0.12), 'rustRed'); for (let x = 9.5; x <= 16.5; x += 1.75) box(tr, v3(x, 1.35, Z), v3(0.08, 0.08, 0.9), 'rustRed');
+      surf(tr, HARD); tr.obstacle = { a: v3(13, 0, Z - 1), b: v3(13, 0, Z + 1), under: 1.23, over: 1.47 };
+      const wh = O('War Rig Wheels', 'deco'); for (const x of [15.5, 11, 7.8]) for (const dz of [-1.05, 1.05]) pipe(wh, v3(x, 0.5, Z + dz - 0.17), v3(x, 0.5, Z + dz + 0.17), 0.5, 'tire');
+      const cab = O('War Rig Cab', 'wall', { wallNormal: v3(-1, 0, 0) }), cx0 = 6.4, cx1 = 9, y0 = 0.9, y1 = 3.2, wz = 1.25, WY0 = 1.55, WY1 = 2.75, WW = 0.85;
+      for (const s of [-1, 1]) box(cab, v3((cx0 + cx1) / 2, (y0 + y1) / 2, Z + s * wz), v3((cx1 - cx0) / 2, (y1 - y0) / 2, 0.06), 'busYellow');   // doors / sides
+      box(cab, v3((cx0 + cx1) / 2, y1, Z), v3((cx1 - cx0) / 2 + 0.05, 0.08, wz + 0.06), 'busYellow'); box(cab, v3((cx0 + cx1) / 2, y0, Z), v3((cx1 - cx0) / 2, 0.08, wz), 'scrap');
+      for (const x of [cx0, cx1]) { box(cab, v3(x, (y0 + WY0) / 2, Z), v3(0.06, (WY0 - y0) / 2, wz), 'busYellow'); box(cab, v3(x, (WY1 + y1) / 2, Z), v3(0.06, (y1 - WY1) / 2, wz), 'busYellow');
+        for (const s of [-1, 1]) box(cab, v3(x, (WY0 + WY1) / 2, Z + s * (WW + (wz - WW) / 2)), v3(0.06, (WY1 - WY0) / 2, (wz - WW) / 2), 'busYellow');
+        O('War Rig Cab window', 'gap', { gap: { c: v3(x, (WY0 + WY1) / 2, Z), n: v3(1, 0, 0), hu: WW - 0.07, hv: (WY1 - WY0) / 2 - 0.07, u: v3(0, 0, 1) } }); }
+      surf(cab, HARD); ring('Steering Wheel Gate', v3(7.7, 2.15, Z), 0.5, v3(1, 0, 0), 0.04, 'carBlack', HARD);
+      const land = O('Landing Sand', 'deco'); box(land, v3(2.2, 0.012, Z), v3(2.6, 0.012, 2.6), 'sand'); surf(land, SAND);
+      const pl = O('Scrap Plates', 'deco'); for (const [x, z] of [[-1.2, Z - 2.4], [-0.6, Z + 2.2], [5.6, Z + 2.8], [-1.6, Z]]) box(pl, v3(x, 0.015, z), v3(0.9, 0.015, 0.7), 'plate', rnd() * 3); surf(pl, PLATE);
+      zones.push({ shape: 'zone', mat: 'dirt', c: v3(12, 0.006, Z), h: v3(12, 0, 4) }); }
+
+    // ---- 4 Dirtbag Lounge (north, under what is left of the roof): a high line over the furniture, a crawl line under it
+    { const Z0 = -27, legs = (o, cx, cz, hx, hz, hgt, m) => { for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(o, v3(cx + sx * (hx - 0.05), (hgt - 0.05) / 2, cz + sz * (hz - 0.05)), v3(0.04, (hgt - 0.05) / 2, 0.04), m); };
+      const couch = (name, cx, cz, ry) => { const o = O(name, 'deco'), cs = Math.cos(ry), sn = Math.sin(ry), at = (dx, dz) => v3(cx + dx * cs + dz * sn, 0, cz - dx * sn + dz * cs);
+        { const p = at(0, 0); box(o, v3(p.x, 0.24, p.z), v3(1.05, 0.24, 0.42), 'couchRot', ry); } { const p = at(0, 0.34); box(o, v3(p.x, 0.62, p.z), v3(1.05, 0.38, 0.1), 'couchRot', ry); }
+        for (const s of [-1, 1]) { const p = at(s * 0.96, 0); box(o, v3(p.x, 0.36, p.z), v3(0.12, 0.36, 0.42), 'couchRot', ry); } return o; };
+      couch('Broken Couch', 2, Z0 - 3, 0.3); couch('Broken Couch', -14, Z0 - 6.5, -0.4);
+      // the couch tunnel: two couches back to back with a door laid across their tops (flown along x)
+      couch('Couch Tunnel', -6.5, Z0 - 2.2, Math.PI); couch('Couch Tunnel', -6.5, Z0 - 3.6, 0);
+      { const o = O('Couch Tunnel Roof', 'overunder'); box(o, v3(-6.5, 1.04, Z0 - 2.9), v3(1.15, 0.03, 1.0), 'oldWood'); O('Couch Tunnel opening', 'gap', { gap: { c: v3(-6.5, 0.55, Z0 - 2.9), n: v3(1, 0, 0), hu: 0.2, hv: 0.38, u: v3(0, 0, 1) } }); }
+      { const o = O('Pool Table', 'overunder'); box(o, v3(-11, 0.8, Z0 - 1.5), v3(1.3, 0.06, 0.72), 'feltGreen'); for (const s of [-1, 1]) box(o, v3(-11, 0.9, Z0 - 1.5 + s * 0.74), v3(1.38, 0.05, 0.06), 'oldWood'); legs(o, -11, Z0 - 1.5, 1.3, 0.72, 0.75, 'oldWood'); }
+      for (const [x, z] of [[-2.5, Z0 - 6], [-9, Z0 - 8.4]]) { const o = O('Crawl Table', 'overunder'); box(o, v3(x, 0.72, z), v3(0.75, 0.03, 0.45), 'oldWood'); legs(o, x, z, 0.75, 0.45, 0.7, 'oldWood'); }
+      { const o = O('Pinball Machine', 'deco'); box(o, v3(-16.5, 0.75, Z0 - 2), v3(0.36, 0.1, 0.68), 'carBlack', 0, -0.12); for (const dz of [-0.6, 0.6]) for (const dx of [-0.3, 0.3]) box(o, v3(-16.5 + dx, 0.35, Z0 - 2 + dz), v3(0.03, 0.35, 0.03), 'galv');
+        box(o, v3(-16.5, 1.35, Z0 - 2.65), v3(0.36, 0.45, 0.06), 'carBlack'); o.vis.push({ shape: 'sign', c: v3(-16.5, 1.35, Z0 - 2.58), w: 0.66, h: 0.5, ry: 0, mat: 'signCasino', glow: true }); }
+      { const o = O('Dead Fridges', 'deco'); box(o, v3(-19, 0.9, Z0 + 0.2), v3(0.4, 0.9, 0.36), 'fridge', 0.2); box(o, v3(-20.4, 0.38, Z0 - 1.4), v3(0.9, 0.38, 0.36), 'fridge', 1.1); surf(o, HARD); }
+      for (const [x, z, h] of [[0, Z0 - 0.5, 1.6], [-4, Z0 - 0.5, 0.9], [-9, Z0 - 5, 1.7], [-13, Z0 - 0.4, 1.0], [-17.5, Z0 - 6, 1.5]]) { const o = O('Bandana Flag', 'deco'); pipe(o, v3(x, 0, z), v3(x, h, z), 0.02, 'oldWood'); o.vis.push({ shape: 'sign', c: v3(x + 0.26, h - 0.18, z), w: 0.5, h: 0.32, ry: 0, mat: 'bandana' }); }
+      const sg = O('Dirtbag Forever Sign', 'deco'); sign(sg, v3(-8, 4.6, -40.6), 4.2, 2.1, 0, 'signDirtbag', false);
+      lamp('Lounge Neon', v3(-8, 4, -38.5), 0xd8ff8a, 9, 18); lamp('Lounge Lamp', v3(-12, 2.6, -29), 0xffb070, 7, 12);
+      zones.push({ shape: 'zone', mat: 'oilCarpet', c: v3(-9, 0.006, Z0 - 4), h: v3(12, 0, 6) }); }
+
+    // ---- 5 The Murder Dome proper: a banked dirt bowl (openings N, E, S, W), a ring truss on four scrap pylons with gates
+    // hung from it on chains, and the Altar in the middle (a fire on top, the Spider Sugar sign over it)
+    { const N = 20, ri = 10, ro = 15, hb = 2.2;
+      for (let i = 0; i < N; i++) { if (i % 5 === 0) continue; const a = (i + 0.5) / N * Math.PI * 2, rm = (ri + ro) / 2, L = Math.hypot(ro - ri, hb) / 2, o = O('Dirt Banking', 'deco');
+        box(o, v3(Math.cos(a) * rm, hb / 2, Math.sin(a) * rm), v3(Math.PI * rm / N + 0.12, 0.18, L), 'dirt', Math.PI / 2 - a, -Math.atan2(hb, ro - ri), 0, { noSurvey: true });
+        box(o, v3(Math.cos(a) * (ro + 0.4), hb / 2, Math.sin(a) * (ro + 0.4)), v3(Math.PI * ro / N + 0.1, hb / 2, 0.4), 'scrap', -a - Math.PI / 2, 0, 0, { noSurvey: true }); }
+      const RT = 17, YT = 11; for (const a of [0.25, 0.75, 1.25, 1.75].map(k => k * Math.PI)) { const o = O('Scrap Pylon', 'pole'); pipe(o, v3(Math.cos(a) * RT, 0, Math.sin(a) * RT), v3(Math.cos(a) * RT, YT, Math.sin(a) * RT), 0.5, 'scrap'); }
+      { const o = O('Ring Truss', 'deco'); for (let i = 0; i < 24; i++) { const a0 = i / 24 * Math.PI * 2, a1 = (i + 1) / 24 * Math.PI * 2; pipe(o, v3(Math.cos(a0) * RT, YT, Math.sin(a0) * RT), v3(Math.cos(a1) * RT, YT, Math.sin(a1) * RT), 0.18, 'rustRed', { noSurvey: true }); } }
+      [0.125, 0.625, 1.125, 1.625].forEach((k, i) => { const a = k * Math.PI, c = v3(Math.cos(a) * RT, 0, Math.sin(a) * RT), t = v3(-Math.sin(a), 0, Math.cos(a)), u = v3(Math.cos(a), 0, Math.sin(a)), W = 0.9, Y0 = 3.4, Y1 = 5.2, o = O(`Chain Gate ${i + 1}`, 'overunder');
+        const P = (s, y) => v3(c.x + u.x * s, y, c.z + u.z * s); pipe(o, P(-W, Y0), P(W, Y0), 0.05, 'rebar'); pipe(o, P(-W, Y1), P(W, Y1), 0.05, 'rebar'); pipe(o, P(-W, Y0), P(-W, Y1), 0.05, 'rebar'); pipe(o, P(W, Y0), P(W, Y1), 0.05, 'rebar');
+        for (const s of [-W, W]) pipe(o, P(s, Y1), P(s * 0.3, YT), 0.025, 'chain', { noSurvey: true }); surf(o, HARD);
+        o.obstacle = { a: P(-W, 0), b: P(W, 0), under: Y0 - 0.05, over: Y0 + 0.05 }; O(`Chain Gate ${i + 1} opening`, 'gap', { gap: { c: v3(c.x, (Y0 + Y1) / 2, c.z), n: t, hu: W - 0.11, hv: (Y1 - Y0) / 2 - 0.11, u } }); });
+      const al = O('The Altar', 'deco'); disc(al, v3(0, 0.8, 0), 3, 0.8, 'scrap'); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; box(al, v3(Math.cos(a) * 3.2, 0.25, Math.sin(a) * 3.2), v3(0.5, 0.25, 0.35), 'rustRed', -a, 0, 0, { noSurvey: true }); }
+      barrel(0, 0, false, 1.6, 'Altar Fire');
+      lamp('Altar Fire', v3(0, 3.4, 0), 0xff7a2a, 12, 22);
+      const em = O('Spider Sugar Sign', 'deco'); for (const s of [-1, 1]) pipe(em, v3(s * 1.7, 1.6, -0.6), v3(s * 1.7, 7.2, -0.6), 0.09, 'rebar'); pipe(em, v3(-1.7, 7.2, -0.6), v3(1.7, 7.2, -0.6), 0.09, 'rebar');
+      sign(em, v3(0, 5.3, -0.6), 3.2, 3.2, 0, 'signSpider');
+      zones.push({ shape: 'zone', mat: 'dirt', c: v3(0, 0.006, 0), h: v3(10, 0, 10) }); }
+    { const o = O('Oil Slick', 'deco'); for (const [x, z, r] of [[-6, -8, 1.6], [7, 6, 1.3], [-20, 33, 1.5], [-15, 33.5, 1.1], [14, 31, 1.2]]) box(o, v3(x, 0.01, z), v3(r, 0.01, r * 0.7), 'oilSlick', rnd() * 3); surf(o, SLICK); }
+    // dust devils: they push you round and up (world.fields), drawn as a spinning haze
+    for (const [x, z] of [[-17, -10], [17, -15]]) { const o = O('Dust Devil', 'deco'); pipe(o, v3(x, 0, z), v3(x, 6, z), 1.8, 'dustDevil', { noCollide: true, cone: true, alpha: true });
+      fields.push({ kind: 'swirl', o: v3(x, 3, z), m: [1, 0, 0, 0, 1, 0, 0, 0, 1], h: v3(2.2, 3, 2.2), accel: 9 }); }
+
+    // ---- 6 The Chain-Link Labyrinth (west): a maze of soft chain-link on a 3 m grid, in at the north, out at the south
+    { const X0 = -39, Z0 = -12, C = 3, NX = 5, NZ = 8, H = 2.4, seen = new Set(), open = new Set(), key = (a, b) => a < b ? a + '|' + b : b + '|' + a, id = (i, j) => i + ',' + j;
+      const st = [[2, 0]]; seen.add(id(2, 0)); while (st.length) { const [i, j] = st[st.length - 1], nb = [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < NX && b < NZ && !seen.has(id(a, b)));
+        if (!nb.length) { st.pop(); continue; } const [a, b] = nb[Math.floor(rnd() * nb.length)]; open.add(key(id(i, j), id(a, b))); seen.add(id(a, b)); st.push([a, b]); }
+      for (let k = 0; k < 5; k++) { const i = Math.floor(rnd() * (NX - 1)), j = Math.floor(rnd() * NZ); open.add(key(id(i, j), id(i + 1, j))); }   // a few loops: more than one way through
+      const panel = (x, z, alongX) => { const o = O('Chain-Link Fence', 'wall', { wallNormal: alongX ? v3(0, 0, 1) : v3(1, 0, 0) }); box(o, v3(x, H / 2, z), v3(alongX ? C / 2 : 0.025, H / 2, alongX ? 0.025 : C / 2), 'chainlink'); surf(o, SOFT); };
+      for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) { const x = X0 + (i + 0.5) * C, z = Z0 + (j + 0.5) * C;
+        if (i < NX - 1 && !open.has(key(id(i, j), id(i + 1, j)))) panel(x + C / 2, z, false); if (j < NZ - 1 && !open.has(key(id(i, j), id(i, j + 1)))) panel(x, z + C / 2, true); }
+      for (let i = 0; i < NX; i++) { if (i !== 2) panel(X0 + (i + 0.5) * C, Z0, true); if (i !== 2) panel(X0 + (i + 0.5) * C, Z0 + NZ * C, true); }
+      for (let j = 0; j < NZ; j++) { panel(X0, Z0 + (j + 0.5) * C, false); panel(X0 + NX * C, Z0 + (j + 0.5) * C, false); }
+      { const o = O('Fence Posts', 'deco'); for (let i = 0; i <= NX; i++) for (let j = 0; j <= NZ; j++) pipe(o, v3(X0 + i * C, 0, Z0 + j * C), v3(X0 + i * C, H + 0.05, Z0 + j * C), 0.035, 'galv'); surf(o, SOFT); }
+      for (const [j, nm] of [[0, 'Labyrinth Entrance'], [NZ, 'Labyrinth Exit']]) { const g = frame(nm, X0 + 2.5 * C, Z0 + j * C, 2.4, 2.0, 'x', 'galv'); surf(g, SOFT); }
+      zones.push({ shape: 'zone', mat: 'concrete', c: v3(X0 + NX * C / 2, 0.006, Z0 + NZ * C / 2), h: v3(NX * C / 2, 0, NZ * C / 2) }); }
+
+    // ---- 7 The Pit (south-west): a raised scrap deck with a hole in it; underneath, a red-lit room with tire rings, wires and
+    // a swinging-tire gauntlet; out through the south door to the final straight
+    { const X0 = -32, X1 = -16, Z0 = 14, Z1 = 26, Y = 3.2, HX = -24, HZ = 19, HH = 1.5, t = 0.12, dk = O('Pit Deck', 'building');
+      box(dk, v3((X0 + HX - HH) / 2, Y, (Z0 + Z1) / 2), v3((HX - HH - X0) / 2, t, (Z1 - Z0) / 2), 'plate'); box(dk, v3((HX + HH + X1) / 2, Y, (Z0 + Z1) / 2), v3((X1 - HX - HH) / 2, t, (Z1 - Z0) / 2), 'plate');
+      box(dk, v3(HX, Y, (Z0 + HZ - HH) / 2), v3(HH, t, (HZ - HH - Z0) / 2), 'plate'); box(dk, v3(HX, Y, (HZ + HH + Z1) / 2), v3(HH, t, (Z1 - HZ - HH) / 2), 'plate');
+      O('The Pit Hole', 'gap', { gap: { c: v3(HX, Y, HZ), n: v3(0, 1, 0), hu: HH - 0.05, hv: HH - 0.05, u: v3(1, 0, 0) } });
+      const DX = -29.5, DW = 0.9, DH = 1.5;
+      const wl = (name, c, h, n) => { const o = O(name, 'wall', { wallNormal: n }); box(o, c, h, 'scrap'); return o; };
+      wl('Pit Wall', v3(X0, Y / 2, (Z0 + Z1) / 2), v3(0.15, Y / 2, (Z1 - Z0) / 2), v3(1, 0, 0)); wl('Pit Wall', v3(X1, Y / 2, (Z0 + Z1) / 2), v3(0.15, Y / 2, (Z1 - Z0) / 2), v3(-1, 0, 0));
+      wl('Pit Wall', v3((X0 + X1) / 2, Y / 2, Z0), v3((X1 - X0) / 2, Y / 2, 0.15), v3(0, 0, 1));
+      { const o = O('Pit Wall', 'wall', { wallNormal: v3(0, 0, -1) }); box(o, v3((X0 + DX - DW) / 2, Y / 2, Z1), v3((DX - DW - X0) / 2, Y / 2, 0.15), 'scrap'); box(o, v3((DX + DW + X1) / 2, Y / 2, Z1), v3((X1 - DX - DW) / 2, Y / 2, 0.15), 'scrap'); box(o, v3(DX, (DH + Y) / 2, Z1), v3(DW, (Y - DH) / 2, 0.15), 'scrap'); }
+      O('Pit Exit Door', 'gap', { gap: { c: v3(DX, DH / 2, Z1), n: v3(0, 0, 1), hu: DW - 0.06, hv: DH / 2 - 0.06, u: v3(1, 0, 0) } });
+      { const o = O('Deck Columns', 'pole'); for (const [x, z] of [[-28, 17], [-20, 17], [-20, 23.5]]) pipe(o, v3(x, 0, z), v3(x, Y - t, z), 0.16, 'rustRed'); }
+      ring('Pit Tire Ring 1', v3(-26.5, 1.25, HZ), 0.5, v3(1, 0, 0), 0.11, 'tire', SOFT); ring('Pit Tire Ring 2', v3(-29.5, 1.25, 21.5), 0.5, v3(0, 0, 1), 0.11, 'tire', SOFT);
+      { const o = O('Swinging Tires', 'deco'); [[DX - 0.6, 22.8], [DX + 0.6, 23.6], [DX - 0.5, 24.4], [DX + 0.5, 25.1]].forEach(([x, z]) => { pipe(o, v3(x, Y - t, z), v3(x, 1.75, z), 0.02, 'chain', { noSurvey: true }); pipe(o, v3(x - 0.15, 1.4, z), v3(x + 0.15, 1.4, z), 0.36, 'tire'); }); surf(o, SOFT); }
+      { const o = O('Hanging Wires', 'deco'); for (let i = 0; i < 9; i++) { const x = X0 + 1 + rnd() * (X1 - X0 - 2), z = Z0 + 1 + rnd() * (Z1 - Z0 - 2); if (Math.hypot(x - HX, z - HZ) < 2) continue; pipe(o, v3(x, Y - t, z), v3(x + (rnd() - 0.5) * 0.3, Y - 0.9 - rnd() * 0.8, z), 0.012, 'carBlack', { noSurvey: true }); } surf(o, SOFT); }
+      { const o = O('Emergency Lights', 'deco'); for (const [x, z] of [[X0 + 0.2, 18], [X1 - 0.2, 22], [-24, Z0 + 0.2]]) box(o, v3(x, 2.6, z), v3(0.14, 0.1, 0.14), 'emergency', 0, 0, 0, { noCollide: true, glow: true }); }
+      lamp('Pit Emergency Light', v3(-27, 2.9, 18), 0xff3a22, 10, 13); lamp('Pit Emergency Light', v3(-20, 2.9, 23), 0xff3a22, 10, 13);
+      { const o = O('Sparks', 'deco'); for (let i = 0; i < 12; i++) box(o, v3(X1 - 0.3, 0.3 + rnd() * 1.2, 15 + rnd() * 2), v3(0.02, 0.02, 0.02), 'fireCore', rnd() * 3, 0, 0, { noCollide: true, glow: true }); }
+      const sg = O("Sugar's Pit Sign", 'deco'); sign(sg, v3(-24, Y + 1.0, Z1 + 0.2), 4.4, 1.1, 0, 'signSugar', false); pipe(sg, v3(-26.4, Y, Z1 + 0.2), v3(-26.4, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); pipe(sg, v3(-21.6, Y, Z1 + 0.2), v3(-21.6, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); }
+
+    // ---- 8 Witness Me: out of the pit, a long drag east, slightly uphill, to the exhaust-stack finish, barrels both sides
+    { const o = O('Witness Me Ramp', 'deco'); box(o, v3(-20, 0.36, 33), v3(7.2, 0.06, 3.2), 'plate', 0, 0, Math.atan2(0.7, 14.4), { noSurvey: true }); box(o, v3(-10.5, 0.36, 33), v3(2.6, 0.36, 3.2), 'plate'); surf(o, PLATE); }
+    { const FX = -10, za = 30.2, zb = 35.8, Y0 = 0.72, YB = 3.5, o = O('Witness Me Finish', 'overunder'); for (const z of [za, zb]) { pipe(o, v3(FX, Y0, z), v3(FX, 5.8, z), 0.22, 'rustRed'); pipe(o, v3(FX, 5.6, z), v3(FX, 6.2, z), 0.26, 'carBlack'); }
+      pipe(o, v3(FX, YB, za), v3(FX, YB, zb), 0.12, 'rebar'); surf(o, HARD); o.obstacle = { a: v3(FX, 0, za), b: v3(FX, 0, zb), under: YB - 0.12, over: YB + 0.12 };
+      O('Witness Me Finish opening', 'gap', { gap: { c: v3(FX, (Y0 + YB - 0.12) / 2, 33), n: v3(1, 0, 0), hu: (zb - za) / 2 - 0.3, hv: (YB - 0.12 - Y0) / 2 - 0.06, u: v3(0, 0, 1) } });
+      sign(o, v3(FX, 4.5, 33), 4.6, 1.1, -Math.PI / 2, 'signWitness'); lamp('Finish Glow', v3(FX + 0.5, 4.4, 33), 0xffa040, 6, 12); }
+    for (let x = -28; x <= -14; x += 3.5) for (const z of [29.2, 36.8]) barrel(x, z, false);
+    zones.push({ shape: 'zone', mat: 'crackedConcrete', c: v3(0, 0.004, 0), h: v3(RW, 0, RW) });
+    zones.unshift(zones.pop());   // the cracked floor first, the patches on top of it
+    return K.done({ id: 'murderdome', title: 'The Murderdome', theme: 'dusk', zones, fields, spawn: { pos: v3(-7, 0.03, 33), yaw: -Math.PI / 2 }, bounds: { x: [-RW - 1, RW + 1], z: [-RW - 1, RW + 1] } });
+  }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet neighbourhood park in Arrow Heights, Revelstoke: groves of tall cedar and hemlock with grassy lanes between them, a weathered swing set and small play unit, picnic tables in the shade, a half-buried tire tunnel among the birch, and the Selkirks beyond the rooftops.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },
     school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school under a pink sunset: chrome pillar plaza, courtyard bowl, pillar hall, rooftop gaps, classroom wing, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('school', buildSchool()))) },
     clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A bright city-block park: a raised playground plaza (twister slide tower, spinner, the Clappy Bars, a climbing dome, sakura trees), a street ring with race gates and a footbridge, shops and flats with reachable roofs, alleys and walkways, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('clappy', buildClappy()))) },
     warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A big, high-bay-lit logistics warehouse: pallet-rack aisles, stacked containers and a container tunnel, a mezzanine and office, catwalks, a crane bridge, a conveyor, skylights, and a loading dock with a trailer outside.', build: () => closeIn(S.surveyObstacles(edited('warehouse', buildWarehouse()))) },
     ship: { id: 'ship', title: 'Ship Drugs', blurb: 'A gaudy 1980s cruise ship in a night-time police raid: a three-storey neon atrium with a hooped chandelier and a backlit grid, breached cabins and a wavy corridor, a drained pool with a spiral slide tube, contraband tunnels, lifeboats, and a port crane over shattered skylights.', build: () => closeIn(S.surveyObstacles(edited('ship', buildShip()))) },
+    murderdome: { id: 'murderdome', title: 'The Murderdome', blurb: 'A blood-and-rust whoop pit in a ruined sports dome under a permanent wasteland dusk: a bus-chassis start gantry between burning barrels, a scrap canyon of containers and crushed cars, a war rig to climb through, the Dirtbag Lounge, a banked bowl round the flaming Altar, a chain-link labyrinth, a drop into the Pit, and the Witness Me straight. Soft chain-link, hard rebar, oil slicks and dust devils.', build: () => closeIn(S.surveyObstacles(edited('murderdome', buildMurderdome()))) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'The original: swing set, slide tower, monkey bars, trees, the flagpole and the brick building, now with a skate corner, scaffold, and the Trick Park to the west.', build: () => closeIn(S.surveyObstacles(edited('playground', Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })))) },
   };
-  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose;
+  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose; S.buildMurderdome = buildMurderdome;
 })(typeof window !== 'undefined' ? window : globalThis);

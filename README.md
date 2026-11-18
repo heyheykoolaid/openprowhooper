@@ -79,6 +79,7 @@ Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.co
 
 - **Music:** 8BiT_ and the Infinity Loops community. The in-game byTe_me Radio streams their free-to-use collection from archive.org; rights remain with the artists.
 - **Whoop model:** the Air65 frame is BetaFPV's design and the "Beast Brain" canopy is by _tcmore; the game draws them from their model files (`assets/meshes/`). They belong to their makers and are used in this game only.
+- **The Murderdome:** made in the spirit of the Dirtbag FPV club and Spider Sugar FPV. The start flag is the Dirtbag FPV logo (`assets/flags/dirtbag.webp`), added at the pilot's request, for this game only; it belongs to the club.
 - **Graffiti:** the MoPenguinz FPV and ByTe_Me logos appear on the walls alongside the pilot's own pieces. They belong to their makers and are used in this game only.
 
 ## Art

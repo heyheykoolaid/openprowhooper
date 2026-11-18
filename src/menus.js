@@ -273,7 +273,7 @@ function renderControls() {
   const tabs = ['keyboard', 'radio', 'gamepad'].map(m => `<button class="tab ${m === mode ? 'on' : ''}" data-mode="${m}">${m === 'radio' ? 'Radio' : m === 'gamepad' ? 'Gamepad' : 'Keyboard'}</button>`).join('');
   let body = '';
   if (mode === 'keyboard') {
-    body = `<p class="note">Keyboard is for a quick look around (checking a map or a track). A radio is the real thing.</p><label class="chk"><input type="checkbox" id="kbAssistOn" ${kbAssistOn() ? 'checked' : ''}> Keyboard flight assist <small>(on: self-levels and holds its height. W / S climb and sink, let go to hover, arrows lean, A / D turn, Shift faster, Space arms. Off: raw acro, W / S move the throttle)</small></label>`;
+    body = `<p class="note">Keyboard is for a quick look around (checking a map or a track). A radio is the real thing.</p><label class="chk"><input type="checkbox" id="kbAssistOn" ${kbAssistOn() ? 'checked' : ''}> Keyboard flight assist <small>(on: self-levels and holds its height. Arrows are the left stick: ↑ ↓ climb and sink, let go to hover, ← → turn. W A S D are the right stick: lean forward, back, left, right. Shift faster, Space arms. Off: raw acro, ↑ ↓ move the throttle)</small></label>`;
   } else {
     const isR = mode === 'radio', cur = readPad(mode), d = describePad(cur);
     const n = Math.max(8, cur ? cur.axes.length : 8);
@@ -297,7 +297,7 @@ function renderControls() {
       ${cur ? `<h3>${isR ? 'Channel monitor' : 'Raw axes'}</h3><div class="chmon">${cur.axes.map((_, i) => `<div><span>${isR ? 'CH' + (i + 1) : 'A' + i}</span><div class="bar"><i id="raw_${i}"></i></div></div>`).join('')}</div>` : ''}`;
   }
   $('#cBody').innerHTML = `<div class="tabs">${tabs}</div>${body}
-    <div class="keys"><b>Keyboard</b> W/S throttle · Shift boost · X cut · A/D yaw · ↑↓ pitch · ←→ roll · Space arm · T flip over · R respawn · 1 / 2 / 3 acro, angle, 3D mode · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
+    <div class="keys"><b>Keyboard</b> ↑↓ throttle (assist: climb / sink, let go to hover) · ←→ yaw · W/S pitch · A/D roll · Shift faster · X cut · Space arm · T flip over · R respawn · 1 / 2 / 3 acro, angle, 3D mode · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
 }
 let calib = null, detecting = null;
 function liveControls() {
@@ -355,7 +355,8 @@ addEventListener('gamepadconnected', e => {
 });
 addEventListener('gamepaddisconnected', () => { if (!$('#controls').classList.contains('hide')) renderControls(); updateMenuDevice(); });
 function updateMenuDevice() {
-  const el = $('#menuDevice'); if (!el) return; const d = describePad(readPad('radio')) || describePad(readPad('gamepad'));
+  const el = $('#menuDevice'); if (!el) return;
+  if (GPU_SOFT) { el.innerHTML = `<b style="color:#ff8b7d">Your browser is drawing the game without your graphics card</b> (hardware acceleration is off), so it will run slowly and work the CPU hard. Chrome / Edge: Settings → System → turn on "Use graphics acceleration when available", then relaunch. Firefox: Settings → General → Performance.`; return; } const d = describePad(readPad('radio')) || describePad(readPad('gamepad'));
   el.innerHTML = inputCfg.mode === 'keyboard' ? (d ? `${d.kind === 'radio' ? 'Radio' : 'Gamepad'} found: <b>${d.name}</b> — switch to it under Controls.` : 'Input: keyboard. Plug in your radio as a USB joystick for real acro.')
     : (describePad(readPad()) ? `Input: <b>${describePad(readPad()).name}</b> (${inputCfg.mode})` : `Input: ${inputCfg.mode} — not connected yet. Move a stick once it's plugged in.`);
 }

@@ -63,7 +63,8 @@ function openOptions() {
     <label class="chk big"><input type="checkbox" id="optShadows" ${PERF.shadows ? 'checked' : ''}> Shadows <small>(off is much lighter on slower computers)</small></label>
     <label class="chk big"><input type="checkbox" id="optFx" ${PERF.fx ? 'checked' : ''}> Screen effects <small>(vignette and scanlines)</small></label>
     <label title="The map's lamps as real lights. Each one costs frame rate everywhere on screen (More Warehouse has 11). Auto drops to Few if the first seconds of flying run under 50 fps.">Map lights <select id="optLights">${[['auto', 'Auto'], ['full', 'Full'], ['few', 'Few (4)'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${PERF.lights === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <label>Render resolution <select id="optRes">${[[1, '100%'], [0.85, '85%'], [0.7, '70%'], [0.5, '50%']].map(([v, l]) => `<option value="${v}" ${Math.abs(PERF.res - v) < 0.01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label>Render resolution <select id="optRes"><option value="auto" ${PERF.resAuto ? 'selected' : ''}>Auto (drops when the frame rate does)</option>${[[1, '100%'], [0.85, '85%'], [0.7, '70%'], [0.5, '50%']].map(([v, l]) => `<option value="${v}" ${!PERF.resAuto && Math.abs(PERF.res - v) < 0.01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <p class="note">Graphics card: ${esc(GPU || 'unknown')}${GPU_SOFT ? ' — <b style="color:#ff8b7d">the browser is drawing without your graphics card (hardware acceleration is off)</b>: Chrome / Edge: Settings → System → "Use graphics acceleration when available", then relaunch. Firefox: Settings → General → Performance.' : ''}</p>
     <label class="chk big" title="Frame rate, where the time goes (physics, trick detection, drawing, the rest), draw calls, resolution and memory"><input type="checkbox" id="optPerf" ${PERF.on ? 'checked' : ''}> Performance overlay <small>(F3)</small></label>
     <label class="chk big" title="The trick library's guesses (never scored) always wait for you in SKITTLES mode; this also shows them on screen while you fly"><input type="checkbox" id="optMaybe" ${store.get('maybeFlash', false) ? 'checked' : ''}> Show "maybe" guesses while flying</label>
     <p class="note">Turn it off if the game runs slowly on that map.</p>
@@ -107,7 +108,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'optBloom') { BLOOM.on = e.target.checked; store.set('bloom', BLOOM.on); }
   if (e.target.id === 'optShadows') { PERF.shadows = e.target.checked; store.set('shadows', PERF.shadows); perfApply(); }
   if (e.target.id === 'optLights') { PERF.lights = e.target.value; store.set('mapLights', PERF.lights); PERF.lightsAuto = null; LA.t = 0; LA.t0 = 0; LA.n = 0; mapLightsBuild(); }
-  if (e.target.id === 'optRes') { PERF.res = +e.target.value || 1; store.set('renderScale', PERF.res); perfApply(); }
+  if (e.target.id === 'optRes') { PERF.resAuto = e.target.value === 'auto'; PERF.res = PERF.resAuto ? 1 : (+e.target.value || 1); store.set('renderScale', PERF.resAuto ? 'auto' : PERF.res); perfApply(); }
   if (e.target.id === 'optPerf') perfToggle(e.target.checked);
   if (e.target.id === 'optFx') { PERF.fx = e.target.checked; store.set('screenFx', PERF.fx); }
   if (e.target.id === 'optMaybe') store.set('maybeFlash', e.target.checked);

@@ -760,6 +760,7 @@ class Drone {
       const lx = d.x * m[0] + d.y * m[3] + d.z * m[6], ly = d.x * m[1] + d.y * m[4] + d.z * m[7], lz = d.x * m[2] + d.y * m[5] + d.z * m[8];
       if (Math.abs(lx) > f.h.x || Math.abs(ly) > f.h.y || Math.abs(lz) > f.h.z) continue;
       if (f.kind === 'push') { const k = f.accel * p.mass; Fw.x += f.dir.x * k; Fw.y += f.dir.y * k; Fw.z += f.dir.z * k; }
+      else if (f.kind === 'swirl') { const r = Math.hypot(d.x, d.z) || 1e-3, k = f.accel * p.mass * Math.max(0, 1 - r / f.h.x); Fw.x += -d.z / r * k; Fw.z += d.x / r * k; Fw.y += 0.3 * k; }   // a dust devil (the Murderdome): it shoves you round and up
       else if (f.kind === 'boost') { const B = qrot(this.q, Fb), g = f.gain - 1; Fw.x += B.x * g; Fw.y += B.y * g; Fw.z += B.z * g; } }
     this.vel = add(this.vel, mul(Fw, dt / p.mass));
     const I = p.I, w = this.w;
@@ -1349,6 +1350,9 @@ class TrickDetector {
           else if (/U$/.test(lk) && (() => {   // Burrito: big roll before crossing over, rewind down the same side, finish under
             const rb = R.filter(x => x.raw >= 150).pop(); if (!rb) return false;
             const noOver = !lat.some(c => c.kind === 'O' && c.t > rb.t0 - 0.6);       // a Double Dutch rolls at the peak, over the object
+            // (owner, 2026-11-18: trippy spins were called Burrito Rolls) a Burrito is a sideways move on an over/under, not
+            // done while circling a pole and looking up it: a roll made while the quad was going round a pole is the trippy's
+            { const inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, rb.t1) - Math.max(w.t0, rb.t0)), 0); if (inPose >= 0.4 * Math.max(0.1, rb.t1 - rb.t0)) return false; }   // the roll was mostly flown in a trippy's pose round a pole
             return noOver && lat.some(c => c.t < rb.t0) && (R.some(x => x !== rb && x.dir !== rb.dir && x.raw >= 60) || rb.raw >= 200);
           })()) pick('Burrito Roll', 2, lat.slice(-2));
           else if (fast || R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230)) pick('Double Dutch', 2, lat.slice(-2));   // the flick at the peak is fast; a slow roll all the way round is a side loop
@@ -1638,7 +1642,7 @@ class StreamDetector extends TrickDetector {
     { const st = this.watcher && this.watcher.style; this.watcher = new Watcher(this); if (st) this.watcher.style = st; } this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
     this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
     this.near = null; this.nearT = null; this.nearPT = null; this.nearP = null;   // near-object caches (a map edited in place is a new layout)
-    this.orb = {}; this.passTr = {}; this.vst = {}; this.hst = {}; this.airPole = null; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
+    this.orb = {}; this.circled = []; this.passTr = {}; this.vst = {}; this.hst = {}; this.airPole = null; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
     // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
     // swing-set legs, slide-tower posts, monkey-bar & jungle-gym uprights, the pilot). Fence posts and wall pipes are excluded.
     this.poles = [];
@@ -1759,6 +1763,9 @@ class StreamDetector extends TrickDetector {
           // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
           // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
           const dA = Math.abs(da) * R2D, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
+          // the trippy pose while circling a pole (the pole held up in the picture, rolled over or nose up the pole): no Burrito
+          // Roll then (owner: a burrito is never flown looking up at a pole); once 90° of the circle has been flown in the pose
+          if (pose && ob.tAcc > 90) { const W = this.circled || (this.circled = []), last = W[W.length - 1]; if (last && last.ob === ob && t - last.t1 < 0.25) last.t1 = t; else { W.push({ ob, t0: t, t1: t }); if (W.length > 12) W.shift(); } }
           if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
             ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; }
           else if (ob.poseT0 == null) ob.run = 0;

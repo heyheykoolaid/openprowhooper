@@ -76,7 +76,7 @@ ok(RG.unpackGhost({ hz: 30, n: 5, d: ['x'] }) && RG.unpackGhost(null) === null, 
 const dirty = { format: 'pro-whooper-track/2', name: '<script>alert(1)</script>Best', preset: 'evil', venue: { kind: 'room', room: '__proto__' }, laps: 1e9, route: ['nope'],
   elements: [{ type: 'gateSquare', id: '"><img>', x: 1e9, y: 'a', p: { size: 99, led: 'boom', collide: 'hard' } }, { type: 'constructor' }, { type: 'wall', p: { mat: 'lava' } }] };
 const c = RG.cleanTrack(dirty);
-ok(!/[<>]/.test(c.name) && c.preset === 'indoor' && c.venue.room === 'livingroom' && c.laps === 20 && c.route.length === 0, 'clean: name, preset, venue, laps, route');
+ok(!/[<>]/.test(c.name) && c.preset === 'racegow' && c.venue.room === 'livingroom' && c.laps === 20 && c.route.length === 0, 'clean: name, preset, venue, laps, route');
 ok(c.elements.length === 2 && c.elements[0].x === 500 && c.elements[0].p.size === 2.4 && c.elements[0].p.led === 'static' && c.elements[0].p.collide === 'hard' && !/[<>"]/.test(c.elements[0].id), 'clean: elements clamped');
 ok(c.elements[1].p.mat === 'drywall', 'clean: unknown option falls back');
 let threw = false; try { RG.cleanTrack({ format: 'x' }); } catch (e) { threw = true; } ok(threw, 'not a track: refused');
@@ -97,7 +97,18 @@ const ts = lineTrack(); ts.elements[1].p.size = 0.2; ok(RG.checks(RG.buildTrack(
 const tw = RG.newTrack({ venue: { kind: 'room', room: 'livingroom' } }); tw.elements.push(RG.newElement('gateSquare', { x: 4, z: 0 }), RG.newElement('gateSquare', { x: 0, z: 0 }), RG.newElement('gateSquare', { x: -1, z: 0 }));
 ok(RG.checks(RG.buildTrack(tw)).checks.some(x => /through the walls/.test(x.text)), 'gate outside the room');
 const tr = RG.newTrack({ preset: 'racegow', venue: { kind: 'room', room: 'garage' } }); tr.elements.push(RG.newElement('pvcGate', { x: 0, z: 0 }), RG.newElement('gateSquare', { x: 1, z: -1 }));
-ok(RG.checks(RG.buildTrack(tr)).checks.some(x => /RaceGOW: gates should be/.test(x.text)), 'RaceGOW preset wants PVC');
+ok(!RG.checks(RG.buildTrack(tr)).checks.some(x => x.level === 'warn' && /PVC/.test(x.text)) && RG.checks(RG.buildTrack(tr)).checks.some(x => /PVC part/.test(x.text)), 'PVC and ordinary gates mix on one track');
+// both-ways checkpoints and the invisible start line
+{ const cb = RG.newElement('checkpoint', {}, { dir: 'both ways' }), cpb = RG.elementParts(cb, {}).gates[0]; ok(cpb.both && RG.crossing(cpb, v3(0, 0.4, -0.1), v3(0, 0.4, 0.1)) === -1, 'a both-ways checkpoint knows it');
+  const tb = RG.newTrack({ venue: { kind: 'room', room: 'hall' } }); tb.elements = [RG.newElement('start', { z: 2 }, { look: 'invisible line' }), RG.newElement('checkpoint', { z: 0 }, { dir: 'both ways' }), RG.newElement('gateSquare', { z: -2 })];
+  const Bb = RG.buildTrack(tb), Rb = new RG.Race(Bb, {}); ok(RG.elementParts(tb.elements[0], {}).vis.length === 0, 'an invisible start line draws nothing');
+  Rb.step(v3(0, 0.4, 2.1), v3(0, 0.4, 1.9), 0); ok(!Rb.step(v3(0, 0.4, -0.1), v3(0, 0.4, 0.1), 1).some(e => e.type === 'wrong') && Rb.next === 2, 'flown backward, a both-ways checkpoint still counts'); }
+// the sample RaceGOW track: a connected PVC structure, raceable, every gate an opening of it
+{ const sm = RG.cleanTrack(RG.SAMPLES[0]()), Bs = RG.buildTrack(sm), cs = RG.checks(Bs);
+  ok(cs.ok, 'the RaceGOW Track 8 sample is raceable (' + cs.checks.filter(x => x.level !== 'pass').map(x => x.text).join('; ') + ')');
+  const pipes = Bs.prims.filter(p => p.type === 'capsule'), ends = pipes.flatMap(p => [p.a, p.b]), joined = p => ends.filter(q => Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) < 0.01).length;
+  ok(pipes.length >= 20 && pipes.every(p => (p.a.y < 0.02 || joined(p.a) >= 2) && (p.b.y < 0.02 || joined(p.b) >= 2 || p.b.y > 1.2)), 'every pipe end sits on the floor, meets another pipe at a joint, or is a free post top');
+  ok(Bs.seq.length >= 9, 'its route has ' + (Bs.seq.length - 1) + ' gates'); }
 
 // --- tools
 const pg = RG.pathGates([[0, 0.6, 0], [0, 0.6, -4], [4, 1.2, -6]], 2);

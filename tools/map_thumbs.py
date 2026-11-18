@@ -14,8 +14,18 @@ VIEWS = {
     'playground': ([14, 9, 16], [-6, 1.5, -2]),
     'moose':      ([-22, 3.2, 10], [-34, 1.4, 0]),
     'ship':       ([-52, 17, -34], [4, 9, 2]),
+    'murderdome': ([30, 13, 44], [-4, 1, 8]),
 }
 EXTRA = {
+    'md-high':     ('murderdome', [0, 40, 60], [0, 0, 0]),
+    'md-start':    ('murderdome', [-9, 1.6, 33], [6, 1.2, 33]),
+    'md-canyon':   ('murderdome', [24, 1.5, 27], [24, 1.2, 10]),
+    'md-rig':      ('murderdome', [26, 3, -21], [8, 1.5, -24]),
+    'md-lounge':   ('murderdome', [2, 2.5, -24], [-12, 0.8, -32]),
+    'md-bowl':     ('murderdome', [12, 4, 16], [0, 2.5, 0]),
+    'md-maze':     ('murderdome', [-25, 6, -16], [-33, 0.5, 2]),
+    'md-pit':      ('murderdome', [-21, 1.4, 22], [-29, 1.2, 21]),
+    'md-finish':   ('murderdome', [-28, 1.4, 33], [-8, 2, 33]),
     'ship-side':    ('ship', [0, 8, 70], [0, 5, 0]),
     'ship-bow':     ('ship', [70, 10, 30], [42, 4, 0]),
     'ship-casino':  ('ship', [-4, 8.5, 6], [3, 6, 0]),
@@ -58,7 +68,9 @@ async def main():
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
         if '--extra' in sys.argv:
             out = pathlib.Path('/tmp/map_shots'); out.mkdir(exist_ok=True)
+            only = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--only=')), '')
             for name, (mid, *view) in EXTRA.items():
+                if only and not name.startswith(only): continue
                 (await shot(b, mid, view, None)).save(out / (name + '.png')); print('shot', name)
         if '--no-thumbs' not in sys.argv:
             d = ROOT / 'assets' / 'maps'; d.mkdir(parents=True, exist_ok=True)

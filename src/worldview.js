@@ -332,7 +332,7 @@ function mats() {
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
-  vaporMats(); viceMats();
+  vaporMats(); viceMats(); duskMats();
 }
 function boxGeo(h, density = 0.5) {
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
@@ -396,6 +396,7 @@ function visMesh(v, art) {
   } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
   else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
   else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
+  else if (v.shape === 'sign') { m = new THREE.Mesh(new THREE.PlaneGeometry(v.w, v.h), MAT[v.mat] || MAT.concrete); m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.rx || 0, v.ry || 0, 0, 'YXZ'); }   // a flat picture (a neon sign, a flag): its texture once across it
   return m || null;
 }
 let objRoot = null;
@@ -427,12 +428,88 @@ function mapLightsBuild() {
   scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 }
 // ============================================================ build world meshes
+
+// ============================================================ The Murderdome (theme 'dusk'): a scrap-yard whoop pit in a ruined sports dome under a
+// permanent wasteland dusk. Materials, the neon signs, the sky and haze, and a tick for fire, flickering neon and dust.
+const DUSK = { t: 0, dust: null, flick: [] };
+function signTex(lines, col, glow, w = 512, h = 128, art) {
+  const [c, g] = cnv(w, h); g.fillStyle = '#07040a'; g.fillRect(0, 0, w, h); if (art) art(g, w, h);
+  g.textAlign = 'center'; g.textBaseline = 'middle'; const fs = Math.floor(h * 0.62 / lines.length); g.font = `900 ${fs}px Impact, 'Arial Black', sans-serif`;
+  lines.forEach((t, i) => { const y = h * (i + 0.5) / lines.length; g.shadowColor = glow; g.shadowBlur = 18; g.fillStyle = col; g.fillText(t, w / 2, y); g.shadowBlur = 0; g.lineWidth = 2; g.strokeStyle = '#fff8'; g.strokeText(t, w / 2, y); });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; }
+function duskMats() {
+  const S2 = (hex, o = {}) => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.8, metalness: 0.15, ...o }), B = (hex, o = {}) => new THREE.MeshBasicMaterial({ color: hex, toneMapped: false, ...o });
+  const mk = (draw, w = 256, h = 256) => { const [c, g] = cnv(w, h); draw(g, w, h); return tex(c); };
+  MAT.rustRed = S2(0x7a3b22, { map: mk((g, w, h) => { g.fillStyle = '#6e3a24'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2600, ['#4a2414', '#8f4e2a', '#a8612f', '#3a2a22'], 1, 4, 0.55); }), roughness: 0.95, metalness: 0.3 });
+  MAT.scrap = S2(0x6a6258, { map: mk((g, w, h) => { g.fillStyle = '#5c564f'; g.fillRect(0, 0, w, h); for (let i = 0; i < 14; i++) { g.fillStyle = ['#7a3b22', '#4a4640', '#8a8478', '#3c5a6a', '#6a2a1a'][i % 5]; g.fillRect(rnd() * w, rnd() * h, 30 + rnd() * 90, 20 + rnd() * 60); } speckle(g, w, h, 1800, ['#2a2622', '#9a5a30'], 1, 3, 0.5); g.strokeStyle = '#222a'; g.lineWidth = 3; for (let i = 0; i < 8; i++) { g.beginPath(); g.moveTo(rnd() * w, rnd() * h); g.lineTo(rnd() * w, rnd() * h); g.stroke(); } }), metalness: 0.45, roughness: 0.7 });
+  MAT.rebar = S2(0x5a3220, { roughness: 0.9, metalness: 0.5 });
+  MAT.plate = S2(0x8a8478, { map: mk((g, w, h) => { g.fillStyle = '#7d776c'; g.fillRect(0, 0, w, h); g.strokeStyle = '#3a3630'; g.lineWidth = 2; for (let x = 0; x < w; x += 24) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 24, h); g.stroke(); } speckle(g, w, h, 900, ['#6a3a22', '#9a948a'], 1, 3, 0.5); }), metalness: 0.6, roughness: 0.55 });
+  MAT.crackedConcrete = S2(0x8c8478, { map: mk((g, w, h) => { g.fillStyle = '#857d70'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2500, ['#76705f', '#9a9284', '#5d574c'], 1, 3, 0.4); g.strokeStyle = '#2e2a24'; g.lineWidth = 1.5; for (let i = 0; i < 6; i++) { let x = rnd() * w, y = rnd() * h; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 7; k++) { x += (rnd() - 0.5) * 60; y += (rnd() - 0.5) * 60; g.lineTo(x, y); } g.stroke(); } }), roughness: 0.95, metalness: 0 });
+  MAT.oilCarpet = S2(0x4a3a30, { map: mk((g, w, h) => { g.fillStyle = '#5a4636'; g.fillRect(0, 0, w, h); speckle(g, w, h, 3000, ['#4a382c', '#6a5240', '#3e3228'], 1, 2, 0.6); for (let i = 0; i < 7; i++) { const x = rnd() * w, y = rnd() * h, r = 15 + rnd() * 40, gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, '#120c08ee'); gr.addColorStop(1, '#120c0800'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); } }), roughness: 1, metalness: 0 });
+  MAT.dirt = S2(0x7a5a3a, { map: mk((g, w, h) => { g.fillStyle = '#76573a'; g.fillRect(0, 0, w, h); speckle(g, w, h, 3200, ['#5e4430', '#8e6a44', '#a07a4c', '#4c3624'], 1, 3, 0.5); }), roughness: 1, metalness: 0 });
+  MAT.oilSlick = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.06, metalness: 0.85, transparent: true, opacity: 0.92 });
+  MAT.candyPink = S2(0xff4fb8, { roughness: 0.35, metalness: 0, emissive: 0x5a0a3a, emissiveIntensity: 0.45 }); MAT.candyYellow = S2(0xffd21e, { roughness: 0.35, metalness: 0, emissive: 0x4a3600, emissiveIntensity: 0.45 });
+  MAT.flamingo = S2(0xff6fa8, { roughness: 0.4, metalness: 0 }); MAT.foamJunk = S2(0x2a6a8a, { roughness: 1, metalness: 0 }); MAT.bandana = S2(0xb51e1e, { roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  MAT.busYellow = S2(0xb38a1a, { map: mk((g, w, h) => { g.fillStyle = '#b08a1e'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2400, ['#6e3a22', '#8a6a1a', '#3a2a1a'], 1, 5, 0.6); }), roughness: 0.85, metalness: 0.35 });
+  MAT.couchRot = S2(0x5a4a3a, { roughness: 1, metalness: 0 }); MAT.fridge = S2(0xcfc8b4, { roughness: 0.5, metalness: 0.3 });
+  MAT.fire = B(0xff7a1e); MAT.fireCore = B(0xffd060); MAT.emberRed = B(0xff2a10); MAT.emergency = B(0xff1a1a);
+  MAT.shaft = new THREE.MeshBasicMaterial({ color: 0xffa860, transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide, fog: false });
+  MAT.dustDevil = new THREE.MeshBasicMaterial({ color: 0xc89060, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide,
+    map: (() => { const [c, g] = cnv(64, 256); for (let i = 0; i < 40; i++) { g.strokeStyle = `rgba(255,220,170,${0.2 + rnd() * 0.5})`; g.lineWidth = 1 + rnd() * 3; g.beginPath(); const y = rnd() * 256; g.moveTo(0, y); g.bezierCurveTo(20, y - 30, 44, y + 30, 64, y - 10); g.stroke(); } const t = tex(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })() });
+  // the scavenged neon (canvas text, original lettering) and the flags
+  const sign = (k, lines, col, glow, art, w, h) => { MAT[k] = new THREE.MeshBasicMaterial({ map: signTex(lines, col, glow, w, h, art), toneMapped: false }); DUSK.flick.push({ m: MAT[k], base: MAT[k].color.clone(), p: rnd() * 10 }); };
+  sign('signSugar', ["SUGAR'S PIT"], '#ff5fd2', '#ff2ab0'); sign('signDirtbag', ['DIRTBAG', 'FOREVER'], '#c8ff3a', '#7aff00', null, 512, 256); sign('signWitness', ['WITNESS ME'], '#ffb02a', '#ff5a00');
+  sign('signSendIt', ['SEND IT'], '#55f6ff', '#00b8ff'); sign('signCasino', ['CASINO'], '#ffe14a', '#ff9a00');
+  sign('signSpider', ['SPIDER', 'SUGAR'], '#ff6ad8', '#ff1fb0', (g, w, h) => { g.strokeStyle = '#ffd21e88'; g.lineWidth = 2; const cx = w / 2, cy = h / 2; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * w, cy + Math.sin(a) * w); g.stroke(); } for (let r = 30; r < w; r += 36) { g.beginPath(); for (let i = 0; i <= 12; i++) { const a = i / 12 * Math.PI * 2; g[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8); } g.stroke(); } }, 512, 512);
+  // the start flag: the Dirtbag FPV club's logo (assets/flags/dirtbag.webp, credited on the main menu and in the README), bone
+  // white on black; a plain skull and crossbones until the picture has loaded
+  { const [c, g] = cnv(1024, 512); g.fillStyle = '#0c0b0a'; g.fillRect(0, 0, 1024, 512); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    MAT.skullFlag = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.95, map: t });
+    const src = (window.PW_FLAGS || {}).dirtbag;
+    if (src) { const im = new Image(); im.onload = () => { const w = 960, h = w * im.height / im.width; g.drawImage(im, (1024 - w) / 2, (512 - h) / 2, w, h); t.needsUpdate = true; }; im.src = src; }
+    else { g.fillStyle = '#ece6d6'; g.beginPath(); g.ellipse(512, 220, 90, 100, 0, 0, 7); g.fill(); g.strokeStyle = '#ece6d6'; g.lineWidth = 34; g.lineCap = 'round'; g.beginPath(); g.moveTo(330, 330); g.lineTo(694, 460); g.moveTo(694, 330); g.lineTo(330, 460); g.stroke(); t.needsUpdate = true; } }
+}
+function duskBackdrop() {
+  // sky: bruised orange low down, purple-grey dust overhead; a big low sun in the west-south-west
+  const [sc, sg] = cnv(16, 512), gr = sg.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#2a1e3a'); gr.addColorStop(0.3, '#4e2f4a'); gr.addColorStop(0.47, '#9a4a3a'); gr.addColorStop(0.55, '#e07a3a'); gr.addColorStop(0.6, '#f0a050'); gr.addColorStop(0.66, '#7a4a3a'); gr.addColorStop(1, '#2e2420');
+  sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
+  playRoot.add(new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false })));
+  const sunDir = new THREE.Vector3(-0.86, 0.3, 0.42).normalize();
+  { const [c, g] = cnv(256, 256), rg = g.createRadialGradient(128, 128, 10, 128, 128, 128); rg.addColorStop(0, '#fff2c0'); rg.addColorStop(0.18, '#ffb050'); rg.addColorStop(0.45, '#ff6a2a88'); rg.addColorStop(1, '#ff4a2000'); g.fillStyle = rg; g.fillRect(0, 0, 256, 256);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, fog: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+    m.position.copy(sunDir).multiplyScalar(280); m.lookAt(0, 0, 0); m.layers.enable(1); playRoot.add(m); }
+  // the wasteland beyond: low broken ridges, wrecks of towers, all dark against the dusk
+  const far = new THREE.MeshBasicMaterial({ color: 0x2a1c1a, fog: false }), far2 = new THREE.MeshBasicMaterial({ color: 0x3a2622, fog: false });
+  for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, R = 200 + rnd() * 40, h = 6 + rnd() * 18, w = 14 + rnd() * 24; const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 5), i % 2 ? far : far2); m.position.set(Math.cos(a) * R, h / 2 - 2, Math.sin(a) * R); m.rotation.y = rnd() * 3; playRoot.add(m); }
+  for (let i = 0; i < 14; i++) { const a = rnd() * Math.PI * 2, R = 150 + rnd() * 40, h = 20 + rnd() * 45, w = 5 + rnd() * 8; const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), far); m.position.set(Math.cos(a) * R, h / 2, Math.sin(a) * R); m.rotation.set((rnd() - 0.5) * 0.25, rnd() * 3, (rnd() - 0.5) * 0.25); playRoot.add(m); }
+  // light: a hard low sun (long shadows through the broken roof) and a dim purple sky fill
+  playRoot.add(new THREE.HemisphereLight(0xc49aa8, 0x6a4a34, 2.0));
+  { const bounce = new THREE.DirectionalLight(0x9a7aa0, 0.9); bounce.position.set(60, 30, -30); playRoot.add(bounce); }   // dusk sky bounce from the east: the shade is dim, not black
+  const sun = new THREE.DirectionalLight(0xffa060, 3.4); sun.position.copy(sunDir).multiplyScalar(80); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+  const sh = sun.shadow.camera, R = 62; sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; sh.near = 1; sh.far = 220; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; playRoot.add(sun); playRoot.add(sun.target);
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.dirt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 50, guv.getY(i) * 50); playRoot.add(gnd);
+  scene.fog = new THREE.Fog(0x5a3a32, 30, 190);
+  // dust hanging in the air (catches the light), drifting
+  const N = 2600, pos = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 46; pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = rnd() * 16; pos[i * 3 + 2] = Math.sin(a) * r; }
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  DUSK.dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc890, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })); DUSK.dust.frustumCulled = false; playRoot.add(DUSK.dust);
+}
+function duskTick(dt) {
+  DUSK.t += dt; const t = DUSK.t, f = 0.82 + 0.18 * Math.sin(t * 17) * Math.sin(t * 5.3 + 1);
+  if (MAT.fire) { MAT.fire.color.setRGB(1, 0.42 * f + 0.05, 0.1 * f); MAT.fireCore.color.setRGB(1, 0.75 * f + 0.1, 0.3 * f); }
+  if (MAT.emergency) { const on = (Math.sin(t * 3.2) > -0.2) ? 1 : 0.25; MAT.emergency.color.setRGB(on, 0.08 * on, 0.06 * on); }
+  for (const s of DUSK.flick) { const k = Math.sin(t * 0.7 + s.p * 3) > 0.94 ? (Math.random() < 0.5 ? 0.15 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a short-circuit now and then
+  if (MAT.dustDevil && MAT.dustDevil.map) MAT.dustDevil.map.offset.set(t * 1.8, t * 0.3);
+  if (MAT.oilSlick) MAT.oilSlick.color.setHSL((0.75 + 0.1 * Math.sin(t * 0.5)) % 1, 0.25, 0.04);
+  if (DUSK.dust) { const a = DUSK.dust.geometry.attributes.position; for (let i = 0; i < a.count; i += 7) { let x = a.getX(i) + dt * 0.25, y = a.getY(i) + Math.sin(t + i) * dt * 0.05; if (x > 46) x = -46; a.setXY(i, x, y); } a.needsUpdate = true; }
+}
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
-  const VICE_ = world.theme === 'vice';
-  if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else {
+  const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk';
+  if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
   if (PNW) { gr.addColorStop(0, '#6f93b8'); gr.addColorStop(0.42, '#a9bfcf'); gr.addColorStop(0.6, '#cfd8da'); gr.addColorStop(0.72, '#a9b4ab'); gr.addColorStop(1, '#55604f'); }
@@ -461,7 +538,7 @@ function buildScene() {
     const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; if (z.ry) m.rotation.z = z.ry; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
   }
   buildObjects();
-  if (VAPOR || VICE_) return;
+  if (VAPOR || VICE_ || DUSK_) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
   if (PNW) { scene.fog = new THREE.Fog(0xb4c0bc, 45, 190); pnwBackdrop(); }

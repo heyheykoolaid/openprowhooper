@@ -3,8 +3,8 @@
 // No trick scoring anywhere here. The editor and the race HUD are src/raceedit.js (the game module).
 //
 // Frames: x right, y up, z back. An element with yaw 0 is flown through toward -z (the way a quad with yaw 0 points).
-// Angles in a track are degrees; lengths metres. Two rule presets: 'indoor' (IGOW-style: any gates, furniture, rooms)
-// and 'racegow' (white PVC in one section size per track, 24 in minimum; the openings of the structure are the gates).
+// Angles in a track are degrees; lengths metres. One kind of track: IGOW-style gates, furniture and rooms mix with RaceGOW
+// white PVC (one section size per track, 24 in minimum; the openings of a PVC structure are its gates).
 (function (root) {
   const S = root.Sim; const { v3, add, sub, mul, dot, cross, len, norm } = S;
   const D2R = Math.PI / 180, U = 0.6096, PIPE_R = 0.0134;   // one 24" PVC section; 3/4" schedule-40 pipe
@@ -19,10 +19,10 @@
     drywall: { e: 0.25, f: 0.5 }, wood: { e: 0.28, f: 0.45 }, concrete: { e: 0.2, f: 0.55, crash: 6.5 }, glass: { e: 0.3, f: 0.2, crash: 5.5 },
     carpet: { e: 0.05, f: 1.1 }, hardwood: { e: 0.2, f: 0.35 }, tile: { e: 0.25, f: 0.22 }, mat: { e: 0.05, f: 0.9, crash: 99 },
   };
-  const PRESETS = {
-    indoor: { label: 'Indoor (IGOW style)', desc: 'Any gates, furniture, rooms and special elements', gateMin: 0.25, gateMax: 1.6, speed: 4.2 },
-    racegow: { label: 'RaceGOW (PVC)', desc: 'One connected white-PVC structure, one section size (24 in minimum); its openings are the gates', gateMin: U, gateMax: 4 * U, speed: 3.8 },
-  };
+  // One kind of track (owner, 2026-11-18: "it should really combine the two"): IGOW-style gates, furniture and rooms and
+  // RaceGOW PVC all mix. The two old presets stay as names only, so older tracks open; both follow the same rules.
+  const RULES = { label: 'RaceGOW', desc: 'Gates, PVC, furniture and rooms all mix', gateMin: 0.25, gateMax: 4 * U, speed: 4 };
+  const PRESETS = { indoor: RULES, racegow: RULES };
   const LED = ['off', 'static', 'rainbow', 'chase', 'finish'], COLORS = ['white', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
   const LAYERS = ['floor', 'walls', 'gates', 'flags', 'obstacles', 'lighting', 'triggers', 'guides'];
 
@@ -95,11 +95,12 @@
         for (const s of [-1, 1]) { const pts = [[s * d - w / 2, p.lift], [s * d - w / 2, p.lift + w], [s * d + w / 2, p.lift + w], [s * d + w / 2, p.lift]]; frameAlong(k, pts, p, 'rgFrame_' + p.color); polys.push(pts); }
         k.gate({ polys }); } },
     checkpoint: { cat: 'Gates', layer: 'gates', gate: true, label: 'Checkpoint', desc: 'An invisible rectangle to fly through (put one in any opening: a door, under a table)',
-      params: { w: [0.8, 0.1, 8, 0.05, 'Width', 'm'], h: [0.8, 0.1, 8, 0.05, 'Height', 'm'], lift: [0, 0, 5, 0.01, 'Off the floor', 'm'] },
-      build(e, k, p) { k.gate({ poly: [[-p.w / 2, p.lift], [-p.w / 2, p.lift + p.h], [p.w / 2, p.lift + p.h], [p.w / 2, p.lift]], invisible: true }); } },
-    start: { cat: 'Gates', layer: 'gates', gate: true, start: true, label: 'Start / Finish', desc: 'The gantry: chequered banner and timing beams. Laps start and end here',
-      params: { w: [1.2, 0.4, 4, 0.05, 'Width', 'm'], h: [0.9, 0.3, 3, 0.05, 'Height', 'm'], lift: [0, 0, 1.5, 0.01, 'Off the floor', 'm'] },
+      params: { w: [0.8, 0.1, 8, 0.05, 'Width', 'm'], h: [0.8, 0.1, 8, 0.05, 'Height', 'm'], lift: [0, 0, 5, 0.01, 'Off the floor', 'm'], dir: { v: 'forward', opts: ['forward', 'both ways'], label: 'Counts flown' } },
+      build(e, k, p) { k.gate({ poly: [[-p.w / 2, p.lift], [-p.w / 2, p.lift + p.h], [p.w / 2, p.lift + p.h], [p.w / 2, p.lift]], invisible: true, both: p.dir === 'both ways' }); } },
+    start: { cat: 'Gates', layer: 'gates', gate: true, start: true, label: 'Start / Finish', desc: 'Laps start and end here: a gantry with a chequered banner and timing beams, or an invisible line (put it in an opening of a PVC structure)',
+      params: { w: [1.2, 0.2, 4, 0.05, 'Width', 'm'], h: [0.9, 0.2, 3, 0.05, 'Height', 'm'], lift: [0, 0, 1.5, 0.01, 'Off the floor', 'm'], look: { v: 'gantry', opts: ['gantry', 'invisible line'], label: 'Look' } },
       build(e, k, p) { const x = p.w / 2 + 0.03, top = p.lift + p.h;
+        if (p.look === 'invisible line') { k.gate({ poly: [[-p.w / 2, p.lift], [-p.w / 2, top], [p.w / 2, top], [p.w / 2, p.lift]], start: true, invisible: true }); return; }
         for (const s of [-1, 1]) { k.bar(v3(s * x, 0, 0), v3(s * x, top + 0.25, 0), 0.03, 'rgFrame_grey'); k.bar(v3(s * x, 0.01, -0.25), v3(s * x, 0.01, 0.25), 0.03, 'rgFrame_grey');
           k.bar(v3(s * (x - 0.03), p.lift + 0.05, -0.04), v3(s * (x - 0.03), top - 0.05, -0.04), 0.008, 'rgBeam', { noCollide: true, glow: true }); }   // timing beams
         k.box(v3(0, top + 0.13, 0), v3(x + 0.03, 0.12, 0.012), 'rgChecker'); if (p.lift > 0.02) k.bar(v3(-x, p.lift, 0), v3(x, p.lift, 0), 0.02, 'rgFrame_grey');
@@ -236,7 +237,7 @@
   // ------------------------------------------------------------------ tracks
   const uid = (p = 'e') => p + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6);
   function newTrack(opts = {}) {
-    const preset = PRESETS[opts.preset] ? opts.preset : 'indoor', venue = opts.venue && opts.venue.kind === 'map' ? { kind: 'map', map: String(opts.venue.map || 'moose') } : { kind: 'room', room: ROOMS[opts.venue && opts.venue.room] ? opts.venue.room : 'livingroom', size: opts.venue && opts.venue.size };
+    const preset = 'racegow', venue = opts.venue && opts.venue.kind === 'map' ? { kind: 'map', map: String(opts.venue.map || 'moose') } : { kind: 'room', room: ROOMS[opts.venue && opts.venue.room] ? opts.venue.room : 'livingroom', size: opts.venue && opts.venue.size };
     const t = { format: 'pro-whooper-track/2', id: uid('t'), name: String(opts.name || 'New track').slice(0, 40), by: String(opts.by || '').slice(0, 24), tags: [], preset, section: U, venue, lighting: 'default', laps: 3, route: [], elements: [], created: new Date().toISOString() };
     t.elements.push(newElement('start', venue.kind === 'room' ? { x: 0, y: 0, z: ((ROOMS[venue.room].build(venue.size).size.z) / 2) - 1.4 } : { x: 0, y: 0, z: 0 }));
     return t;
@@ -257,7 +258,7 @@
       if (e.sector) o.sector = true; if (e.hidden) o.hidden = true; if (e.name) o.name = name(e.name); return o; });
     const ids = new Set(els.map(e => e.id));
     return { format: 'pro-whooper-track/2', id: String(t.id || uid('t')).replace(/[^\w-]/g, '').slice(0, 32), name: name(t.name) || 'Track', by: name(t.by).slice(0, 24), pilot: /^[a-z0-9]{6,40}$/.test(String(t.pilot || '')) ? t.pilot : undefined,
-      tags: (Array.isArray(t.tags) ? t.tags : []).filter(x => TAGS.includes(x)).slice(0, 6), preset: PRESETS[t.preset] ? t.preset : 'indoor', section: clamp(num(t.section, U), U, 3), venue,
+      tags: (Array.isArray(t.tags) ? t.tags : []).filter(x => TAGS.includes(x)).slice(0, 6), preset: 'racegow', section: clamp(num(t.section, U), U, 3), venue,
       lighting: LIGHTING[t.lighting] ? t.lighting : 'default', laps: clamp(Math.round(num(t.laps, 3)), 1, 20), route: (Array.isArray(t.route) ? t.route : []).filter(id => ids.has(id)).slice(0, 400),
       elements: els, created: String(t.created || '').slice(0, 30), updated: String(t.updated || '').slice(0, 30), path: Array.isArray(t.path) ? t.path.slice(0, 200).map(q => [num(q[0]), num(q[1]), num(q[2])]) : undefined };
   }
@@ -295,7 +296,7 @@
   function routeOf(track) { const gates = track.elements.filter(e => CATALOG[e.type] && CATALOG[e.type].gate && !e.hidden && !CATALOG[e.type].start && !CATALOG[e.type].finish);
     const pos = new Map(track.route.map((id, i) => [id, i])); return gates.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e6 + track.elements.indexOf(a)) - (pos.has(b.id) ? pos.get(b.id) : 1e6 + track.elements.indexOf(b))); }
   function buildTrack(track, mapWorld) {
-    const V = venueOf(track, mapWorld), ctx = { section: track.preset === 'racegow' ? track.section : U, ceiling: V.ceiling };
+    const V = venueOf(track, mapWorld), ctx = { section: track.section || U, ceiling: V.ceiling };
     const objs = [], gatesByEl = new Map(), fields = [], lights = [];
     for (const e of track.elements) { const o = { id: 'rg:' + e.id, eid: e.id, name: e.name || (CATALOG[e.type] || {}).label, kind: 'race', ...elementParts(e, ctx) }; for (const pr of o.prims) pr.owner = o.id; objs.push(o);
       if (o.gates.length) gatesByEl.set(e.id, o.gates); fields.push(...o.fields); lights.push(...o.lights); }
@@ -333,9 +334,10 @@
   Race.prototype.step = function (p0, p1, t) {
     const ev = [];
     if (this.done || this.n < 2) return ev;
-    const want = this.B.seq[this.next], cross1 = st => { for (const cp of st.cps) { const c = crossing(cp, p0, p1); if (c) return c; } return 0; }, c = cross1(want);
-    if (c < 0) { ev.push({ type: 'wrong', i: this.next, t }); return ev; }
-    if (c > 0) {
+    const want = this.B.seq[this.next], cross1 = st => { for (const cp of st.cps) { const c = crossing(cp, p0, p1); if (c) return c < 0 && cp.both ? 1 : c; } return 0; }, c = cross1(want);
+    const c1 = c < 0 && want.cps.some(cp => cp.both) ? 1 : c;
+    if (c1 < 0) { ev.push({ type: 'wrong', i: this.next, t }); return ev; }
+    if (c1 > 0) {
       if (want.start && !this.on) { this.on = true; this.t0 = t; this.lapT0 = t; this.lap = 1; this.gateTimes = [0]; this.curSectors = []; this.next = 1; ev.push({ type: 'start', t }); return ev; }
       const lt = t - this.lapT0, endOfLap = want.start || want.finish;
       const ref = this.ref && this.ref.gateTimes ? this.ref.gateTimes[endOfLap ? this.n : this.next] : null;
@@ -401,8 +403,7 @@
     for (const st of B.seq) for (const cp of st.cps) { if (cp.invisible || cp.start || cp.finish) continue; const w = cp.circle ? cp.circle.r * 2 * cp.s : (() => { const Q = cp.polys ? cp.polys[0] : cp.poly, xs = Q.map(q => q[0]), ys = Q.map(q => q[1]); return Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * cp.s; })();
       if (w < P.gateMin - 1e-3) small.push(st.eid); if (w > P.gateMax + 1e-3) big.push(st.eid); }
     if (small.length) add1('fail', `${small.length} gate${small.length > 1 ? 's are' : ' is'} smaller than ${P.label} allows (${Math.round(P.gateMin * 100)} cm)`, small); if (big.length) add1('warn', `${big.length} gate${big.length > 1 ? 's are' : ' is'} bigger than ${Math.round(P.gateMax * 100)} cm`, big);
-    if (T.preset === 'racegow') { const nonPvc = T.elements.filter(e => !e.hidden && CATALOG[e.type].gate && !CATALOG[e.type].pvc && !['start', 'finish', 'checkpoint'].includes(e.type)); if (nonPvc.length) add1('warn', 'RaceGOW: gates should be openings of the PVC structure (PVC parts or checkpoints)', nonPvc.map(e => e.id));
-      const pipes = T.elements.filter(e => CATALOG[e.type].pvc).length; add1(pipes ? 'pass' : 'warn', `RaceGOW: section ${Math.round(T.section / 0.0254)} in (24 in minimum), ${pipes} PVC part${pipes === 1 ? '' : 's'}`); }
+    { const pipes = T.elements.filter(e => !e.hidden && CATALOG[e.type].pvc).length; if (pipes) add1('pass', `${pipes} PVC part${pipes === 1 ? '' : 's'} in ${Math.round(T.section / 0.0254)} in sections (RaceGOW: 24 in minimum, one size per track)`); }
     // floating: every element that stands must touch the floor or rest on something
     const solids = B.objs.filter(o => o.prims.length), boxes = new Map(solids.map(o => [o.eid, aabbOf(o.prims)])), floating = [];
     for (const o of solids) { const e = T.elements.find(x => x.id === o.eid); if (!e || HANGS.has(e.type)) continue; const b = boxes.get(o.eid); if (b.min.y < 0.03) continue;
@@ -452,7 +453,40 @@
     for (const e of track.elements) { const p = paramsOf(e); if (p.autoFace !== 'yes') continue; let bi = 0, bd = 1e9; cs.forEach((c, i) => { const d = Math.hypot(c.x - e.x, c.z - e.z); if (d < bd) { bd = d; bi = i; } });
       const tgt = cs[(bi + 1) % cs.length]; e.ry = Math.atan2(-(tgt.x - e.x), -(tgt.z - e.z)) / D2R; } }
 
+
+  // ------------------------------------------------------------------ sample tracks
+  // RaceGOW 5 · Track 8, read from the event's track animation (owner, 2026-11-18). In 24 in sections: X runs along the
+  // rails, Z toward the front, Y up. A back rail (X 0..2) and a front rail one section in front (X -1..2, a coupler at
+  // X 0), cross members at X 1 and X 2, rails 1 section up; posts: back-left 1 high (an elbow into the back rail), back
+  // middle 2.25 (a T, top free), back right 2 with a top bar forward to the front-right post, which stands 3.5; at the
+  // front left the rail ends in a 2-section post and an arm forward to a 1-section leg. Pipes are cut at every joint.
+  // The checkpoints are the openings the animation lights up, in its order; most count either way (pilots fly them both).
+  function sampleTrack8() {
+    const P = (X, Y, Z) => ({ x: +((X - 0.5) * U).toFixed(4), y: +(Y * U).toFixed(4), z: +((Z - 1) * U).toFixed(4) }), els = [], m = 0.03, W = U - 2 * m;
+    const pipe = (X, Y, Z, dir, L) => els.push(newElement('pvcPipe', { ...P(X, Y, Z), rz: dir === 'x' ? -90 : 0, rx: dir === 'z' ? 90 : 0 }, { len: L }));
+    // rails, cross members, the arm and the top bar (1 section up, the top bar 2)
+    pipe(0, 1, 0, 'x', 1); pipe(1, 1, 0, 'x', 1); pipe(-1, 1, 1, 'x', 1); pipe(0, 1, 1, 'x', 1); pipe(1, 1, 1, 'x', 1);
+    pipe(1, 1, 0, 'z', 1); pipe(2, 1, 0, 'z', 1); pipe(-1, 1, 1, 'z', 1); pipe(2, 2, 0, 'z', 1);
+    // posts, cut where something joins them
+    pipe(0, 0, 0, 'y', 1); pipe(1, 0, 0, 'y', 1); pipe(1, 1, 0, 'y', 1.25); pipe(2, 0, 0, 'y', 1); pipe(2, 1, 0, 'y', 1);
+    pipe(2, 0, 1, 'y', 1); pipe(2, 1, 1, 'y', 1); pipe(2, 2, 1, 'y', 1.5); pipe(-1, 0, 1, 'y', 1); pipe(-1, 1, 1, 'y', 1); pipe(-1, 0, 2, 'y', 1);
+    const cp = (name, X, Y, Z, ry, rx, w, h, lift, both = true) => { const e = newElement('checkpoint', { ...P(X, Y, Z), ry, rx }, { w, h, lift, dir: both ? 'both ways' : 'forward' }); e.name = name; els.push(e); return e; };
+    const st = newElement('start', { ...P(-1, 0, 1.5), ry: 90 }, { w: W, h: U - 2 * m, lift: m, look: 'invisible line' }); st.name = 'Start: under the front-left arm';
+    const route = [
+      cp('1 Past the tall post', 2.02, 0, 1.5, -90, 0, 0.9 * U, 3 * U, 0, false),
+      cp('2 Right window', 2, 0, 0.5, 90, 0, W, U - 2 * m, U + m),
+      cp('3 Over the front-left arm', -1, 0, 1.5, 90, 0, W, U - 2 * m, U + m),
+      cp('4 Back window', 1.5, 0, 0, 0, 0, W, U - 2 * m, U + m),
+      cp('5 Left of the middle post', 0, 0, 0, 180, 0, 2 * U - 2 * m, U - 2 * m, U + m),
+      cp('6 Under the back rail', 0.5, 0, 0, 0, 0, W, U - 2 * m, m),
+      cp('7 Past the tall post again', 2.02, 0, 1.5, -90, 0, 0.9 * U, 3 * U, 0),
+      cp('8 Under the front rail', 1.5, 0, 1, 0, 0, W, U - 2 * m, m),
+      cp('9 Dive through the top', 1.5, 1, 1, 0, -90, W, U - 2 * m, m) ];
+    route[8].y = +(U + 0.03).toFixed(4);
+    return { ...newTrack({ name: 'RaceGOW 5 - Track 8', by: 'sample', venue: { kind: 'room', room: 'garage' } }), elements: [st, ...els], route: route.map(e => e.id), tags: ['racegow', 'technical'], laps: 3 };
+  }
+  const SAMPLES = [sampleTrack8];
   root.RG = { U, PIPE_R, SURF, PRESETS, CATALOG, CATS, LAYERS, LED, COLORS, TAGS, LIGHTING, ROOMS, sizePresets, rotM, poseOf, paramsOf, defaults, newTrack, newElement, cleanTrack, convertV1, trackHash,
-    elementParts, buildTrack, routeOf, crossing, centreOf, stepCentre, inOpening, Race, sectorPlan, packGhost, unpackGhost, sampleGhost, GHZ, flow, estimate, checks, pathGates, mirror, autoFace, uid };
+    elementParts, buildTrack, routeOf, crossing, centreOf, stepCentre, inOpening, Race, sectorPlan, packGhost, unpackGhost, sampleGhost, GHZ, flow, estimate, checks, pathGates, mirror, autoFace, uid, SAMPLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.RG;
 })(typeof window !== 'undefined' ? window : globalThis);

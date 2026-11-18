@@ -1,0 +1,5 @@
+{ "format": "pro-whooper-blackbox/1", "date": "2026-11-17", "craft": "bum darts",
+  "fc": "Betaflight 4.5.0 (BEFH BETAFPVG473)",
+  "build": { "frame": "BetaFPV Air2 (Air65-style 65 mm)", "camera": "Caddx C03", "canopy": "Beast Brain (printed)", "motors": "RCINPower EVO 31800KV", "aio": "Matrix 2" },
+  "notes": "From the pilot, 2026-11-18: the sim feels locked in but floaty, without a real whoop's lofty, shuddery feel. 35 logs in the dump; the long ones are 0 (90 s), 27 (154 s, flips to 2000 deg/s), 28-34.",
+  "firstLook": "Hover 25-28% motor (41% near empty), ~17-18k rpm by eRPM (14 poles), motor command to eRPM lag 4-7 ms, hover gyro noise (unfiltered) sd 10-43 deg/s with peaks at 320-350 Hz and broad wobble under 20 Hz; pack 4.2-4.5 V (vbat reads high) to 2.9 V in 65-154 s at 4-5 A mean, 20 A peaks." }
