@@ -97,8 +97,8 @@ function renderGarage() {
     <label>Frame<select data-part="frame">${opt(P.frames, spec.frame)}</select></label>
     <label>Motors<select data-part="motor">${opt(P.motors, spec.motor)}</select></label>
     <label>Props<select data-part="prop">${opt(P.props, spec.prop)}</select></label>
-    <label>Battery<select data-part="battery">${opt(P.batteries, spec.battery)}</select></label>
-    <label>Electronics<select data-part="electronics">${opt(P.electronics, spec.electronics)}</select></label>
+    <label title="Only packs that fit this frame: its cell count and size">Battery<select data-part="battery">${opt(Object.fromEntries(Object.entries(P.batteries).filter(([k]) => S.batteryFits(spec.frame, k))), spec.battery)}</select></label>
+    <label>Electronics<select data-part="electronics">${opt(Object.fromEntries(Object.entries(P.electronics).filter(([k]) => S.electronicsFit(spec.frame, k))), spec.electronics)}</select></label>
     ${(WHOOP_LOOK.frames[spec.frame] || {}).ring && (WHOOP_LOOK.canopies[spec.electronics] || {}).bridge ? `<label>Canopy<select id="gCanopy"><option value="beastbrain" ${(spec.canopy || 'beastbrain') === 'beastbrain' ? 'selected' : ''}>Beast Brain (printed)</option><option value="bridge" ${spec.canopy === 'bridge' ? 'selected' : ''}>Air bridge</option></select></label>` : ''}
     <div class="row gLook"><span>Colours</span>${[['frame', 'frame'], ['canopy', 'canopy'], ['props', 'props']].map(([k, l]) => `<label title="${l} colour"><input type="color" data-look="${k}" value="${/^#[0-9a-f]{6}$/i.test(look[k] || '') ? look[k] : hex(dflt[k])}">${l}</label>`).join('')}${spec.look ? '<button id="gLookReset" class="ghost" title="Back to the parts\' own colours">reset</button>' : ''}</div>
     ${params.warnings.map(w => `<p class="warn">⚠ ${w}</p>`).join('')}
@@ -129,6 +129,7 @@ function renderGarage() {
       <label>Camera FOV ° (horiz)<input type=number data-t="camFov" value="${tune.camFov}"></label>
       <label class="chk"><input type=checkbox data-tb="airmode" ${tune.airmode ? 'checked' : ''}> Airmode</label>
       <label class="chk"><input type=checkbox data-tb="itermRelax" ${tune.itermRelax ? 'checked' : ''}> I-term relax</label>
+      <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
     </div>
     <details class="gAdv" ${tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim') ? 'open' : ''}><summary>Advanced: radio link and stick smoothing</summary>
       <p class="note">By default your sticks reach the flight controller instantly, which is crisper than any real quad. These add what a real radio link does. Try "Real radio feel" if the sim feels harsher than your quad on the same rates.</p>
@@ -153,7 +154,7 @@ function drawRateCurve() {
   const cols = { roll: '#ff5a5a', pitch: '#5ad1ff', yaw: '#ffd25a' }, max = 2000;
   for (const ax of ['roll', 'pitch', 'yaw']) { g.strokeStyle = cols[ax]; g.beginPath(); for (let i = 0; i <= 100; i++) { const x = i / 100, r = S.applyRate(x, tune.rates[ax], tune.ratesType); const px = x * c.width, py = c.height - r / max * c.height; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); g.fillStyle = cols[ax]; g.fillText(`${ax} ${Math.round(S.applyRate(1, tune.rates[ax], tune.ratesType))}°/s`, 6, 14 + ['roll', 'pitch', 'yaw'].indexOf(ax) * 13); }
 }
-function applyParts() { params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(activeWorld.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
+function applyParts() { Object.assign(spec, S.fitParts(spec)); params = S.buildDrone(spec); drone.setParams(params, tune); drone.reset(activeWorld.spawn); buildDroneMesh(); store.set('spec', spec); renderGarage(); }
 // Named rate profiles (Garage & Tune): saved sets of rates type + roll/pitch/yaw rates, kept in this browser.
 // Whole builds, named and kept like rate profiles: the five parts and the colours.
 const myBuilds = () => { const a = store.get('builds', []); return Array.isArray(a) ? a.filter(b => b && typeof b.name === 'string' && b.spec && S.PARTS.frames[b.spec.frame] && S.PARTS.motors[b.spec.motor] && S.PARTS.props[b.spec.prop] && S.PARTS.batteries[b.spec.battery] && S.PARTS.electronics[b.spec.electronics]) : []; };
@@ -200,7 +201,7 @@ document.addEventListener('change', e => {
   if (t.id === 'gMyBuild' && t.value) { const b = myBuilds().find(x => x.name === t.value); if (b) { spec = JSON.parse(JSON.stringify(b.spec)); applyParts(); } }
   if (t.id === 'gCanopy') { spec.canopy = t.value; store.set('spec', spec); buildDroneMesh(); renderGarage(); }
   if (t.dataset.look) { spec.look = { ...(spec.look || {}), [t.dataset.look]: t.value }; store.set('spec', spec); buildDroneMesh(); }
-  if (t.dataset.part) { spec[t.dataset.part] = t.value; applyParts(); }
+  if (t.dataset.part) { spec[t.dataset.part] = t.value; Object.assign(spec, S.fitParts(spec)); applyParts(); }
   if (t.id === 'gRT') { tune.ratesType = t.value; rateEdited(); saveTune(); renderGarage(); }
   if (t.dataset.r) { const [ax, k] = t.dataset.r.split('.'); tune.rates[ax][k] = +t.value; rateEdited(); saveTune(); drawRateCurve(); }
   if (t.id === 'gRP' && t.value) { const d = t.value === '__default__' ? { name: '', ratesType: S.defaultTune().ratesType, rates: S.defaultTune().rates } : rateProfiles().find(p => p.name === t.value);

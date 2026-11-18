@@ -107,7 +107,11 @@ function hud() {
   for (const L of ['K', 'W', 'A', 'D']) $('#kw' + L).classList.toggle('on', !!score.kwad[L]);
   // OSD
   const v = drone.vbat; $('#osdV').textContent = v.toFixed(2) + 'V'; $('#osdV').classList.toggle('blink', v / (params.bat.cells || 1) < 3.35 && drone.armed);
-  $('#osdA').textContent = drone.ibat.toFixed(1) + 'A'; $('#osdMah').textContent = Math.round(drone.mAh) + 'mAh';
+  $('#osdA').textContent = drone.ibat.toFixed(1) + 'A'; $('#osdMah').textContent = Math.round(drone.mAh) + 'mAh' + (tune.batteryLife === false ? ' ∞' : ' ' + Math.round(drone.soc * 100) + '%');
+  // battery life: a warning near the end of the pack, and the brown-out when the AIO gives up (sim.js Drone.step)
+  if (tune.batteryLife !== false) { if (drone.soc < 0.15 && !batWarn.low && drone.armed) { batWarn.low = true; flash('<b>LOW BATTERY</b><small>land soon · B for a fresh pack</small>', 'warn'); }
+    if (drone.brownout && !batWarn.dead) { batWarn.dead = true; flash('<b>BATTERY DEAD</b><small>the flight controller browned out · B for a fresh pack</small>', 'warn'); if (typeof crashThud === 'function') crashThud(); } }
+  if (!drone.brownout) batWarn.dead = false; if (drone.soc > 0.5) batWarn.low = false;
   $('#osdThr').textContent = 'THR ' + Math.round(lastRC.thr * 100);
   $('#osdSpd').textContent = Math.round(S.len(drone.vel) * 3.6) + 'kph';
   $('#osdAlt').textContent = drone.pos.y.toFixed(1) + 'm';

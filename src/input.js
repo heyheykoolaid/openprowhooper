@@ -123,6 +123,7 @@ function onKey(e) {
   if (e.code === 'KeyC') camMode = camMode === 'fpv' ? 'chase' : 'fpv';
   if (e.code === 'Tab') { e.preventDefault(); $('#breakdown').classList.toggle('hide'); }
   if (e.code === 'KeyB' && race.on && race.fromEditor) { backToEditor(); return; }
+  if (e.code === 'KeyB') freshPack();
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); }   // V: stick overlay
 }
 let lastRC = { thr: 0, roll: 0, pitch: 0, yaw: 0 };
@@ -151,7 +152,11 @@ function stickHud(rc) {
   stickUI.trail.push({ thr: rc.thr, yaw: rc.yaw, pitch: rc.pitch, roll: rc.roll }); if (stickUI.trail.length > 30) stickUI.trail.shift();
   drawSticks(cv, rc, stickUI.trail);
 }
+// a fresh battery (B, or the pause menu): a full pack, the brown-out cleared; the quad stays where it is
+function freshPack() { drone.soc = 1; drone.mAh = 0; drone.brownout = false; drone.lowV = 0; batWarn.low = false; flash('<b>FRESH PACK</b><small>battery swapped</small>', 'good'); }
+const batWarn = { low: false, dead: false };
 function setArmed(on, byThrottle) {
+  if (on && drone.brownout) { flash('<b>BATTERY DEAD</b><small>the flight controller browned out · B for a fresh pack</small>', 'warn'); return; }
   if (on) {
     if (!byThrottle && !thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
     if (drone.crashed) { flipOver(); }

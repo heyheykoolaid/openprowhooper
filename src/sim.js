@@ -42,14 +42,14 @@ function makeRng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s
 // They are meant to be replaced by values fitted from real Blackbox logs.
 const PARTS = {
   frames: {
-    air65:      { name: 'Air65 frame', size: 65, mass: 2.6, propMax: 31, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.38 },
-    air65champ: { name: 'Air65 Champion frame (light)', size: 65, mass: 2.2, propMax: 31, ductDrag: 0.97, ductThrust: 1.06, restitution: 0.42 },
-    meteor65:   { name: 'Meteor65 Pro frame', size: 65, mass: 3.4, propMax: 31, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.32 },
-    air75:      { name: 'Air75 frame', size: 75, mass: 3.0, propMax: 40, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.36 },
-    meteor75:   { name: 'Meteor75 Pro frame', size: 75, mass: 3.9, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
+    air65:      { name: 'Air65 frame', size: 65, cells: 1, cap: [250, 380], mass: 2.6, propMax: 31, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.38 },
+    air65champ: { name: 'Air65 Champion frame (light)', size: 65, cells: 1, cap: [250, 380], mass: 2.2, propMax: 31, ductDrag: 0.97, ductThrust: 1.06, restitution: 0.42 },
+    meteor65:   { name: 'Meteor65 Pro frame', size: 65, cells: 1, cap: [250, 380], mass: 3.4, propMax: 31, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.32 },
+    air75:      { name: 'Air75 frame', size: 75, cells: 1, cap: [300, 550], mass: 3.0, propMax: 40, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.36 },
+    meteor75:   { name: 'Meteor75 Pro frame', size: 75, cells: 1, cap: [300, 550], mass: 3.9, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
     // 2S whoops (estimates from typical builds: Mobula7-style 75 mm and Mobula8 / Beta85X-style 85 mm; tune from a Blackbox log when one arrives)
-    whoop75_2s: { name: '75mm 2S frame (Mobula7 style)', size: 75, mass: 4.6, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
-    whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
+    whoop75_2s: { name: '75mm 2S frame (Mobula7 style)', size: 75, cells: 2, cap: [300, 450], mass: 4.6, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
+    whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, cells: 2, cap: [450, 650], mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
   },
   motors: { // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
     m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.55, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
@@ -85,14 +85,15 @@ const PARTS = {
     b300:   { name: '1S 300mAh LiHV', cap: 300, mass: 7.4, r: 0.065, hv: true },
     b380:   { name: '1S 380mAh LiHV', cap: 380, mass: 9.4, r: 0.058, hv: true },
     b450:   { name: '1S 450mAh LiPo', cap: 450, mass: 11.6, r: 0.050, hv: false },
+    b550:   { name: '1S 550mAh LiHV', cap: 550, mass: 13.8, r: 0.045, hv: true },
     b2s300: { name: '2S 300mAh LiHV', cap: 300, mass: 16.5, r: 0.135, hv: true, cells: 2 },
     b2s450: { name: '2S 450mAh LiHV', cap: 450, mass: 24.5, r: 0.105, hv: true, cells: 2 },
     b2s550: { name: '2S 550mAh LiHV', cap: 550, mass: 30.0, r: 0.090, hv: true, cells: 2 },
   },
   electronics: { // AIO + VTX + RX + canopy + camera
-    air:    { name: 'Air AIO 5-in-1 + C03 cam + Air canopy', mass: 5.9 },
-    std:    { name: 'Standard AIO + micro cam + canopy', mass: 6.9 },
-    aio2s:  { name: '2S 12A AIO + micro cam + canopy', mass: 8.6 },
+    air:    { name: 'Air AIO 5-in-1 + C03 cam + Air canopy', mass: 5.9, cells: 1 },
+    std:    { name: 'Standard AIO + micro cam + canopy', mass: 6.9, cells: 1 },
+    aio2s:  { name: '2S 12A AIO + micro cam + canopy', mass: 8.6, cells: 2 },
   },
 };
 
@@ -135,6 +136,7 @@ function buildDrone(spec) {
   const fr = PARTS.frames[spec.frame], mo = PARTS.motors[spec.motor], pr = PARTS.props[spec.prop],
         ba = PARTS.batteries[spec.battery], el = PARTS.electronics[spec.electronics];
   const warnings = [];
+  if (spec.frame && spec.battery && !batteryFits(spec.frame, spec.battery)) warnings.push(`${(PARTS.batteries[spec.battery] || {}).name || 'This battery'} does not fit the ${(PARTS.frames[spec.frame] || {}).name || 'frame'}`);
   if (pr.d > fr.propMax) warnings.push(`${pr.name} is too big for ${fr.name} (max ${fr.propMax}mm)`);
   const arm = (fr.size / 1000) / 2 / Math.SQRT2;          // motor offset on x and z
   const mMotor = (mo.mass + pr.mass) / 1000, mFrame = fr.mass / 1000, mEl = el.mass / 1000, mBat = ba.mass / 1000;
@@ -180,7 +182,19 @@ function buildDrone(spec) {
   return p;
 }
 
+// What fits a frame (pilot, 2026-11-17: "restrict battery sizes to the appropriate whoop"): its cell count and a pack size
+// range (65 mm whoops 1S 250-380 mAh, 75 mm 1S 300-550, 75 mm 2S 300-450, 85 mm 2S 450-650), and electronics of the same
+// cell count. fitParts swaps anything that does not fit for the nearest that does (the Garage calls it on every change).
+function batteryFits(frameKey, batKey) { const f = PARTS.frames[frameKey], b = PARTS.batteries[batKey]; if (!f || !b) return false; return (b.cells || 1) === (f.cells || 1) && (!f.cap || (b.cap >= f.cap[0] && b.cap <= f.cap[1])); }
+function electronicsFit(frameKey, eKey) { const f = PARTS.frames[frameKey], e = PARTS.electronics[eKey]; return !!f && !!e && (e.cells || 1) === (f.cells || 1); }
+function fitParts(spec) {
+  const out = { ...spec }, f = PARTS.frames[out.frame]; if (!f) return out;
+  if (!batteryFits(out.frame, out.battery)) { const want = (PARTS.batteries[out.battery] || { cap: 300 }).cap; let best = null; for (const k of Object.keys(PARTS.batteries)) if (batteryFits(out.frame, k) && (!best || Math.abs(PARTS.batteries[k].cap - want) < Math.abs(PARTS.batteries[best].cap - want))) best = k; if (best) out.battery = best; }
+  if (!electronicsFit(out.frame, out.electronics)) { const k = Object.keys(PARTS.electronics).find(x => electronicsFit(out.frame, x)); if (k) out.electronics = k; }
+  return out;
+}
 function ocv(soc, hv, cells = 1) { return cells === 1 ? ocv1(soc, hv) : ocv1(soc, hv) * cells; }
+const BROWNOUT = 2.9;   // V a cell, under load (see Drone.step)
 function ocv1(soc, hv) {
   const tbl = [3.30, 3.50, 3.62, 3.68, 3.72, 3.76, 3.80, 3.85, 3.92, 4.02, 4.20];
   const x = clamp(soc, 0, 1) * 10, i = Math.min(9, Math.floor(x)), f = x - i;
@@ -645,7 +659,7 @@ class Drone {
     this.motorW = [0, 0, 0, 0]; this.motorI = [0, 0, 0, 0]; this.thrust = [0, 0, 0, 0];
     if (!keepBattery) { this.soc = 1; this.mAh = 0; }
     this.vbat = ocv(this.soc, this.p.bat.hv, this.p.bat.cells); this.ibat = 0;
-    this.armed = false; this.crashed = false; this.contacts = []; this.contactThisStep = false;
+    this.armed = false; this.crashed = false; this.brownout = false; this.lowV = 0; this.contacts = []; this.contactThisStep = false;
     this.noise = [0, 0, 0, 0]; this.washLevel = 0; this.wake = []; this.wakeTimer = 0; this.time = this.time || 0;
     this.fc.reset(); this.restOnGround = 0; this.lastImpact = 0; this.lowSpeedContact = 0;
   }
@@ -726,7 +740,9 @@ class Drone {
     }
     Tb.y += rotorAccelYaw;
     this.ibat = Itot; this.vbat = Vbus;
-    this.soc = Math.max(0, this.soc - Itot * dt / (p.bat.cap * 3.6));
+    if (this.tune.batteryLife !== false) this.soc = Math.max(0, this.soc - Itot * dt / (p.bat.cap * 3.6));   // Garage → Battery life off: the pack never runs down
+    // brownout: a whoop's AIO resets when the loaded voltage falls below ~2.9 V a cell for a moment; the quad drops
+    if (this.armed && Vbus < BROWNOUT * p.bat.cells) { this.lowV = (this.lowV || 0) + dt; if (this.lowV > 0.25) { this.armed = false; this.brownout = true; } } else this.lowV = 0;
     this.mAh += Itot * dt / 3.6;
     // ---- aerodynamic drag (body frame, quadratic) + rotor H-force (linear)
     const vb = vRelB;
@@ -2776,6 +2792,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

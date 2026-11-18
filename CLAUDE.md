@@ -289,6 +289,17 @@ not a crash, and arming is allowed with the throttle low or centred (`thrArmOk`)
 2 angle, 3 3D; the OSD shows the mode. test/modes.js flies all of it with the real physics. The default 1S physics is
 unchanged (same hash).
 
+## Battery life and what fits (2026-11-17; src/sim.js `batteryFits`, `fitParts`, `BROWNOUT`; Garage)
+Frames carry `cells` and a pack size range `cap` (65 mm 1S 250-380 mAh, 75 mm 1S 300-550, 75 mm 2S 300-450, 85 mm 2S
+450-650); electronics carry `cells`. The Garage lists only fitting packs and electronics, and `fitParts` swaps a misfit
+for the nearest that fits on every change (`applyParts`); `buildDrone` warns about a misfit. New pack: 1S 550 mAh.
+`tune.batteryLife` (Garage checkbox, on by default = the old behaviour): off, the pack never runs down. On, the pack
+drains from the real current, the OCV curve and the internal resistance (×1.9 near empty) make it sag, and when the
+loaded voltage stays under `BROWNOUT` (2.9 V a cell) for 0.25 s the AIO browns out: `drone.brownout`, disarmed, no
+arming until B (`freshPack` in input.js; R keeps the pack). The game warns at 15% (`batWarn` in play.js); the OSD shows
+mAh and % left (∞ when off). test/battery.js: an Air65 on 300 mAh, flown hard, lasts about 5 minutes then browns out.
+Fit the drain to a Blackbox log when one arrives (testers' real packs last about 3 minutes of freestyle).
+
 ## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
 Off by default (the sticks reach the FC instantly: crisper than a real quad; a pilot found identical Betaflight rates
 "harsh"). `tune.rcLinkHz` sends the sticks in packets, `tune.rcDelayMs` delays them, `tune.rcSmooth` is `sim` (40 Hz
