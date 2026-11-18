@@ -370,7 +370,7 @@ Keyboard is Mode 2 (owner, 2026-11-18): the arrows are the left stick (↑ ↓ t
 (pitch, roll), full stick range. Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls →
 Keyboard): `fc.modeOverride = 'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and
 height hold (↑ ↓ climb and sink, released = hover; a PI on vertical speed in input.js). Disarmed, ↑ still raises the
-throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`).
+throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`, right of the score in `#scoreRow`, clear of the "what counted" list).
 The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 
 ## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
@@ -652,7 +652,7 @@ the low sun (west-south-west) comes in through the caved-in south and middle. On
 3 War Rig Climb (z -24, west: a ramp onto the trailer skeleton, the cab with window gaps and the steering-wheel ring, sand
 to land on, bouncy scrap plates), 4 Dirtbag Lounge (north: couches, the couch tunnel, pool table, crawl tables, pinball,
 fridges, bandana flags, DIRTBAG FOREVER), 5 the Murder Dome proper (a banked dirt bowl r 10..15 open N/E/S/W, four scrap
-pylons (poles) with a ring truss at 11 m and four chain-hung gates, the Altar with its fire and the SPIDER SUGAR sign),
+pylons (poles) with a ring truss at 11 m (each of its 24 segments an over/under: the owner's tricks round it did not count) and four chain-hung gates, the Altar with its fire and the SPIDER SUGAR sign),
 6 the Chain-Link Labyrinth (west: a seeded maze on a 3 m grid, 5 x 8 cells, in at the north, out at the south), 7 the Pit
 (a deck 3.2 m up with a 3 m hole; under it a red-lit room, two tire rings, a swinging-tire gauntlet, wires, a door south),
 8 Witness Me (a gentle ramp east to the exhaust-stack finish at x -10). Surfaces (`prim.surf`, the RaceGOW hook): chain-

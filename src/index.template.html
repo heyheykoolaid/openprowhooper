@@ -17,7 +17,8 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 .hide { display: none !important; }
 /* HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; }
-#hudPause { position: absolute; left: 10px; top: 112px; width: 46px; height: 46px; padding: 0 !important; font-size: 18px; line-height: 46px; text-align: center; border-radius: 10px; background: #000a; color: #fff; border: 1px solid #fff4; pointer-events: auto; touch-action: manipulation; z-index: 5; }
+#scoreRow { display: flex; align-items: center; gap: 14px; }
+#hudPause { position: relative; transform: skew(6deg); width: 46px; height: 46px; padding: 0 !important; font-size: 18px; line-height: 46px; text-align: center; border-radius: 10px; background: #000a; color: #fff; border: 1px solid #fff4; pointer-events: auto; touch-action: manipulation; flex: none; }
 #hudPause:active { background: #ffd34d; color: #111; }
 #scoreBox { position: absolute; left: 22px; top: 16px; transform: skew(-6deg); }
 #score { font-family: 'Bungee', Impact, sans-serif; font-size: 44px; line-height: 1; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 3px 3px 0 #111; }
@@ -358,8 +359,8 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <canvas id="view"></canvas>
 
 
-<div id="hud" class="hide"><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button><div id="passFeed"></div>
-  <div id="scoreBox"><div id="score">0</div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
+<div id="hud" class="hide"><div id="passFeed"></div>
+  <div id="scoreBox"><div id="scoreRow"><div id="score">0</div><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button></div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
   <div id="hudStack"><div id="popups"></div><div id="combo" class="hide"></div></div><div id="comboBank"></div>

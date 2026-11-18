@@ -1173,7 +1173,7 @@ class TrickDetector {
         this.prevSide[key] = side;
         if (prev !== undefined && prev !== side && along > -0.35 && along < L + 0.35) {
           let kind = null;
-          if (d.pos.y < under && d.pos.y > 0) kind = 'U'; else if (d.pos.y > over && d.pos.y < over + 7) kind = 'O';
+          if (d.pos.y < under && d.pos.y > (o.obstacle.floor || 0)) kind = 'U'; else if (d.pos.y > over && d.pos.y < over + 7) kind = 'O';   // floor: a high bar's unders only count close below it (the Murderdome's ring truss over its chain gates)
           if (kind) {
             const f = d.fwd(), fh = Math.hypot(f.x, f.z), vh = Math.hypot(d.vel.x, d.vel.z);
             const fwdDot = (fh > 0.2 && vh > 0.8) ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;

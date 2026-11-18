@@ -733,7 +733,7 @@
     const Y = y => pv.y + (y - pv.y) * s + d.y, D = v => { const q = R(v); return v3(q.x, q.y, q.z); };
     o.prims = o.prims.map(p => { const n = p.type === 'box' ? makeBox(T(p.c), v3(p.h.x * s, p.h.y * s, p.h.z * s), p.euler[1] + ry, p.euler[0], p.euler[2]) : p.type === 'capsule' ? makeCapsule(T(p.a), T(p.b), p.r * s) : p.type === 'sphere' ? makeSphere(T(p.c), p.r * s) : p; n.owner = o.id; if (p.leaf) n.leaf = true; return n; });
     o.vis = o.vis.map(v => { const n = { ...v }; if (v.c) n.c = T(v.c); if (v.a) n.a = T(v.a); if (v.b) n.b = T(v.b); if (v.h) n.h = v3(v.h.x * s, v.h.y * s, v.h.z * s); if (v.r != null) n.r = v.r * s; if (v.th != null) n.th = v.th * s; if (v.euler) n.euler = [v.euler[0], v.euler[1] + ry, v.euler[2]]; return n; });
-    if (o.obstacle) o.obstacle = { ...o.obstacle, a: T(o.obstacle.a), b: T(o.obstacle.b), under: Y(o.obstacle.under), over: Y(o.obstacle.over) };
+    if (o.obstacle) o.obstacle = { ...o.obstacle, a: T(o.obstacle.a), b: T(o.obstacle.b), under: Y(o.obstacle.under), over: Y(o.obstacle.over), ...(o.obstacle.floor != null ? { floor: Y(o.obstacle.floor) } : {}) };
     if (o.round) { const r = { ...o.round, c: T(o.round.c), r: o.round.r * s, under: Y(o.round.under), over: Y(o.round.over) }; delete r.box; o.round = r; }
     if (o.gap) o.gap = { ...o.gap, c: T(o.gap.c), n: D(o.gap.n), u: o.gap.u ? D(o.gap.u) : o.gap.u, hu: o.gap.hu * s, hv: o.gap.hv * s };
     if (o.light) o.light = T(o.light); if (o.wallNormal) o.wallNormal = D(o.wallNormal); if (o.tall) o.tall *= s;
@@ -1275,7 +1275,8 @@
         box(o, v3(Math.cos(a) * rm, hb / 2, Math.sin(a) * rm), v3(Math.PI * rm / N + 0.12, 0.18, L), 'dirt', Math.PI / 2 - a, -Math.atan2(hb, ro - ri), 0, { noSurvey: true });
         box(o, v3(Math.cos(a) * (ro + 0.4), hb / 2, Math.sin(a) * (ro + 0.4)), v3(Math.PI * ro / N + 0.1, hb / 2, 0.4), 'scrap', -a - Math.PI / 2, 0, 0, { noSurvey: true }); }
       const RT = 17, YT = 11; for (const a of [0.25, 0.75, 1.25, 1.75].map(k => k * Math.PI)) { const o = O('Scrap Pylon', 'pole'); pipe(o, v3(Math.cos(a) * RT, 0, Math.sin(a) * RT), v3(Math.cos(a) * RT, YT, Math.sin(a) * RT), 0.5, 'scrap'); }
-      { const o = O('Ring Truss', 'deco'); for (let i = 0; i < 24; i++) { const a0 = i / 24 * Math.PI * 2, a1 = (i + 1) / 24 * Math.PI * 2; pipe(o, v3(Math.cos(a0) * RT, YT, Math.sin(a0) * RT), v3(Math.cos(a1) * RT, YT, Math.sin(a1) * RT), 0.18, 'rustRed', { noSurvey: true }); } }
+      for (let i = 0; i < 24; i++) { const a0 = i / 24 * Math.PI * 2, a1 = (i + 1) / 24 * Math.PI * 2, A = v3(Math.cos(a0) * RT, YT, Math.sin(a0) * RT), B = v3(Math.cos(a1) * RT, YT, Math.sin(a1) * RT);   // the ring truss: every segment an over/under (owner: tricks round it did not count)
+        const o = O('Ring Truss', 'overunder', { obstacle: { a: v3(A.x, 0, A.z), b: v3(B.x, 0, B.z), under: YT - 0.18, over: YT + 0.18, floor: YT - 4 } }); pipe(o, A, B, 0.18, 'rustRed', { noSurvey: true }); }
       [0.125, 0.625, 1.125, 1.625].forEach((k, i) => { const a = k * Math.PI, c = v3(Math.cos(a) * RT, 0, Math.sin(a) * RT), t = v3(-Math.sin(a), 0, Math.cos(a)), u = v3(Math.cos(a), 0, Math.sin(a)), W = 0.9, Y0 = 3.4, Y1 = 5.2, o = O(`Chain Gate ${i + 1}`, 'overunder');
         const P = (s, y) => v3(c.x + u.x * s, y, c.z + u.z * s); pipe(o, P(-W, Y0), P(W, Y0), 0.05, 'rebar'); pipe(o, P(-W, Y1), P(W, Y1), 0.05, 'rebar'); pipe(o, P(-W, Y0), P(-W, Y1), 0.05, 'rebar'); pipe(o, P(W, Y0), P(W, Y1), 0.05, 'rebar');
         for (const s of [-W, W]) pipe(o, P(s, Y1), P(s * 0.3, YT), 0.025, 'chain', { noSurvey: true }); surf(o, HARD);
