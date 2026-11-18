@@ -214,6 +214,12 @@ addEventListener('pointerdown', e => { if (e.target.id === 'gPreview') { gPrev.d
 addEventListener('pointermove', e => { const d = gPrev.drag; if (!d) return; gPrev.yaw = d.yaw - (e.clientX - d.x) * 0.01; gPrev.pitch = Math.max(-1.3, Math.min(1.4, d.pitch + (e.clientY - d.y) * 0.01)); });
 addEventListener('pointerup', () => { gPrev.drag = null; });
 window.__pwGarage = gPrev;
+// The credits on the main menu: one line that scrolls (owner, 2026-11-18: room to grow). The text is doubled so the loop
+// has no seam, and the speed stays the same however long the credits get (about 40 px a second).
+function creditsTicker() { const tr = $('#menuThanks .tkTrack'); if (!tr || tr.dataset.on) return; const it = tr.querySelector('.tkItem'); if (!it) return;
+  tr.dataset.on = '1'; tr.appendChild(it.cloneNode(true)).setAttribute('aria-hidden', 'true');
+  const set = () => { const w = it.getBoundingClientRect().width; if (w > 0) tr.style.setProperty('--tkDur', Math.max(15, w / 40).toFixed(1) + 's'); }; set(); addEventListener('resize', set); setTimeout(set, 1500); }
+creditsTicker();
 // ============================================================ Advanced physics (a popup from the Garage)
 // Everything that shapes how the whoop flies beyond the parts and the PIDs, in tabs, with sliders and button rows rather
 // than drop-downs. The Betaflight tab uses Betaflight's own settings (src/sim.js FlightController; imported from a diff all
@@ -221,7 +227,7 @@ window.__pwGarage = gPrev;
 const ADV = { open: false, tab: 'feel' };
 // [tune key, name, min, max, step, shown = value × this, unit, what it does, default]
 const ADV_SL = {
-  wobble: [['shake', 'Wobble', 0, 4, 0.05, 100, '%', 'Air that is never still: the wobble a light whoop has in its own air. 0 = the old glassy-smooth sim; the default (225%) is fitted to a real 30000KV whoop\'s Blackbox logs', FEEL_DEF.shake],
+  wobble: [['shake', 'Wobble', 0, 4, 0.05, 100, '%', 'Air that is never still: the wobble a light whoop has in its own air. 0 = the old glassy-smooth sim; the default (70%) is the owner\'s own tuning; 225% matches a real 30000KV whoop\'s Blackbox logs', FEEL_DEF.shake],
     ['shakeTau', 'Wobble smoothness', 0.03, 0.4, 0.01, 1000, ' ms', 'How slowly the wobble changes: longer is a lazy float, shorter a quick shudder', FEEL_DEF.shakeTau],
     ['shakeMove', 'Wobble on movement', 0, 1, 0.1, 100, '%', '100%: the wobble comes with turns and speed and a still hover stays calm; 0%: the same wobble all the time', FEEL_DEF.shakeMove],
     ['loopDelayMs', 'Motor / ESC delay', 0, 6, 0.5, 1, ' ms', 'A real quad answers a few ms late (DShot, the ESC, the motor). More is softer but rings; the Feel Lab measured about 3 ms on a real whoop', FEEL_DEF.loopDelayMs],
@@ -264,8 +270,8 @@ function renderAdv() {
   if (ADV.tab === 'feel') h = `<p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts (Weight defaults to 90%: real whoops hover like that in their Blackbox logs); these change only how the physics feels, not the parts or the Garage figures.</p>
     ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label class="advS" title="${help}"><span>${name} <b id="gFeelV-${k}">${v}%</b></span><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
     <div class="row"><button data-advreset="feel" class="ghost">Feel back to the defaults</button></div>`;
-  if (ADV.tab === 'wobble') h = `<p class="note">The life a real whoop has in the air, fitted from real Blackbox logs (Tools &amp; labs → Feel Lab). The defaults are fitted to a real 30000KV whoop: its wobble when moving, its lag (no extra delay needed). A still hover stays calm.</p>
-    ${ADV_SL.wobble.map(advSlider).join('')}<div class="row"><button data-advreset="wobble" class="ghost">Back to the defaults</button><button data-advpreset="logfit" class="ghost" title="The owner's Air2 build answered about 4 ms later than the 30000KV whoop: the same wobble with 3 ms of motor / ESC delay">Laggier whoop (+3 ms)</button><button data-advpreset="calm" class="ghost" title="The old smooth sim with a hint of wobble">Calm</button></div>`;
+  if (ADV.tab === 'wobble') h = `<p class="note">The life a real whoop has in the air, fitted from real Blackbox logs (Tools &amp; labs → Feel Lab). The defaults are the owner\'s own tuning. "Real 30000KV whoop" is what a real whoop\'s Blackbox logs measured: its wobble when moving, its lag (no extra delay needed).</p>
+    ${ADV_SL.wobble.map(advSlider).join('')}<div class="row"><button data-advreset="wobble" class="ghost">Back to the defaults</button><button data-advpreset="fit30k" class="ghost" title="Fitted to a real 30000KV whoop's Blackbox logs: wobble 225 % at 100 ms, on movement">Real 30000KV whoop</button><button data-advpreset="logfit" class="ghost" title="The owner's Air2 build answered about 4 ms later than the 30000KV whoop: the same wobble with 3 ms of motor / ESC delay">Laggier whoop (+3 ms)</button><button data-advpreset="calm" class="ghost" title="The old smooth sim with a hint of wobble">Calm</button></div>`;
   if (ADV.tab === 'bf') h = `<p class="note">The flight controller's filters, as Betaflight has them. Lower cutoffs are smoother and laggier; a dynamic lowpass opens with the throttle. The sim has no motor noise to filter, so here they shape only the lag and the softness. Untouched: one 180 Hz gyro filter and one 90 Hz D-term filter, the sim as it always was.</p>
     ${ADV_SL.filters.slice(0, 3).map(advSlider).join('')}
     <div class="advPair"><span>Gyro lowpass 1 type</span>${advSeg('gyroLpfType', [['PT1', 'PT1'], ['PT2', 'PT2'], ['PT3', 'PT3'], ['BIQUAD', 'BIQUAD']], tune.gyroLpfType || 'PT1', 'gyro_lpf1_type')}</div>
@@ -300,7 +306,7 @@ document.addEventListener('click', e => {
   if (t.dataset.advset) { const k = t.dataset.advset, v = t.dataset.v; tune[k] = /^-?\d+(\.\d+)?$/.test(v) ? +v : v; saveTune(); renderAdv(); }
   if (t.dataset.advreset === 'feel') { for (const [k] of FEEL) tune[k] = 1; tune.weightFeel = WEIGHT_DEF; saveTune(); renderAdv(); }
   if (t.dataset.advreset === 'wobble') { Object.assign(tune, FEEL_DEF); saveTune(); renderAdv(); }
-  if (t.dataset.advpreset) { const p = t.dataset.advpreset; Object.assign(tune, p === 'bfstock' ? S.BF_STOCK : p === 'sim' ? S.BF_SIM : p === 'calm' ? FEEL3 : { ...FEEL_DEF, loopDelayMs: 3 }); saveTune(); renderAdv(); }
+  if (t.dataset.advpreset) { const p = t.dataset.advpreset; Object.assign(tune, p === 'bfstock' ? S.BF_STOCK : p === 'sim' ? S.BF_SIM : p === 'calm' ? FEEL3 : p === 'fit30k' ? FEEL_FIT : { ...FEEL_FIT, loopDelayMs: 3 }); saveTune(); renderAdv(); }
 });
 document.addEventListener('input', e => { const t = e.target, k = t.dataset && t.dataset.adv; if (!k) return;
   const d = [...ADV_SL.wobble, ...ADV_SL.filters, ...ADV_SL.extras].find(x => x[0] === k) || { gyroLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], dtermLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], rcDelayMs: [k, '', 0, 0, 0, 1, ' ms', '', 0], rcSmoothFactor: [k, '', 0, 0, 0, 1, '', '', 30] }[k];

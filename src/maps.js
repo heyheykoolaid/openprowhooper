@@ -1213,7 +1213,7 @@
       for (let z = z0; z <= z1; z += 1.2) box(o, v3(GX, 3.9, z), v3(0.5, 0.1, 0.05), 'scrap');   // seat frames welded on top
       surf(o, HARD); o.obstacle = { a: v3(GX, 0, z0), b: v3(GX, 0, z1), under: 3.2, over: 3.64 };
       O('Blood Oath Gantry opening', 'gap', { gap: { c: v3(GX, 1.6, 33), n: v3(1, 0, 0), hu: 3.5, hv: 1.54, u: v3(0, 0, 1) } });
-      const fl = O('Skull Flag', 'deco'); fl.vis.push({ shape: 'sign', c: v3(GX + 0.65, 2.6, 33), w: 2.4, h: 1.2, ry: Math.PI / 2, mat: 'skullFlag' }); }   // the Dirtbag FPV flag
+      const fl = O('Skull Flag', 'deco'); fl.vis.push({ shape: 'sign', c: v3(GX + 0.62, 2.62, 33), w: 2.4, h: 1.2, ry: Math.PI / 2, mat: 'skullFlag' }); for (const z of [31.85, 34.15]) pipe(fl, v3(GX + 0.6, 3.2, z), v3(GX + 0.63, 3.24, z), 0.015, 'rebar', { noCollide: true }); }   // the Dirtbag FPV flag, wired to the beam's face   // the Dirtbag FPV flag
     for (let x = -1; x <= 13; x += 3.5) for (const z of [28.6, 37.4]) barrel(x, z, z < 30 && (x === -1 || x === 9.5));
     zones.push({ shape: 'zone', mat: 'sand', c: v3(5, 0.006, 33), h: v3(10, 0, 4.5) });
 
@@ -1245,6 +1245,7 @@
         for (const s of [-1, 1]) box(cab, v3(x, (WY0 + WY1) / 2, Z + s * (WW + (wz - WW) / 2)), v3(0.06, (WY1 - WY0) / 2, (wz - WW) / 2), 'busYellow');
         O('War Rig Cab window', 'gap', { gap: { c: v3(x, (WY0 + WY1) / 2, Z), n: v3(1, 0, 0), hu: WW - 0.07, hv: (WY1 - WY0) / 2 - 0.07, u: v3(0, 0, 1) } }); }
       surf(cab, HARD); ring('Steering Wheel Gate', v3(7.7, 2.15, Z), 0.5, v3(1, 0, 0), 0.04, 'carBlack', HARD);
+      { const sc = O('Steering Column', 'deco'); pipe(sc, v3(7.7, 1.66, Z), v3(7.95, 0.98, Z), 0.045, 'carBlack', { noSurvey: true }); surf(sc, HARD); }
       const land = O('Landing Sand', 'deco'); box(land, v3(2.2, 0.012, Z), v3(2.6, 0.012, 2.6), 'sand'); surf(land, SAND);
       const pl = O('Scrap Plates', 'deco'); for (const [x, z] of [[-1.2, Z - 2.4], [-0.6, Z + 2.2], [5.6, Z + 2.8], [-1.6, Z]]) box(pl, v3(x, 0.015, z), v3(0.9, 0.015, 0.7), 'plate', rnd() * 3); surf(pl, PLATE);
       zones.push({ shape: 'zone', mat: 'dirt', c: v3(12, 0.006, Z), h: v3(12, 0, 4) }); }
@@ -1264,7 +1265,7 @@
         box(o, v3(-16.5, 1.35, Z0 - 2.65), v3(0.36, 0.45, 0.06), 'carBlack'); o.vis.push({ shape: 'sign', c: v3(-16.5, 1.35, Z0 - 2.58), w: 0.66, h: 0.5, ry: 0, mat: 'signCasino', glow: true }); }
       { const o = O('Dead Fridges', 'deco'); box(o, v3(-19, 0.9, Z0 + 0.2), v3(0.4, 0.9, 0.36), 'fridge', 0.2); box(o, v3(-20.4, 0.38, Z0 - 1.4), v3(0.9, 0.38, 0.36), 'fridge', 1.1); surf(o, HARD); }
       for (const [x, z, h] of [[0, Z0 - 0.5, 1.6], [-4, Z0 - 0.5, 0.9], [-9, Z0 - 5, 1.7], [-13, Z0 - 0.4, 1.0], [-17.5, Z0 - 6, 1.5]]) { const o = O('Bandana Flag', 'deco'); pipe(o, v3(x, 0, z), v3(x, h, z), 0.02, 'oldWood'); o.vis.push({ shape: 'sign', c: v3(x + 0.26, h - 0.18, z), w: 0.5, h: 0.32, ry: 0, mat: 'bandana' }); }
-      const sg = O('Dirtbag Forever Sign', 'deco'); sign(sg, v3(-8, 4.6, -40.6), 4.2, 2.1, 0, 'signDirtbag', false);
+      const sg = O('Dirtbag Forever Sign', 'deco'); sign(sg, v3(-8, 4.6, -40.6), 4.2, 2.1, 0, 'signDirtbag', false); for (const x of [-10.02, -5.98]) pipe(sg, v3(x, 0, -40.7), v3(x, 5.75, -40.7), 0.07, 'rustRed'); box(sg, v3(-8, 3.5, -40.7), v3(2.1, 0.05, 0.05), 'rustRed', 0, 0, 0, { noSurvey: true });
       lamp('Lounge Neon', v3(-8, 4, -38.5), 0xd8ff8a, 9, 18); lamp('Lounge Lamp', v3(-12, 2.6, -29), 0xffb070, 7, 12);
       zones.push({ shape: 'zone', mat: 'oilCarpet', c: v3(-9, 0.006, Z0 - 4), h: v3(12, 0, 6) }); }
 
@@ -1320,19 +1321,20 @@
       O('Pit Exit Door', 'gap', { gap: { c: v3(DX, DH / 2, Z1), n: v3(0, 0, 1), hu: DW - 0.06, hv: DH / 2 - 0.06, u: v3(1, 0, 0) } });
       { const o = O('Deck Columns', 'pole'); for (const [x, z] of [[-28, 17], [-20, 17], [-20, 23.5]]) pipe(o, v3(x, 0, z), v3(x, Y - t, z), 0.16, 'rustRed'); }
       ring('Pit Tire Ring 1', v3(-26.5, 1.25, HZ), 0.5, v3(1, 0, 0), 0.11, 'tire', SOFT); ring('Pit Tire Ring 2', v3(-29.5, 1.25, 21.5), 0.5, v3(0, 0, 1), 0.11, 'tire', SOFT);
+      { const o = O('Tire Ring Chains', 'deco'); for (const [x, z, ux, uz] of [[-26.5, HZ, 0, 1], [-29.5, 21.5, 1, 0]]) for (const s of [-1, 1]) pipe(o, v3(x + ux * s * 0.32, 1.25 + 0.38, z + uz * s * 0.32), v3(x + ux * s * 0.42, Y - t, z + uz * s * 0.42), 0.018, 'chain', { noSurvey: true }); surf(o, SOFT); }
       { const o = O('Swinging Tires', 'deco'); [[DX - 0.6, 22.8], [DX + 0.6, 23.6], [DX - 0.5, 24.4], [DX + 0.5, 25.1]].forEach(([x, z]) => { pipe(o, v3(x, Y - t, z), v3(x, 1.75, z), 0.02, 'chain', { noSurvey: true }); pipe(o, v3(x - 0.15, 1.4, z), v3(x + 0.15, 1.4, z), 0.36, 'tire'); }); surf(o, SOFT); }
       { const o = O('Hanging Wires', 'deco'); for (let i = 0; i < 9; i++) { const x = X0 + 1 + rnd() * (X1 - X0 - 2), z = Z0 + 1 + rnd() * (Z1 - Z0 - 2); if (Math.hypot(x - HX, z - HZ) < 2) continue; pipe(o, v3(x, Y - t, z), v3(x + (rnd() - 0.5) * 0.3, Y - 0.9 - rnd() * 0.8, z), 0.012, 'carBlack', { noSurvey: true }); } surf(o, SOFT); }
       { const o = O('Emergency Lights', 'deco'); for (const [x, z] of [[X0 + 0.2, 18], [X1 - 0.2, 22], [-24, Z0 + 0.2]]) box(o, v3(x, 2.6, z), v3(0.14, 0.1, 0.14), 'emergency', 0, 0, 0, { noCollide: true, glow: true }); }
       lamp('Pit Emergency Light', v3(-27, 2.9, 18), 0xff3a22, 10, 13); lamp('Pit Emergency Light', v3(-20, 2.9, 23), 0xff3a22, 10, 13);
-      { const o = O('Sparks', 'deco'); for (let i = 0; i < 12; i++) box(o, v3(X1 - 0.3, 0.3 + rnd() * 1.2, 15 + rnd() * 2), v3(0.02, 0.02, 0.02), 'fireCore', rnd() * 3, 0, 0, { noCollide: true, glow: true }); }
-      const sg = O("Sugar's Pit Sign", 'deco'); sign(sg, v3(-24, Y + 1.0, Z1 + 0.2), 4.4, 1.1, 0, 'signSugar', false); pipe(sg, v3(-26.4, Y, Z1 + 0.2), v3(-26.4, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); pipe(sg, v3(-21.6, Y, Z1 + 0.2), v3(-21.6, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); }
+      { const o = O('Sparks', 'deco', { float: true }); for (let i = 0; i < 12; i++) box(o, v3(X1 - 0.3, 0.3 + rnd() * 1.2, 15 + rnd() * 2), v3(0.02, 0.02, 0.02), 'fireCore', rnd() * 3, 0, 0, { noCollide: true, glow: true }); }
+      const sg = O("Sugar's Pit Sign", 'deco'); sign(sg, v3(-24, Y + 1.0, Z1 + 0.2), 4.4, 1.1, 0, 'signSugar', false); pipe(sg, v3(-26.22, Y, Z1 + 0.2), v3(-26.22, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); pipe(sg, v3(-21.78, Y, Z1 + 0.2), v3(-21.78, Y + 1.6, Z1 + 0.2), 0.05, 'rebar'); }
 
     // ---- 8 Witness Me: out of the pit, a long drag east, slightly uphill, to the exhaust-stack finish, barrels both sides
     { const o = O('Witness Me Ramp', 'deco'); box(o, v3(-20, 0.36, 33), v3(7.2, 0.06, 3.2), 'plate', 0, 0, Math.atan2(0.7, 14.4), { noSurvey: true }); box(o, v3(-10.5, 0.36, 33), v3(2.6, 0.36, 3.2), 'plate'); surf(o, PLATE); }
     { const FX = -10, za = 30.2, zb = 35.8, Y0 = 0.72, YB = 3.5, o = O('Witness Me Finish', 'overunder'); for (const z of [za, zb]) { pipe(o, v3(FX, Y0, z), v3(FX, 5.8, z), 0.22, 'rustRed'); pipe(o, v3(FX, 5.6, z), v3(FX, 6.2, z), 0.26, 'carBlack'); }
       pipe(o, v3(FX, YB, za), v3(FX, YB, zb), 0.12, 'rebar'); surf(o, HARD); o.obstacle = { a: v3(FX, 0, za), b: v3(FX, 0, zb), under: YB - 0.12, over: YB + 0.12 };
       O('Witness Me Finish opening', 'gap', { gap: { c: v3(FX, (Y0 + YB - 0.12) / 2, 33), n: v3(1, 0, 0), hu: (zb - za) / 2 - 0.3, hv: (YB - 0.12 - Y0) / 2 - 0.06, u: v3(0, 0, 1) } });
-      sign(o, v3(FX, 4.5, 33), 4.6, 1.1, -Math.PI / 2, 'signWitness'); lamp('Finish Glow', v3(FX + 0.5, 4.4, 33), 0xffa040, 6, 12); }
+      sign(o, v3(FX, 4.5, 33), (zb - za) - 0.4, 1.1, -Math.PI / 2, 'signWitness'); lamp('Finish Glow', v3(FX + 0.5, 4.4, 33), 0xffa040, 6, 12); }
     for (let x = -28; x <= -14; x += 3.5) for (const z of [29.2, 36.8]) barrel(x, z, false);
     zones.push({ shape: 'zone', mat: 'crackedConcrete', c: v3(0, 0.004, 0), h: v3(RW, 0, RW) });
     zones.unshift(zones.pop());   // the cracked floor first, the patches on top of it

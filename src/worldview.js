@@ -503,7 +503,9 @@ function duskBackdrop() {
   // dust hanging in the air (catches the light), drifting
   const N = 2600, pos = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 46; pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = rnd() * 16; pos[i * 3 + 2] = Math.sin(a) * r; }
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  DUSK.dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc890, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })); DUSK.dust.frustumCulled = false; playRoot.add(DUSK.dust);
+  const moteTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+  // a soft round mote, not a square (a mote right by the lens used to draw as a big grey tile)
+  DUSK.dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc890, size: 0.035, map: moteTex, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending })); DUSK.dust.frustumCulled = false; playRoot.add(DUSK.dust);
 }
 function duskTick(dt) {
   DUSK.t += dt; const t = DUSK.t, f = 0.82 + 0.18 * Math.sin(t * 17) * Math.sin(t * 5.3 + 1);

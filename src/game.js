@@ -19,9 +19,13 @@ if (!store.get('feel3', false)) { if (tune.shake == null || (tune.shake === 1 &&
 // wobble 2.25 at 0.1 s on movement gives its 2-20 Hz wobble (sim 6.5 / 7.2 °/s, real 8.7 / 6.5) and tracking error; its lag
 // (7.7 / 7.8 ms) needs no extra delay; it hovers like 0.9 of the build's weight. Pilots still on FEEL3 (or the first fit) get
 // these once; anyone who moved a slider keeps their own.
-const FEEL_DEF = { shake: 2.25, shakeTau: 0.1, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 }, WEIGHT_DEF = 0.9;
+const FEEL_FIT = { shake: 2.25, shakeTau: 0.1, shakeMove: 1, loopDelayMs: 0, camBuzz: 0 }, WEIGHT_DEF = 0.9;
 if (!store.get('feel4', false)) { const on3 = Object.entries(FEEL3).every(([k, v]) => tune[k] === v);
-  if (on3) Object.assign(tune, FEEL_DEF); if (tune.weightFeel == null || tune.weightFeel === 1) tune.weightFeel = WEIGHT_DEF; store.set('feel4', true); }
+  if (on3) Object.assign(tune, FEEL_FIT); if (tune.weightFeel == null || tune.weightFeel === 1) tune.weightFeel = WEIGHT_DEF; store.set('feel4', true); }
+// Owner, 2026-11-18, after tuning it himself: wobble 70 %, 220 ms, 10 % on movement (so most of it is there all the time), no
+// delay, no buzz. This is the default; pilots still on the log fit (FEEL_FIT) get it once.
+const FEEL_DEF = { shake: 0.7, shakeTau: 0.22, shakeMove: 0.1, loopDelayMs: 0, camBuzz: 0 };
+if (!store.get('feel5', false)) { if (Object.entries(FEEL_FIT).every(([k, v]) => tune[k] === v)) Object.assign(tune, FEEL_DEF); store.set('feel5', true); }
 for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;

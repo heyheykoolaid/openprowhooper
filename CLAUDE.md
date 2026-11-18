@@ -81,6 +81,8 @@ real vs 3-4 sim; the joint fit again picks 3 ms and shake 0.7. Then the owner: "
 `WEIGHT_DEF` in game.js): wobble 2.25 at `shakeTau` 0.1 s, on movement (sim 6.5 / 7.2 °/s 2-20 Hz, real 8.7 / 6.5; tracking
 error 5.3 / 4.8 % vs 7.6 / 6), no loop delay (lag 8.1 / 7.8 vs 7.7 / 7.8 ms), Weight 90 % (hover 37 % real vs 39 % sim).
 Pilots still on FEEL3 get them once (`store 'feel4'`), Weight 100 % becomes 90 % once; the physics (Node) is unchanged.
+That fit is now `FEEL_FIT` (preset "Real 30000KV whoop"): **the default `FEEL_DEF` is the owner's own tuning** (shake 0.7,
+`shakeTau` 0.22, `shakeMove` 0.1, no delay, no buzz; pilots still on FEEL_FIT get it once, `store 'feel5'`).
 Presets in Wobble and lag: "Laggier whoop (+3 ms)" (the owner's Air2), "Calm" (= FEEL3).
 
 ## Feel Lab: the sim's feel fitted to real Blackbox logs (src/feelfit.js, tools/feelfit.js, src/feellab.js; 2026-11-18)
@@ -468,6 +470,8 @@ Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in 
 "never used" variable still needs a grep for assignments.
 
 ## Review list: picking, combos, deleting
+The main menu's credits are one scrolling line (`#menuThanks .tkTrack`, `creditsTicker` in menus.js: text doubled for a seamless
+loop, ~40 px/s whatever its length, pauses on hover, still for prefers-reduced-motion). Add credits inside `.tkItem`.
 Every list of trick names a pilot picks from while labelling (SKITTLES review, Quick check, Video Review, Blackbox Replay,
 Judge the Bot, Pause & Ask, Trick Calibration) is alphabetical (`abcSort` in game.js; owner, 2026-11-18).
 List rows are clickable (`recapPick`: click, Ctrl-click, Shift-click range in time order; `recap.multi`). "Combo" gives
@@ -723,6 +727,13 @@ neon short-circuits, emergency blink, oil sheen, dust). The start flag is the Di
 flat textured plane) is new in `visMesh`. 13 real lights (Map lights Auto drops to Few on slow machines). Not in (static
 world): swaying gates, destructible props, confetti, kill-cam pads, the dirtbag radio. test/maps.js covers it (the bot's
 Powerloops and Mattys on the gantry, the finish and a chain gate); `tools/map_thumbs.py --extra --only=md` saves check shots.
+
+**Art pass 1** (2026-11-18, owner: "tidy up floating things"): `tools/floatcheck.js [map…] [--all]` (new: every drawn piece boxed,
+touching pieces linked, groups that never reach the ground listed; signs / glow ride on what they touch; `float: true` on an
+object or piece = meant to float, e.g. Sparks). Fixed: the Dirtbag flag wired to the gantry beam's face, a steering column
+under the Steering Wheel Gate (below the hole), chains for both Pit Tire Rings, the pit sign's and finish banner's edges
+on their posts / stacks, two posts and a rail for DIRTBAG FOREVER; 0 floating groups. Dust motes are a soft round sprite
+(they drew as grey squares, big when near the lens).
 
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
