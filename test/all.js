@@ -11,6 +11,7 @@ const checks = [
   ['phase-2 tricks + live counters', () => { const o = run('phase2.js'); const m = o.match(/(\d+)\/(\d+) phase-2/); return m && m[1] === m[2] ? null : o; }],
   ['tricktionary demo loops', () => { const o = run('demos.js'); const m = o.match(/(\d+)\/(\d+) demo loops/); return m && m[1] === m[2] ? null : o; }],
   ['demo GIF motion replay', () => { const o = run('demo-replay.js'); const m = o.match(/(\d+)\/(\d+) demo replays/); return m && m[1] === m[2] ? null : o; }],
+  ['RaceGOW tracks (blocks, gates, laps, sectors, ghosts, checks, surfaces)', () => { const o = run('racegow.js', []); return /(\d+)\/\1 racegow checks/.test(o) ? null : o.split('\n').filter(l => l.startsWith('FAIL')).slice(0, 6).join('\n') || o.slice(-400); }],
   ['race rules (gates, laps, best 3 consecutive, validation)', () => { const o = run('race.js', []); return /(\d+)\/\1 race checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['blackbox decoder matches orangebox on a real flight', () => { const o = run('bbl.js', []); return /(\d+)\/\1 blackbox decoder checks/.test(o) ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['vaporwave school map (builds, spawn clear, transitions, orbit and loop on its objects)', () => { const o = run('school.js', []); return /(\d+)\/\1 school map checks/.test(o) ? null : o; }],

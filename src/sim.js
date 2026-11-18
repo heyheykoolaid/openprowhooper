@@ -755,6 +755,12 @@ class Drone {
     Tb.x += -p.angDrag * this.w.x * Math.abs(this.w.x) * 1000; Tb.y += -p.angDrag * this.w.y * Math.abs(this.w.y) * 600; Tb.z += -p.angDrag * this.w.z * Math.abs(this.w.z) * 1000;
     // ---- integrate
     const Fw = qrot(this.q, Fb); Fw.y -= p.mass * G;
+    // race fields (RaceGOW: fan drafts push, battery-saver zones add thrust); maps without fields are untouched
+    const WF = this.world.fields; if (WF && WF.length) for (const f of WF) { const d = sub(this.pos, f.o), m = f.m;
+      const lx = d.x * m[0] + d.y * m[3] + d.z * m[6], ly = d.x * m[1] + d.y * m[4] + d.z * m[7], lz = d.x * m[2] + d.y * m[5] + d.z * m[8];
+      if (Math.abs(lx) > f.h.x || Math.abs(ly) > f.h.y || Math.abs(lz) > f.h.z) continue;
+      if (f.kind === 'push') { const k = f.accel * p.mass; Fw.x += f.dir.x * k; Fw.y += f.dir.y * k; Fw.z += f.dir.z * k; }
+      else if (f.kind === 'boost') { const B = qrot(this.q, Fb), g = f.gain - 1; Fw.x += B.x * g; Fw.y += B.y * g; Fw.z += B.z * g; } }
     this.vel = add(this.vel, mul(Fw, dt / p.mass));
     const I = p.I, w = this.w;
     const Iw = v3(I.x * w.x, I.y * w.y, I.z * w.z), gyro = cross(w, Iw);
@@ -808,7 +814,7 @@ class Drone {
   }
 
   collide(dt) {
-    const p = this.p; let hit = false; let maxImpact = 0; let hitOwner = -1, hitNormal = null;
+    const p = this.p; let hit = false; let maxImpact = 0; let hitOwner = -1, hitNormal = null, hitSurf = null;
     for (let iter = 0; iter < 2; iter++) {
       for (const c of p.colliders) {
         const cw = add(this.pos, qrot(this.q, c.c));
@@ -825,7 +831,7 @@ class Drone {
         for (const pr of this._near) {
           const a = pr.aabb;
           if (cw.x + c.r < a.min.x || cw.x - c.r > a.max.x || cw.y + c.r < a.min.y || cw.y - c.r > a.max.y || cw.z + c.r < a.min.z || cw.z - c.r > a.max.z) continue;
-          const r = sphereVs(pr, cw, c.r); if (r) { r.owner = pr.owner; contacts.push(r); }
+          const r = sphereVs(pr, cw, c.r); if (r) { r.owner = pr.owner; r.surf = pr.surf; contacts.push(r); }
         }
         for (const ct of contacts) {
           hit = true;
@@ -835,12 +841,12 @@ class Drone {
           const vc = add(this.vel, cross(wW, r));
           const vn = dot(vc, ct.n);
           if (vn < 0) {
-            if (-vn > maxImpact) { maxImpact = -vn; hitOwner = ct.owner; hitNormal = ct.n; }
+            if (-vn > maxImpact) { maxImpact = -vn; hitOwner = ct.owner; hitNormal = ct.n; hitSurf = ct.surf; }   // ct.surf: RaceGOW surfaces { e, f, crash }
             // effective mass along normal
             const rB = qinv(this.q, r), nB = qinv(this.q, ct.n);
             const rxn = cross(rB, nB); const Iinv = v3(rxn.x / p.I.x, rxn.y / p.I.y, rxn.z / p.I.z);
             const k = 1 / p.mass + dot(cross(Iinv, rB), nB);
-            const e = -vn > 0.4 ? p.restitution : 0;
+            const sf = ct.surf, e = -vn > 0.4 ? (sf ? sf.e : p.restitution) : 0;
             const jn = -(1 + e) * vn / k;
             // friction
             const vt = sub(vc, mul(ct.n, vn)), vtl = len(vt);
@@ -849,7 +855,7 @@ class Drone {
               const tdir = mul(vt, 1 / vtl);
               const rxt = cross(rB, qinv(this.q, tdir)); const It = v3(rxt.x / p.I.x, rxt.y / p.I.y, rxt.z / p.I.z);
               const kt = 1 / p.mass + dot(cross(It, rB), qinv(this.q, tdir));
-              const jt = Math.min(vtl / kt, p.friction * jn);
+              const jt = Math.min(vtl / kt, (sf ? sf.f : p.friction) * jn);
               J = sub(J, mul(tdir, jt));
             }
             this.vel = add(this.vel, mul(J, 1 / p.mass));
@@ -862,12 +868,12 @@ class Drone {
     }
     this.contactThisStep = hit;
     if (hit) {
-      this.lastImpact = maxImpact; this.impactOwner = hitOwner; this.impactNormal = hitNormal;
+      this.lastImpact = maxImpact; this.impactOwner = hitOwner; this.impactNormal = hitNormal; this.impactSurf = hitSurf;
       this.w = mul(this.w, 0.995);
     }
     // crash rules (≈ "contact + disarm" in TPW terms)
     if (this.armed && !this.crashed) {
-      if (maxImpact > (this.crashImpact || 7.5)) this.crash('impact');
+      if (maxImpact > (hitSurf && hitSurf.crash ? hitSurf.crash : (this.crashImpact || 7.5))) this.crash('impact');
       const up = this.up();
       const speed = len(this.vel);
       if (hit && up.y < -0.35 && speed < 0.6 && !this.fc.reversible) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }   // in 3D mode upside-down on the ground is just a place to take off from
