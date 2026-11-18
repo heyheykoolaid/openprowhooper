@@ -80,7 +80,7 @@
       const pts = shape === 'square' ? [[-w / 2, p.lift], [-w / 2, p.lift + w * p.aspect], [w / 2, p.lift + w * p.aspect], [w / 2, p.lift]]
         : shape === 'triangle' ? ngon(3, w, cy, Math.PI).reverse() : shape === 'diamond' ? ngon(4, w * Math.SQRT2, cy, 0) : ngon(6, w, cy, Math.PI / 6);
       frameAlong(k, pts, p, fm); k.gate({ poly: pts }); } });
-  const FURN = (label, desc, params, build) => ({ cat: 'Obstacles', layer: 'obstacles', solid: true, label, desc, params: { ...params, destructible: { v: 'no', opts: ['no', 'yes'], label: 'Destructible' } }, build });
+  const FURN = (label, desc, params, build) => ({ cat: 'Obstacles', layer: 'obstacles', solid: true, label, desc, params, build });
   const CATALOG = {
     // gates
     gateSquare: G('Square gate', 'The standard whoop gate (40 x 40 cm)', 'square'),
@@ -276,7 +276,7 @@
   // a short fingerprint of what the track IS (its geometry, not its name): leaderboards key on it
   function trackHash(t) { const g = JSON.stringify([t.preset, t.section, t.venue, t.route, t.elements.map(e => [e.type, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), Math.round(e.ry), Math.round(e.rx), Math.round(e.rz), +e.s.toFixed(2), e.p, !!e.sector])]);
     let h1 = 0x811c9dc5, h2 = 0x01000193; for (let i = 0; i < g.length; i++) { const c = g.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
-    return (h1.toString(36) + h2.toString(36)).slice(0, 14); }
+    return (h1.toString(36).padStart(7, '0') + h2.toString(36).padStart(7, '0')).slice(0, 14); }
 
   // ------------------------------------------------------------------ building a track into colliders, looks and gates
   function elementParts(e, ctx) {

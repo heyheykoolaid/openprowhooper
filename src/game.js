@@ -1,6 +1,7 @@
 const THREE = window.THREE;   // three.js r160 (UMD) is loaded by a plain <script> before this module
 const S = window.Sim;
 const $ = s => document.querySelector(s);
+const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // every bit of remote or typed text that goes into HTML
 const store = { get(k, d) { try { const v = localStorage.getItem('pw.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
                 set(k, v) { try { localStorage.setItem('pw.' + k, JSON.stringify(v)); } catch {} } };
 
@@ -35,7 +36,7 @@ let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);
 drone.crashImpact = 9.5;   // a ducted whoop bounces off more than the bare number used by the tests (pilot: crashing should be more forgiving)
 const detector = new S.TrickDetector(world);
-let activeWorld = world;   // the playground, or a race track's room + gates (editor.js useWorld)
+let activeWorld = world;   // the playground, or a race track's room + gates (raceedit.js useWorld)
 let score = new S.ScoreKeeper();
 let mode = 'menu';           // menu | fly | paused
 let session = null;          // {timeLeft} for 2-minute runs
@@ -52,7 +53,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = PERF.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-const playRoot = new THREE.Group(); scene.add(playRoot);   // the playground; race rooms have their own group (editor.js)
+const playRoot = new THREE.Group(); scene.add(playRoot);   // the playground; race rooms have their own group (raceedit.js)
 scene.fog = new THREE.Fog(0xc7ae8c, 28, 110);
 const fpvCam = new THREE.PerspectiveCamera(90, 1, 0.004, 400);
 const chaseCam = new THREE.PerspectiveCamera(70, 1, 0.01, 400);

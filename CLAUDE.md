@@ -4,7 +4,7 @@
 Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's Pro Whooper (TPW) trick library.
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
-`menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `editor.js`,
+`menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `raceedit.js`,
 `mapedit.js`, `bbreplay.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
@@ -85,18 +85,33 @@ checks to things the trick cannot do without. It's off in Video Review (`det.wat
 Tricks are built from segments; pilots leave air between them. `AIR_OPEN` (1.0 s, 1.5 s hanging inverted) is the
 allowed gap; a smaller pending trick waits (`awaitingSegment`) while the quad holds steady. `stress.js --air=0.6`.
 
-## RaceGOW racing (src/race.js, src/editor.js)
-**Switched off in the interface for now** (pilot's request): `RACEGOW_ON = false` in menus.js hides the Tools & labs
-button and keeps the menu closed; the code, tracks and test/race.js stay. Set it to true (and unhide `data-act="race"`) to bring it back.
-Pure rules/geometry in race.js (tested by test/race.js); the editor and race HUD in editor.js (same module as game.js,
-concatenated by build.py). Tracks: `pro-whooper-track/1`; race results/ghosts: `pro-whooper-race/1` (`races/…`).
-A RaceGOW track is usually ONE connected PVC structure whose openings are the gates, flown many times from different
-sides: build it from loose `pipe`/`bar` parts (ends magnet together, connectors via `trackJoints`), mark openings with
-`invisible` checkpoints (any size/angle, flat ones are dived through; the editor's Define-gate tool makes one from two
-clicked corners), and set `track.nextOnly` so only the next checkpoint counts. RaceGOW rules the editor follows: one
-gate (section) size per track, 24 in minimum, the whole track scales with it (`track.section`, `rescaleTrack`); 20 PVC
-sections and a 4 ft x 6 ft footprint at 24 in (`trackStats`, shown as guidance, not enforced). Pipes just join: no
-connector parts. The `Pipe` part turns freely in 3D about its joining end (`rotated`, axis X/Y/Z, angle snap toggle).
+## RaceGOW racing (src/racegow.js, src/raceedit.js) — redesigned 2026-11-18, racing only (no trick scoring)
+On: main menu "RaceGOW racing" (`RACEGOW_ON` in menus.js). **racegow.js** (window.RG, pure, test/racegow.js) is the track
+format `pro-whooper-track/2` (`newTrack`, `cleanTrack` for anything untrusted, `trackHash` = the geometry, leaderboards key
+on it; `/1` tracks convert), two rule presets (`indoor`: IGOW-style gates 25-160 cm; `racegow`: white PVC in one section
+size, 24 in minimum), venues (a room from `ROOMS`, the sized `empty` volume, or a map: `venue.kind 'map'`, raced on that
+map, the game reloads into it: `rgGoToMap`, `store 'rgPending'`), the `CATALOG` of building blocks (gates square / round /
+triangle / diamond / hex, split, checkpoint, start/finish gantry, point-to-point finish, PVC gate / hurdle / pipe, flags,
+arrows, plaques with auto-face, parametric furniture, walls / half walls / arches / tunnels / platforms in drywall, wood,
+glass, foam, concrete, floor patches carpet / hardwood / tile / mat, ramps, fan / dark / battery-saver zones, lights, neon),
+each building colliders, looks, checkpoints (convex polygons or circles on the element's plane, flown toward local -z),
+fields and lights through a small kit. `Race` (gates in order, wrong-way, skipped gates, laps, sectors (marked gates or
+three even ones), deltas to a reference lap, time attack / hot laps), ghosts (`packGhost`: 30 Hz, delta-coded mm), `flow`
+/ `estimate` (lap time, difficulty), `checks` ("Make raceable": start, route, gate sizes per preset, floating things,
+solids through each other, out of the room, close under the ceiling, ground cushion and prop-wash notes), `pathGates`,
+`mirror`, `autoFace`. **Physics hooks** in sim.js, absent everywhere else (default physics unchanged): a prim's `surf`
+{ e, f, crash } (soft gates bounce you on, hard gates stop you and crash you over 2.6 m/s, foam never crashes),
+`world.groundSurf`, and `world.fields` (fan push, boost thrust) in `Drone.step`.
+**raceedit.js**: its own editor (not the Map Editor): 3D / top (orthographic) / split views, orbit / pan / zoom by mouse,
+WASD QE and gamepad, grid snap free / 1 / 5 / 10 cm, angle snap, magnetic placing on top of things, layers (hide / lock),
+palette with categories and search, a parametric inspector, move arrows and a turn ring, undo / redo, copy / paste /
+duplicate, path tool, mirror, flow line coloured by speed, collision view, the checklist (click a line to select what it
+names), route order, auto-save (`store 'rg.tracks'`), Test fly with no reload (B comes back). Racing: HUD (`#rgHud`:
+timer, delta, lap / gate, sectors purple / green / yellow, best and theoretical lap, battery V, A and time left, BUMP on a
+soft hit), next-gate panel and arrow (options), dark zones lower the exposure, ghosts (own best, last lap, a downloaded
+lap in pink) with trails, bests per track hash in `store 'rg.best.<hash>'`. Sharing: track codes (`PWTRACK2-…`), files,
+and the relay: kind `track` → tracks/, kind `racetime` (best lap + ghost) → racetimes/<hash>/, GET /tracks, /track,
+/raceboard, /ghost (test/dropoff.js). **The relay must be redeployed in Cloudflare** for sharing and boards to work.
 
 ## Blackbox Replay (src/bbl.js, src/bbreplay.js) and the benchmark
 bbl.js decodes Betaflight logs (bit-exact with orangebox, test/bbl.js). Blackbox Replay plays a flight from its log
@@ -336,6 +351,12 @@ dropoff.js, `store 'phys2Asked'`; the old values kept in `store 'feelBefore2'`) 
 Not changed, no data: yaw reaches full rate in 35-95 ms (the spec says 120-160; no pilot has said yaw feels wrong); the
 1002 19000KV (75 mm 1S build) is still weak (TWR 3.4); battery drain (5.3 min to brown-out at ~55 % throttle; real packs
 ~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model yet (a guess without a log).
+
+## Keyboard assist, pause button, 3D checkbox (2026-11-18)
+Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls → Keyboard): `fc.modeOverride =
+'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and height hold (W / S climb and
+sink, released = hover; a PI on vertical speed in input.js). The HUD has a pause button for touch screens (`#hudPause`).
+The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 
 ## Radio link and stick smoothing (Garage → Advanced; `FlightController.update`)
 Off by default (the sticks reach the FC instantly: crisper than a real quad; a pilot found identical Betaflight rates

@@ -55,6 +55,7 @@ const ARM_THR_MAX = 0.08;
 // throttle seen at rest (bottom, or the middle in 3D mode), raising it arms and flies. Disarming still works as before
 // (switch off / Space / arm button), and after a disarm the throttle has to come back to rest before it can arm again,
 // so a Slide Disarm is: disarm, slide, throttle down and up again. Controls has the switch to turn this off.
+const kbAssistOn = () => store.get('kbAssist', true) !== false;   // keyboard flight assist (self-level + height hold), on by default
 const autoArmOn = () => store.get('autoArm', false) === true;   // off by default: you arm to fly (pilot: with it on, Slide Disarms got harder)
 let armSwWas = null, armReady = false;
 function autoArmTick() {
@@ -75,7 +76,7 @@ function switchOn(pad, s) { return s.type === 'axis' ? (pad.axes[s.i] ?? -1) > (
 function getRC(dt) {
   const P = prof(); const pad = P ? readPad() : null;
   if (P && pad) {
-    const A = P.axes;
+    drone.fc.modeOverride = null; const A = P.axes;
     let thr = axisVal(pad, A.thr);
     const rc = { thr: P.thrCentered ? Math.max(0, thr) : (thr + 1) / 2, yaw: axisVal(pad, A.yaw), pitch: axisVal(pad, A.pitch), roll: axisVal(pad, A.roll) };
     lastRC = rc;
@@ -107,6 +108,18 @@ function getRC(dt) {
   kb.yaw = ramp(kb.yaw, (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), 6);
   kb.pitch = ramp(kb.pitch, (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0), 6);
   kb.roll = ramp(kb.roll, (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0), 6);
+  // Keyboard assist (on by default; Controls → Keyboard): the flight controller self-levels (angle mode, the pilot's
+  // tune is not changed) and the throttle holds height: W climbs, S sinks, let go and it hovers; Shift goes faster.
+  // Arrows lean (about 30°, Shift: the full angle limit), A / D yaw. For looking round a map without a radio.
+  if (kbAssistOn() && tune.flightMode !== '3d') {
+    drone.fc.modeOverride = 'angle'; const fast = keys.ShiftLeft || keys.ShiftRight, lean = fast ? 1 : 0.55;
+    kb.pitch = Math.max(-lean, Math.min(lean, kb.pitch)); kb.roll = Math.max(-lean, Math.min(lean, kb.roll)); kb.yaw *= 0.8;
+    if (!drone.armed || drone.crashed) { kb.ai = 0.3; kb.thr = 0; return { thr: 0, yaw: kb.yaw, pitch: kb.pitch, roll: kb.roll }; }
+    const vzT = ((keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0)) * (fast ? 5 : 2.5), e = vzT - drone.vel.y, up = Math.max(0.5, drone.up().y);
+    kb.ai = Math.max(0.05, Math.min(0.9, (kb.ai ?? 0.3) + e * 0.25 * dt)); kb.thr = keys.KeyX ? 0 : Math.max(0, Math.min(1, (kb.ai + 0.12 * e) / up));
+    return { thr: kb.thr, yaw: kb.yaw, pitch: kb.pitch, roll: kb.roll };
+  }
+  drone.fc.modeOverride = null;
   if (keys.KeyW) kb.thr = Math.min(1, kb.thr + dt * 0.9); if (keys.KeyS) kb.thr = Math.max(0, kb.thr - dt * 1.4);
   if (keys.ShiftLeft || keys.ShiftRight) kb.thr = Math.min(1, kb.thr + dt * 2.5);
   if (keys.KeyX) kb.thr = tune.flightMode === '3d' ? 0.5 : 0;   // throttle cut (3D: back to the middle)

@@ -58,8 +58,8 @@ node test/stress.js 40 --tilt=30 --human=1 --air=0.6 --slow=1.3   # randomised b
 |---|---|
 | `src/sim.js` | Simulation core (no rendering): parts, physics, flight controller, map, trick detector, scoring |
 | `src/game.js` | Renderer, HUD, menus, input, music, training/calibration, Blackbox Lab, Video Review, Judge the Bot, GitHub sync |
-| `src/race.js` | RaceGOW gates, rooms, tracks, race rules, ghosts (pure, tested by `test/race.js`) |
-| `src/editor.js` | Track editor and race HUD (same module as game.js) |
+| `src/racegow.js` | RaceGOW: track format, building blocks, rooms, race rules, ghosts, Make-raceable checks (pure, tested by `test/racegow.js`) |
+| `src/raceedit.js` | RaceGOW race editor, racing HUD, ghosts and track sharing (same module as game.js) |
 | `src/bbl.js`, `src/bbreplay.js` | Betaflight blackbox decoder; Blackbox Replay mode |
 | `src/maneuvers.js`, `src/vision.js` | The bot's scripted trick flights; FPV video motion tracker |
 | `tools/unify.js` | Every labelled source as one kind of episode, for the benchmark |

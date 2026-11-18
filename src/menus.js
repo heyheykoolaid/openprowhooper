@@ -1,6 +1,6 @@
 // RaceGOW (track builder and racing) is switched off in the interface for now, at the pilot's request: its button in
 // Tools & labs is hidden and its menu will not open. The code, tracks and tests stay; set this to true to bring it back.
-const RACEGOW_ON = false;
+const RACEGOW_ON = true;   // RaceGOW racing (src/racegow.js + src/raceedit.js), redesigned 2026-11-18
 // physics feel sliders (Garage → Advanced): [tune key, name, what it does]
 const FEEL = [['weightFeel', 'Weight', 'Lighter accelerates and stops quicker and floats more; heavier carries more momentum and drops harder'],
   ['dragFeel', 'Air drag', 'More slows the whoop down sooner and it coasts less; less lets it carry speed'],
@@ -168,6 +168,7 @@ function renderGarage() {
       <label class="chk"><input type=checkbox data-tb="airmode" ${tune.airmode ? 'checked' : ''}> Airmode</label>
       <label class="chk"><input type=checkbox data-tb="itermRelax" ${tune.itermRelax ? 'checked' : ''}> I-term relax</label>
       <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
+      <label class="chk" title="Betaflight's 3D mode: throttle stick in the middle is zero thrust, below the middle the motors spin backward so the quad can fly upside-down. Same as the 3 key while flying (1 acro, 2 angle)."><input type=checkbox data-t3d ${tune.flightMode === '3d' ? 'checked' : ''}> 3D mode (reversible motors)</label>
     </div>
     <details class="gAdv" ${tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim') ? 'open' : ''}><summary>Advanced: radio link and stick smoothing</summary>
       <p class="note">By default your sticks reach the flight controller instantly, which is crisper than any real quad. These add what a real radio link does. Try "Real radio feel" if the sim feels harsher than your quad on the same rates.</p>
@@ -250,6 +251,7 @@ document.addEventListener('change', e => {
   if (t.dataset.feel) { tune[t.dataset.feel] = +t.value / 100; saveTune(); }
   if (t.id === 'gRcSmooth') { tune.rcSmooth = t.value; saveTune(); renderGarage(); }
   if (t.dataset.tb) { tune[t.dataset.tb] = t.checked; saveTune(); }
+  if (t.dataset.t3d !== undefined) { if (t.checked) { if (tune.flightMode !== '3d') store.set('mode2d', tune.flightMode || 'acro'); setFlightMode('3d'); } else setFlightMode(store.get('mode2d', 'acro') === 'angle' ? 'angle' : 'acro'); saveTune(); }
   if (t.id === 'vol') { store.set('vol', +t.value); if (window._master) window._master.gain.value = +t.value; }
 });
 document.addEventListener('click', e => {
@@ -271,7 +273,7 @@ function renderControls() {
   const tabs = ['keyboard', 'radio', 'gamepad'].map(m => `<button class="tab ${m === mode ? 'on' : ''}" data-mode="${m}">${m === 'radio' ? 'Radio' : m === 'gamepad' ? 'Gamepad' : 'Keyboard'}</button>`).join('');
   let body = '';
   if (mode === 'keyboard') {
-    body = `<p class="note">Keyboard is for a quick look around. Acro on keys is rough; a radio is the real thing.</p>`;
+    body = `<p class="note">Keyboard is for a quick look around (checking a map or a track). A radio is the real thing.</p><label class="chk"><input type="checkbox" id="kbAssistOn" ${kbAssistOn() ? 'checked' : ''}> Keyboard flight assist <small>(on: self-levels and holds its height. W / S climb and sink, let go to hover, arrows lean, A / D turn, Shift faster, Space arms. Off: raw acro, W / S move the throttle)</small></label>`;
   } else {
     const isR = mode === 'radio', cur = readPad(mode), d = describePad(cur);
     const n = Math.max(8, cur ? cur.axes.length : 8);
@@ -338,6 +340,7 @@ document.addEventListener('change', e => {
   if (t.dataset.swi) P[t.dataset.swi].i = +t.value;
   if (t.dataset.swtog !== undefined && t.matches('[data-swtog]')) P.arm.toggle = t.checked;
   if (t.id === 'autoArmOn') { store.set('autoArm', t.checked); return; }
+  if (t.id === 'kbAssistOn') { store.set('kbAssist', t.checked); return; }
   if (t.id === 'resetSwOn') { P.reset = P.reset || { type: 'axis', i: 5, th: 0.5 }; P.reset.enabled = t.checked; saveInput(); renderControls(); return; }
   if (t.id === 'cThrC') P.thrCentered = t.checked;
   if (t.id === 'cDb') P.deadband = +t.value;
@@ -368,3 +371,6 @@ function openTricks() {
 }
 
 
+
+// the on-screen pause button (phones and tablets have no Esc key)
+$('#hudPause').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (mode === 'fly') pause(); });

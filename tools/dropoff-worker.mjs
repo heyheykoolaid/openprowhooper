@@ -21,12 +21,16 @@
 //     replay, which the player chose to publish): the id must be a leaderboard file name, so nothing outside
 //     leaderboard/ can ever be read, and the file is passed through the same field check again on the way out.
 //     Scores are whatever the game reported (see docs/DATA.md);
+//   - RaceGOW: a track a pilot shares (kind 'track') is filed as tracks/<time>.<pilot>.<name>.<by>.json, GET /tracks lists
+//     them (file names only), GET /track?id= returns one checked again; a best lap (kind 'racetime', with its ghost) as
+//     racetimes/<track hash>/<lap ms>-<name>-<pilot>-<time>.json, GET /raceboard?track= is each pilot's best from the
+//     file names, GET /ghost?track=&id= returns one lap. Nothing outside tracks/ and racetimes/ can be read that way;
 //   - ENABLED = "0" switches it off without deleting anything.
 // Variables: GITHUB_TOKEN (secret), GITHUB_REPO "owner/repo", optional GITHUB_BRANCH, ALLOW_ORIGINS (comma separated,
 // default https://heyheykoolaid.github.io), PER_IP_HOUR (30), DAILY_CAP (800), ENABLED. Optional KV binding LIMITS makes
 // the daily cap exact across Cloudflare's machines (one small write per upload); without it, and for the per-address
 // limit, counts are kept in memory on each machine (best effort).
-const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1', video: 'pro-whooper-video/1', map: 'pro-whooper-map/1' };
+const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1', video: 'pro-whooper-video/1', map: 'pro-whooper-map/1', track: 'pro-whooper-track/2', racetime: 'pro-whooper-racetime/1' };
 const MAX_BYTES = 1000000;
 const KEYS = {
   flight: ['format', 'build', 'id', 'started', 'ended', 'pilot', 'name', 'map', 'mode', 'camTilt', 'craft', 'tune', 'profile', 'input', 'score', 'events', 'missed', 'summary', 'trace'],
@@ -35,6 +39,8 @@ const KEYS = {
   video: ['format', 'build', 'duration', 'video', 'analysis', 'frames', 'marks', 'detected', 'labels', 'name', 'pilot', 'profile'],   // measured camera motion + marks + labels (never the video or its file name)
   map: ['format', 'build', 'name', 'by', 'pilot', 'base', 'at', 'moved', 'removed', 'added'],   // a pilot's own map, shared by their click: a layer over an official map
   score: ['format', 'build', 'name', 'pilot', 'score', 'map', 'mode', 'flight', 'totals', 'sheet', 'events', 'camTilt', 'camFov', 'craft', 'trace'],
+  track: ['format', 'id', 'name', 'by', 'pilot', 'build', 'tags', 'preset', 'section', 'venue', 'lighting', 'laps', 'route', 'elements', 'created', 'updated'],   // a RaceGOW track a pilot shares (the game cleans it again: RG.cleanTrack)
+  racetime: ['format', 'build', 'name', 'pilot', 'track', 'trackName', 'lap', 'ghost', 'craft'],   // a best lap on a track (by its geometry hash) and its ghost
 };
 const str = (v, max) => typeof v === 'string' && v.length <= max;
 const optStr = (v, max) => v == null || str(v, max);
@@ -74,6 +80,22 @@ function clean(kind, p) {
     const nameOk = v => str(v, 40) && /^[A-Za-z0-9_.,'!&()+ -]{1,40}$/.test(v) && v.trim().length > 0;
     if (!nameOk(out.name) || !str(out.by, 24) || !/^[A-Za-z0-9_. -]{2,24}$/.test(out.by) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot) || !str(out.base, 24) || !/^[a-z0-9-]{1,24}$/.test(out.base)) return null;
     const L = cleanLayer(out); if (!L || !optStr(out.at, 40) || JSON.stringify(out).length > 400000) return null; Object.assign(out, L);
+  } else if (kind === 'track') {
+    // names a list can show as they are, a pilot id, and elements that are plain data: known shapes only, numbers and short words
+    const nameOk = v => str(v, 40) && /^[A-Za-z0-9_.,'!&()+ -]{1,40}$/.test(v) && v.trim().length > 0, word = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v);
+    if (!nameOk(out.name) || !str(out.by, 24) || !/^[A-Za-z0-9_. -]{2,24}$/.test(out.by) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot) || !word(out.preset)) return null;
+    const V = out.venue; if (!V || typeof V !== 'object' || !['room', 'map'].includes(V.kind) || !word(V.room || V.map)) return null;
+    const E = out.elements; if (!Array.isArray(E) || E.length < 1 || E.length > 600) return null;
+    for (const e of E) { if (!e || typeof e !== 'object' || !word(e.id) || !/^[A-Za-z]{2,24}$/.test(e.type) || !['x', 'y', 'z', 'ry', 'rx', 'rz', 's'].every(k => e[k] === undefined || (Number.isFinite(e[k]) && Math.abs(e[k]) <= 5000))) return null;
+      if (e.p != null && (typeof e.p !== 'object' || Array.isArray(e.p) || Object.keys(e.p).length > 20 || !Object.entries(e.p).every(([k, v]) => /^[A-Za-z]{1,16}$/.test(k) && (Number.isFinite(v) || word(v))))) return null; }
+    if (!Array.isArray(out.route) || out.route.length > 600 || !out.route.every(word) || (out.tags != null && (!Array.isArray(out.tags) || out.tags.length > 6 || !out.tags.every(word)))) return null;
+    if (!sane(out) || JSON.stringify(out).length > 300000) return null;
+  } else if (kind === 'racetime') {
+    // a lap time in whole ms, a track hash, a pilot, and the lap's ghost (30 Hz, delta-coded integers)
+    if (!str(out.name, 24) || !/^[A-Za-z0-9_. -]{2,24}$/.test(out.name) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot) || !str(out.track, 20) || !/^[a-z0-9]{6,20}$/.test(out.track)) return null;
+    if (!Number.isInteger(out.lap) || out.lap < 500 || out.lap > 3600000 || !optStr(out.trackName, 40)) return null;
+    const g = out.ghost; if (!g || typeof g !== 'object' || g.hz !== 30 || !Number.isInteger(g.n) || g.n < 1 || g.n > 54000 || !Array.isArray(g.d) || g.d.length !== g.n * 7 || !g.d.every(Number.isInteger)) return null;
+    out.ghost = { hz: 30, n: g.n, d: g.d }; const gg = out.ghost; out.ghost = undefined; if (!sane(out)) return null; out.ghost = gg;
   } else if (kind === 'video') {
     const F = out.frames; if (!Array.isArray(F) || F.length < 10 || F.length > 6000 || !F.every(r => Array.isArray(r) && r.length === 4 && r.every(Number.isFinite))) return null;
     if (!Array.isArray(out.labels) || out.labels.length > 600 || (out.marks != null && (!Array.isArray(out.marks) || out.marks.length > 2000)) || (out.detected != null && (!Array.isArray(out.detected) || out.detected.length > 2000))) return null;
@@ -130,6 +152,36 @@ async function oneMap(request, env, fetchImpl, reply) {
     if (r.status === 404) return reply(404, 'no such map'); if (!r.ok) return reply(502, 'could not read the map');
     const p = clean('map', JSON.parse(await r.text())); if (!p || p.base !== base) return reply(404, 'no such map');
     return reply(200, JSON.stringify(p), { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }); } catch { return reply(502, 'could not read the map'); }
+}
+// RaceGOW tracks: tracks/<time>.<pilot>.<name b64url>.<by b64url>.json (the list is the file names, like community maps)
+const trackFile = (p, now) => `${now}.${p.pilot}.${b64u(p.name)}.${b64u(p.by)}.json`;
+// lap times: racetimes/<track hash>/<lap ms, 8 digits>-<name b64url>-<pilot>-<time>.json (the board is the file names)
+const lapFile = (p, now) => `${String(p.lap).padStart(8, '0')}-${b64u(p.name)}-${p.pilot}-${now}.json`;
+const LAP_ID_RE = /^(\d{8})-([A-Za-z0-9_-]{1,40})-([a-z0-9]{6,40})-(\d{10,16})$/;
+function lapsFrom(names) { const best = new Map();
+  for (const n of names.filter(x => x.endsWith('.json')).map(x => x.slice(0, -5)).sort()) { const m = LAP_ID_RE.exec(n); if (!m) continue; const name = unb64u(m[2]); if (!name || best.has(m[3])) continue; best.set(m[3], { id: n, name, pilot: m[3], lap: +m[1], at: +m[4] }); }
+  return [...best.values()].sort((a, b) => a.lap - b.lap).slice(0, 100); }
+const ghGet = (env, fetchImpl, path, raw) => fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' } });
+const rgCache = new Map();
+async function rgListing(request, env, fetchImpl, reply, folder, key, from) {
+  const c = rgCache.get(folder), json = body => reply(200, body, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' }); if (c && Date.now() - c.at < 30000) return json(c.body);
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'; if (!(await bump(env, `mip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 240))) return reply(429, 'slow down');
+  let names = []; try { const r = await ghGet(env, fetchImpl, folder); if (r.ok) { const L = await r.json(); if (Array.isArray(L)) names = L.filter(x => x && x.type === 'file' && typeof x.name === 'string').map(x => x.name); } else if (r.status !== 404) return c ? json(c.body) : reply(502, 'could not list'); } catch { return c ? json(c.body) : reply(502, 'could not list'); }
+  const body = JSON.stringify({ [key]: from(names) }); if (rgCache.size > 200) rgCache.clear(); rgCache.set(folder, { at: Date.now(), body }); return json(body);
+}
+async function rgOne(request, env, fetchImpl, reply, path, kind, check) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'; if (!(await bump(env, `mip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 240))) return reply(429, 'slow down');
+  try { const r = await ghGet(env, fetchImpl, path, true); if (r.status === 404) return reply(404, 'not found'); if (!r.ok) return reply(502, 'could not read it');
+    const p = clean(kind, JSON.parse(await r.text())); if (!p || (check && !check(p))) return reply(404, 'not found');
+    return reply(200, JSON.stringify(p), { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }); } catch { return reply(502, 'could not read it'); }
+}
+function raceGet(request, env, fetchImpl, reply, pth) {
+  const u = new URL(request.url), q = k => u.searchParams.get(k) || '';
+  if (pth.endsWith('/tracks')) return rgListing(request, env, fetchImpl, reply, 'tracks', 'tracks', mapsFrom);
+  if (pth.endsWith('/track')) { if (!MAP_ID_RE.test(q('id'))) return reply(400, 'bad track'); return rgOne(request, env, fetchImpl, reply, `tracks/${q('id')}.json`, 'track'); }
+  if (pth.endsWith('/raceboard')) { if (!/^[a-z0-9]{6,20}$/.test(q('track'))) return reply(400, 'bad track'); return rgListing(request, env, fetchImpl, reply, `racetimes/${q('track')}`, 'times', lapsFrom); }
+  if (pth.endsWith('/ghost')) { if (!/^[a-z0-9]{6,20}$/.test(q('track')) || !LAP_ID_RE.test(q('id'))) return reply(400, 'bad ghost'); return rgOne(request, env, fetchImpl, reply, `racetimes/${q('track')}/${q('id')}.json`, 'racetime', p => p.track === q('track')); }
+  return null;
 }
 const scoreFile = (p, now) => `${String(p.score).padStart(8, '0')}-${p.map}-${b64u(p.name)}-${p.pilot}-${now}.json`;
 // file names of one day's folder -> the board: each pilot's best run per map, highest first
@@ -197,7 +249,7 @@ async function handle(request, env, fetchImpl = fetch) {
   const reply = (status, text, extra) => new Response(text, { status, headers: { ...cors, ...(extra || {}) } });
   if (request.method === 'OPTIONS') return reply(204, '');
   if (env.ENABLED === '0' || !env.GITHUB_TOKEN || !env.GITHUB_REPO) return reply(503, 'closed');
-  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); return reply(405, 'POST only'); }
+  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
   if (request.method !== 'POST') return reply(405, 'POST only');
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
@@ -211,13 +263,13 @@ async function handle(request, env, fetchImpl = fetch) {
   if (!(await bump(env, `ip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, +(env.PER_IP_HOUR || 30)))) return reply(429, 'slow down');
   if (!(await bump(env, `day:${day}`, 172800, +(env.DAILY_CAP || 800), true))) return reply(429, 'full for today');
   const id = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
-  const path = j.kind === 'score' ? `leaderboard/${day}/${scoreFile(payload, Date.now())}` : j.kind === 'map' ? `maps/community/${payload.base}/${mapFile(payload, Date.now())}` : `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
+  const path = j.kind === 'score' ? `leaderboard/${day}/${scoreFile(payload, Date.now())}` : j.kind === 'map' ? `maps/community/${payload.base}/${mapFile(payload, Date.now())}` : j.kind === 'track' ? `tracks/${trackFile(payload, Date.now())}` : j.kind === 'racetime' ? `racetimes/${payload.track}/${lapFile(payload, Date.now())}` : `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(body); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   let r; try { r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`, { method: 'PUT',
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' },
     body: JSON.stringify({ message: `drop-off: ${j.kind}`, content: btoa(bin), branch: env.GITHUB_BRANCH || 'main' }) }); } catch { return reply(502, 'could not store it'); }
-  if (r.ok && j.kind === 'score') boardCache.delete(day); if (r.ok && j.kind === 'map') mapsCache.delete(payload.base);
+  if (r.ok && j.kind === 'score') boardCache.delete(day); if (r.ok && j.kind === 'map') mapsCache.delete(payload.base); if (r.ok && j.kind === 'track') rgCache.delete('tracks'); if (r.ok && j.kind === 'racetime') rgCache.delete(`racetimes/${payload.track}`);
   return r.ok ? reply(200, 'ok') : reply(502, 'could not store it');
 }
 export default { fetch: (request, env) => handle(request, env) };
-export { handle, clean, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer };
+export { handle, clean, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer, trackFile, lapFile, lapsFrom };

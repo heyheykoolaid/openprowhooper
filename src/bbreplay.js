@@ -1,6 +1,6 @@
 
 // ============================================================ Blackbox Replay: watch a real flight play out from its log
-// (concatenated after game.js / editor.js into the same module). The .bbl is decoded in the browser (src/bbl.js), the
+// (concatenated after game.js / raceedit.js into the same module). The .bbl is decoded in the browser (src/bbl.js), the
 // attitude comes straight from the gyro, the sticks from rcCommand, and a plausible path from thrust (eRPM, or motor
 // output) and gravity with drag — high-passed so it stays local (a log can't tell you where the room's walls were).
 // The trick detector and the Watcher run on it (real sticks and throttle!), and the pilot confirms or corrects the

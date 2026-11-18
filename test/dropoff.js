@@ -87,5 +87,38 @@
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.4' }); check('after 5 wrong keys an address waits an hour (even with the right key)', r.status === 429);
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.5', env: env() }); check('without OWNER_KEY set, publishing is closed', r.status === 503);
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.6', origin: 'https://evil.example' }); check('other websites cannot publish', r.status === 403); }
+
+  { // RaceGOW: shared tracks, best laps and their ghosts
+    require('../src/tricks.js'); require('../src/sim.js'); const RG = require('../src/racegow.js');
+    const T = RG.cleanTrack(RG.newTrack({ name: 'Couch Loop', by: 'Tester' })); T.elements.push(RG.newElement('gateSquare', { z: -1 }), RG.newElement('gateCircle', { x: 1, z: -2 }));
+    const tp = (o = {}) => ({ ...JSON.parse(JSON.stringify(RG.cleanTrack(T))), by: 'Tester', pilot: 'abc1234', ...o });
+    let n0 = calls.length, r = await post({ kind: 'track', payload: tp() }, { ip: '7.7.0.1' }); const last = calls[calls.length - 1];
+    check('a shared track is filed under tracks/ by the relay', r.status === 200 && calls.length === n0 + 1 && /contents\/tracks\/\d+\.abc1234\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.json$/.test(last.url), last.url.split('contents/')[1]);
+    r = await post({ kind: 'track', payload: tp({ name: '<img src=x onerror=alert(1)>' }) }, { ip: '7.7.0.2' }); check('a track name with markup is refused', r.status === 400);
+    r = await post({ kind: 'track', payload: tp({ elements: [{ id: 'a', type: 'gate<script>', x: 0 }] }) }, { ip: '7.7.0.3' }); check('an element type that is not a word is refused', r.status === 400);
+    r = await post({ kind: 'track', payload: tp({ elements: [{ id: 'a', type: 'wall', p: { mat: { evil: 1 } } }] }) }, { ip: '7.7.0.4' }); check('element settings must be numbers or words', r.status === 400);
+    r = await post({ kind: 'track', payload: tp({ venue: { kind: 'map', map: '../../src' } }) }, { ip: '7.7.0.5' }); check('a venue outside the maps is refused', r.status === 400);
+    const sm = []; for (let i = 0; i < 90; i++) sm.push({ t: i / 30, p: { x: i * 0.05, y: 0.5, z: 0 }, q: { w: 1, x: 0, y: 0, z: 0 } }); const ghost = RG.packGhost(sm), h = RG.trackHash(T);
+    const lp = (o = {}) => ({ format: 'pro-whooper-racetime/1', name: 'Tester', pilot: 'abc1234', track: h, trackName: 'Couch Loop', lap: 9123, ghost, ...o });
+    n0 = calls.length; r = await post({ kind: 'racetime', payload: lp() }, { ip: '7.7.1.1' }); const lt = calls[calls.length - 1];
+    check('a best lap is filed under racetimes/<track hash>/ with the lap in its name', r.status === 200 && new RegExp(`contents/racetimes/${h}/00009123-[A-Za-z0-9_-]+-abc1234-\\d+\\.json$`).test(lt.url), lt.url.split('contents/')[1]);
+    r = await post({ kind: 'racetime', payload: lp({ lap: 12.5 }) }, { ip: '7.7.1.2' }); check('a lap must be whole milliseconds', r.status === 400);
+    r = await post({ kind: 'racetime', payload: lp({ track: '../x' }) }, { ip: '7.7.1.3' }); check('a track hash that is not a hash is refused', r.status === 400);
+    r = await post({ kind: 'racetime', payload: lp({ ghost: { hz: 30, n: 2, d: [1, 2, 3] } }) }, { ip: '7.7.1.4' }); check('a ghost whose size does not add up is refused', r.status === 400);
+    const { lapsFrom, trackFile } = await import('../tools/dropoff-worker.mjs'), b = s => Buffer.from(s).toString('base64url');
+    const L = lapsFrom([`00009000-${b('Ann')}-aaaaaa1-1700000000000.json`, `00008000-${b('Ann')}-aaaaaa1-1700000000001.json`, `00009500-${b('Bob')}-bbbbbb2-1700000000002.json`, 'junk.json', `00001000-${b('X')}-../etc-1.json`]);
+    check('the race board is each pilot\'s best, fastest first, from file names alone', L.length === 2 && L[0].name === 'Ann' && L[0].lap === 8000 && L[1].name === 'Bob');
+    // reading: lists and single files go through the same checks again
+    const files = { 'tracks': [{ type: 'file', name: trackFile({ pilot: 'abc1234', name: 'Couch Loop', by: 'Tester' }, 1700000000000) }], [`racetimes/${h}`]: [{ type: 'file', name: `00009123-${b('Tester')}-abc1234-1700000000000.json` }] };
+    const ghr = async url => { const m = /contents\/(.*?)\?/.exec(url), path = m && m[1]; if (files[path]) return { ok: true, status: 200, json: async () => files[path] };
+      if (path && path.startsWith('tracks/')) return { ok: true, status: 200, text: async () => JSON.stringify({ ...tp(), evil: '<script>' }) };
+      if (path && path.startsWith('racetimes/')) return { ok: true, status: 200, text: async () => JSON.stringify(lp()) }; return { ok: false, status: 404 }; };
+    const get = (u, ip) => handle(new Request('https://drop' + u, { headers: { Origin: GAME, 'CF-Connecting-IP': ip || '6.6.6.' + n } }), env(), ghr);
+    r = await get('/tracks'); let j = await r.json(); check('GET /tracks lists shared tracks by name and pilot', r.status === 200 && j.tracks.length === 1 && j.tracks[0].name === 'Couch Loop' && j.tracks[0].by === 'Tester');
+    r = await get('/track?id=' + j.tracks[0].id); j = await r.json(); check('GET /track returns one track, unknown fields dropped', r.status === 200 && j.name === 'Couch Loop' && !('evil' in j) && j.elements.length === 3);
+    r = await get('/track?id=../../secrets'); check('reading a track needs a track file name', r.status === 400);
+    r = await get('/raceboard?track=' + h); j = await r.json(); check('GET /raceboard lists the laps of that track', r.status === 200 && j.times.length === 1 && j.times[0].lap === 9123);
+    r = await get(`/ghost?track=${h}&id=${j.times[0].id}`); j = await r.json(); check('GET /ghost returns the lap with its ghost', r.status === 200 && j.ghost && j.ghost.n === 90);
+    r = await get(`/ghost?track=zzzzzz9&id=00009123-${b('Tester')}-abc1234-1700000000000`); check('a ghost filed under another track is not served', r.status === 404); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

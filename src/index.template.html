@@ -17,6 +17,8 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 .hide { display: none !important; }
 /* HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; }
+#hudPause { position: absolute; left: 10px; top: 112px; width: 46px; height: 46px; padding: 0 !important; font-size: 18px; line-height: 46px; text-align: center; border-radius: 10px; background: #000a; color: #fff; border: 1px solid #fff4; pointer-events: auto; touch-action: manipulation; z-index: 5; }
+#hudPause:active { background: #ffd34d; color: #111; }
 #scoreBox { position: absolute; left: 22px; top: 16px; transform: skew(-6deg); }
 #score { font-family: 'Bungee', Impact, sans-serif; font-size: 44px; line-height: 1; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 3px 3px 0 #111; }
 #streak { font-family: 'Bungee'; font-size: 15px; color: var(--acid); -webkit-text-stroke: 1px #111; margin-top: 4px; }
@@ -163,44 +165,43 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 
 /* ---- RaceGOW tracks, race HUD and the track editor */
 .panel.wide { max-width: 1100px; width: 94vw; }
-#raceBody .rTracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 10px; }
-#raceBody .rCard { background: #0006; border: 1px solid #fff2; border-radius: 10px; padding: 10px 12px; }
-#raceBody .rCard h3 { margin: 0 0 2px; font-size: 17px; } #raceBody .rCard small { opacity: .7; }
-#raceBody .rCard .rBest { font-family: var(--mono); font-size: 13px; margin: 6px 0; }
-#raceBody .rCard .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } #raceBody .rCard button { padding: 5px 9px; font-size: 13px; }
-#raceBody .rTop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } #raceBody .rTop label { font-size: 13px; }
+#rgBody .rTracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 10px; }
+#rgBody .rCard { background: #0006; border: 1px solid #fff2; border-radius: 10px; padding: 10px 12px; }
+#rgBody .rCard h3 { margin: 0 0 2px; font-size: 17px; } #rgBody .rCard small { opacity: .7; }
+#rgBody .rCard .rBest { font-family: var(--mono); font-size: 13px; margin: 6px 0; }
+#rgBody .rCard .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } #rgBody .rCard button { padding: 5px 9px; font-size: 13px; }
+#rgBody .rTop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } #rgBody .rTop label { font-size: 13px; } #rgBody .rTop .sp { flex: 1; } #rgBody button.on { background: #ffd34d; color: #111; }
+#rgBody .rgBoard table { width: 100%; font-family: var(--mono); font-size: 13px; margin-top: 6px; } #rgBody .rgBoard td { padding: 2px 4px; } #rgBody .rgBoard button { padding: 1px 6px; font-size: 11px; }
 #hud.racing #scoreBox, #hud.racing #kwad, #hud.racing #combo, #hud.racing #comboBank, #hud.racing #sessionT { display: none; }
-body.bbr #music { right: 340px !important; bottom: auto !important; top: 8px !important; transform: scale(0.6); transform-origin: top right; }
+#rgHud { position: absolute; inset: 0; pointer-events: none; font-family: var(--mono); color: #fff; text-shadow: 0 0 3px #000, 1px 1px 0 #000; }
+#rgTime { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 42px; font-weight: 700; letter-spacing: 1px; }
+#rgSub { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); font-size: 15px; opacity: .92; white-space: nowrap; }
+#rgDelta { position: absolute; top: 18px; left: calc(50% + 120px); font-size: 24px; font-weight: 700; } #rgDelta.good { color: #5dff8a; } #rgDelta.bad { color: #ff6b5a; }
+#rgSectors { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; font-size: 13px; }
+#rgSectors span { background: #0007; padding: 2px 7px; border-radius: 4px; } #rgSectors .purple { background: #8a3cff; } #rgSectors .green { background: #1f9d48; } #rgSectors .yellow { background: #a8871c; }
+#rgMsg { position: absolute; top: 116px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #ff6b5a; white-space: nowrap; } #rgMsg.good { color: #7dff9a; }
+#rgBox { position: absolute; right: 18px; top: 14px; text-align: right; font-size: 14px; line-height: 1.45; background: #0005; padding: 8px 12px; border-radius: 8px; }
+#rgBox b { font-size: 20px; color: #ffd34d; } #rgBox .dim { opacity: .65; } #rgBox .good { color: #7dff9a; }
+#rgBat { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 13px; background: #0005; padding: 3px 10px; border-radius: 6px; } #rgBat .bump { color: #39ff6a; }
+#rgArrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-top: 16px solid transparent; border-bottom: 16px solid transparent; border-left: 34px solid #2fd24a; display: none; filter: none; }
+#rgEd { position: absolute; inset: 0; pointer-events: none; font-size: 13px; color: #eee; }
+#rgEd > div { pointer-events: auto; background: #111a; }
+#edTopBar { position: absolute; left: 0; right: 0; top: 0; height: 40px; overflow-x: auto; overflow-y: hidden; display: flex; flex-wrap: nowrap; white-space: nowrap; gap: 6px; align-items: center; padding: 4px 8px; box-sizing: border-box; }
+#edTopBar .edGroup { display: flex; gap: 3px; align-items: center; padding-left: 6px; border-left: 1px solid #fff2; } #edTopBar .sp { flex: 1; } #edTopBar #edName { width: 160px; }
+#rgEd button { padding: 3px 7px !important; font-size: 12px !important; margin: 0 !important; min-width: 0 !important; flex: none; } #rgEd button.on { background: #ffd34d; color: #111; } #rgEd select { padding: 3px; font-size: 12px; }
+#edLeftP { position: absolute; left: 0; top: 46px; bottom: 0; width: 220px; overflow: auto; padding: 8px; box-sizing: border-box; }
+#edRightP { position: absolute; right: 0; top: 46px; bottom: 0; width: 300px; overflow: auto; padding: 8px; box-sizing: border-box; }
+#rgEd h4 { margin: 12px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .85; }
+#rgEd label { display: block; margin: 4px 0; } #rgEd input[type=number], #rgEd input:not([type]), #rgEd select { width: 100%; box-sizing: border-box; } #rgEd input[type=range] { width: 70%; } #rgEd output { font-family: var(--mono); font-size: 11px; margin-left: 4px; }
+#rgEd .chk { font-size: 12px; display: inline-block; margin-right: 6px; } #rgEd .chk input { width: auto; } #rgEd .hint { font-size: 11px; opacity: .7; line-height: 1.4; }
+#rgEd .edCats { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; } #rgEd .edLib { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; } #rgEd .edLib button { text-align: left; white-space: normal; }
+#rgEd .edLayers div { display: flex; gap: 4px; align-items: center; } #rgEd .edLayers span { flex: 1; text-transform: capitalize; }
+#rgEd .edXYZ { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; } #rgEd .edXYZ label { font-size: 11px; margin: 0; }
+#rgEd .edRoute { padding-left: 22px; margin: 4px 0; } #rgEd .edRoute li { display: flex; gap: 3px; align-items: center; } #rgEd .edRoute li a { flex: 1; cursor: pointer; } #rgEd .edRoute li.on a { color: #ffd34d; }
+#rgEd .edChk div { font-size: 12px; padding: 2px 0; } #rgEd .edChk [data-ea] { cursor: pointer; } #rgEd .edChk .fail { color: #ff8b7d; } #rgEd .edChk .warn { color: #ffd34d; } #rgEd .edChk .pass { color: #7dff9a; } #rgEd .edChk .note { opacity: .8; }
+#rgEd .row { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0; }
+#edHint2 { position: absolute; left: 240px; right: 320px; bottom: 8px; text-align: center; pointer-events: none !important; background: none !important; font-size: 12px; opacity: .9; text-shadow: 0 0 3px #000; }
 body.editing #music { right: auto !important; left: 6px !important; bottom: 6px !important; transform: scale(0.55); transform-origin: bottom left; }
-#raceHud { position: absolute; inset: 0; pointer-events: none; font-family: var(--mono); color: #fff; text-shadow: 0 0 3px #000, 1px 1px 0 #000; }
-#rhLap { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 40px; font-weight: 700; letter-spacing: 1px; }
-#rhSub { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); font-size: 15px; opacity: .92; white-space: nowrap; }
-#rhMsg { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #ff6b5a; white-space: nowrap; }
-#rhMsg.good { color: #7dff9a; }
-#rhCount { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); font-size: 110px; font-weight: 800; color: #ffd34d; }
-#rhBox { position: absolute; right: 18px; top: 14px; text-align: right; font-size: 14px; line-height: 1.45; background: #0005; padding: 8px 12px; border-radius: 8px; }
-#rhBox b { font-size: 22px; color: #ffd34d; } #rhBox .bad { color: #ff7d6e; text-decoration: line-through; } #rhBox .dim { opacity: .65; }
-#editorUI { position: absolute; inset: 0; pointer-events: none; font-size: 13px; color: #eee; }
-#editorUI > div { pointer-events: auto; }
-#edTop { position: absolute; left: 0; right: 0; top: 0; height: 34px; overflow: hidden; display: flex; gap: 6px; align-items: center; padding: 6px 10px; background: #12141add; border-bottom: 1px solid #fff2; white-space: nowrap; }
-#edTop button { padding: 3px 6px !important; }
-#edTop .edGroup { display: flex; gap: 4px; align-items: center; } #edTop .sp { flex: 1; }
-#edTop button, #edLeft button, #edRight button, #editorUI select { padding: 4px 8px; font-size: 12px; }
-#edTop button.on { background: #ffd34d; color: #111; } #editorUI kbd { font-size: 10px; opacity: .7; }
-#edLeft { position: absolute; left: 0; top: 46px; bottom: 0; width: 210px; overflow: auto; padding: 10px; background: #12141add; border-right: 1px solid #fff2; }
-#edRight { position: absolute; right: 0; top: 46px; bottom: 0; width: 290px; overflow: auto; padding: 10px; background: #12141add; border-left: 1px solid #fff2; }
-#editorUI h4 { margin: 12px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
-#editorUI label { display: block; margin: 4px 0; } #editorUI input:not([type=checkbox]), #editorUI select { width: 100%; box-sizing: border-box; }
-#edLib { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; } #edLib button { text-align: left; } #edLib button.on { background: #ffd34d; color: #111; }
-.edEnv { margin: 6px 0; font-size: 12px; opacity: .85; }
-#edOrder .oRow { display: flex; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
-#edOrder .oRow:hover { background: #fff1; } #edOrder .oRow.sel { background: #ffd34d33; outline: 1px solid #ffd34d88; }
-#edOrder .oRow .n { width: 26px; font-family: var(--mono); opacity: .8; } #edOrder .oRow .lb { flex: 1; } #edOrder .oRow button { padding: 1px 5px; } #edOrder .oRow button.on { background: #ffd34d; color: #111; }
-#edOrder .oRow.opt .lb { opacity: .55; font-style: italic; }
-#edProps .pGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; } #edProps .pGrid label { margin: 0; font-size: 11px; }
-#edValid .err { color: #ff8b7d; } #edValid .warn { color: #ffd34d; } #edValid .ok { color: #7dff9a; }
-#edHint { position: absolute; left: 250px; right: 300px; bottom: 8px; text-align: center; pointer-events: none !important; font-size: 12px; opacity: .85; text-shadow: 0 0 3px #000; }
-#editorUI .hint { font-size: 11px; opacity: .7; line-height: 1.4; } #editorUI .chk { font-size: 12px; } #editorUI .chk input { width: auto; }
 
 #rvCtl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 12px var(--mono); color: #ddd; } #rvCtl button { padding: 3px 8px; font-size: 13px; } #rvCtl #rvSeek { flex: 1; min-width: 160px; }
 #rvCtl select { padding: 2px; } #rvCtl #rvVol { width: 80px; } #rvCtl .rvOv { font-size: 11px; } #rvCtl button.on { background: #ffd34d; color: #111; }
@@ -352,12 +353,12 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <canvas id="view"></canvas>
 
 
-<div id="hud" class="hide"><div id="passFeed"></div>
+<div id="hud" class="hide"><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button><div id="passFeed"></div>
   <div id="scoreBox"><div id="score">0</div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
   <div id="hudStack"><div id="popups"></div><div id="combo" class="hide"></div></div><div id="comboBank"></div>
-  <div id="raceHud" class="hide"><div id="rhLap"></div><div id="rhSub"></div><div id="rhMsg"></div><div id="rhCount"></div><div id="rhBox"></div></div>
+  <div id="rgHud" class="hide"><div id="rgTime"></div><div id="rgDelta"></div><div id="rgSub"></div><div id="rgSectors"></div><div id="rgMsg"></div><div id="rgBox"></div><div id="rgBat"></div><div id="rgArrow"></div></div>
   <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
   <div id="osd"><span class="o" id="cross">─ ┼ ─</span><span class="o" id="osdMode" title="Flight mode: 1 acro · 2 angle · 3 3D"></span><span class="o" id="osdV"></span><span class="o" id="osdA"></span><span class="o" id="osdMah"></span>
     <span class="o" id="osdThr"></span><span class="o" id="osdSpd"></span><span class="o" id="osdAlt"></span><span class="o" id="osdTimer"></span><span class="o" id="osdState"></span><span class="o" id="washMeter">≋ PROPWASH ≋</span></div>
@@ -390,6 +391,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="board">Daily leaderboard</button>
+    <button data-act="race" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
     <button data-act="judge" id="judgeBtn" class="hide" title="Watch moments from other pilots' runs and say what the trick really was">Judge the community</button>
     <button data-act="map">Maps</button><button data-act="mapedit" title="Move, add or remove anything on this map">Map Editor</button>
     <button data-act="garage">Garage &amp; Tune</button>
@@ -418,41 +420,14 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <canvas id="bbrTimeline" height="150"></canvas>
 </div>
 
-<div id="raceScreen" class="screen hide"><div class="panel wide">
-  <div class="topbar"><h2>RaceGOW Tracks</h2><span class="sp"></span><button data-act="back">Back</button></div>
-  <div id="raceBody"></div>
+<div id="rgScreen" class="screen hide"><div class="panel wide">
+  <div class="topbar"><h2>RaceGOW</h2><span class="sp"></span><button data-act="back">Back</button></div>
+  <div id="rgBody"></div>
 </div></div>
 
-<div id="raceResults" class="screen hide"><div class="panel" style="max-width:520px"><div id="raceResBody"></div></div></div>
+<div id="rgResults" class="screen hide"><div class="panel" style="max-width:560px"><div id="rgResBody"></div></div></div>
 
-<div id="editorUI" class="hide">
-  <div id="edTop">
-    <span class="edGroup"><button data-ed="tool:move" title="Move (W)">Move <kbd>W</kbd></button><button data-ed="tool:rotate" title="Rotate (E)">Rotate <kbd>E</kbd></button><button data-ed="tool:scale" title="Scale (R)">Scale <kbd>R</kbd></button><button data-ed="tool:paint" title="Paint a path of gates (P)">Paint path <kbd>P</kbd></button><button data-ed="tool:define" title="Make any opening or open space a gate: click two opposite corners (D)">Define gate <kbd>D</kbd></button></span>
-    <span class="edGroup"><button data-ed="space" id="edSpace" title="Local / Global (L)">Global</button><button data-ed="axis" id="edAxis" title="Lock moving / choose the rotation axis (X, Y, Z keys)">Axis: free</button><button data-ed="anglesnap" id="edAngle" title="Angle snap on/off (N)">Angle snap: 15°</button><select id="edSnap" title="Angle snap step" style="width:64px"><option value="0">free</option><option value="5">5°</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select><button data-ed="grid" id="edGrid" title="Move snap to 1/4 section (6 in)">Grid: off</button><button data-ed="magnet" id="edMagnet" title="Pipe ends click onto nearby pipes (M)">Snap: on</button></span>
-    <span class="edGroup"><button data-ed="ground" title="Drop to the floor (G)">Ground <kbd>G</kbd></button><button data-ed="clone" title="Clone (Ctrl+D)">Clone</button><button data-ed="delete" title="Delete (Del)">Delete</button><button data-ed="focus" title="Focus on selection (F)">Focus <kbd>F</kbd></button><button data-ed="ortho" id="edOrtho" title="Orthographic / perspective (O)">Persp</button><button data-ed="flight" id="edFlight" title="Animate the lap as a red line through the checkpoints, in order">Flight line</button></span>
-    <span class="edGroup"><button data-ed="undo" title="Undo (Ctrl+Z)">↶</button><button data-ed="redo" title="Redo (Ctrl+Y)">↷</button></span>
-  </div>
-  <div id="edLeft">
-    <div class="edGroup" style="display:flex;gap:4px;margin-bottom:8px"><button data-ed="save" class="primary">Save</button><button data-ed="test" class="primary" title="Fly test (T); B brings you back">Fly test <kbd>T</kbd></button><button data-ed="exit">Exit</button></div>
-    <label>Track name <input id="edName" maxlength="60"></label>
-    <div class="edEnv" id="edEnv"></div>
-    <h4>Gate library</h4><div id="edLib"></div>
-    <label>Colour <select id="edColor"></select></label>
-    <p class="hint">Build one structure from Pipes: pick Pipe, click the floor or a pipe end to join one there, then turn it with Rotate (X / Y / Z pick the axis) — pipes just join. Then use Define gate on its openings. Click a part, then click in the room to place it. Right-drag to orbit, middle-drag (or Shift+right) to pan, wheel to zoom.</p>
-  </div>
-  <div id="edRight">
-    <h4>Gate order <small id="edCount"></small></h4>
-    <label class="chk"><input type="checkbox" id="edSF"> Start gate is also the finish (laps)</label>
-    <label class="chk" title="For one-structure tracks where checkpoints share pipes and you fly through other checkpoints on the way"><input type="checkbox" id="edNext"> Only the next gate counts (structure tracks)</label>
-    <label class="chk" title="Gates are just spaces: they have no body. This only controls the green guide panel"><input type="checkbox" id="edShow"> Show the next gate as a green panel while racing</label>
-    <div id="edOrder"></div>
-    <h4>Selection</h4><div id="edProps"><p class="hint">Nothing selected.</p></div>
-    <h4>RaceGOW sizing</h4><div id="edStats" class="hint" style="font-size:12px;opacity:.95"></div>
-    <label style="display:flex;gap:4px;align-items:center">Gate size (in) <input id="edSec" type="number" min="24" step="1" style="width:64px"> <button data-ed="rescale" title="Scales the whole track equally, like the RaceGOW rules">Scale track</button></label>
-    <h4>Checks</h4><div id="edValid"></div>
-  </div>
-  <div id="edHint"></div>
-</div>
+<div id="rgEd" class="hide"><div id="edTopBar"></div><div id="edLeftP"></div><div id="edRightP"></div><div id="edHint2"></div></div>
 
 <div id="garage" class="screen hide"><div class="panel">
   <div class="topbar"><h2>Garage</h2><button data-act="back">Back</button></div>
@@ -476,7 +451,6 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="blackbox">Blackbox Lab<small>download logs from your quad over USB</small></button>
     <button data-act="review">Video Review<small>measure tricks in an FPV video</small></button>
     <button data-act="desk" id="deskBtn" class="hide">Flight desk<small>review flights pilots have shared (project owner)</small></button>
-    <button data-act="race" class="hide">RaceGOW Tracks<small>track builder and racing: an early start, more to come</small></button>
     <button data-act="train" class="ghost">Trick Calibration<small>fly each trick five times (playground)</small></button>
     <button data-act="judge" class="ghost">Judge the Bot<small>say whether the bot's tricks look right (playground)</small></button>
   </div>

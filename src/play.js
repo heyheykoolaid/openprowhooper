@@ -122,7 +122,7 @@ function hud() {
     drone.crashed ? (crashLock ? (tune.flightMode === '3d' ? 'CRASH · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASH · THROTTLE TO ZERO TO GO AGAIN') : drone.crashReason === 'turtle' ? 'CRASH · T OR ARM TO FLIP' : 'CRASH · ARM TO RESET') :
     (!thrArmOk(lastRC.thr) ? `THROTTLE HIGH (${Math.round(lastRC.thr * 100)}%)` : (autoArmOn() ? 'THROTTLE UP TO TAKE OFF' : inputCfg.mode === 'keyboard' ? 'DISARMED · SPACE TO ARM' : 'DISARMED · ' + (prof().arm.type === 'button' ? 'PRESS ARM' : 'ARM SWITCH')));
   $('#osdTimer').textContent = fmtT(flightTime);
-  { const m = tune.flightMode || 'acro', el = $('#osdMode'); if (el) { el.textContent = m === '3d' ? 'METALCRAFT' : m.toUpperCase(); el.classList.toggle('metal', m === '3d'); el.classList.toggle('alt', m !== 'acro'); } }
+  { const m = drone.fc.modeOverride ? 'kb assist' : tune.flightMode || 'acro', el = $('#osdMode'); if (el) { el.textContent = m === '3d' ? 'METALCRAFT' : m.toUpperCase(); el.classList.toggle('metal', m === '3d'); el.classList.toggle('alt', m !== 'acro'); } }
   $('#sessionT').textContent = train.on ? 'TRAINING' : session ? fmtT(Math.max(0, session.timeLeft)) : 'FREE FLY';
   $('#washMeter').style.opacity = Math.min(1, drone.washLevel * 2);
 }
@@ -210,7 +210,7 @@ function frame(now) {
   const rT0 = pf ? performance.now() : 0;
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   renderer.render(scene, cam);
-  if (BLOOM.on && (world.theme === 'vapor' || world.theme === 'vice') && !race.on) bloomRender(cam);
+  if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice')) bloomRender(cam);   // racing: the gates' LEDs glow
   if (PERF.fx) fxRender();
   if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();

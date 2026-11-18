@@ -275,7 +275,7 @@ class FlightController {
   // backward to push the other way, so the quad can hover and fly upside-down. Betaflight's 3D feature: a small
   // deadband round the middle keeps the motors idling in the direction last used).
   update(rc, gyro, dt, armed, att) {
-    const t = this.tune, axes = ['roll', 'pitch', 'yaw'], fm = t.flightMode || 'acro';
+    const t = this.tune, axes = ['roll', 'pitch', 'yaw'], fm = this.modeOverride || t.flightMode || 'acro';   // modeOverride: the game's keyboard assist flies in angle mode without changing the pilot's tune
     this.reversible = fm === '3d';
     // Advanced (off by default): the radio link. A real link sends the sticks in packets (rcLinkHz a second) and they
     // arrive a little late (rcDelayMs: radio + receiver + the flight controller's own delay); between packets the
@@ -676,7 +676,7 @@ class Drone {
     this.contactThisStep = false;
     // ---- flight controller
     // attitude for Angle mode, in the pilot's axes: roll right +, pitch back (nose up) +
-    const att = this.fc.tune.flightMode === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
+    const att = (this.fc.modeOverride || this.fc.tune.flightMode) === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
     const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
     // ---- motors + battery
     const up = this.up();
@@ -819,7 +819,7 @@ class Drone {
       for (const c of p.colliders) {
         const cw = add(this.pos, qrot(this.q, c.c));
         const contacts = [];
-        if (cw.y < c.r) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true });
+        if (cw.y < c.r) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true, surf: this.world.groundSurf });
         // Broad phase: the world has a few hundred shapes and this runs 1000 times a second, but the quad is only ever
         // near a handful. Keep the list of shapes within NEAR_M of where it was last built (same order as the world's
         // list, so results are identical) and rebuild it once the quad has moved far enough that one could be missed.
