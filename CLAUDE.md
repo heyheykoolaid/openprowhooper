@@ -179,6 +179,19 @@ Destructible or moving props from the brief are not in (the physics world is sta
 skyline and power lines; the sun's shadow box is sized from each map's bounds. Static materials `blossom` and `fluoro`
 are new. test/maps.js checks every map (builds, Surveyor counts, clear spawn, bot Powerloops/Mattys on its own objects).
 
+**Moose Knuckle Park** (`moose`, `buildMoose`, theme 'pnw'): after the real Moose Park, 1625 Arrow Dr, Arrow Heights,
+Revelstoke (the pilot's photos and the satellite view): a modest municipal park at Arrow Dr (north) and Park Dr (west),
+x -46..46, z -24..24. Groves of slim western redcedar and hemlock (flared trunks bare for the first few metres, stacked
+drooping cones; over/under under the lowest boughs, slim trunks are poles, an inner crown capsule collides) on a
+needle-duff floor; two grass lanes running east-north-east (rotated zones: `zone.ry`) with a few big trees in them and
+worn dirt paths; the playground at the west end (weathered A-frame Swing Set 2.4 m, a small tan Play Unit with a faded
+blue slide and Climbing Bars, a timber border round wood chips, picnic tables beside the pilot's big cedar 1.1 m across);
+the Tire Tunnel (four half-buried tractor tires, a gap) among birch and bracken at the east end; two Trunk Gaps;
+bear-resistant bins, the routed park sign and a carved cedar moose; steep-roofed houses (`house`: a diamond gable plus two
+45° roof panels), back fences, power poles and pickups round the edges. `pnwBackdrop` in worldview.js draws forested
+ridges, Mt Begbie (SW) and Mt Mackenzie (E), unfogged and pre-hazed; cool sky, softer high sun, grass ground plane.
+Muted materials only (no bright primary plastic). No Trick Park on this map (the pilot's brief: a compact park).
+
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of
 approach direction: (1) a tagged object that is really a slab (at least 0.6 m both ways within its over/under band) gets

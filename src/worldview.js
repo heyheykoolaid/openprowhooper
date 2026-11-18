@@ -219,6 +219,30 @@ function mats() {
   MAT.skin = new THREE.MeshStandardMaterial({ color: 0xc89272, roughness: 0.7 }); MAT.radio = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.3 });
   MAT.goggles = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.4, emissive: 0x220000 });
   MAT.backboard = std(TX.backboard); MAT.rimOrange = new THREE.MeshStandardMaterial({ color: 0xd2521f, metalness: 0.5, roughness: 0.4 });
+  // Moose Knuckle Park (theme 'pnw'): interior-BC ground, bark, canopy and the muted, weathered park furniture
+  { let c, g; const T = (fill, dots, n = 9000, s0 = 1, s1 = 3, a = 0.45, st = null) => { [c, g] = cnv(256, 256); g.fillStyle = fill; g.fillRect(0, 0, 256, 256); speckle(g, 256, 256, n, dots, s0, s1, a); if (st) stains(g, 256, 256, 14, st, 10, 60, 0.3); return tex(c); };
+    TX.grass = T('#6c7646', ['#55613a', '#83895a', '#7a6544', '#5f6e3e', '#93936a'], 16000, 1, 3, 0.55, 'rgba(90,70,45,A)');
+    TX.duff = T('#6a4a35', ['#83563a', '#4a3324', '#7d6a4a', '#5b4a2e', '#9a6a44'], 18000, 1, 3, 0.6, 'rgba(60,70,40,A)');
+    TX.woodchip = T('#7b5638', ['#a07450', '#5a3c26', '#8e6a4a', '#c09068'], 9000, 2, 5, 0.6);
+    TX.path = T('#6e5a46', ['#5a4836', '#857059', '#4a3c30'], 9000, 1, 3, 0.5, 'rgba(40,30,20,A)');
+    TX.gravel = T('#8a8478', ['#a39c90', '#6a655c', '#c0b8a8'], 12000, 1, 3, 0.6);
+    TX.cedarBark = (() => { [c, g] = cnv(128, 256); g.fillStyle = '#6a4434'; g.fillRect(0, 0, 128, 256); for (let i = 0; i < 70; i++) { g.fillStyle = ['rgba(40,24,16,0.55)', 'rgba(150,110,85,0.35)', 'rgba(90,60,45,0.5)'][i % 3]; g.fillRect(rnd() * 128, 0, 1 + rnd() * 4, 256); } return tex(c); })();
+    TX.birchBark = (() => { [c, g] = cnv(128, 256); g.fillStyle = '#ddd8cc'; g.fillRect(0, 0, 128, 256); for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(30,28,26,' + (0.4 + rnd() * 0.5) + ')'; g.fillRect(rnd() * 128, rnd() * 256, 4 + rnd() * 18, 1 + rnd() * 3); } return tex(c); })();
+    TX.oldWood = T('#8c8278', ['#6e655c', '#a69c90', '#5a524a'], 6000, 1, 2, 0.4, 'rgba(50,45,40,A)');
+    TX.tireTread = (() => { [c, g] = cnv(64, 256); g.fillStyle = '#1e1e1e'; g.fillRect(0, 0, 64, 256); g.fillStyle = '#0c0c0c'; for (let y = 0; y < 256; y += 16) { g.fillRect(0, y, 28, 8); g.fillRect(36, y + 8, 28, 8); } return tex(c); })();
+    TX.mooseSign = (() => { [c, g] = cnv(512, 128); g.fillStyle = '#5a3a24'; g.fillRect(0, 0, 512, 128); speckle(g, 512, 128, 3000, ['#3e2818', '#7a5434'], 1, 3, 0.4); g.strokeStyle = '#3a2416'; g.lineWidth = 8; g.strokeRect(6, 6, 500, 116);
+      g.fillStyle = '#e8c766'; g.font = 'bold 50px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('MOOSE KNUCKLE PARK', 256, 56); g.font = '20px Georgia, serif'; g.fillText('City of Revelstoke · open dawn to dusk', 256, 100); const t2 = tex(c); t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping; return t2; })();
+    const P = (hex, o = {}) => std(T(hex, ['#ffffff', '#000000', '#5a4a3a'], 2500, 1, 2, 0.12, 'rgba(70,60,50,A)'), { roughness: 0.75, metalness: 0.1, ...o });
+    for (const k of ['grass', 'duff', 'woodchip', 'path', 'gravel']) MAT[k] = std(TX[k], { roughness: 0.95 });
+    MAT.cedarBark = std(TX.cedarBark, { roughness: 0.95 }); MAT.birchBark = std(TX.birchBark, { roughness: 0.8 }); MAT.oldWood = std(TX.oldWood, { roughness: 0.9 });
+    MAT.fenceWood = std(TX.oldWood, { roughness: 0.9, color: 0xb59a7a }); MAT.polewood = std(TX.cedarBark, { color: 0x9a8a78 }); MAT.carvedCedar = std(TX.wood, { color: 0xc89a70, roughness: 0.9 }); MAT.mossLog = std(TX.cedarBark, { color: 0x8a9a62 });
+    MAT.tireTread = std(TX.tireTread, { roughness: 0.95 }); MAT.mooseSign = std(TX.mooseSign, { roughness: 0.8 });
+    const leaf = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.95, flatShading: true });
+    MAT.cedarLeaf = leaf(0x2c4630); MAT.hemlockLeaf = leaf(0x34503a); MAT.mapleLeaf = leaf(0x56702e); MAT.birchLeaf = leaf(0x7a8a3c); MAT.shrub = leaf(0x3b5430); MAT.bracken = leaf(0x8a5a30);
+    MAT.fadedBlue = P('#4f7090'); MAT.fadedRed = P('#8a4c3e'); MAT.playTan = P('#bca67a'); MAT.darkMetal = P('#3a3c3a', { metalness: 0.4 }); MAT.binGreen = P('#3d5a44', { metalness: 0.3 });
+    MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
+    MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
+    MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
   vaporMats();
 }
 function boxGeo(h, density = 0.5) {
@@ -240,24 +264,36 @@ function pipeMesh(a, b, r, mat, cone) {
   return m;
 }
 
+// Moose Knuckle Park's surroundings, seen between the trees: forested ridges all round (Mt Mackenzie and the Selkirks to
+// the east, the Monashees west) and Mt Begbie's snowy peak to the south-west. Far away and drawn without fog, pre-hazed.
+function pnwBackdrop() {
+  const ridge = (col) => new THREE.MeshBasicMaterial({ color: col, fog: false }), snow = ridge(0xe4e9ee);
+  const add = (ang, R, h, r, col, snowy) => { const x = Math.cos(ang) * R, z = Math.sin(ang) * R, m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7, 1), ridge(col)); m.position.set(x, h / 2 - 6, z); m.rotation.y = ang * 3; playRoot.add(m);
+    if (snowy) { const s = new THREE.Mesh(new THREE.ConeGeometry(r * 0.22, h * 0.22, 7, 1), snow); s.position.set(x, h - 6 - h * 0.11 + 0.5, z); s.rotation.y = ang * 3; playRoot.add(s); } };
+  for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + rnd() * 0.12, R = 210 + rnd() * 50; add(a, R, 55 + rnd() * 45, 50 + rnd() * 30, [0x5e7470, 0x6a7f7c, 0x566a68][i % 3], false); }
+  add(Math.atan2(170, -150), 245, 150, 60, 0x7a8c92, true);   // Mt Begbie, south-west
+  add(Math.atan2(-60, 230), 250, 120, 70, 0x6f8288, true);    // Mt Mackenzie, east
+}
 // ============================================================ build world meshes
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
-  const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
+  const IND = world.theme === 'industrial';
+  const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   if (VAPOR) vaporBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
-  gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a');
+  if (PNW) { gr.addColorStop(0, '#6f93b8'); gr.addColorStop(0.42, '#a9bfcf'); gr.addColorStop(0.6, '#cfd8da'); gr.addColorStop(0.72, '#a9b4ab'); gr.addColorStop(1, '#55604f'); }
+  else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   playRoot.add(sky);
   // lights
-  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : 0xa9c0e0, IND ? 0x6a645a : 0x5a4532, IND ? 1.9 : 0.9));
-  const sun = new THREE.DirectionalLight(0xffcf98, 2.6); sun.position.set(-30, 22, 18); sun.castShadow = true;
+  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xc6d6e2 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x4a5236 : 0x5a4532, IND ? 1.9 : PNW ? 1.15 : 0.9));
+  const sun = new THREE.DirectionalLight(PNW ? 0xfff0d8 : 0xffcf98, PNW ? 2.4 : 2.6); if (PNW) sun.position.set(-18, 40, 14); else sun.position.set(-30, 22, 18); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 60, guv.getY(i) * 60);
   playRoot.add(gnd);
   }
@@ -269,7 +305,7 @@ function buildScene() {
     // they can never flicker against it at any distance (pilot: the grid showed through the plaza). Objects are drawn
     // later and still hide them properly, because the ground itself wrote the depth.
     const zm = MAT[z.mat].clone(); zm.depthTest = false; zm.depthWrite = false;
-    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
+    const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; if (z.ry) m.rotation.z = z.ry; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
   }
   // objects
   for (const o of world.objs) for (const v of o.vis) {
@@ -287,6 +323,7 @@ function buildScene() {
   if (VAPOR) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
+  if (PNW) { scene.fog = new THREE.Fog(0xb4c0bc, 45, 190); pnwBackdrop(); }
   for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, o.lightPower || 6, o.lightRange || 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)
