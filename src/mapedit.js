@@ -94,13 +94,15 @@ async function mePasteCode() {
   if (meHas(ME.E) && !confirm('Replace your official draft with the layout in this code? (Undo brings yours back.)')) return;
   mePush(); ME.E = meClean(got.E); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); flash(`<b>MAP CODE LOADED</b><small>${Object.keys(ME.E.moved).length} moved · ${ME.E.removed.length} removed · ${ME.E.added.length} added · into the official draft</small>`);
 }
+// official layouts always go to the game repo (GitHub Pages builds from it), whatever repo Options names for uploads
+const GAME_REPO = 'heyheykoolaid/openprowhooper';
 async function mePublish() {
   if (!ME.official || !ghMenus()) return; if (!gh.token) { flash('<b>NO GITHUB TOKEN</b><small>add one in Options (Contents: Read and write on the game repo)</small>', 'warn'); return; }
   const E = { ...ME.E, map: MAP_ID, at: new Date().toISOString(), by: pilotName() }, path = `/contents/maps/official/${MAP_ID}.json`; ME.pubMsg = 'Publishing…'; mePanels();
-  try { const cur = await ghFetch(path + '?ref=' + encodeURIComponent(gh.branch)), sha = cur.ok && cur.body && cur.body.sha;
-    const r = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message: `Official layout of ${MAP_ID} (${Object.keys(E.moved).length} moved, ${E.removed.length} removed, ${E.added.length} added)`, content: b64(JSON.stringify(E, null, 1)), branch: gh.branch, ...(sha ? { sha } : {}) }) });
-    if (!r.ok) { ME.pubMsg = `Not published (${r.status}${r.body && r.body.message ? ': ' + r.body.message : ''}). The token needs Contents: Read and write on ${gh.owner}/${gh.repo}. Your draft is kept; "Copy map code" gives it as one line to send instead.`; mePanels();
-      flash(`<b>NOT PUBLISHED</b><small>GitHub said ${r.status}: the token in Options can't write to ${esc(gh.owner + '/' + gh.repo)}</small>`, 'warn'); return; }
+  try { const cur = await ghFetch(path + '?ref=main', {}, GAME_REPO), sha = cur.ok && cur.body && cur.body.sha;
+    const r = await ghFetch(path, { method: 'PUT', body: JSON.stringify({ message: `Official layout of ${MAP_ID} (${Object.keys(E.moved).length} moved, ${E.removed.length} removed, ${E.added.length} added)`, content: b64(JSON.stringify(E, null, 1)), branch: 'main', ...(sha ? { sha } : {}) }) }, GAME_REPO);
+    if (!r.ok) { ME.pubMsg = `Not published (${r.status}${r.body && r.body.message ? ': ' + r.body.message : ''}). The token needs Contents: Read and write on ${GAME_REPO}. Your draft is kept; "Copy map code" gives it as one line to send instead.`; mePanels();
+      flash(`<b>NOT PUBLISHED</b><small>GitHub said ${r.status}: the token in Options can't write to ${GAME_REPO}</small>`, 'warn'); return; }
     const loc = store.get('officialLocal', {}) || {}; loc[MAP_ID] = E; store.set('officialLocal', loc); const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.E = meClean(E); ME.E.at = E.at;
     ME.pubMsg = `Published ✓ ${new Date().toLocaleTimeString()}. GitHub Pages rebuilds the game for everyone in a minute or two; your game uses it now.`; }
   catch { ME.pubMsg = 'Not published: GitHub could not be reached from here. Your draft is kept.'; flash('<b>NOT PUBLISHED</b><small>GitHub could not be reached</small>', 'warn'); }

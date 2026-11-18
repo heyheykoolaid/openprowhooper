@@ -6,8 +6,8 @@ const ghState = { queue: [], busy: false, last: '', ok: null };
 const saveGh = () => store.set('ghsync', gh);
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 function b64(str) { const bytes = new TextEncoder().encode(str); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
-async function ghFetch(path, init = {}) {
-  const r = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}${path}`, { ...init, headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers || {}) } });
+async function ghFetch(path, init = {}, repo) {   /* repo: 'owner/name' to aim at one repo whatever Options says (official maps: the game repo) */
+  const r = await fetch(`https://api.github.com/repos/${repo || gh.owner + '/' + gh.repo}${path}`, { ...init, headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers || {}) } });
   let body = null; try { body = await r.json(); } catch {}
   return { ok: r.ok, status: r.status, body };
 }
