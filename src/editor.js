@@ -263,7 +263,7 @@ document.addEventListener('click', e => {
   if (a === 'raceExit') { raceOff(); mode = 'menu'; drone.armed = false; $('#hud').classList.add('hide'); openRaceMenu(); }
 });
 // pause menu: show the race buttons while racing
-const _pause = pause; pause = function () { _pause(); $('#pauseRace').classList.toggle('hide', !race.on); $('#pauseEditorBtn').classList.toggle('hide', !race.fromEditor); };
+const _pause = pause; pause = function () { _pause(); $('#pauseRace').classList.toggle('hide', !race.on); $('#pauseEditorBtn').classList.toggle('hide', !race.fromEditor); $('#pauseMapEdit').classList.toggle('hide', !ME.testing); };
 
 // ---- the track list
 function openRaceMenu() {

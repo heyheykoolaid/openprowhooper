@@ -5,7 +5,7 @@ Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
 `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `editor.js`,
-`bbreplay.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
+`mapedit.js`, `bbreplay.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
@@ -208,6 +208,24 @@ closed-in area (the sun's shadow box uses it) and `w.ceiling` its height. The No
   draw / other, physics steps and catch-up drops, draw calls, triangles, geometries, textures, resolution, shadows, glow,
   scenery batching, objects, colliders, JS heap. Graphics options: Shadows (`store 'shadows'`) and Render resolution
   (`store 'renderScale'`), both applied live (`perfApply`).
+
+## The Map Editor (src/mapedit.js; the edit layer in maps.js) — for every pilot, main menu → Map Editor
+A layout is a layer over the generated map (`pro-whooper-mapedit/1`: `moved` { key: { dx, dy, dz, ry°, s } }, `removed`
+[key], `added` [{ asset, x, y, z, ry, s }]), kept per map in `store 'mapEdits'` and applied at start-up (`MAP_EDITS` in
+game.js → `S.setMapEdits` → every `S.MAPS[id].build()` runs `applyMapEdits` before the Surveyor and `closeIn`). A piece
+(`mapPieces`) is an object plus everything made with it (`K.together(fn)` in the kit: Moose's Play Unit with its roof,
+slide, bars and openings; the Swing Set and its opening; the Tire Tunnel; the trunk-gap pairs) and any shape-less gap
+right after it; its key is "Name@x,z" of where it stood (`editKey` sticks to it when moved; keys are found again within
+0.6 m if the map code moves things a little; a key that matches nothing is counted as `lost`, never applied elsewhere).
+`moveObject` moves colliders (boxes keep their euler: `makeBox` stores it), looks, over/under lines and heights, round
+crowns (their `round.box` is re-surveyed), gaps, lights, wall normals. `ASSETS` (maps.js) is the library: Moose's trees
+and furniture from `natureKit`, swing set, over/under bar, gap gate, pole, tire, fence, plywood wall, house, pickup.
+The editor screen rebuilds the world in place after every change (`meRebuild`: the same `world` object, so drone,
+detector and race code keep it; `detector.reset()` re-reads poles and clears the near-object caches) with unmerged meshes
+(`buildObjects(false)`, each mesh has `userData.oid`), and merged again when it closes. Test fly → pause menu "Back to
+Map Editor". A reference image (photo / satellite) can be laid on the ground to trace from: session only, never saved
+or sent. Flights flown on a layout carry it in `summary.layout`; tools/evidence.js, signatures.js and flights.js re-fly
+them on it (`worldOf(map, layout)`). Edited layouts can't post to the daily board or watch board runs. test/mapedit.js.
 
 ## The Surveyor (src/sim.js `surveyObstacles`)
 Run by maps.js on every game map after it is built. It makes over/under detection independent of hand tagging and of

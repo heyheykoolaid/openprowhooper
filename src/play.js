@@ -159,6 +159,7 @@ function frame(now) {
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
   if (mode === 'editor') { editorFrame(dt); return; }
+  if (mode === 'mapedit') { mapEditFrame(dt); return; }
   if (mode === 'bbreplay') brStep(dt);
   if (mode === 'recap') recapStep(dt);
   if (mode === 'fly' && warm.on) warmTick();

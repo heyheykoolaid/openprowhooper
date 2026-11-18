@@ -291,15 +291,37 @@ function staticFlush() {
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2); let o = 0;
     for (const x of g.geos) { const k = x.attributes.position.count; pos.set(x.attributes.position.array, o * 3); if (x.attributes.normal) nor.set(x.attributes.normal.array, o * 3); if (x.attributes.uv) uv.set(x.attributes.uv.array, o * 2); o += k; x.dispose(); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.computeBoundingSphere();
-    const mesh = new THREE.Mesh(geo, g.mat); mesh.castShadow = g.cast; mesh.receiveShadow = g.recv; mesh.matrixAutoUpdate = false; if (g.glow) mesh.layers.enable(1); /* the neon still glows: bloom draws layer 1 */ playRoot.add(mesh);
+    const mesh = new THREE.Mesh(geo, g.mat); mesh.castShadow = g.cast; mesh.receiveShadow = g.recv; mesh.matrixAutoUpdate = false; if (g.glow) mesh.layers.enable(1); /* the neon still glows: bloom draws layer 1 */ objRoot.add(mesh);
   }
   PERF.staticPieces = [...STATIC.values()].reduce((a, g) => a + g.geos.length, 0); PERF.staticMeshes = STATIC.size; STATIC.clear();
+}
+// The map's objects (everything in world.objs), in their own group so the Map Editor can rebuild them after each change:
+// unmerged while editing (each mesh knows its object: userData.oid, for picking), merged for flying.
+let objRoot = null;
+function buildObjects(merge = MERGE_STATIC) {
+  if (objRoot) { playRoot.remove(objRoot); objRoot.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  objRoot = new THREE.Group(); playRoot.add(objRoot);
+  for (const o of world.objs) for (const v of o.vis) {
+    let m;
+    if (v.shape === 'box') {
+      m = new THREE.Mesh(boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);
+      m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
+      if (v.graffiti) addGraffiti(v);
+    } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
+    else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
+    else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
+    if (!m) continue;
+    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
+    m.userData.oid = o.id; if (!merge) objRoot.add(m); else staticAdd(m, v);
+  }
+  staticFlush();
+  if (world.theme !== 'vapor') for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, o.lightPower || 6, o.lightRange || 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); l.userData.oid = o.id; objRoot.add(l); }
 }
 // ============================================================ build world meshes
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
-  const IND = world.theme === 'industrial';
-  const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
+  const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
+  const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
   if (VAPOR) vaporBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
@@ -328,26 +350,12 @@ function buildScene() {
     const zm = MAT[z.mat].clone(); zm.depthTest = false; zm.depthWrite = false;
     const m = new THREE.Mesh(g, zm); m.rotation.x = -Math.PI / 2; if (z.ry) m.rotation.z = z.ry; m.position.set(z.c.x, z.c.y, z.c.z); m.receiveShadow = true; m.renderOrder = -9 + (z.mat === 'rubberMat' ? 0 : 1) + world.zones.indexOf(z) * 0.01; playRoot.add(m);
   }
-  // objects
-  for (const o of world.objs) for (const v of o.vis) {
-    let m;
-    if (v.shape === 'box') {
-      m = new THREE.Mesh(boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);
-      m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
-      if (v.graffiti) addGraffiti(v);
-    } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
-    else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
-    else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
-    if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
-    if (!MERGE_STATIC) playRoot.add(m); else staticAdd(m, v);
-  }
-  staticFlush();
+  buildObjects();
   if (VAPOR) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
   if (PNW) { scene.fog = new THREE.Fog(0xb4c0bc, 45, 190); pnwBackdrop(); }
-  for (const o of world.objs) if (o.light) { const l = new THREE.PointLight(o.lightColor || 0xffc98a, o.lightPower || 6, o.lightRange || 12, 2); l.position.set(o.light.x, o.light.y - 0.3, o.light.z); playRoot.add(l); }
+  // lamp lights are made with the objects (buildObjects)
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)
   const sk = new THREE.MeshStandardMaterial({ color: 0x4d4a52, roughness: 1, map: TX.concrete });
@@ -385,7 +393,7 @@ function addGraffiti(v) {
   const grp = new THREE.Group(); grp.position.copy(pos); m.position.set(0, 0, 0);
   if (v.graffiti === 'top') { m.rotation.x = -Math.PI / 2; grp.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ'); }
   else m.rotation.y = rotY;
-  grp.add(m); m.receiveShadow = true; playRoot.add(grp);
+  grp.add(m); m.receiveShadow = true; (objRoot || playRoot).add(grp);
 }
 
 // ============================================================ drone model

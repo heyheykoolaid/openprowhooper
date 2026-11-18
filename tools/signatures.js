@@ -13,7 +13,7 @@ try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('p
 const args = process.argv.slice(2), opt = n => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; }, jsonOut = opt('json'), only = opt('trick');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); }; (args.length ? args : ['telemetry']).forEach(walk);
 const med = a => { const s = a.filter(Number.isFinite).sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; }, rng = a => { const s = a.filter(Number.isFinite); return s.length ? `${Math.round(Math.min(...s))}–${Math.round(Math.max(...s))}` : '—'; };
-const worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (S.MAPS[id] || S.MAPS.playground).build());
+const worlds = {}, worldOf = (id, layout) => { const k = id + (layout ? JSON.stringify(layout) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground'; S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
 const tokStr = k => `${k.ax}${k.dir > 0 ? '+' : '-'}${Math.round(k.raw)}${k.inv > k.n * 0.5 ? 'i' : ''}`;
 (async () => {
   const flights = new Map(), labels = [];
@@ -26,10 +26,10 @@ const tokStr = k => `${k.ax}${k.dir > 0 ? '+' : '-'}${Math.round(k.raw)}${k.inv 
     let rows; try { rows = await FL.unpack(p.trace); } catch { continue; } if (!Array.isArray(rows) || rows.length < 100) continue;
     const T0 = rows[0][0], toks = [], Pr = S.TrickDetector.prototype, ft = Pr.finishTok; let det;
     Pr.finishTok = function (k) { const n0 = this.toks.length; ft.call(this, k); if (this.toks.length > n0) toks.push(this.toks[n0]); };
-    let R; try { R = S.replayTrace(rows, { world: worldOf(p.map), camTilt: p.camTilt, pilot: p.profile || null, debug: false, hook: d => { det = d; } }); } finally { Pr.finishTok = ft; }
+    let R; try { R = S.replayTrace(rows, { world: worldOf(p.map, p.summary && p.summary.layout), camTilt: p.camTilt, pilot: p.profile || null, debug: false, hook: d => { det = d; } }); } finally { Pr.finishTok = ft; }
     // crossings: replay again cheaply is not needed: the detector's own log is pruned, so collect from the events' time instead
     const crosses = []; { const Pr2 = S.TrickDetector.prototype, tc = Pr2.trackCrossings; Pr2.trackCrossings = function (d, t) { const n = this.crossLog.length; tc.call(this, d, t); for (let i = n; i < this.crossLog.length; i++) crosses.push({ t: this.crossLog[i].t + T0, kind: this.crossLog[i].kind, name: this.crossLog[i].name }); };
-      try { S.replayTrace(rows, { world: worldOf(p.map), camTilt: p.camTilt, pilot: p.profile || null, debug: false }); } finally { Pr2.trackCrossings = tc; } }
+      try { S.replayTrace(rows, { world: worldOf(p.map, p.summary && p.summary.layout), camTilt: p.camTilt, pilot: p.profile || null, debug: false }); } finally { Pr2.trackCrossings = tc; } }
     const evs = R.events.filter(e => e.name !== 'near' && e.name !== 'Crash'), abs = toks.map(k => ({ ...k, a: k.t0 + T0, b: k.t1 + T0 }));
     const sticks = (a, b) => { const o = { roll: 0, pitch: 0, yaw: 0, thrMin: 1, thrSum: 0, n: 0 }; for (const r of rows) { if (r[0] < a) continue; if (r[0] > b) break; o.roll = Math.max(o.roll, Math.abs(r[24] || 0)); o.pitch = Math.max(o.pitch, Math.abs(r[25] || 0)); o.yaw = Math.max(o.yaw, Math.abs(r[26] || 0)); o.thrMin = Math.min(o.thrMin, r[11]); o.thrSum += r[11]; o.n++; } return o; };
     const evidence = (a, b) => ({ toks: abs.filter(k => k.raw >= 60 && k.b > a - 0.15 && k.a < b + 0.15), pass: crosses.filter(c => c.t > a - 2.3 && c.t < b + 0.4), st: sticks(a, b) });

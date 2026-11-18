@@ -14,6 +14,9 @@ let tune = Object.assign(S.defaultTune(), store.get('tune', {}));
   tune.ratesV2 = true; store.set('tune', tune); })();
 // the map: chosen on the main menu, remembered, built once at start-up (changing it reloads the page)
 const MAP_ID = S.MAPS[store.get('map', 'moose')] ? store.get('map', 'moose') : 'moose';   // Moose Knuckle Park is the default (pilot, 2026-11-17)
+// the pilot's own layout of this map from the Map Editor (store 'mapEdits': { mapId: layer }), applied before the build
+let MAP_EDITS = (() => { const all = store.get('mapEdits', {}), E = all && all[MAP_ID]; return E && ((E.moved && Object.keys(E.moved).length) || (E.removed && E.removed.length) || (E.added && E.added.length)) ? E : null; })();
+S.setMapEdits(MAP_ID, MAP_EDITS);
 const world = S.MAPS[MAP_ID].build();
 let params = S.buildDrone(spec);
 const drone = new S.Drone(params, tune, world);

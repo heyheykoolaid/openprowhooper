@@ -5,7 +5,7 @@
 //   reports CHANGES and DOUBTS, not right/wrong: calls that differ now, calls the Watcher was unsure of, flagged calls.
 const fs = require('fs'), path = require('path');
 const FL = require('../src/flightlog.js'); const { replayTrace } = require('../test/lib.js');
-require('../src/maps.js'); const MAPS = globalThis.Sim.MAPS, worlds = {}, worldOf = id => worlds[id] || (worlds[id] = (MAPS[id] || MAPS.playground).build());   // each flight is re-flown on the map it was flown on
+require('../src/maps.js'); const MAPS = globalThis.Sim.MAPS, worlds = {}, worldOf = (id, layout) => { const k = id + (layout ? JSON.stringify(layout) : ''); if (worlds[k]) return worlds[k]; const m = MAPS[id] ? id : 'playground'; globalThis.Sim.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); try { return (worlds[k] = MAPS[m].build()); } finally { globalThis.Sim.setMapEdits(m, null); } };   // each flight is re-flown on the map it was flown on
 try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
 try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'))); } catch { /* no trick library yet */ }
 const args = process.argv.slice(2), verbose = args.includes('--verbose');
@@ -20,7 +20,7 @@ for (const a of args) if (!a.startsWith('--')) walk(a);
   const seen = new Set(), tally = {}; let secs = 0, changed = 0, calls = 0;
   const T = k => tally[k] = tally[k] || { then: 0, now: 0, lost: 0, gained: 0, unsure: 0, flagged: 0 };
   for (const p of flights) { if (seen.has(p.id)) continue; seen.add(p.id);
-    const rows = await FL.unpack(p.trace), R = replayTrace(rows, { camTilt: p.camTilt, world: worldOf(p.map) });
+    const rows = await FL.unpack(p.trace), R = replayTrace(rows, { camTilt: p.camTilt, world: worldOf(p.map, p.summary && p.summary.layout) });
     const now = R.events.filter(e => e.name !== 'near' && e.name !== 'Crash').map(e => ({ name: e.name, t: e.t })), then = (p.events || []).filter(e => !e.maybe).map(e => ({ ...e }));
     secs += rows.length / p.trace.hz; calls += then.length;
     // pair calls of the same name within 1.5 s

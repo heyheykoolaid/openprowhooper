@@ -44,7 +44,7 @@ function telCapture(reason) {
     missed: recap.flags.map(f => ({ t: f.t })) };
   const stamp = telStamp(recap);
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS;   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
 
 // ---- "Processing…": the heavy moments (packing and sending a flight, learning from a review) happen behind a short
@@ -234,14 +234,14 @@ const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbr
 function lbResultsBox() {
   const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
   const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
-  const can = lbBase() && L.total > 0, why = !lbBase() ? 'The leaderboard needs the online version of the game.' : L.total <= 0 ? 'Score something to post a run.' : !lbNameOk(name) ? 'Leaderboard names use letters, numbers, spaces and _ . - (2 to 24). Change yours in Options.' : '';
+  const can = lbBase() && L.total > 0, why = !lbBase() ? 'The leaderboard needs the online version of the game.' : MAP_EDITS ? 'This run was flown on your own layout of the map (Map Editor). The daily board is for the standard maps: reset the layout to post.' : L.total <= 0 ? 'Score something to post a run.' : !lbNameOk(name) ? 'Leaderboard names use letters, numbers, spaces and _ . - (2 to 24). Change yours in Options.' : '';
   el.innerHTML = `<h3>TODAY'S LEADERBOARD <small>${esc(lbMapTitle(L.map))} · resets 00:00 UTC</small></h3>
     ${runs.length ? `<table class="lbT">${lbRows(runs, 5, name)}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted on this map yet today. Yours could be first.')}</p>`}
     <div class="row">${done ? `<span class="note">✓ ${esc(done)}</span>` : can && !why ? `<button data-lb="post" class="primary">Post this run as ${esc(name)}</button>` : ''}<button data-lb="open">Full leaderboard</button></div>
     <p class="note">${done ? '' : why || 'Posting puts your pilot name, score, scoring sheet and the replay of this run on the public board for the day.'}</p>`;
 }
 async function lbPost() {
-  const L = LB.last, name = pilotName(); if (!L || LB.posted[L.id] || !lbBase() || !lbNameOk(name) || L.total <= 0 || LB.busy) return; LB.busy = true;
+  const L = LB.last, name = pilotName(); if (!L || LB.posted[L.id] || !lbBase() || !lbNameOk(name) || L.total <= 0 || LB.busy || MAP_EDITS) return; LB.busy = true;
   const el = document.querySelector('[data-lb="post"]'); if (el) { el.disabled = true; el.textContent = 'Posting…'; }
   let msg = '';
   try { const trace = L.rows.length > TRACE_HZ ? await FlightLog.pack(L.rows, TRACE_COLS, TRACE_HZ) : undefined;
@@ -269,10 +269,10 @@ function lbRender() {
 }
 function lbRunHtml(R) {
   if (R.loading) return '<p class="note">Loading the run…</p>'; if (R.error) return `<p class="note">${esc(R.error)}</p>`;
-  const p = R.run, T = p.totals || {}, sheet = Array.isArray(p.sheet) ? p.sheet.slice(0, 400) : [], canWatch = p.trace && p.map === MAP_ID, num = v => Number.isFinite(+v) ? (+v).toLocaleString() : '—';
+  const p = R.run, T = p.totals || {}, sheet = Array.isArray(p.sheet) ? p.sheet.slice(0, 400) : [], canWatch = p.trace && p.map === MAP_ID && !MAP_EDITS, num = v => Number.isFinite(+v) ? (+v).toLocaleString() : '—';
   return `<h3>${esc(p.name)} · ${num(p.score)}</h3>
     <p class="note">${esc(lbMapTitle(p.map))}${T.trick != null ? ` · trick score ${num(T.trick)} × switch ${esc(T.switchMult)} + K.W.A.D. ${num(T.kwad)}` : ''}${T.streak != null ? ` · max streak ×${esc(T.streak)}` : ''}${T.obstacles != null ? ` · obstacles ${esc(T.obstacles)}` : ''}</p>
-    <div class="row">${canWatch ? '<button data-lb="watch" class="primary">▶ Watch the run</button>' : `<span class="note">${p.trace ? 'Flown on ' + esc(lbMapTitle(p.map)) + ': switch to that map (Maps) to watch it.' : 'No replay was posted with this run.'}</span>`}</div>
+    <div class="row">${canWatch ? '<button data-lb="watch" class="primary">▶ Watch the run</button>' : `<span class="note">${p.trace && p.map === MAP_ID && MAP_EDITS ? 'Your own layout of this map is loaded (Map Editor): reset it to watch runs on the standard map.' : p.trace ? 'Flown on ' + esc(lbMapTitle(p.map)) + ': switch to that map (Maps) to watch it.' : 'No replay was posted with this run.'}</span>`}</div>
     <ol class="lbSheet">${sheet.map(x => `<li>${esc(x.name)}${x.obstacle ? ' <small>' + esc(x.obstacle) + '</small>' : ''} <span class="${/^[A-Z]+$/.test(x.exec) ? x.exec : ''}">${esc(x.exec)}</span> +${num(x.net)}</li>`).join('') || '<li>no scoring sheet</li>'}</ol>`;
 }
 async function lbPick(id) {
