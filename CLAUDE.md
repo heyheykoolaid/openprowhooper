@@ -553,3 +553,29 @@ goes through `meClean` like a layout file (known fields, clamped numbers, librar
 or into the official draft in Official mode. `node tools/mapcode.js <code> --official` writes it as
 maps/official/<map>.json (then build, `npm test`, commit): the fallback when publishing from the game fails. A failed
 publish now flashes the reason (usually a token without Contents: write on the game repo) and keeps the draft.
+
+## Official maps, the pilot's own maps, community maps (2026-11-17, owner's request)
+Players never change an official map. **The pilot's own maps** (`store 'myMaps'`: [{ id, name, base, E, at, shared }],
+the one flown: `store 'myMap'`; game.js `MY_MAPS`, `MY_MAP`) are named copies of an official or a community map, made
+in the Map Editor ("Make my own map", `meNewMap`); the editor is locked (`ME.locked`: the view moves, nothing else) on
+official and community maps. Older per-map layouts (`store 'mapEdits'`) became "<map> (my layout)" once.
+**Community maps**: "Share with the community" (`meShareMap`, the pilot's click) posts `pro-whooper-map/1` (name, `by`
+= pilot name, pilot id, `base`, the layer) to the relay, filed as `maps/community/<base>/<time>.<pilot>.<name b64url>.<by
+b64url>.json`; `GET /maps?base=` lists them (file names only, newest of each pilot's map name), `GET /map?base=&id=`
+returns one, cleaned again (tools/dropoff-worker.mjs; test/dropoff.js). The Maps carousel shows only the official maps;
+each slide lists its community maps (the pilot's own "by you", then other pilots', `commMapsHtml` / `commMapsLoad` /
+`commFly` in menus.js). A downloaded map is cleaned with `meClean` and kept in `store 'commMaps'` (30 at most); the one
+flown is `store 'commMap'` (game.js `COMM_MAP`, read-only, a template for "Make my own map"). MAP_EDITS is the layer of
+whichever is loaded; flights carry it in `summary.layout` as before; the daily board is for official maps only. Map
+codes carry the map's name; pasting one makes a new map of the pilot's (or goes into the owner's official draft).
+The relay must be redeployed in Cloudflare for sharing and the lists to work.
+
+## Reviews of other pilots' runs (Judge the community, board runs)
+One send button: in a guest review the ↑ Upload between Export and Done sends the verdicts as reviewer labels
+(`reviewerSave`), for every pilot; Done sends them too. Every submission ends with "Thanks for your submission and
+helping Open Pro Whooper, <name>!" (`procThanks`). Opening any review closes Judge the Bot's panel first (`openRecap`).
+
+## The bot's Barani keeps moving (2026-11-17, pilot: "there should always be forward momentum with a barani")
+The inverted yaw 180 happens while the quad keeps travelling over the top of the loop at the loop's own pace (it yaws
+across `a` = 0.3-0.55 rad either side of the top, smoothstep), then the Matty out; it used to hang almost still (0.1-0.4 m/s)
+at the top. Slowest point now 1.2-4.7 m/s; stress 30/30 on seeds 1-3.

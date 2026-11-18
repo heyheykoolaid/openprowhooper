@@ -15,18 +15,50 @@ function needPlayground(what) { if (MAP_ID === 'playground') return false; flash
 function menuMapLabels() { const m = $('#menuMap'); if (m) m.textContent = world.title; }
 function openMaps() {
   show('#mapScreen'); if (mode === 'fly') { mode = 'paused'; }
-  const maps = Object.values(S.MAPS), thumbs = window.PW_MAPTHUMBS || {};
-  mapCar.i = Math.max(0, maps.findIndex(m => m.id === MAP_ID));
-  $('#mapList').innerHTML = `<div class="mapCar"><button class="mapArrow" data-mapnav="-1" aria-label="previous map">‹</button><div class="mapViewport"><div class="mapTrack">${maps.map((m, k) => `<div class="mapSlide ${m.id === MAP_ID ? 'cur' : ''}" data-mapk="${k}">
-      <div class="mapThumb ${thumbs[m.id] ? '' : 'none'}" ${thumbs[m.id] ? `style="background-image:url('${thumbs[m.id]}')"` : ''}>${thumbs[m.id] ? '' : `<span>${esc(m.title)}</span>`}${m.id === MAP_ID ? '<em>you are here</em>' : ''}</div>
-      <div class="mapInfo"><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${m.id === MAP_ID && world.survey ? `<small class="mapStats">The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>
-      <div class="mapGo">${m.id === MAP_ID ? '<span class="note">you are flying here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div></div>`).join('')}</div></div><button class="mapArrow" data-mapnav="1" aria-label="next map">›</button></div>
+  // the official maps; each lists its community maps: the pilot's own (named copies, Map Editor) and the ones other pilots
+  // shared (relay GET /maps?base=, by pilot name; other people's text: always esc)
+  const thumbs = window.PW_MAPTHUMBS || {}, maps = Object.values(S.MAPS), onOfficial = !MY_MAP && !COMM_MAP;
+  mapCar.n = maps.length; mapCar.i = Math.max(0, maps.findIndex(m => m.id === MAP_ID));
+  $('#mapList').innerHTML = `<div class="mapCar"><button class="mapArrow" data-mapnav="-1" aria-label="previous map">‹</button><div class="mapViewport"><div class="mapTrack">${maps.map((m, k) => { const here = m.id === MAP_ID, cur = here && onOfficial;
+      return `<div class="mapSlide ${here ? 'cur' : ''}" data-mapk="${k}">
+      <div class="mapThumb ${thumbs[m.id] ? '' : 'none'}" ${thumbs[m.id] ? `style="background-image:url('${thumbs[m.id]}')"` : ''}>${thumbs[m.id] ? '' : `<span>${esc(m.title)}</span>`}${here ? `<em>${cur ? 'you are here' : 'you are on a community map of this one'}</em>` : ''}</div>
+      <div class="mapInfo"><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${here && world.survey ? `<small class="mapStats">The game found ${world.survey.overUnders} things to go over and under, ${world.survey.gaps} gaps, ${world.survey.poles} poles and ${world.survey.walls} walls here.</small>` : ''}</div>
+      <div class="mapGo">${cur ? '<span class="note">you are flying here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>
+      <div class="commMaps" data-commbase="${m.id}">${commMapsHtml(m.id)}</div></div>`; }).join('')}</div></div><button class="mapArrow" data-mapnav="1" aria-label="next map">›</button></div>
     <div class="mapDots">${maps.map((m, k) => `<button data-mapdot="${k}" title="${esc(m.title)}" aria-label="${esc(m.title)}"></button>`).join('')}</div>`;
+  for (const m of maps) commMapsLoad(m.id);
   mapCarGo(mapCar.i);
 }
+// ---- community maps per official map: the pilot's own first ("by you"), then other pilots' (newest of each)
+const COMM = { lists: {}, at: {} };
+function commMapsHtml(base) {
+  const mine = MY_MAPS.filter(m => m.base === base), L = COMM.lists[base], others = (Array.isArray(L) ? L : []).filter(x => x.pilot !== telPilot());
+  const row = (title, by, btn, cur, extra = '') => `<li class="${cur ? 'cur' : ''}"><b>${esc(title)}</b> <small>by ${esc(by)}</small>${cur ? '<span class="note">flying</span>' : btn}${extra}</li>`;
+  const rows = [...mine.map(my => row(my.name, 'you', `<button data-mymap="${esc(my.id)}">Fly</button>`, MY_MAP && MY_MAP.id === my.id, `<button data-mymapdel="${esc(my.id)}" class="ghost" title="Delete your map">✕</button>`)),
+    ...others.map(x => row(x.name, x.by, `<button data-commfly="${esc(x.id)}" data-commb="${esc(base)}">Fly</button>`, COMM_MAP && COMM_MAP.id === x.id))];
+  const state = L === 'loading' ? '<span class="note">looking for community maps…</span>' : L === 'off' ? '<span class="note">community maps need the online game</span>' : L === 'err' ? '<span class="note">could not reach the community list</span>' : '';
+  return `<h5>Community maps</h5>${rows.length ? `<ul>${rows.join('')}</ul>` : `<span class="note">${L === 'loading' ? '' : 'None yet. Make one in the Map Editor and share it.'}</span>`}${state}`;
+}
+async function commMapsLoad(base) {
+  const el = () => document.querySelector(`#mapList [data-commbase="${base}"]`);
+  if (!lbBase()) { COMM.lists[base] = 'off'; if (el()) el().innerHTML = commMapsHtml(base); return; }
+  if (Array.isArray(COMM.lists[base]) && Date.now() - (COMM.at[base] || 0) < 60000) return;
+  if (!Array.isArray(COMM.lists[base])) { COMM.lists[base] = 'loading'; if (el()) el().innerHTML = commMapsHtml(base); }
+  try { const r = await fetch(`${lbBase()}/maps?base=${encodeURIComponent(base)}`); if (!r.ok) throw 0; const j = await r.json();
+    COMM.lists[base] = (Array.isArray(j.maps) ? j.maps : []).filter(x => x && typeof x.id === 'string' && /^[A-Za-z0-9_.-]{10,200}$/.test(x.id) && typeof x.name === 'string' && typeof x.by === 'string').slice(0, 100).map(x => ({ id: x.id, name: x.name.slice(0, 40), by: x.by.slice(0, 24), pilot: String(x.pilot || '') }));
+    COMM.at[base] = Date.now(); } catch { if (!Array.isArray(COMM.lists[base])) COMM.lists[base] = 'err'; }
+  if (el()) el().innerHTML = commMapsHtml(base);
+}
+async function commFly(base, id) {   // download another pilot's map (cleaned like a layout file), then load it
+  if (!S.MAPS[base] || !lbBase()) return; flash('<b>LOADING THE MAP…</b>');
+  try { const r = await fetch(`${lbBase()}/map?base=${encodeURIComponent(base)}&id=${encodeURIComponent(id)}`); if (!r.ok) throw 0; const j = await r.json(); if (!j || j.base !== base) throw 0;
+    const all = store.get('commMaps', {}) || {}, keys = Object.keys(all); if (keys.length > 30) for (const k of keys.slice(0, keys.length - 30)) delete all[k];
+    all[id] = { id, name: String(j.name || 'Community map').slice(0, 40), by: String(j.by || '?').slice(0, 24), base, E: meClean(j), at: j.at || null }; store.set('commMaps', all);
+    store.set('map', base); store.set('myMap', null); store.set('commMap', id); mapGoLoad(all[id].name);
+  } catch { flash('<b>COULD NOT LOAD THAT MAP</b><small>try again in a moment</small>', 'warn'); } }
 // the carousel: one map in the middle; arrows, dots, a click on a faded neighbour, the arrow keys, a swipe
 const mapCar = { i: 0 };
-function mapCarGo(k) { const n = Object.keys(S.MAPS).length, tr = $('#mapList .mapTrack'); if (!tr) return; mapCar.i = (k + n) % n;
+function mapCarGo(k) { const n = mapCar.n || Object.keys(S.MAPS).length, tr = $('#mapList .mapTrack'); if (!tr) return; mapCar.i = (k + n) % n;
   tr.style.transform = `translateX(${-mapCar.i * 100}%)`;
   for (const el of document.querySelectorAll('#mapList .mapSlide')) el.classList.toggle('on', +el.dataset.mapk === mapCar.i);
   for (const el of document.querySelectorAll('#mapList [data-mapdot]')) el.classList.toggle('on', +el.dataset.mapdot === mapCar.i); }
@@ -37,8 +69,14 @@ document.addEventListener('keydown', e => { if ($('#mapScreen').classList.contai
   if (e.key === 'Enter') { const b = $('#mapList .mapSlide.on [data-mapid]'); if (b) { b.click(); e.preventDefault(); } } });
 { let x0 = null; document.addEventListener('pointerdown', e => { x0 = e.target.closest('#mapList .mapViewport') ? e.clientX : null; });
   document.addEventListener('pointerup', e => { if (x0 === null) return; const dx = e.clientX - x0; x0 = null; if (Math.abs(dx) > 50) mapCarGo(mapCar.i + (dx < 0 ? 1 : -1)); }); }
+function mapGoLoad(next) { procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + next + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); }
+document.addEventListener('click', e => { const y = e.target.closest('[data-mymap]'), dl = e.target.closest('[data-mymapdel]');
+  const cf = e.target.closest('[data-commfly]'); if (cf) { commFly(cf.dataset.commb, cf.dataset.commfly); return; }
+  if (y) { const my = MY_MAPS.find(m => m.id === y.dataset.mymap); if (!my) return; store.set('map', my.base); store.set('myMap', my.id); store.set('commMap', null); mapGoLoad(my.name); return; }
+  if (dl) { const i = MY_MAPS.findIndex(m => m.id === dl.dataset.mymapdel); if (i < 0 || !confirm(`Delete your map "${MY_MAPS[i].name}"? This can't be undone.`)) return; const was = MY_MAPS[i]; MY_MAPS.splice(i, 1); store.set('myMaps', MY_MAPS);
+    if (MY_MAP === was) { store.set('myMap', null); mapGoLoad(S.MAPS[MAP_ID].title); } else openMaps(); return; } });
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
-  store.set('map', next); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
+  store.set('map', next); store.set('myMap', null); store.set('commMap', null); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { const j = $('#judgeBtn'); if (j) j.classList.toggle('hide', !ghMenus()); } }   // Judge the community: the project owner's tool for now
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)

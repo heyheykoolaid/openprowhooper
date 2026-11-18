@@ -27,13 +27,45 @@ function meClean(E) {   // a layer from a file or storage: only known fields, sa
 }
 function meSave() {
   if (ME.official) { const d = store.get('officialDraft', {}) || {}; d[MAP_ID] = ME.E; store.set('officialDraft', d); return; }   // the owner's draft of the official map: kept, not published
-  const all = store.get('mapEdits', {}) || {}; if (meHas(ME.E)) all[MAP_ID] = ME.E; else delete all[MAP_ID]; store.set('mapEdits', all); MAP_EDITS = meHas(ME.E) ? ME.E : null; }
+  if (!MY_MAP) return;   // an official or community map: players can't change it (ME.locked)
+  MY_MAP.E = ME.E; MY_MAP.at = new Date().toISOString(); store.set('myMaps', MY_MAPS); MAP_EDITS = meHas(ME.E) ? ME.E : null; }
+// ---- the pilot's own maps: named copies of an official map (game.js MY_MAPS / MY_MAP)
+function meNewMap(name, E) {
+  name = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40) || (world.baseTitle || MAP_ID) + ' remix';
+  const m = { id: 'my' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, base: MAP_ID, E: meClean(E || null), at: new Date().toISOString() };
+  MY_MAPS.push(m); store.set('myMaps', MY_MAPS); MY_MAP = m; store.set('myMap', m.id); COMM_MAP = null; store.set('commMap', null);
+  ME.official = false; ME.locked = false; ME.E = m.E; ME.E.map = MAP_ID; ME.sel.clear(); ME.undo = []; ME.redo = [];
+  S.setOfficialEdits(MAP_ID, mePublished()); meSave(); meRebuild(false); meLibrary(); mePanels(); flash(`<b>${esc(name).toUpperCase()}</b><small>your map, based on ${esc(world.baseTitle || MAP_ID)} · in the Maps carousel</small>`);
+}
+function meLeaveMyMap() {   // back to the official map (the pilot's maps stay in the carousel)
+  MY_MAP = null; store.set('myMap', null); COMM_MAP = null; store.set('commMap', null); MAP_EDITS = null; ME.locked = !ME.official; ME.E = meEmpty(); ME.E.map = MAP_ID; ME.sel.clear(); ME.undo = []; ME.redo = [];
+  meRebuild(false); meLibrary(); mePanels();
+}
+// share the pilot's own map with every pilot: listed with its official map in Maps (the relay files it as
+// maps/community/<base>/…; tools/dropoff-worker.mjs). The pilot's own click every time; what goes out: the map's name, the
+// pilot's name and id, the official map it is built on and its layer (moves, removals, library pieces). Nothing else.
+async function meShareMap() {
+  if (!MY_MAP) return; const name = MY_MAP.name, by = pilotName();
+  if (!lbBase()) { flash('<b>SHARING NEEDS THE ONLINE GAME</b><small>copy the map code instead</small>', 'warn'); return; }
+  if (!/^[A-Za-z0-9_.,'!&()+ -]{1,40}$/.test(name)) { flash('<b>RENAME IT FIRST</b><small>map names to share: letters, numbers, spaces and . , \' ! & ( ) + -</small>', 'warn'); return; }
+  if (!lbNameOk(by)) { flash('<b>PICK A PILOT NAME FIRST</b><small>Options → pilot name (letters, numbers, . _ - and spaces)</small>', 'warn'); return; }
+  if (!meHas(ME.E)) { flash('<b>NOTHING TO SHARE YET</b><small>this map is still the same as ' + esc(world.baseTitle || MAP_ID) + '</small>', 'near'); return; }
+  if (!confirm(`Share "${name}" with every pilot? It will be listed with ${world.baseTitle || MAP_ID} in Maps, by ${by}.`)) return;
+  meSave(); procShow('Sharing your map…', `${name} · by ${by}`, 0.3);
+  const payload = { format: 'pro-whooper-map/1', build: '0.1', name, by, pilot: telPilot(), base: MAP_ID, at: new Date().toISOString(), moved: ME.E.moved, removed: ME.E.removed, added: ME.E.added };
+  let ok = false, why = ''; try { const r = await fetch(lbBase(), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: 'map', payload }) }); ok = r.ok; if (!ok) why = (await r.text()).slice(0, 80); } catch { why = 'the drop-off could not be reached'; }
+  if (ok) { MY_MAP.shared = new Date().toISOString(); store.set('myMaps', MY_MAPS); procShow(procThanks(), `"${name}" is listed with ${world.baseTitle || MAP_ID} in Maps for every pilot (it can take a minute to appear).`, 1); }
+  else procShow('Not shared', `${why || 'the drop-off said no'}. Your map is safe here; try again later, or copy the map code.`, 1);
+  await new Promise(res => setTimeout(res, 2200)); procHide(); mePanels();
+}
+const meLockedHint = () => flash(`<b>OFFICIAL MAP</b><small>it can't be changed · make your own map from it (right panel)</small>`, 'near');
 // ---- the official map (owner only: pilot name heyheykoolaid, and a GitHub token that can write to the game repo)
 const mePublished = () => { const loc = (store.get('officialLocal', {}) || {})[MAP_ID], ship = window.PW_OFFICIAL && window.PW_OFFICIAL[MAP_ID]; return loc && (!ship || String(loc.at || '') > String(ship.at || '')) ? loc : ship || null; };
 function meMode(official) {   // switch between the pilot's own layout and the official map
   meSave(); ME.official = !!official && ghMenus(); ME.sel.clear(); ME.undo = []; ME.redo = [];
   if (ME.official) { const draft = (store.get('officialDraft', {}) || {})[MAP_ID]; ME.E = meClean(draft || mePublished()); S.setMapEdits(MAP_ID, null); S.setOfficialEdits(MAP_ID, null); }
-  else { ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); S.setMapEdits(MAP_ID, null); S.setOfficialEdits(MAP_ID, mePublished()); }
+  else { ME.E = meClean(MY_MAP ? MY_MAP.E : COMM_MAP ? COMM_MAP.E : null); S.setMapEdits(MAP_ID, null); S.setOfficialEdits(MAP_ID, mePublished()); }
+  ME.locked = !ME.official && !MY_MAP;
   ME.E.map = MAP_ID; ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands under this layer
   meRebuild(false); meLibrary(); mePanels();
 }
@@ -43,23 +75,24 @@ function meMode(official) {   // switch between the pilot's own layout and the o
 const ME_CODE = /^PWMAP1-([a-z0-9_]{1,24})-([A-Za-z0-9_-]{4,200000})$/;
 async function meZip(bytes, Stream) { const st = new Stream('deflate-raw'), w = st.writable.getWriter(); w.write(bytes); w.close(); const parts = [], r = st.readable.getReader(); let n = 0;
   for (;;) { const { done, value } = await r.read(); if (done) break; parts.push(value); n += value.length; if (n > 4e6) throw new Error('too big'); } const out = new Uint8Array(n); let o = 0; for (const q of parts) { out.set(q, o); o += q.length; } return out; }
-async function meCodeOf(E) { const j = JSON.stringify({ format: 'pro-whooper-mapedit/1', map: MAP_ID, moved: E.moved, removed: E.removed, added: E.added }), z = await meZip(new TextEncoder().encode(j), CompressionStream);
+async function meCodeOf(E, name) { const j = JSON.stringify({ format: 'pro-whooper-mapedit/1', map: MAP_ID, name: name ? String(name).slice(0, 40) : undefined, moved: E.moved, removed: E.removed, added: E.added }), z = await meZip(new TextEncoder().encode(j), CompressionStream);
   let bin = ''; for (let i = 0; i < z.length; i += 0x8000) bin += String.fromCharCode.apply(null, z.subarray(i, i + 0x8000));
   return `PWMAP1-${MAP_ID}-` + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 async function meCodeRead(str) { const m = ME_CODE.exec(String(str || '').trim().replace(/\s+/g, '')); if (!m) return null;
   const b = atob(m[2].replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((m[2].length + 3) % 4)), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
-  const j = JSON.parse(new TextDecoder().decode(await meZip(a, DecompressionStream))); if (!j || j.format !== 'pro-whooper-mapedit/1') return null; return { map: m[1], E: j }; }
+  const j = JSON.parse(new TextDecoder().decode(await meZip(a, DecompressionStream))); if (!j || j.format !== 'pro-whooper-mapedit/1') return null; return { map: m[1], E: j, name: typeof j.name === 'string' ? j.name.slice(0, 40) : '' }; }
 async function meCopyCode() {
   if (!meHas(ME.E)) { flash('<b>NOTHING TO SHARE</b><small>this layout is the map as built</small>', 'near'); return; }
-  const code = await meCodeOf(ME.E); let ok = false; try { await navigator.clipboard.writeText(code); ok = true; } catch {}
+  const code = await meCodeOf(ME.E, ME.official ? null : MY_MAP && MY_MAP.name); let ok = false; try { await navigator.clipboard.writeText(code); ok = true; } catch {}
   if (ok) flash(`<b>MAP CODE COPIED</b><small>${code.length} characters · paste it anywhere; others use "Paste map code" on ${esc(S.MAPS[MAP_ID].title || MAP_ID)}</small>`); else prompt('Map code (copy it):', code);
 }
 async function mePasteCode() {
   let txt = ''; try { txt = await navigator.clipboard.readText(); } catch {} if (!ME_CODE.test((txt || '').trim())) txt = prompt('Paste a map code (PWMAP1-…):', '') || ''; if (!txt.trim()) return;
   let got = null; try { got = await meCodeRead(txt); } catch {} if (!got) { flash('<b>NOT A MAP CODE</b><small>it starts with PWMAP1-</small>', 'near'); return; }
   if (got.map !== MAP_ID) { flash(`<b>CODE FOR ANOTHER MAP</b><small>it is for ${esc(S.MAPS[got.map] ? S.MAPS[got.map].title || got.map : got.map)}: switch map first</small>`, 'warn'); return; }
-  if (meHas(ME.E) && !confirm('Replace the layout in the editor with the one in this code? (Undo brings yours back.)')) return;
-  mePush(); ME.E = meClean(got.E); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); flash(`<b>MAP CODE LOADED</b><small>${Object.keys(ME.E.moved).length} moved · ${ME.E.removed.length} removed · ${ME.E.added.length} added${ME.official ? ' · into the official draft' : ''}</small>`);
+  if (!ME.official) { meNewMap(got.name || 'Shared ' + (world.baseTitle || MAP_ID), got.E); return; }   // a shared map becomes a new map of the pilot's
+  if (meHas(ME.E) && !confirm('Replace your official draft with the layout in this code? (Undo brings yours back.)')) return;
+  mePush(); ME.E = meClean(got.E); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); flash(`<b>MAP CODE LOADED</b><small>${Object.keys(ME.E.moved).length} moved · ${ME.E.removed.length} removed · ${ME.E.added.length} added · into the official draft</small>`);
 }
 async function mePublish() {
   if (!ME.official || !ghMenus()) return; if (!gh.token) { flash('<b>NO GITHUB TOKEN</b><small>add one in Options (Contents: Read and write on the game repo)</small>', 'warn'); return; }
@@ -77,7 +110,7 @@ async function mePublish() {
 function meRebuild(merge) {
   if (ME.official) { S.setOfficialEdits(MAP_ID, meHas(ME.E) ? ME.E : null); S.setMapEdits(MAP_ID, null); } else S.setMapEdits(MAP_ID, meHas(ME.E) ? ME.E : null);
   const nw = S.MAPS[MAP_ID].build();
-  for (const k of Object.keys(world)) delete world[k]; Object.assign(world, nw); drone.world = world; detector.reset();
+  for (const k of Object.keys(world)) delete world[k]; Object.assign(world, nw); world.baseTitle = world.title; if (!ME.official && MY_MAP) world.title = MY_MAP.name; else if (!ME.official && COMM_MAP) world.title = `${COMM_MAP.name} by ${COMM_MAP.by}`; drone.world = world; detector.reset();
   buildObjects(merge); ME.pieces = S.mapPieces(world); ME.byOid = new Map(); for (const p of ME.pieces) for (const id of p.ids) ME.byOid.set(id, p);
   const keep = new Set(ME.pieces.map(meId)); for (const id of [...ME.sel]) if (!keep.has(id)) ME.sel.delete(id); meSelBox();
 }
@@ -101,14 +134,14 @@ function meUndo() { if (!ME.undo.length) return; ME.redo.push(JSON.stringify(ME.
 function meRedo() { if (!ME.redo.length) return; ME.undo.push(JSON.stringify(ME.E)); ME.E = JSON.parse(ME.redo.pop()); meCommit(); }
 
 function openMapEditor() {
-  ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); ME.E.map = MAP_ID; ME.sel.clear(); ME.place = null; ME.undo = []; ME.redo = []; ME.testing = false;
+  ME.E = meClean(MY_MAP ? MY_MAP.E : COMM_MAP ? COMM_MAP.E : null); ME.E.map = MAP_ID; ME.sel.clear(); ME.place = null; ME.undo = []; ME.redo = []; ME.testing = false; ME.locked = !MY_MAP;
   ME.official = false; S.setMapEdits(MAP_ID, null); ME.base = new Map(S.mapPieces(S.MAPS[MAP_ID].build()).map(p => [p.key, p.pivot]));   // where every piece stands under the official layout
   mode = 'mapedit'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#mapEditUI').classList.remove('hide'); document.body.classList.add('bbr', 'meOn');
   const B = world.bounds || { x: [-40, 40], z: [-40, 40] }; ME.cam.t.set((B.x[0] + B.x[1]) / 2 * 0.5, 0, (B.z[0] + B.z[1]) / 2 * 0.5); ME.cam.dist = Math.min(110, Math.max(45, (B.x[1] - B.x[0]) * 0.55)); ME.cam.pitch = 1.05; /* start on a high overview */ meRebuild(false); meLibrary(); mePanels(); meHint();
 }
 function closeMapEditor(to) {
   ME.drag = null; ME.place = null; meSave();
-  if (to !== 'fly' && ME.official) { ME.official = false; S.setOfficialEdits(MAP_ID, mePublished()); ME.E = meClean((store.get('mapEdits', {}) || {})[MAP_ID]); }
+  if (to !== 'fly' && ME.official) { ME.official = false; S.setOfficialEdits(MAP_ID, mePublished()); ME.E = meClean(MY_MAP ? MY_MAP.E : COMM_MAP ? COMM_MAP.E : null); ME.locked = !MY_MAP; }
   meRebuild(true); $('#mapEditUI').classList.add('hide'); document.body.classList.remove('bbr', 'meOn'); if (ME.box) { scene.remove(ME.box); ME.box = null; }
   if (ME.ref) ME.ref.mesh.visible = false; drone.reset(world.spawn);
   if (to === 'fly') { ME.testing = true; startFly(false); } else { ME.testing = false; mode = 'menu'; show('#mainMenu'); }
@@ -128,11 +161,16 @@ function mePanels() {
   else if (ps.length > 1) selH = `<h4>${ps.length} pieces picked</h4><div class="row"><button data-me="del">Remove all</button></div>`;
   const R = ME.ref;
   const own = ghMenus(), pub = mePublished();
-  const modeH = own ? `<div class="row meMode"><button data-me="mode-own" class="${ME.official ? '' : 'on'}">Your layout</button><button data-me="mode-off" class="${ME.official ? 'on' : ''}">Official map</button></div>
+  const modeH = own ? `<div class="row meMode"><button data-me="mode-own" class="${ME.official ? '' : 'on'}">Your maps</button><button data-me="mode-off" class="${ME.official ? 'on' : ''}">Official map</button></div>
     ${ME.official ? `<p class="note"><b>Editing the official ${esc(world.title || MAP_ID)}</b>: what every pilot flies. Your changes are a draft until you publish.${pub && pub.at ? ` Last published ${esc(new Date(pub.at).toLocaleString())}.` : ' Not published yet.'}</p>
       <div class="row"><button data-me="publish" class="primary">Publish for everyone</button><button data-me="discard" class="ghost">Discard draft</button></div>${ME.pubMsg ? `<p class="note">${esc(ME.pubMsg)}</p>` : ''}` : ''}` : '';
-  el.innerHTML = `<h3>MAP EDITOR <small>${esc(world.title || MAP_ID)}</small></h3>${modeH}${selH}
-    <h4>Layout</h4><p class="note">${nMoved} moved · ${E.removed.length} removed · ${E.added.length} added${world.edits && world.edits.lost ? ` · <span class="bad">${world.edits.lost} no longer match the map</span>` : ''}. ${ME.official ? 'A draft, kept in this browser until you publish.' : 'Saved as you go, in this browser.'}</p>
+  const baseT = esc(world.baseTitle || MAP_ID), mine = MY_MAPS.filter(m => m.base === MAP_ID && m !== MY_MAP);
+  const ownH = ME.official ? '' : ME.locked ? `<div class="meLocked"><p>${COMM_MAP ? `<b>${esc(COMM_MAP.name)}</b> is ${esc(COMM_MAP.by)}'s map, built on ${baseT}. It can't be changed here, but you can make your own map from it (it starts as a copy).` : `<b>${baseT} is an official map.</b> Players can't change it. Make your own map from it: it is listed with ${baseT} in Maps, and the original stays as it is.`}</p>
+      <label>Name <input id="meNewName" maxlength="40" value="${esc(COMM_MAP ? COMM_MAP.name : world.baseTitle || MAP_ID)} remix"></label><div class="row"><button data-me="newmap" class="primary">Make my own map</button><button data-me="pastecode">Paste a map code</button></div>
+      ${mine.length ? `<p class="note">Your maps from ${baseT}: ${mine.map(m => `<b>${esc(m.name)}</b>`).join(', ')}. Pick one in Maps (main menu) to fly or edit it.</p>` : ''}</div>`
+    : `<p class="note"><b>${esc(MY_MAP.name)}</b> · your map, based on ${baseT}. Saved as you go, in this browser.</p><div class="row"><button data-me="sharemap" class="primary" title="List it with ${baseT} in Maps for every pilot, with your pilot name">${MY_MAP.shared ? 'Share the update' : 'Share with the community'}</button><button data-me="renamemap">Rename</button></div><div class="row"><button data-me="delmap" class="ghost">Delete map</button><button data-me="officialmap" class="ghost">Back to the official map</button></div>${MY_MAP.shared ? `<p class="note">Shared ${esc(new Date(MY_MAP.shared).toLocaleString())}. Changes since then stay yours until you share the update.</p>` : ''}`;
+  el.innerHTML = `<h3>MAP EDITOR <small>${esc(world.title || MAP_ID)}</small></h3>${modeH}${ownH}${ME.locked ? '' : selH}
+    <h4>Layout</h4><p class="note">${nMoved} moved · ${E.removed.length} removed · ${E.added.length} added${world.edits && world.edits.lost ? ` · <span class="bad">${world.edits.lost} no longer match the map</span>` : ''}. ${ME.official ? 'A draft, kept in this browser until you publish.' : ME.locked ? 'The official layout.' : 'Saved as you go, in this browser.'}</p>
     <div class="row"><button data-me="copycode" title="The whole layout as one line of text to paste anywhere">Copy map code</button><button data-me="pastecode" title="Load a layout someone shared as a map code">Paste map code</button></div>
     <div class="row"><button data-me="export">Export</button><button data-me="import">Import…</button><button data-me="resetall" class="ghost">Reset map</button></div>
     <h4>Reference image</h4><p class="note">Lay a photo or satellite view on the ground and place trees over it. It stays on this computer and goes away when you leave.</p>
@@ -184,6 +222,7 @@ canvas.addEventListener('mousedown', e => {
   if (mode !== 'mapedit') return; e.preventDefault();
   if (e.button === 2 || e.button === 1) { ME.drag = { kind: e.button === 1 || e.shiftKey ? 'pan' : 'orbit', x: e.clientX, y: e.clientY }; return; }
   if (e.button !== 0) return;
+  if (ME.locked) { meLockedHint(); return; }
   if (ME.place) { const f = meFloor(e); if (!f) return; mePush(); const v = ME.vary;
     ME.E.added.push({ asset: ME.place, x: +f.x.toFixed(2), y: 0, z: +f.z.toFixed(2), ry: v ? Math.round(Math.random() * 360) : Math.round(((ME.cam.yaw * 180 / Math.PI) % 360 + 360) % 360), s: v ? +(0.85 + Math.random() * 0.3).toFixed(2) : 1 });
     if (!e.shiftKey) { ME.place = null; meLibrary(); } meCommit(); ME.sel = new Set(['add:' + (ME.E.added.length - 1)]); meSelBox(); mePanels(); return; }
@@ -221,6 +260,7 @@ addEventListener('keydown', e => {
   if (mode !== 'mapedit' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; ME.keys = ME.keys || {};
   if (/^Key[WASD]$/.test(e.code)) ME.keys[e.code] = true;
   const ctrl = e.ctrlKey || e.metaKey;
+  if (ME.locked && !/^Key[WASDFT]$/.test(e.code) && e.code !== 'Escape' && !/^(Shift|Alt|Control|Meta)/.test(e.code)) return;   // an official map: the view moves, nothing else
   if (ctrl && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) meRedo(); else meUndo(); return; } if (ctrl && e.code === 'KeyY') { e.preventDefault(); meRedo(); return; }
   if (e.code === 'Escape') { if (ME.place) { ME.place = null; meLibrary(); meToolbar(); } else { ME.sel.clear(); meSelBox(); mePanels(); } return; }
   if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); meDelete(); return; }
@@ -231,13 +271,19 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { if (ME.keys) ME.keys[e.code] = false; });
 document.addEventListener('click', e => {
   if (mode !== 'mapedit') { const b = e.target.closest('[data-act="mapedit"]'); if (b) { const job = mode === 'paused' ? telCapture('mapedit') : null; if (job) procFlight(job, openMapEditor); else openMapEditor(); } return; }
-  const a = e.target.closest('[data-measset]'); if (a) { ME.place = ME.place === a.dataset.measset ? null : a.dataset.measset; ME.sel.clear(); meSelBox(); meLibrary(); mePanels(); return; }
+  const a = e.target.closest('[data-measset]'); if (a && ME.locked) { meLockedHint(); return; } if (a) { ME.place = ME.place === a.dataset.measset ? null : a.dataset.measset; ME.sel.clear(); meSelBox(); meLibrary(); mePanels(); return; }
   const t = e.target.closest('[data-metool]'); if (t) { ME.tool = t.dataset.metool; ME.place = null; meLibrary(); meToolbar(); return; }
   const b = e.target.closest('[data-me]'); if (!b) return; const k = b.dataset.me;
+  if (k === 'newmap') { meNewMap(($('#meNewName') || {}).value, COMM_MAP ? COMM_MAP.E : null); return; }   /* a community map is a template too */
+  if (k === 'sharemap') { meShareMap(); return; }
+  if (k === 'officialmap') { meLeaveMyMap(); return; }
+  if (k === 'renamemap' && MY_MAP) { const n = prompt('Name of your map:', MY_MAP.name); if (n && n.trim()) { MY_MAP.name = n.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40); store.set('myMaps', MY_MAPS); world.title = MY_MAP.name; mePanels(); } return; }
+  if (k === 'delmap' && MY_MAP && confirm(`Delete your map "${MY_MAP.name}"? This can't be undone (copy its map code first to keep it).`)) { const i = MY_MAPS.indexOf(MY_MAP); if (i >= 0) MY_MAPS.splice(i, 1); store.set('myMaps', MY_MAPS); meLeaveMyMap(); return; }
+  if (ME.locked && /^(undo|redo|del|dup|reset1|resetall)$/.test(k)) { meLockedHint(); return; }
   if (k === 'undo') meUndo(); if (k === 'redo') meRedo(); if (k === 'top') ME.cam.pitch = 1.55; if (k === 'del') meDelete(); if (k === 'dup') meDuplicate();
   if (k === 'reset1') { const p = mePiece([...ME.sel][0]); if (p) { mePush(); delete ME.E.moved[p.key]; meCommit(); } }
   if (k === 'resetall' && confirm('Put every piece of this map back where it was and remove everything you added?')) { mePush(); ME.E = meEmpty(); ME.sel.clear(); meCommit(); }
-  if (k === 'export') saveFile(`layout-${MAP_ID}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify(ME.E, null, 1));
+  if (k === 'export') saveFile(`layout-${MAP_ID}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify({ ...ME.E, name: !ME.official && MY_MAP ? MY_MAP.name : undefined }, null, 1));
   if (k === 'copycode') meCopyCode(); if (k === 'pastecode') mePasteCode();
   if (k === 'import') $('#meFile').click(); if (k === 'refload') $('#meRefFile').click();
   if (k === 'fly') closeMapEditor('fly'); if (k === 'done') closeMapEditor();
@@ -252,7 +298,7 @@ document.addEventListener('change', e => {
     if (f === 'turn °') meApply(p, new THREE.Vector3(), v - xf.ry, 1); if (f === 'scale' && v > 0) meApply(p, new THREE.Vector3(), 0, v / xf.s); meCommit(); }
   if (t.id === 'meFile' && t.files[0]) { t.files[0].text().then(txt => { let j; try { j = JSON.parse(txt); } catch { flash('<b>NOT A LAYOUT FILE</b>', 'near'); return; }
     if (!j || j.format !== 'pro-whooper-mapedit/1') { flash('<b>NOT A LAYOUT FILE</b><small>expected pro-whooper-mapedit/1</small>', 'near'); return; }
-    if (j.map && j.map !== MAP_ID) flash(`<b>MADE FOR ANOTHER MAP</b><small>${esc(String(j.map))}: pieces that don't match are skipped</small>`, 'near'); mePush(); ME.E = meClean(j); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); }); t.value = ''; }
+    if (j.map && j.map !== MAP_ID) flash(`<b>MADE FOR ANOTHER MAP</b><small>${esc(String(j.map))}: pieces that don't match are skipped</small>`, 'near'); if (ME.locked) { meNewMap(j.name || 'Imported ' + (world.baseTitle || MAP_ID), j); return; } mePush(); ME.E = meClean(j); ME.E.map = MAP_ID; ME.sel.clear(); meCommit(); }); t.value = ''; }
   if (t.id === 'meRefFile' && t.files[0]) { meRefLoad(t.files[0]); t.value = ''; }
   if (t.id === 'meRefOn' && ME.ref) ME.ref.mesh.visible = t.checked;
   if (t.dataset.meref && ME.ref) { const R = ME.ref, v = +t.value; if (!Number.isFinite(v)) return; const k = t.dataset.meref; if (k === 'width m') R.w = Math.max(1, v); if (k === 'x') R.x = v; if (k === 'z') R.z = v; if (k === 'turn °') R.r = v; if (k === 'opacity') R.o = Math.max(0.05, Math.min(1, v)); meRefPlace(); }

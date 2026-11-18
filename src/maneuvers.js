@@ -115,13 +115,17 @@
   }
   function barani(world, r, o = {}) {
     const F = frame(world, o.object || pick(r, OVER), r), G = loopGeo(F, r), v = range(r, 3, 6), wob = wobble(r, o.wobble ?? range(r, 0, 25));
-    const wmin = range(r, 90, 180), wmax = range(r, 220, 320), yT = range(r, 0.35, 0.6), b0 = G.at(0);
-    const top = { T: yT, f: t => ({ pos: G.at(P + 0.1 * t / yT), q: qmul(G.face, qmul(pitchQ(P + 0.1 * t / yT), yawQ(P * t / yT))) }) };
-    const s2 = sweep(P + 0.1, 2 * P, wmin, wmax), base = qmul(G.face, qmul(pitchQ(P + 0.1), yawQ(P)));
-    const down = { T: s2.T, f: t => { const th = s2.at(t), u = (th - P - 0.1) / (P - 0.1); return { pos: G.at(th), q: qmul(base, pitchQ(-P * u)) }; } };
+    // Forward momentum all the way (pilot, 2026-11-17: "there should always be forward momentum with a barani"; the
+    // Tricktionary GIF keeps moving with the camera tracking the object): the inverted yaw 180 happens WHILE the quad keeps
+    // travelling over the top of the loop at the loop's own pace (a = half the arc it yaws across), never hanging still.
+    const wmin = range(r, 90, 180), wmax = range(r, 220, 320), a = range(r, 0.3, 0.55), b0 = G.at(0);
+    const sy = sweep(P - a, P + a, wmin, wmax), yT = sy.T;
+    const top = { T: yT, f: t => { const th = sy.at(t), u = (th - (P - a)) / (2 * a), e = u * u * (3 - 2 * u); return { pos: G.at(th), q: qmul(G.face, qmul(pitchQ(th), yawQ(P * e))) }; } };
+    const s2 = sweep(P + a, 2 * P, wmin, wmax), base = qmul(G.face, qmul(pitchQ(P + a), yawQ(P)));
+    const down = { T: s2.T, f: t => { const th = s2.at(t), u = (th - P - a) / (P - a); return { pos: G.at(th), q: qmul(base, pitchQ(-P * u)) }; } };
     const qEnd = qmul(base, pitchQ(-P));
-    const c = chain([line(sub(b0, mul(G.h, v)), mul(G.h, v), 1.0, G.face), arc(G, 0, P, wmin, wmax, th => pitchQ(th)), top, down, line(G.at(2 * P), mul(G.h, 3), 1.0, qEnd), hold(add(G.at(2 * P), mul(G.h, 3)), qEnd, 1.5)]);
-    return { T: c.T, object: F.name, params: { speed: +v.toFixed(1), yaw: +yT.toFixed(2) }, at: t => { const s = c.at(t); return { pos: s.pos, q: qmul(s.q, wob(t)) }; } };
+    const c = chain([line(sub(b0, mul(G.h, v)), mul(G.h, v), 1.0, G.face), arc(G, 0, P - a, wmin, wmax, th => pitchQ(th)), top, down, line(G.at(2 * P), mul(G.h, 3), 1.0, qEnd), hold(add(G.at(2 * P), mul(G.h, 3)), qEnd, 1.5)]);
+    return { T: c.T, object: F.name, params: { speed: +v.toFixed(1), yaw: +yT.toFixed(2), yawArc: Math.round(2 * a / D) }, at: t => { const s = c.at(t); return { pos: s.pos, q: qmul(s.q, wob(t)) }; } };
   }
   // maverick: stays upright and forward-looking (nose up climbing, level over the top flying backward, nose down after)
   function maverick(rollAtTop) {

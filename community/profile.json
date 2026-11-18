@@ -1,21 +1,25 @@
 {
  "format": "pro-whooper-community/1",
- "updated": "2026-11-17",
+ "updated": "2026-11-18",
  "learn": {
   "tol": 0,
   "rev": 0,
   "crossBack": 0
  },
- "floor": {},
+ "floor": {
+  "Eject Roll": 0.5
+ },
  "stats": {
-  "flights": 22,
-  "pilots": 3,
-  "labellers": 1,
-  "evidence": 68,
+  "flights": 80,
+  "pilots": 7,
+  "labellers": 3,
+  "evidence": 153,
   "found": [
-   0.643,
-   0.643
+   0.569,
+   0.569
   ],
-  "changes": []
+  "changes": [
+   "Eject Roll needs 50% Watcher confidence (drops 3 rejected calls, 1 unreviewed)"
+  ]
  }
 }

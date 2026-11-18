@@ -243,6 +243,7 @@ body.meOn #music { display: none !important; }
 #meBar { position: absolute; left: 0; right: 0; top: 0; height: 40px; display: flex; gap: 6px; align-items: center; padding: 4px 10px; background: rgba(14,13,12,.92); border-bottom: 2px solid #0b0a09; }
 #meBar button { padding: 5px 10px; font-size: 12px; } #meBar .sep { width: 14px; } #meBar .mePlacing { margin-left: 12px; font: 12px var(--mono); color: var(--acid); }
 #meSide .meFields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; } #meSide .meFields label { display: flex; flex-direction: column; font: 11px var(--mono); } #meSide .meFields input { width: 100%; box-sizing: border-box; }
+#meSide .meLocked { border: 1px solid var(--acid); padding: 10px; margin: 8px 0 12px; background: rgba(214,255,60,.06); } #meSide .meLocked p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; } #meSide .meLocked input { width: 100%; box-sizing: border-box; margin: 4px 0 8px; }
 #meSide .meEnd { margin-top: 16px; } #meSide .meMode button.on { background: var(--acid); color: #111; } #meSide .bad { color: #ff7a5c; }
 #meHint { position: absolute; left: 210px; right: 300px; bottom: 0; height: 24px; padding: 4px 10px; font: 11px var(--mono); color: #cfc6b4; background: rgba(14,13,12,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #recapUI { position: absolute; inset: 0; pointer-events: none; } #recapUI > * { pointer-events: auto; }
@@ -325,6 +326,7 @@ body.rcWide #recapBar { right: 12px; }
 #fbModal h3 { margin: 0 0 8px; } #fbModal label { display: block; margin: 8px 0; font-size: 13px; } #fbModal select, #fbModal textarea, #fbModal input:not([type=checkbox]) { width: 100%; box-sizing: border-box; margin-top: 3px; font: 14px system-ui, sans-serif; padding: 5px; }
 #fbModal .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #fbModal button { padding: 5px 10px; font-size: 13px; } #fbModal .chk input { width: auto; }
 #fbToast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 3200; background: #15130f; color: #ffd34d; border: 2px solid #ffd34d; padding: 8px 16px; font: 14px system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .3s; } #fbToast.show { opacity: 1; }
+#mapList .commMaps { margin-top: 10px; text-align: left; max-height: 150px; overflow-y: auto; } #mapList .commMaps h5 { margin: 0 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--acid); } #mapList .commMaps ul { list-style: none; margin: 0; padding: 0; } #mapList .commMaps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.08); } #mapList .commMaps li b { flex: 0 1 auto; } #mapList .commMaps li small { flex: 1; opacity: .7; } #mapList .commMaps li button { padding: 2px 10px; font-size: 12px; } #mapList .commMaps li.cur { color: var(--acid); }
 </style>
 <!--THREE-->
 <script>

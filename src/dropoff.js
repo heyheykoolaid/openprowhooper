@@ -56,7 +56,7 @@ function procShow(title, sub, frac) {
 }
 function procCreep(to, ms) { clearInterval(proc.timer); const f0 = proc.frac, t0 = performance.now(); proc.timer = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ms); proc.frac = f0 + (to - f0) * (1 - Math.pow(1 - k, 2)); const b = document.querySelector('#procModal .procBar i'); if (b) b.style.width = Math.round(proc.frac * 100) + '%'; if (k >= 1) clearInterval(proc.timer); }, 60); }
 function procHide() { clearInterval(proc.timer); proc.on = false; proc.frac = 0; $('#procModal').classList.add('hide'); }
-const procThanks = () => `Thank you${pilotName() ? ', ' + pilotName() : ''}!`;
+const procThanks = () => `Thanks for your submission and helping Open Pro Whooper${pilotName() ? ', ' + pilotName() : ''}!`;
 const procWait = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('slow'), ms))]);
 // a finished flight on its way to the project: pause, show progress, thank the pilot, then carry on with `after`
 async function procFlight(job, after) {
@@ -234,7 +234,7 @@ const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbr
 function lbResultsBox() {
   const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
   const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
-  const can = lbBase() && L.total > 0, why = !lbBase() ? 'The leaderboard needs the online version of the game.' : MAP_EDITS ? 'This run was flown on your own layout of the map (Map Editor). The daily board is for the standard maps: reset the layout to post.' : L.total <= 0 ? 'Score something to post a run.' : !lbNameOk(name) ? 'Leaderboard names use letters, numbers, spaces and _ . - (2 to 24). Change yours in Options.' : '';
+  const can = lbBase() && L.total > 0, why = !lbBase() ? 'The leaderboard needs the online version of the game.' : MAP_EDITS ? 'This run was flown on a community map. The daily board is for the official maps: pick the official one in Maps to post.' : L.total <= 0 ? 'Score something to post a run.' : !lbNameOk(name) ? 'Leaderboard names use letters, numbers, spaces and _ . - (2 to 24). Change yours in Options.' : '';
   el.innerHTML = `<h3>TODAY'S LEADERBOARD <small>${esc(lbMapTitle(L.map))} · resets 00:00 UTC</small></h3>
     ${runs.length ? `<table class="lbT">${lbRows(runs, 5, name)}</table>` : `<p class="note">${esc(LB.msg || 'No runs posted on this map yet today. Yours could be first.')}</p>`}
     <div class="row">${done ? `<span class="note">✓ ${esc(done)}</span>` : can && !why ? `<button data-lb="post" class="primary">Post this run as ${esc(name)}</button>` : ''}<button data-lb="open">Full leaderboard</button></div>
@@ -272,7 +272,7 @@ function lbRunHtml(R) {
   const p = R.run, T = p.totals || {}, sheet = Array.isArray(p.sheet) ? p.sheet.slice(0, 400) : [], canWatch = p.trace && p.map === MAP_ID && !MAP_EDITS, num = v => Number.isFinite(+v) ? (+v).toLocaleString() : '—';
   return `<h3>${esc(p.name)} · ${num(p.score)}</h3>
     <p class="note">${esc(lbMapTitle(p.map))}${T.trick != null ? ` · trick score ${num(T.trick)} × switch ${esc(T.switchMult)} + K.W.A.D. ${num(T.kwad)}` : ''}${T.streak != null ? ` · max streak ×${esc(T.streak)}` : ''}${T.obstacles != null ? ` · obstacles ${esc(T.obstacles)}` : ''}</p>
-    <div class="row">${canWatch ? '<button data-lb="watch" class="primary">▶ Watch the run</button>' : `<span class="note">${p.trace && p.map === MAP_ID && MAP_EDITS ? 'Your own layout of this map is loaded (Map Editor): reset it to watch runs on the standard map.' : p.trace ? 'Flown on ' + esc(lbMapTitle(p.map)) + ': switch to that map (Maps) to watch it.' : 'No replay was posted with this run.'}</span>`}</div>
+    <div class="row">${canWatch ? '<button data-lb="watch" class="primary">▶ Watch the run</button>' : `<span class="note">${p.trace && p.map === MAP_ID && MAP_EDITS ? 'A community map is loaded: pick the official map in Maps to watch runs.' : p.trace ? 'Flown on ' + esc(lbMapTitle(p.map)) + ': switch to that map (Maps) to watch it.' : 'No replay was posted with this run.'}</span>`}</div>
     <ol class="lbSheet">${sheet.map(x => `<li>${esc(x.name)}${x.obstacle ? ' <small>' + esc(x.obstacle) + '</small>' : ''} <span class="${/^[A-Z]+$/.test(x.exec) ? x.exec : ''}">${esc(x.exec)}</span> +${num(x.net)}</li>`).join('') || '<li>no scoring sheet</li>'}</ol>`;
 }
 async function lbPick(id) {
@@ -293,7 +293,7 @@ function guestOpen(rows, events, of, review) {
   openRecap(of.source); recap.review = !!review; renderRecap();
 }
 async function reviewerSave() {
-  const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); recap.dirty = false; if (!L.length || !of.flight) return;
+  const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); if (!L.length || !of.flight) { flash('<b>NOTHING TO SEND YET</b><small>give a call ✓, ✗ or "it was…" first</small>', 'near'); return; } recap.dirty = false;
   const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a leaderboard run is a vote (tools/community.js counts it once a second pilot agrees); the owner's Judge-the-community and Flight desk verdicts are reviewer labels
   procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
   const stamp = `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}`;
@@ -348,7 +348,7 @@ function judgeClip(i) {
 async function lbPlay(id, map) {
   if (!/^[A-Za-z0-9_-]{10,140}$/.test(id) || !S.MAPS[map]) return; const day = LB.day || lbToday();
   if (map !== MAP_ID || MAP_EDITS) {
-    const q = map !== MAP_ID ? `Watching this run will change your map to ${S.MAPS[map].title}. Is that okay?` : 'Watching this run uses the standard map, so your own layout (Map Editor) is switched off until the next reload. It is kept. Is that okay?';
+    const q = map !== MAP_ID ? `Watching this run will change your map to ${S.MAPS[map].title}. Is that okay?` : 'Watching this run uses the official map, so the community map you are on is switched off until the next reload. Is that okay?';
     if (!confirm(q)) return; store.set('lbPending', { id, day, map }); if (map !== MAP_ID) store.set('map', map); else store.set('layoutOffOnce', true);
     procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); }); return; }
   LB.view = map; await lbPick(id); await lbWatch();

@@ -63,5 +63,16 @@
     check('a video review is stored under telemetry/inbox/video/, without the file name', r.status === 200 && calls.length === n0 + 1 && /telemetry\/inbox\/video\//.test(calls[calls.length - 1].url) && !('file' in st) && st.frames.length === 40);
     r = await post({ kind: 'video', payload: vid({ frames: [[0, 'x', 0, 0]] }) }, { ip: '7.7.8.2' }); check('frames that are not numbers are refused', r.status === 400);
     r = await post({ kind: 'video', payload: vid({ frames: Array.from({ length: 6001 }, () => [0, 0, 0, 0]) }) }, { ip: '7.7.8.3' }); check('an over-long clip is refused', r.status === 400); }
+  { // community maps: a pilot's own map, shared by their click, listed and read back through the relay only
+    const { mapsFrom } = await import('../tools/dropoff-worker.mjs');
+    const mp = (x = {}) => ({ format: 'pro-whooper-map/1', name: "Rod's park", by: 'RodFPV', pilot: 'abc1234', base: 'moose', moved: { 'Cedar@1,2': { dx: 1, dy: 0, dz: 0, ry: 5, s: 1 } }, removed: ['Bench@3,4'], added: [{ asset: 'Pole', x: 1, y: 0, z: 2 }], ...x });
+    const n0 = calls.length; let r = await post({ kind: 'map', payload: mp() }, { ip: '8.8.1.1' }); const last = calls[calls.length - 1];
+    check('a shared map is filed under maps/community/<base>/ by the relay', r.status === 200 && calls.length === n0 + 1 && /contents\/maps\/community\/moose\/\d+\.abc1234\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.json$/.test(last.url), last.url.split('contents/')[1]);
+    r = await post({ kind: 'map', payload: mp({ moved: { a: { dx: 1, evil: 1, b: 2, c: 3, d: 4, e: 5 } } }) }, { ip: '8.8.1.3' }); check('a moved piece with extra fields is refused', r.status === 400);
+    r = await post({ kind: 'map', payload: mp({ name: '<img onerror=x>' }) }, { ip: '8.8.1.4' }); check('a map name with markup is refused', r.status === 400);
+    r = await post({ kind: 'map', payload: mp({ base: '../../src' }) }, { ip: '8.8.1.5' }); check('a base outside the maps is refused', r.status === 400);
+    const L = mapsFrom(['1794972722171.abc1234.Um9kJ3MgcGFyaw.Um9kRlBW.json', '1794972000000.abc1234.Um9kJ3MgcGFyaw.Um9kRlBW.json', 'junk.json']);
+    check('the list shows each pilot\'s map once (newest), with its name and maker', L.length === 1 && L[0].name === "Rod's park" && L[0].by === 'RodFPV' && L[0].at === 1794972722171);
+    r = await handle(new Request('https://drop/map?base=moose&id=../../secrets', { headers: { Origin: GAME } }), env(), gh); check('reading a map needs a map file name', r.status === 400); }
   console.log(`\n${ok}/${n} drop-off checks`); process.exitCode = ok === n ? 0 : 1;
 })();

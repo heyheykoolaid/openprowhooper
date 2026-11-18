@@ -38,6 +38,7 @@ addEventListener('keydown', e => {
 const recapItems = () => [...recap.events.map((e, i) => ({ kind: 'call', i, t: e.t, e })).filter(x => !x.e.hidden), ...recap.flags.map((f, i) => ({ kind: 'miss', i, t: f.t, f })).filter(x => !x.f.hidden)]
   .sort((a, b) => { const pa = a.kind === 'miss' || a.e.flag || a.e.maybe ? 0 : a.e.conf != null && a.e.conf < 0.7 ? 1 : 2, pb = b.kind === 'miss' || b.e.flag || b.e.maybe ? 0 : b.e.conf != null && b.e.conf < 0.7 ? 1 : 2; return pa - pb || a.t - b.t; });
 function openRecap(from) {
+  if (!$('#judgeBox').classList.contains('hide')) stopJudge();   /* Judge the Bot's panel never stays over a review */
   if (recap.trace.length < TRACE_HZ) { flash('<b>NOTHING TO REPLAY YET</b><small>fly first</small>', 'near'); return; }
   recap.back = from || 'pause'; mode = 'recap'; drone.armed = false; show(null); $('#hud').classList.add('hide'); $('#recapUI').classList.remove('hide'); document.body.classList.add('bbr');
   recap.saved = { pos: drone.pos, q: drone.q, vel: drone.vel }; recapClipsReset(); recap.rec = null; recap.review = !recap.guest && store.get('recapReview', true);
@@ -198,8 +199,8 @@ function renderRecap() {
       return `<div class="rvItem ${cls} ${on ? 'on' : ''} ${pk} ${gr}" data-rvkey="${it.kind + it.i}"><span class="t">${fmtT(recapSpanOf(it)[0] - T0)}</span>${gTag}<b>${e.name}</b> <small>${e.exec}${e.obstacle ? ' · ' + e.obstacle : ''}${e.flag ? ' · <span style="color:#ff8b7d">you flagged this</span>' : e.maybe ? ' · <span style="color:#7fd0f2">maybe: the trick library\'s guess, not scored</span>' : unsure ? ' · <span style="color:#ffd34d">the game wasn\'t sure</span>' : ''}</small>
         <div class="row"><button data-rc="yes" data-i="${it.i}" title="It was this trick">✓</button><button data-rc="go" data-k="call" data-i="${it.i}" title="Play it">▶</button>${recapCallSelect(it.i, e, names)}${recapExecBtns(it.i, e)}${thenB}</div></div>`; }).join('')}
     <div class="row"><button data-rc="allyes" class="ghost" title="Mark every call you haven't judged as correct">✓ The rest were right</button>${recapHiddenN() ? `<button data-rc="restore" class="ghost" title="Put every deleted trick back on the timeline">↩ Bring back deleted (${recapHiddenN()})</button>` : ''}</div>
-    <div class="row"><button data-rc="export" class="ghost">Export</button>${ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
-    <p class="note" id="recapMsg">${ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
+    <div class="row"><button data-rc="export" class="ghost">Export</button>${recap.guest ? '<button data-rc="upload" class="ghost" title="Send your verdicts on this run to the project">↑ Upload</button>' : ghMenus() ? '<button data-rc="upload" class="ghost">↑ Upload</button>' : ''}<button data-rc="close" class="primary">Done</button></div>
+    <p class="note" id="recapMsg">${recap.guest ? 'Your verdicts on this run go to the project when you press ↑ Upload or Done.' : ghMenus() ? (gh.enabled && gh.token ? 'Labels upload when you press Done.' : 'Uploads are off (Options) — labels are kept in this browser; Export saves a file.') : (tel.on ? 'Your answers are shared with the project along with the flight when you press Done.' : 'Your answers are kept in this browser; Export saves a file. Turn on sharing in Options to send them.')}</p>
     <p class="note"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 1 s · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>[</kbd><kbd>]</kbd> trick · <kbd>A</kbd> add at the red line · <kbd>T</kbd> then… (combo) · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Del</kbd> remove · <kbd>L</kbd> loop · <kbd>C</kbd> camera · <kbd>S</kbd> split into clips · <kbd>I</kbd><kbd>O</kbd> trim clip</p>`;
   renderRecapBar();
   { const on = el.querySelector('.rvItem.on'), k = recap.play && recap.play.key; if (on && recap.listKey !== k) { recap.listKey = k; on.scrollIntoView({ block: 'nearest' }); } }   // the picked trick stays in sight
@@ -339,6 +340,7 @@ document.addEventListener('click', e => {
     if (a === 'delmiss') { recapRemove({ kind: 'miss', i, f: recap.flags[i] }); }
     if (a === 'allyes') { for (const ev of recap.events) if (!ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
     if (a === 'export') saveFile(`run-review-${recap.id}.json`, JSON.stringify(recapPayload()));
+    if (a === 'upload' && recap.guest) { reviewerSave(); return; }
     if (a === 'upload') { recapSave(true); if (!(gh.enabled && gh.token)) { closeRecap(); openOptions(); return; } }
     if (a === 'close') { closeRecap(); return; }
     if (p) {
