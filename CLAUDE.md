@@ -659,8 +659,10 @@ pylons (poles) with a ring truss at 11 m and four chain-hung gates, the Altar wi
 link, foam junk, candy and tires soft (duct bounce), rebar, car frames, fridges and the cab hard (crash over 5 m/s), oil
 slicks slippery, sand dead, scrap plates bouncy. Two dust devils (`world.fields`, kind 'swirl' in `Drone.step`: shoves you
 round and up). worldview.js `duskMats` (rust, scrap, plate, cracked concrete, oil carpet, dirt, candy, fire, emergency,
-light shafts, dust devil, neon signs from canvas text, the flag), `duskBackdrop` (bruised orange-purple sky, a big low sun,
-far ridges and wrecked towers, hemisphere + a purple bounce light, dusty fog, drifting dust), `duskTick` (fire flicker,
+dust devil, neon signs from canvas text, the flag), `duskBackdrop` (bruised orange-purple sky, a big low sun,
+far ridges and wrecked towers, hemisphere + a purple bounce light, dusty fog, drifting dust, and the **searchlights**: 7
+solid bases (5 in the dome under the open roof, 2 outside) from `world.searchlights`, each with a drum, a glowing lens and
+a beam fading up into the sky, drawn by worldview.js), `duskTick` (sweeps the searchlights, fire flicker,
 neon short-circuits, emergency blink, oil sheen, dust). The start flag is the Dirtbag FPV logo (`assets/flags/dirtbag.webp`,
 `window.PW_FLAGS`, added at the pilot's request for this game only; a plain skull until it loads). A vis shape `sign` (a
 flat textured plane) is new in `visMesh`. 13 real lights (Map lights Auto drops to Few on slow machines). Not in (static

@@ -490,6 +490,16 @@ function duskBackdrop() {
   const sh = sun.shadow.camera, R = 62; sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; sh.near = 1; sh.far = 220; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; playRoot.add(sun); playRoot.add(sun.target);
   const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), MAT.dirt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10; const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 50, guv.getY(i) * 50); playRoot.add(gnd);
   scene.fog = new THREE.Fog(0x5a3a32, 30, 190);
+  // searchlights: a drum and a glowing lens on each base, and a long beam fading upward, swept slowly by duskTick
+  { const [c, g] = cnv(8, 256), gr = g.createLinearGradient(0, 256, 0, 0); gr.addColorStop(0, 'rgba(255,240,210,1)'); gr.addColorStop(0.25, 'rgba(255,214,160,0.55)'); gr.addColorStop(1, 'rgba(255,190,140,0)'); g.fillStyle = gr; g.fillRect(0, 0, 8, 256);
+    const bt = new THREE.CanvasTexture(c), beamM = new THREE.MeshBasicMaterial({ map: bt, color: 0xffe0b0, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false });
+    const L = 140, beamG = new THREE.CylinderGeometry(5.5, 0.38, L, 28, 1, true).translate(0, L / 2, 0), coreG = new THREE.CylinderGeometry(1.6, 0.22, L * 0.7, 16, 1, true).translate(0, L * 0.35, 0);
+    const drumM = MAT.scrap, lensM = new THREE.MeshBasicMaterial({ color: 0xfff2d8, toneMapped: false });
+    DUSK.lights = (world.searchlights || []).map(s => { const yawG = new THREE.Group(), tilt = new THREE.Group(); yawG.position.set(s.at.x, s.at.y, s.at.z); yawG.add(tilt); tilt.rotation.x = (90 - s.el) * Math.PI / 180;
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.5, 0.9, 18), drumM); drum.castShadow = true; tilt.add(drum);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), lensM); lens.rotation.x = -Math.PI / 2; lens.position.y = 0.46; lens.layers.enable(1); tilt.add(lens);
+      const beam = new THREE.Mesh(beamG, beamM), core = new THREE.Mesh(coreG, beamM); beam.position.y = core.position.y = 0.46; beam.frustumCulled = core.frustumCulled = false; tilt.add(beam, core);
+      playRoot.add(yawG); return { g: yawG, s }; }); }
   // dust hanging in the air (catches the light), drifting
   const N = 2600, pos = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 46; pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = rnd() * 16; pos[i * 3 + 2] = Math.sin(a) * r; }
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -500,6 +510,7 @@ function duskTick(dt) {
   if (MAT.fire) { MAT.fire.color.setRGB(1, 0.42 * f + 0.05, 0.1 * f); MAT.fireCore.color.setRGB(1, 0.75 * f + 0.1, 0.3 * f); }
   if (MAT.emergency) { const on = (Math.sin(t * 3.2) > -0.2) ? 1 : 0.25; MAT.emergency.color.setRGB(on, 0.08 * on, 0.06 * on); }
   for (const s of DUSK.flick) { const k = Math.sin(t * 0.7 + s.p * 3) > 0.94 ? (Math.random() < 0.5 ? 0.15 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a short-circuit now and then
+  for (const L of DUSK.lights || []) L.g.rotation.y = L.s.yaw + L.s.sweep * Math.sin(t * L.s.speed + L.s.phase);   // the searchlights sweep
   if (MAT.dustDevil && MAT.dustDevil.map) MAT.dustDevil.map.offset.set(t * 1.8, t * 0.3);
   if (MAT.oilSlick) MAT.oilSlick.color.setHSL((0.75 + 0.1 * Math.sin(t * 0.5)) % 1, 0.25, 0.04);
   if (DUSK.dust) { const a = DUSK.dust.geometry.attributes.position; for (let i = 0; i < a.count; i += 7) { let x = a.getX(i) + dt * 0.25, y = a.getY(i) + Math.sin(t + i) * dt * 0.05; if (x > 46) x = -46; a.setXY(i, x, y); } a.needsUpdate = true; }

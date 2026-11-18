@@ -18,6 +18,8 @@ VIEWS = {
 }
 EXTRA = {
     'md-high':     ('murderdome', [0, 40, 60], [0, 0, 0]),
+    'md-lights':   ('murderdome', [-14, 3, -20], [8, 9, 30]),
+    'md-lights2':  ('murderdome', [0, 2, 30], [10, 12, 42]),
     'md-start':    ('murderdome', [-9, 1.6, 33], [6, 1.2, 33]),
     'md-canyon':   ('murderdome', [24, 1.5, 27], [24, 1.2, 10]),
     'md-rig':      ('murderdome', [26, 3, -21], [8, 1.5, -24]),

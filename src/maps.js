@@ -1200,10 +1200,12 @@
       for (let k = 0; k < 16; k++) { const a = (k + 1) / 16 * Math.PI * 2; if (Math.sin(a) > -0.3) continue;
         for (const [ro, ri] of bands) { if (rnd() < 0.22) continue; const rm = (ro + ri) / 2, yo = ribY(ro), yi = ribY(ri), L = Math.hypot(ro - ri, yi - yo) / 2, wt = Math.PI * rm / 16 + 0.05;
           box(o, v3(Math.cos(a) * rm, (yo + yi) / 2, Math.sin(a) * rm), v3(wt, 0.1, L), 'rustRed', Math.PI / 2 - a, Math.atan2(yi - yo, ro - ri), 0, { noSurvey: true }); } } }
-    // light shafts through the broken roof (seen, never hit), lined up on the low sun
-    { const o = O('Dusk Light Shafts', 'deco'), d = (() => { const x = 0.86, y = -0.3, z = -0.42, l = Math.hypot(x, y, z); return v3(x / l, y / l, z / l); })();
-      for (const [x, z, w] of [[6, 4, 1.4], [11, -6, 0.9], [15, 9, 1.6], [-1, 12, 1.1], [19, 19, 1.3], [4, 24, 1.0], [24, -1, 0.8], [-8, 2, 1.2]]) { const L = 24, c = v3(x - d.x * L, -d.y * L, z - d.z * L);
-        box(o, c, v3(w, w * 0.6, L), 'shaft', Math.atan2(-d.x, -d.z), Math.asin(-d.y), 0, { noCollide: true, alpha: true }); } }
+    // searchlights on the ground throwing beams up through the caved-in roof into the dusk (owner, 2026-11-18): the base is
+    // solid, the drum, lens and beam are drawn and swept by worldview.js (duskBackdrop / duskTick: world.searchlights)
+    const searchlights = [];
+    [[-2, 39.5, 0.3, 64], [13, 39, -0.5, 70], [31, 21, -1.9, 66], [36, 4, -2.3, 72], [-9, 13, 2.6, 60], [-26, 54, 0.7, 58], [44, 46, -0.9, 62]].forEach(([x, z, yaw, el], i) => {
+      const o = O('Searchlight', 'deco'); box(o, v3(x, 0.22, z), v3(0.42, 0.22, 0.42), 'rustRed'); for (const s of [-1, 1]) box(o, v3(x + s * 0.36, 0.72, z), v3(0.05, 0.3, 0.12), 'scrap', yaw);
+      searchlights.push({ at: v3(x, 0.95, z), yaw, el, sweep: 0.35 + (i % 3) * 0.12, speed: 0.12 + (i % 4) * 0.035, phase: i * 1.7 }); });
 
     // ---- 1 Blood Oath: the bus-chassis gantry, the skull flag, the dusty straight between burning barrels (flown east)
     { const GX = -4, z0 = 29.4, z1 = 36.6, o = O('Blood Oath Gantry', 'overunder'); for (const z of [z0 - 0.3, z1 + 0.3]) box(o, v3(GX, 1.6, z), v3(0.5, 1.6, 0.3), 'busYellow');
@@ -1333,7 +1335,7 @@
     for (let x = -28; x <= -14; x += 3.5) for (const z of [29.2, 36.8]) barrel(x, z, false);
     zones.push({ shape: 'zone', mat: 'crackedConcrete', c: v3(0, 0.004, 0), h: v3(RW, 0, RW) });
     zones.unshift(zones.pop());   // the cracked floor first, the patches on top of it
-    return K.done({ id: 'murderdome', title: 'The Murderdome', theme: 'dusk', zones, fields, spawn: { pos: v3(-7, 0.03, 33), yaw: -Math.PI / 2 }, bounds: { x: [-RW - 1, RW + 1], z: [-RW - 1, RW + 1] } });
+    return K.done({ id: 'murderdome', title: 'The Murderdome', theme: 'dusk', zones, fields, searchlights, spawn: { pos: v3(-7, 0.03, 33), yaw: -Math.PI / 2 }, bounds: { x: [-RW - 1, RW + 1], z: [-RW - 1, RW + 1] } });
   }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet neighbourhood park in Arrow Heights, Revelstoke: groves of tall cedar and hemlock with grassy lanes between them, a weathered swing set and small play unit, picnic tables in the shade, a half-buried tire tunnel among the birch, and the Selkirks beyond the rooftops.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },
