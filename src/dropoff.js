@@ -306,43 +306,65 @@ async function reviewerSave() {
 // the game is unsure or now calls something different from what it called then. Anyone can judge them; the verdicts go
 // out as reviewer labels (only the owner, heyheykoolaid, sees this mode).
 // The pilot's own runs are left out. Re-flying a run takes a few seconds, so it happens here in the menu, never in flight.
-const JG = { clips: null, msg: '', done: store.get('judgeDone', {}) };
+// The moments are listed per map in a carousel like the board's (JG.view; arrows, dots, ← →). Each map's runs are re-flown
+// on that map's official layout (built here when it is not the one loaded); watching a moment needs its own scenery, so
+// one on another map asks, reloads into it and opens there (store 'judgePending'), like the board's ▶.
+const JG = { byMap: {}, msgs: {}, view: null, busy: false, done: store.get('judgeDone', {}), worlds: {} };
 const jgKey = c => `${c.id}@${c.t.toFixed(1)}`;
-function judgeOpen() { if (!ghMenus()) return; show('#judgeScreen'); judgeRender(); if (!JG.clips) judgeLoad(); }
-async function judgeLoad() {
-  if (!lbBase()) { JG.msg = 'Judging needs the online version of the game.'; judgeRender(); return; }
-  JG.msg = 'Finding moments to judge…'; judgeRender(); await lbLoad(lbToday());
-  const me = telPilot(), myName = pilotName().toLowerCase(), runs = (LB.runs || []).filter(e => e.map === MAP_ID && e.id && String(e.name).toLowerCase() !== myName).slice(0, 8), clips = [];
-  if (runs.length) procShow('Finding moments to judge…', "Re-flying today's posted runs through the current trick detector", 0.03);
+function judgeOpen() { if (!ghMenus()) return; show('#judgeScreen'); if (!S.MAPS[JG.view]) JG.view = MAP_ID; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); }
+function jgWorld(id) {   // the official layout of a map, for re-flying runs posted there
+  if (id === MAP_ID && !MAP_EDITS) return activeWorld; if (JG.worlds[id]) return JG.worlds[id];
+  const mine = id === MAP_ID ? MAP_EDITS : null; if (mine) S.setMapEdits(id, null); try { JG.worlds[id] = S.MAPS[id].build(); } finally { if (mine) S.setMapEdits(id, mine); } return JG.worlds[id]; }
+async function judgeLoad(id) {
+  if (!lbBase()) { JG.msgs[id] = 'Judging needs the online version of the game.'; judgeRender(); return; } if (JG.busy) return; JG.busy = true;
+  try {
+  JG.msgs[id] = 'Finding moments to judge…'; judgeRender(); if (!LB.runs || LB.day !== lbToday()) await lbLoad(lbToday());
+  const me = telPilot(), myName = pilotName().toLowerCase(), runs = (LB.runs || []).filter(e => e.map === id && e.id && String(e.name).toLowerCase() !== myName).slice(0, 8), clips = [], W = runs.length ? jgWorld(id) : null;
+  if (runs.length) procShow(`Finding moments to judge on ${lbMapTitle(id)}…`, "Re-flying today's posted runs through the current trick detector", 0.03);
   for (let i = 0; i < runs.length; i++) { const e = runs[i];
     try { const r = await fetch(`${lbBase()}/run?day=${LB.day || lbToday()}&id=${encodeURIComponent(e.id)}`); if (!r.ok) continue; const run = await r.json();
-      if (!run || typeof run.name !== 'string' || !run.trace || run.map !== MAP_ID || run.pilot === me) continue;
+      if (!run || typeof run.name !== 'string' || !run.trace || run.map !== id || run.pilot === me) continue;
       const rows = await FlightLog.unpack(run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(x => Array.isArray(x) && x.length >= 27 && x.every(Number.isFinite))) continue;
       await new Promise(res => setTimeout(res, 40));
-      const now = S.replayTrace(rows, { world: activeWorld, camTilt: Number.isFinite(+run.camTilt) ? +run.camTilt : 20, debug: false }).events.filter(x => x.name !== 'near' && x.name !== 'Crash');
-      const then = (Array.isArray(run.events) ? run.events : []).filter(y => y && Number.isFinite(y.t) && typeof y.name === 'string' && !y.maybe).slice(0, 400), of = { of: String(run.name).slice(0, 24), id: e.id, flight: String(run.flight || e.id).slice(0, 40), rows };
+      const now = S.replayTrace(rows, { world: W, camTilt: Number.isFinite(+run.camTilt) ? +run.camTilt : 20, debug: false }).events.filter(x => x.name !== 'near' && x.name !== 'Crash');
+      const then = (Array.isArray(run.events) ? run.events : []).filter(y => y && Number.isFinite(y.t) && typeof y.name === 'string' && !y.maybe).slice(0, 400), of = { of: String(run.name).slice(0, 24), id: e.id, map: id, flight: String(run.flight || e.id).slice(0, 40), rows };
       for (const x of now) { const was = then.find(y => Math.abs(y.t - x.t) < 1), conf = x.watch ? x.watch.conf : 1;
         const why = was && was.name !== x.name ? [3, `called ${was.name.slice(0, 40)} then`] : !was ? [2, 'new call: the game did not call it then'] : conf < 0.75 ? [1, `the game is unsure (${Math.round(conf * 100)}%)`] : null;
         if (why) clips.push({ ...of, name: x.name.slice(0, 60), t: x.t, rank: why[0], why: why[1] }); }
       for (const y of then) if (!now.some(x => Math.abs(x.t - y.t) < 1)) clips.push({ ...of, name: y.name.slice(0, 60), t: y.t, rank: 2, why: 'the game no longer calls it' });
     } catch { /* a run that will not load is skipped */ }
-    procShow('Finding moments to judge…', `${i + 1} of ${runs.length} runs re-flown`, (i + 1) / runs.length); }
-  procHide();
-  JG.clips = clips.sort((a, b) => b.rank - a.rank || a.t - b.t).slice(0, 30);
-  JG.msg = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(MAP_ID)} today yet.`; judgeRender();
+    procShow(`Finding moments to judge on ${lbMapTitle(id)}…`, `${i + 1} of ${runs.length} runs re-flown`, (i + 1) / runs.length); }
+  if (runs.length) procHide();
+  JG.byMap[id] = clips.sort((a, b) => b.rank - a.rank || a.t - b.t).slice(0, 30);
+  JG.msgs[id] = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(id)} today yet.`;
+  } finally { JG.busy = false; } judgeRender();
 }
+function judgeView(d) { const ids = Object.keys(S.MAPS); JG.view = ids[(ids.indexOf(JG.view) + d + ids.length) % ids.length]; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); }
 function judgeRender() {
-  const el = $('#judgePanel'); if (!el) return; const C = JG.clips || [];
+  const el = $('#judgePanel'); if (!el) return; const ids = Object.keys(S.MAPS), V = S.MAPS[JG.view] ? JG.view : MAP_ID, C = JG.byMap[V] || [], th = (window.PW_MAPTHUMBS || {})[V], myName = pilotName().toLowerCase();
+  const count = id => (LB.runs || []).filter(e => e.map === id && String(e.name).toLowerCase() !== myName).length;
   el.innerHTML = `<h2>JUDGE THE COMMUNITY</h2>
-    <p class="note">Moments from today's posted runs on ${esc(lbMapTitle(MAP_ID))} where the game is unsure, or now calls something different from what it called during the run. Open one, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
-    ${C.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${C.map((c, i) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>` : `<p class="note">${esc(JG.msg || "Nothing to judge right now: every call in today's runs looks settled.")}</p>`}
+    <p class="note">Moments from today's posted runs where the game is unsure, or now calls something different from what it called during the run. Pick a map, open a moment, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
+    <div class="lbCar"><button class="mapArrow" data-jg="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${LB.runs ? `${count(V)} run${count(V) === 1 ? '' : 's'} from other pilots today` : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-jg="next" aria-label="next map">›</button></div>
+    <div class="mapDots">${ids.map(id => `<button data-jgmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${LB.runs ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}</div>
+    ${C.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${C.map((c, i) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>`
+      : `<p class="note">${esc(JG.msgs[V] || (JG.byMap[V] ? "Nothing to judge right now: every call in today's runs here still agrees, and the game is sure of each." : 'Loading…'))}</p>`}
+    ${V !== MAP_ID && C.length ? `<p class="note">These were flown on ${esc(lbMapTitle(V))}: opening one switches your map there.</p>` : ''}
     <div class="row"><button data-jg="refresh">↻ Look again</button><button data-jg="close" class="primary">Back</button></div>`;
 }
 function judgeClip(i) {
-  const c = (JG.clips || [])[i]; if (!c) return;
+  const c = (JG.byMap[JG.view] || [])[i]; if (!c) return;
+  if (c.map !== MAP_ID || MAP_EDITS) {   // its own scenery: switch map (or put the official layout back), then open it there
+    const q = c.map !== MAP_ID ? `This moment was flown on ${S.MAPS[c.map].title}. Judging it will change your map to ${S.MAPS[c.map].title}. Is that okay?` : 'Judging uses the official map, so the community map you are on is switched off until the next reload. Is that okay?';
+    if (!confirm(q)) return; store.set('judgePending', { map: c.map, id: c.id, t: c.t }); if (c.map !== MAP_ID) store.set('map', c.map); else store.set('layoutOffOnce', true);
+    procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[c.map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); }); return; }
   try { guestOpen(c.rows, [{ t: c.t, t0: c.t - 1.5, name: c.name, exec: '' }], { name: c.of, flight: c.flight, source: 'judge', ref: c.id, clip: jgKey(c) }, true); const it = recapItems()[0]; if (it) recapPlay(it); renderRecap(); }
-  catch { JG.msg = 'That run could not be opened.'; judgeRender(); }
+  catch { JG.msgs[JG.view] = 'That run could not be opened.'; judgeRender(); }
 }
+setTimeout(async () => { const P = store.get('judgePending', null); if (!P) return; store.set('judgePending', null); if (P.map !== MAP_ID || !ghMenus()) return;
+  JG.view = P.map; judgeOpen(); await judgeLoad(P.map); const k = (JG.byMap[P.map] || []).findIndex(c => c.id === P.id && Math.abs(c.t - P.t) < 0.05); if (k >= 0) judgeClip(k); }, 1600);
+document.addEventListener('keydown', e => { const sc = $('#judgeScreen'); if (!sc || sc.classList.contains('hide') || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
+  if (e.key === 'ArrowLeft') { judgeView(-1); e.preventDefault(); } if (e.key === 'ArrowRight') { judgeView(1); e.preventDefault(); } });
 // ▶ next to a run on the board: watch it straight away. A run flown on another map (or on the standard map while the
 // pilot has their own layout loaded) asks first, then reloads into the right map and carries on (store 'lbPending').
 async function lbPlay(id, map) {
@@ -416,7 +438,8 @@ document.addEventListener('click', e => {
   if (row && row.dataset.lbrun) { if ($('#lbScreen').classList.contains('hide')) { lbOpen('results'); } lbPick(row.dataset.lbrun); }
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu'); if (act && act.dataset.act === 'judge') judgeOpen();
   const jg = e.target.closest('[data-jg]'), jr = e.target.closest('[data-judge]');
-  if (jg) { if (jg.dataset.jg === 'close') { mode = 'menu'; show('#mainMenu'); } if (jg.dataset.jg === 'refresh') { JG.clips = null; judgeLoad(); } return; }
+  const jm = e.target.closest('[data-jgmap]'); if (jm) { JG.view = jm.dataset.jgmap; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); return; }
+  if (jg) { const a = jg.dataset.jg; if (a === 'close') { mode = 'menu'; show('#mainMenu'); } if (a === 'prev' || a === 'next') judgeView(a === 'next' ? 1 : -1); if (a === 'refresh') { delete JG.byMap[JG.view]; LB.runs = null; judgeLoad(JG.view); } return; }
   if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };

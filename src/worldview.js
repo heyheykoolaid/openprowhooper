@@ -216,10 +216,14 @@ function viceBackdrop() {
   for (let i = 0; i < 9; i++) { const pill = new THREE.Group(), col = [0xff2fb8, 0x55f6ff, 0xb6ff3c, 0xb26bff][i % 4], half = mat => new THREE.Mesh(new THREE.CapsuleGeometry(1.2, 2.4, 6, 12), mat);
     const a = half(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, toneMapped: false, depthWrite: false })); pill.add(a); pill.rotation.z = rnd() * 3; H(pill, -40 + i * 11 + rnd() * 4, 30 + rnd() * 12, -14 + rnd() * 28, 0.25 + rnd() * 0.3); }
   const wire = col => new THREE.LineBasicMaterial({ color: col, toneMapped: false, transparent: true, opacity: 0.8 });
-  for (let i = 0; i < 5; i++) { const palm = new THREE.Group(), m = wire([0xb6ff3c, 0x55f6ff, 0xff2fb8][i % 3]);
-    const trunk = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.35, 0.6, 9, 6, 4)), m); trunk.position.y = 4.5; trunk.rotation.z = 0.12; palm.add(trunk);
-    for (let k = 0; k < 7; k++) { const fr = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ConeGeometry(0.9, 5.5, 4, 3)), m); fr.position.set(0.5, 9, 0); fr.rotation.set(Math.PI / 2 + 0.6, k / 7 * Math.PI * 2, 0); fr.translateY(2.6); palm.add(fr); }
-    H(palm, -45 + i * 22 + rnd() * 6, 26 + rnd() * 6, (i % 2 ? 22 : -26) + rnd() * 4, 0.08); }
+  // wireframe mushrooms (the pilot: the palms read as a weird shape): a domed cap, gills under it, a stem, spots on top
+  for (let i = 0; i < 5; i++) { const mush = new THREE.Group(), m = wire([0xb6ff3c, 0x55f6ff, 0xff2fb8][i % 3]), m2 = wire([0xff2fb8, 0xfff36a, 0xb6ff3c][i % 3]);
+    const stem = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.75, 1.05, 4.2, 10, 3)), m); stem.position.y = 2.1; mush.add(stem);
+    const cap = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(3.2, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2)), m); cap.scale.y = 0.62; cap.position.y = 4.1; mush.add(cap);
+    const gills = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.RingGeometry(0.8, 3.2, 20, 1)), m2); gills.rotation.x = Math.PI / 2; gills.position.y = 4.1; mush.add(gills);
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + 0.3, r = k % 2 ? 1.9 : 1.1, y = 4.1 + Math.sqrt(Math.max(0, 1 - (r / 3.2) ** 2)) * 3.2 * 0.62;
+      const spot = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CircleGeometry(0.42, 8)), m2); spot.position.set(Math.cos(a) * r, y + 0.02, Math.sin(a) * r); spot.lookAt(spot.position.x * 2, y + 3, spot.position.z * 2); mush.add(spot); }
+    mush.rotation.z = (rnd() - 0.5) * 0.3; H(mush, -45 + i * 22 + rnd() * 6, 25 + rnd() * 6, (i % 2 ? 22 : -26) + rnd() * 4, 0.08); }
   for (let i = 0; i < 4; i++) { const eye = new THREE.Group(), white = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1), new THREE.MeshBasicMaterial({ color: 0xeef2ff, transparent: true, opacity: 0.6, toneMapped: false, depthWrite: false })),
       iris = new THREE.Mesh(new THREE.CircleGeometry(1.0, 6), new THREE.MeshBasicMaterial({ color: [0xff2fb8, 0x55f6ff][i % 2], toneMapped: false })), pupil = new THREE.Mesh(new THREE.CircleGeometry(0.45, 6), new THREE.MeshBasicMaterial({ color: 0x05030f }));
     iris.position.z = 2.15; pupil.position.z = 2.17; eye.add(white, iris, pupil); H(eye, -30 + i * 24, 38 + rnd() * 6, (i % 2 ? -6 : 8), 0.05); VICE.hallu[VICE.hallu.length - 1].eye = true; }

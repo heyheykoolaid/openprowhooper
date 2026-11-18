@@ -450,6 +450,9 @@ moments where the game now calls something else, no longer calls it, makes a new
 listed (not the pilot's own runs); each opens as a guest review of that one call. Its verdicts, like the Flight desk's, are
 reviewer labels (weight 1.5). Anyone's review of a leaderboard run watched from the board goes out with `judge: true`:
 tools/community.js counts such a vote only once a second pilot agrees.
+The screen is a carousel of maps like the board's (`JG.view`, arrows, dots, ← →; `judgeView`): each map's runs are re-flown
+on that map's official layout (`jgWorld`, built when it is not the one loaded) and listed per map (`JG.byMap`); opening a
+moment on another map (or with a community/own map loaded) asks, reloads into it (`store 'judgePending'`) and opens it there.
 
 ## The trick library (tools/library.js, library/, `LIBRARY` in src/sim.js) — docs/DATA.md
 Real examples of every trick for the detector to compare moves against. **The Tricktionary demo GIFs are the reference**
@@ -627,5 +630,5 @@ are drawn to the full width of their openings, so the checker flags their edges:
 Theme 'vice' (worldview.js `viceMats`, `viceBackdrop`, `viceTick`): indigo night, a striped synthwave sun on the water
 beyond the bow, the grid ring beyond 120 m, purple fog, a far shore of dark towers, black glossy water, bloom; police
 lights strobe red and blue in turns (lights with `o.strobe`, and the lightbar materials); hallucinations (translucent neon
-pills, wireframe palms, geometric eyes that turn to watch the quad) drift overhead, visual only. 12 real lights: Map
+pills, wireframe mushrooms (were palms; the pilot asked for mushrooms), geometric eyes that turn to watch the quad) drift overhead, visual only. 12 real lights: Map
 lights Auto drops to Few on slow machines.
