@@ -38,7 +38,7 @@ function demoExamples() {
     const seq = []; const N = Math.max(1, Math.round((b - a + 1) / (hz / 25)));
     for (let k = 0; k < N; k++) { const i0 = a + k * (hz / 25), i1 = a + (k + 1) * (hz / 25), s = [0, 0, 0]; for (let i = Math.floor(i0); i < Math.min(b + 1, Math.ceil(i1)); i++) { if (!fr[i]) continue; const ov = Math.min(i + 1, i1) - Math.max(i, i0); if (ov > 0) for (let x = 0; x < 3; x++) s[x] += fr[i][x] * ov; } seq.push(s); }
     const sig = S.libSig(seq, 25); if (!sig) { notes.push(`${it.trick}: no clear move found`); continue; }
-    out.push({ t: it.trick, ...sig, w: +(3 * Math.min(1, track + 0.1)).toFixed(2), s: 'demo', obs: !/open air/i.test(it.object || '') });
+    out.push({ t: it.trick, ...sig, ps: /open air/i.test(it.object || '') ? '' : undefined, w: +(3 * Math.min(1, track + 0.1)).toFixed(2), s: 'demo', obs: !/open air/i.test(it.object || '') });   // an open-air demo passed nothing; where an object was used the GIF can't say which way round
   }
   return { out, notes };
 }
@@ -46,11 +46,11 @@ function demoExamples() {
 function flightExamples(runs) {
   const out = [], pid = {}, P = a => pid[a] || (pid[a] = String(Object.keys(pid).length + 1));
   for (const r of runs) {
-    const upY = row => { const q = { w: row[4], x: row[5], y: row[6], z: row[7] }; return S.qrot(q, S.v3(0, 1, 0)).y; };
-    const seqOf = (a, b) => { const seq = [], ups = []; let acc = [0, 0, 0], n = 0; for (let i = 1; i < r.rows.length; i++) { const row = r.rows[i], dt = row[0] - r.rows[i - 1][0]; if (row[0] < a) continue; if (row[0] > b) break; if (!(dt > 0 && dt < 0.2)) continue;
-      for (let x = 0; x < 3; x++) acc[x] += row[8 + x] * dt; n += dt; if (n >= 0.04 - 1e-9) { seq.push(acc); ups.push(upY(row)); acc = [0, 0, 0]; n = 0; } } return { seq, ups }; };
+    // each labelled stretch is re-flown through the detector itself, so the example is measured exactly as the game measures
+    // a move live: rotation, up.y, the over/under/gap passes and the sticks (the detector's libSigOf)
     for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue;
-      const so = seqOf(e.a - 0.25, e.b + 0.25), sig = S.libSig(so.seq, 25, so.ups); if (!sig) continue;
+      const from = Math.max(r.rows[0][0], e.a - 3.5), { det } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
+      const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined }); }
   }
   return out;
@@ -59,8 +59,9 @@ function flightExamples(runs) {
   const t0 = Date.now();
   const { out: demos, notes } = demoExamples();
   const { runs } = await load(files);
+  S.setLibrary({ format: 'pro-whooper-library/1', examples: [] });   // an empty library switches on the detector's library ear (libTick) for the re-flights
   const fl = flightExamples(runs), examples = [...demos, ...fl];
-  const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; return o; }) };
+  const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (typeof e.ps === 'string') o.ps = e.ps; if (e.k) o.k = e.k; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; return o; }) };
   const L = S.setLibrary(lib);
   // leave-one-out: does the nearest OTHER example of the same clip's trick come out on top?
   const loo = {}; let right = 0, tot = 0;

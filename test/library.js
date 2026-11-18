@@ -41,5 +41,11 @@ S.setLibrary({ format: 'pro-whooper-library/1', examples: [ex('Roll', roll, 0), 
 R = S.replayTrace(roll.rows, { world, camTilt: 0, debug: false }); const rc = R.events.find(e => e.name === 'Roll');
 check('a roll that looks like the demo roll gets a strong library vote', rc && rc.watch.votes.library > 0.8, rc && JSON.stringify(rc.watch.votes));
 check('…and no maybe on top of a rule call', R.maybes.length === 0);
+// passes count when both sides know them (2026-11-18): the same rotation over then under an object is further from an
+// open-air example than from one that also went over then under; a GIF example (passes unknown) is judged on rotation only
+{ const c = Array.from({ length: 72 }, (_, i) => i % 3 === 1 ? Math.round(i / 3 / 23 * 360) : 0), base = { d: 1.2, c, u: Array(24).fill(100) };
+  const mk = ps => ps === undefined ? { ...base } : { ...base, ps }, d0 = S.libDist(mk('OU'), mk('OU')), d1 = S.libDist(mk('OU'), mk('')), d2 = S.libDist(mk('OU'), mk(undefined)), d3 = S.libDist(mk('UOU'), mk('OU'));
+  check('passes: over-under vs open air is further apart than over-under vs over-under', d1 > d0 + 0.1 && d3 > d0 && d3 < d1, `same ${d0.toFixed(3)}, vs open air ${d1.toFixed(3)}, vs UOU ${d3.toFixed(3)}`);
+  check('passes: an example that does not know its passes is judged on rotation only', Math.abs(d2 - d0) < 1e-9); }
 S.setLibrary(null);
 console.log(`\n${ok}/${n} library checks`);

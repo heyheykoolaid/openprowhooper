@@ -932,19 +932,30 @@ function libSig(seq, hz = LIB_HZ, ups = null) {   // seq: [[dR, dP, dY] degrees 
   // U[k] = up.y after k samples of the move
   const U = [i0 > 0 ? ups[i0 - 1] : 1, ...ups.slice(i0, i1 + 1)], c = [], u = []; for (let i = 0; i < LIB_N; i++) { const x = i / (LIB_N - 1) * (cum.length - 1), j = Math.min(cum.length - 2, Math.floor(x)), f = x - j; for (let ax = 0; ax < 3; ax++) c.push(Math.round(cum[j][ax] + (cum[j + 1][ax] - cum[j][ax]) * f));
     const k = Math.min(U.length - 1, Math.round(x)); u.push(Math.round(clamp(Number.isFinite(U[k]) ? U[k] : 1, -1, 1) * 100)); }
-  return { d: +(S.length / hz).toFixed(2), c, u };
+  const o = { d: +(S.length / hz).toFixed(2), c, u }; Object.defineProperty(o, 'span', { value: [i0, i1] }); return o;   // span: which samples were the move (not stored)
 }
+// Where the move went and what the hands did (2026-11-18): ps = the over / under / gap passes during the move in order
+// ('OU' a Matty, 'UOU' a powerloop, '' open air; null = not known, as for a GIF), k = the sticks: th = throttle at 8
+// points through the move (0-100), cmd = how much of the rotation had the stick on that axis pushed (0-100: a bump or a
+// tumble has the sticks centred). Both only count when both signatures have them.
+function libLev(a, b) { const m = a.length, n = b.length; if (!m || !n) return Math.max(m, n); let p = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const q = [i]; for (let j = 1; j <= n; j++) q.push(Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))); p = q; } return p[n]; }
+const LIB_XW = +(process.env.LIB_XW ?? 0.12), LIB_KW = +(process.env.LIB_KW ?? 0);   // sticks: recorded, but on the first 224 examples they told confirmed and rejected calls apart no better than chance (both ~99% commanded): weight 0 until they do
+function libExtra(a, b) { let e = 0;
+  if (typeof a.ps === 'string' && typeof b.ps === 'string') e += LIB_XW * Math.min(1, libLev(a.ps, b.ps) / Math.max(1, a.ps.length, b.ps.length));
+  if (a.k && b.k) { let th = 0; for (let i = 0; i < 8; i++) th += Math.abs(a.k.th[i] - b.k.th[i]); e += LIB_KW * (th / 800 + Math.abs(a.k.cmd - b.k.cmd) / 100) / 2; }
+  return e; }
 function libDist(a, b) {
   const N = LIB_N, B = 5, D = []; for (let i = 0; i < N; i++) D.push(new Float64Array(N).fill(Infinity));
   const cost = (i, j) => Math.hypot(a.c[i * 3] - b.c[j * 3], a.c[i * 3 + 1] - b.c[j * 3 + 1], a.c[i * 3 + 2] - b.c[j * 3 + 2]) / 360 + (a.u && b.u ? Math.abs(a.u[i] - b.u[j]) / 400 : 0);   // upside-down vs upright: up to 0.5
   for (let i = 0; i < N; i++) for (let j = Math.max(0, i - B); j <= Math.min(N - 1, i + B); j++) { const k = cost(i, j); D[i][j] = k + (i || j ? Math.min(i ? D[i - 1][j] : Infinity, j ? D[i][j - 1] : Infinity, i && j ? D[i - 1][j - 1] : Infinity) : 0); }
-  return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d))));
+  return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d)))) + libExtra(a, b);
 }
+function libK(k) { return k && typeof k === 'object' && Array.isArray(k.th) && k.th.length === 8 && k.th.every(Number.isFinite) && Number.isFinite(+k.cmd) ? { th: k.th.map(v => clamp(Math.round(v), 0, 100)), cmd: clamp(Math.round(+k.cmd), 0, 100) } : null; }
 function setLibrary(L) {
   if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) { LIBRARY = null; return null; }
   const ex = [], by = {};
   for (const e of L.examples.slice(0, 5000)) { if (!e || typeof e.t !== 'string' || e.t.length > 60 || !Array.isArray(e.c) || e.c.length !== LIB_N * 3 || !e.c.every(Number.isFinite) || !(+e.d > 0)) continue;
-    const x = { t: e.t, d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs };
+    const x = { t: e.t, d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs, ps: typeof e.ps === 'string' && /^[OUG]{0,8}$/.test(e.ps) ? e.ps : null, k: libK(e.k) };
     ex.push(x); const b = by[x.t] || (by[x.t] = { pos: 0, neg: 0, demo: false, pilots: new Set(), dur: [] }); if (x.neg) b.neg++; else { b.pos++; if (x.s === 'demo') b.demo = true; else b.pilots.add(x.p); b.dur.push(x.d); } }
   for (const [k, b] of Object.entries(by)) { b.dur.sort((p, q) => p - q); b.trusted = b.demo || b.pilots.size >= 2;
     // only tricks the rotation itself defines are said as maybes (tap, stall, wall, pole and dive tricks need what the rules see)
@@ -1540,7 +1551,7 @@ class TrickDetector {
   libTick(d, t, rates, dt) {
     const L = this.lib || (this.lib = { acc: [0, 0, 0], n: 0, buf: [], burst: null, bursts: [], quiet: 0, queue: [] });
     for (let k = 0; k < 3; k++) L.acc[k] += rates[k] * dt; L.n += dt;
-    if (L.n >= 1 / LIB_HZ - 1e-9) { L.buf.push([t, L.acc[0], L.acc[1], L.acc[2], d.up().y]); L.acc = [0, 0, 0]; L.n = 0; if (L.buf.length > LIB_HZ * 14) L.buf.splice(0, L.buf.length - LIB_HZ * 12); }
+    if (L.n >= 1 / LIB_HZ - 1e-9) { { const r = this.lastRc; L.buf.push([t, L.acc[0], L.acc[1], L.acc[2], d.up().y, r ? r.thr : null, r ? r.roll : 0, r ? r.pitch : 0, r ? r.yaw : 0]); } L.acc = [0, 0, 0]; L.n = 0; if (L.buf.length > LIB_HZ * 14) L.buf.splice(0, L.buf.length - LIB_HZ * 12); }
     const on = Math.hypot(rates[0], rates[1], rates[2]) >= LIB_ON && !d.crashed;
     if (on) { L.quiet = 0; if (!L.burst) L.burst = { a: t, b: t, rot: 0 }; L.burst.b = t; L.burst.rot += Math.hypot(rates[0], rates[1], rates[2]) * dt; }
     else if (L.burst) { L.quiet += dt; if (L.quiet >= LIB_QUIET) { const B = L.burst; L.burst = null; L.bursts.push(B); if (L.bursts.length > 4) L.bursts.shift();
@@ -1550,7 +1561,16 @@ class TrickDetector {
     if (L.queue.length && t >= L.queue[0].due) this.libJudge(L.queue.shift(), t);
   }
   libSeq(a, b) { return (this.lib ? this.lib.buf : []).filter(r => r[0] >= a - 0.02 && r[0] <= b + 0.06); }
-  libSigOf(a, b) { const R = this.libSeq(a, b); return libSig(R.map(r => [r[1], r[2], r[3]]), LIB_HZ, R.map(r => r[4])); }
+  libSigOf(a, b) { const R = this.libSeq(a, b), sig = libSig(R.map(r => [r[1], r[2], r[3]]), LIB_HZ, R.map(r => r[4])); if (!sig) return null;
+    const [i0, i1] = sig.span, A = R[i0][0] - 1 / LIB_HZ, B = R[i1][0];
+    // the passes during the move (an over/under can come just before the rotation starts: a Matty goes over, then flips)
+    sig.ps = this.crossLog.filter(c => c.t >= A - 0.6 && c.t <= B + 0.3 && (c.kind === 'O' || c.kind === 'U' || c.kind === 'G')).map(c => c.kind).join('').slice(0, 8);
+    // the sticks over the move, when they were recorded (not for a GIF or an old trace)
+    const M = R.slice(i0, i1 + 1); if (M.length >= 3 && M.every(r => r[5] != null) && M.some(r => Math.abs(r[6]) > 0.05 || Math.abs(r[7]) > 0.05 || Math.abs(r[8]) > 0.05)) {
+      const th = []; for (let i = 0; i < 8; i++) th.push(Math.round(clamp(M[Math.round(i / 7 * (M.length - 1))][5], 0, 1) * 100));
+      let on = 0, all = 0; for (const r of M) { const a3 = [Math.abs(r[1]), Math.abs(r[2]), Math.abs(r[3])], k = a3[0] >= a3[1] && a3[0] >= a3[2] ? 0 : a3[1] >= a3[2] ? 1 : 2; all += a3[k]; if (Math.abs(r[6 + k]) > 0.15) on += a3[k]; }
+      sig.k = { th, cmd: all > 0 ? Math.round(on / all * 100) : 0 }; }
+    return sig; }
   libJudge(q, t) {
     const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3);
     let pick = null;

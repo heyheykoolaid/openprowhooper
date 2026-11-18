@@ -471,7 +471,13 @@ the Watcher (`votes.library`, weight 2 in `conf`, but never in the veto). `node 
 [--check]` rebuilds it (only derived numbers and an anonymous pilot number: the pilot agreed), `--check` re-flies the
 shared flights and counts the maybes. build.py ships it (`Sim.setLibrary`); Node tests run without it except
 test/library.js; `PW_LIBRARY=file npm run bench`. First build: 107 examples (66 demos), leave-one-out 54%, 30 maybes in
-22 flights, none against a label. The weekly scheduled run rebuilds it before the community learner.
+22 flights, none against a label. The weekly scheduled run rebuilds it before the community learner. **Passes and sticks** (2026-11-18): each signature also carries `ps`, the over / under / gap passes during the move in order
+(from `crossLog`, from 0.6 s before the rotation; '' = none, so open-air demos are '', obstacle demos unknown), and `k`, the
+sticks (`th`: throttle at 8 points, `cmd`: % of the rotation with that axis's stick pushed). `libExtra` adds up to
+`LIB_XW` 0.12 for different pass orders (edit distance) when both sides know them; sticks have weight `LIB_KW` 0, because on
+the first 224 examples confirmed and rejected calls were both ~99% commanded. Pilot examples are now measured by re-flying the
+labelled stretch through the detector (`replayTrace(...).det.libSigOf`), exactly as the game measures live. Rebuild: 57%
+leave-one-out (56% before), maybes on the shared flights 109 → 99 with the same 8 right and none wrong, bench unchanged.
 
 ## Judge the Bot feeds the data, and the FPV view sits at the lens (2026-11-17)
 Every judged bot flight goes to the project as a **mini flight** (`judgeShare` in judge.js): `pro-whooper-flight/1` with
