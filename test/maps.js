@@ -15,4 +15,8 @@ for (const id of Object.keys(S.MAPS)) {
     tot++; const calls = MV.detect(m, w, 30).map(e => e.name); if (calls.includes(name)) got++; else miss.push(`${name}@${obj} -> ${calls.join(',') || 'nothing'}`); }
   check(`${id}: the bot's obstacle tricks are called on the map's own objects`, got >= tot - 1, `${got}/${tot}${miss.length ? ' · ' + miss.slice(0, 3).join(' · ') : ''}`);
 }
+// one move is one obstacle trick: a Matty over the sakura tree in front of Clappy's shops also passes the shop's awning, window
+// and trim, and used to be called three times (bot run, 2026-11-18)
+{ const w = S.MAPS.clappy.build(); for (const [name, seed] of [['Matty Flip', 7], ['Matty 360', 7]]) { const calls = MV.detect(MV.make(name, w, seed, { object: 'Sakura Tree' }), w, 20).map(e => e.name);
+  check(`clappy: one ${name} over the sakura by the shops is one call`, calls.length === 1 && calls[0] === name, calls.join(', ')); } }
 console.log(`\n${ok}/${n} map checks`);

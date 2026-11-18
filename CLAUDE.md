@@ -712,6 +712,11 @@ forward-flip Mattys only (it first made backflips while climbing into 13 Anti Ma
 brushed awnings, windows and façade trim and were never called; labelled flights: Matty Flip 14 → 15 of 17 found, no rejected
 one back). The detector's
 `nearTall` now skips the map edge (a Stall Rewind / Eject Roll was called "on the Map Edge").
+**One move, one obstacle trick** (2026-11-18, found by the bot's Clappy run): when an obstacle trick commits, the passes of
+OTHER objects made during it (from 0.3 s before its first pass to 0.35 s after its last) are used up too. A Matty over the sakura
+tree in front of Clappy's shops also went over and back under the shop's awning, window and trim, and the over-then-under
+fallback called three Mattys for one flip. Labelled flights: rejected calls avoided 47 → 51, Double Dutch +1 found, one
+confirmed Side Loop lost; bench unchanged; test/maps.js. (A board replay that looked stuck at 0:01 was only a slow test browser.)
 **Half Matty Pendulum** (owner: "chain 3 half mattys together"; `pendulumStep`, `PENDULUM_GAP` 1.6 s): the third Half Matty in
 a row on the same object, nothing else in between, is called Half Matty Pendulum (draft). Not in the TPW book: `EXTRA_TRICKS`
 in sim.js adds it to the trick list with 1050 points (three Half Mattys at full value) until the owner sets them. test/pendulum.js.

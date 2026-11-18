@@ -2405,6 +2405,11 @@ class StreamDetector extends TrickDetector {
     if (p.tapRef) this.contacts.forEach(c => { if (Math.abs(c.t - p.tapRef.t) < 0.12) c.tap = true; });
     for (const k of this.toks) if (k.t1 < p.t0 - 0.05) k.usedUntil = Math.max(k.usedUntil, k.t1); // leftovers before this trick
     if (p.part) p.part.slice(0, -1).forEach(c => c.used = true); // the last pass may start the next trick
+    // …and one move is one obstacle trick: the passes of OTHER objects made during it are used up too (a Matty over a sakura
+    // tree in front of a shop also went over and back under the shop's awning, window and trim, and the over-then-under
+    // fallback called three Mattys for one flip: the bot's run on Clappy Park, 2026-11-18)
+    if (p.part && p.part.length) { const a0 = Math.min(...p.part.map(c => c.t)) - 0.3, a1 = Math.max(...p.part.map(c => c.t)) + 0.35, own = p.part[0].obj;
+      for (const c of this.crossLog) if (c.obj !== own && c.t >= a0 && c.t <= a1) c.used = true; }
     const contacts = this.contacts.filter(c => c.t >= p.t0 - 0.05 && c.t <= p.tDone + 0.05);
     const g = this.grade(p, contacts, p.toks);
     for (const k of p.toks) { const m = k.rateSum / k.n, v = Math.sqrt(Math.max(0, k.rateSq / k.n - m * m)); const cv = v / (m || 1); if (cv > 0.45) { g.clean = Math.max(0, g.clean - Math.round((cv - 0.45) * 40)); g.notes.push('uneven rotation speed'); } }
