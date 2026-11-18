@@ -33,7 +33,7 @@ const canvas = $('#view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 // Performance (2026-11-17, testers reported heavy CPU): the diagnostic overlay (Options → Graphics, or F3) and two graphics
 // settings: render resolution (a share of the screen's pixels) and shadows. PERF collects the timings play.js measures.
-const PERF = { on: store.get('perfHud', false), res: store.get('renderScale', 1), shadows: store.get('shadows', true), acc: { phys: 0, det: 0, rend: 0, frame: 0, ui: 0, steps: 0, n: 0, worst: 0 }, shown: 0, staticPieces: 0, staticMeshes: 0 };
+const PERF = { fx: store.get('screenFx', true), on: store.get('perfHud', false), res: store.get('renderScale', 1), shadows: store.get('shadows', true), acc: { phys: 0, det: 0, rend: 0, frame: 0, ui: 0, steps: 0, n: 0, worst: 0 }, shown: 0, staticPieces: 0, staticMeshes: 0 };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;

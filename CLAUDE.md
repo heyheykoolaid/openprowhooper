@@ -208,6 +208,12 @@ closed-in area (the sun's shadow box uses it) and `w.ceiling` its height. The No
   draw / other, physics steps and catch-up drops, draw calls, triangles, geometries, textures, resolution, shadows, glow,
   scenery batching, objects, colliders, JS heap. Graphics options: Shadows (`store 'shadows'`) and Render resolution
   (`store 'renderScale'`), both applied live (`perfApply`).
+- **No CSS effects over the canvas** (pilots: smooth windowed, poor fullscreen, the fps counter steady): the canvas used to
+  carry a CSS `filter` (contrast/saturate) and two full-screen CSS layers (vignette; scanlines with mix-blend-mode), which
+  the browser composited at full screen resolution every frame, outside what the game's loop measures, and which kept
+  it from sending the canvas straight to the screen in fullscreen. The vignette and scanlines are now one transparent
+  quad drawn by WebGL after the frame (`fxRender` in play.js; Options → Screen effects, `store 'screenFx'`); the filter is
+  gone. Keep CSS filters, blend modes and backdrop-filter off anything that covers the game view.
 
 ## The Map Editor (src/mapedit.js; the edit layer in maps.js) — for every pilot, main menu → Map Editor
 A layout is a layer over the generated map (`pro-whooper-mapedit/1`: `moved` { key: { dx, dy, dz, ry°, s } }, `removed`

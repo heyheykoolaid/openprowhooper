@@ -200,6 +200,7 @@ function frame(now) {
   const rT0 = pf ? performance.now() : 0;
   renderer.render(scene, cam);
   if (BLOOM.on && world.theme === 'vapor' && !race.on) bloomRender(cam);
+  if (PERF.fx) fxRender();
   if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
@@ -226,7 +227,7 @@ function perfFrame(now, fT0, tPh, tDe, tR) {
   el.innerHTML = `<b>${fps.toFixed(0)} fps</b> · frame CPU ${f(A.frame)} ms (worst ${A.worst.toFixed(1)}) · main thread ${busy.toFixed(0)}% busy
     <br>physics ${f(A.phys)} ms (${(A.steps / n).toFixed(0)} steps)${A.drop ? ` · <span class="bad">${A.drop} catch-up drops</span>` : ''} · tricks ${f(A.det)} ms · draw ${f(A.rend)} ms · other ${f(A.frame - A.phys - A.det - A.rend)} ms
     <br>${Math.round(A.calls / n)} draw calls · ${(A.tris / n / 1000).toFixed(0)}k triangles · ${info.geometries} geometries · ${info.textures} textures · longest gap ${A.gap.toFixed(0)} ms
-    <br>${cv.width}×${cv.height} px (×${pr.toFixed(2)}) · shadows ${renderer.shadowMap.enabled ? 'on' : 'off'} · neon glow ${BLOOM.on && world.theme === 'vapor' ? 'on' : 'off'} · scenery ${PERF.staticPieces} pieces in ${PERF.staticMeshes} meshes
+    <br>${cv.width}×${cv.height} px (×${pr.toFixed(2)}) · shadows ${renderer.shadowMap.enabled ? 'on' : 'off'} · screen fx ${PERF.fx ? 'on' : 'off'} · ${document.fullscreenElement || (innerWidth === screen.width && innerHeight === screen.height) ? 'fullscreen' : 'windowed'} ${screen.width}×${screen.height} · neon glow ${BLOOM.on && world.theme === 'vapor' ? 'on' : 'off'} · scenery ${PERF.staticPieces} pieces in ${PERF.staticMeshes} meshes
     <br>${esc(world.title || world.id || '')} · ${world.objs.length} objects · ${world.prims.length} colliders · JS heap ${mem} · mode ${esc(mode)}`;
   Object.assign(A, { phys: 0, det: 0, rend: 0, frame: 0, n: 0, worst: 0, steps: 0, calls: 0, tris: 0, gap: 0, drop: 0 });
 }
@@ -237,3 +238,16 @@ function perfApply() {   // render resolution and shadows, live
 }
 addEventListener('keydown', e => { if (e.code === 'F3') { e.preventDefault(); perfToggle(!PERF.on); } });
 setTimeout(() => { $('#perfHud').classList.toggle('hide', !PERF.on); renderer.info.autoReset = !PERF.on; }, 0);
+
+// ---- screen effects: the vignette and faint scanlines, drawn by the GPU as one transparent quad over the finished frame.
+// They used to be CSS layers over the canvas (plus a CSS contrast/saturation filter on it), which the browser had to
+// composite at full screen resolution every frame: pilots saw it most in fullscreen, and the fps counter could not see it.
+const FX = { scene: new THREE.Scene(), cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
+FX.mat = new THREE.ShaderMaterial({ transparent: true, depthTest: false, depthWrite: false, uniforms: { res: { value: new THREE.Vector2(1, 1) }, pr: { value: 1 } },
+  vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform vec2 res; uniform float pr;
+    void main() { vec2 uv = gl_FragCoord.xy / res, d = (uv - 0.5) * vec2(res.x / res.y, 1.0) / vec2(res.x / res.y * 0.5, 0.5) * 0.7071;
+      float vig = smoothstep(0.55, 1.0, length(d)) * 0.55, scan = mod(floor(gl_FragCoord.y / pr), 3.0) < 1.0 ? 0.045 : 0.0;
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - (1.0 - vig) * (1.0 - scan)); }` });
+FX.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), FX.mat));
+function fxRender() { const c = renderer.domElement; FX.mat.uniforms.res.value.set(c.width, c.height); FX.mat.uniforms.pr.value = renderer.getPixelRatio(); const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(FX.scene, FX.cam); renderer.autoClear = ac; }

@@ -61,6 +61,7 @@ function openOptions() {
     <h3>Graphics</h3>
     <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
     <label class="chk big"><input type="checkbox" id="optShadows" ${PERF.shadows ? 'checked' : ''}> Shadows <small>(off is much lighter on slower computers)</small></label>
+    <label class="chk big"><input type="checkbox" id="optFx" ${PERF.fx ? 'checked' : ''}> Screen effects <small>(vignette and scanlines)</small></label>
     <label>Render resolution <select id="optRes">${[[1, '100%'], [0.85, '85%'], [0.7, '70%'], [0.5, '50%']].map(([v, l]) => `<option value="${v}" ${Math.abs(PERF.res - v) < 0.01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="chk big" title="Frame rate, where the time goes (physics, trick detection, drawing, the rest), draw calls, resolution and memory"><input type="checkbox" id="optPerf" ${PERF.on ? 'checked' : ''}> Performance overlay <small>(F3)</small></label>
     <label class="chk big" title="The trick library's guesses (never scored) always wait for you in SKITTLES mode; this also shows them on screen while you fly"><input type="checkbox" id="optMaybe" ${store.get('maybeFlash', false) ? 'checked' : ''}> Show "maybe" guesses while flying</label>
@@ -106,6 +107,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'optShadows') { PERF.shadows = e.target.checked; store.set('shadows', PERF.shadows); perfApply(); }
   if (e.target.id === 'optRes') { PERF.res = +e.target.value || 1; store.set('renderScale', PERF.res); perfApply(); }
   if (e.target.id === 'optPerf') perfToggle(e.target.checked);
+  if (e.target.id === 'optFx') { PERF.fx = e.target.checked; store.set('screenFx', PERF.fx); }
   if (e.target.id === 'optMaybe') store.set('maybeFlash', e.target.checked);
   if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !(gh.enabled || gh.bbEnabled)); renderGhStatus(); }
   if (e.target.id === 'optVol') { store.set('vol', +e.target.value); if (window._master) window._master.gain.value = +e.target.value; const v = $('#vol'); if (v) v.value = e.target.value; }
