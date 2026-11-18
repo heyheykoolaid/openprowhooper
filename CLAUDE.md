@@ -587,3 +587,23 @@ wait per address); the layer goes through `cleanLayer`; the relay commits `maps/
 (default heyheykoolaid/openprowhooper), so its GITHUB_TOKEN needs Contents: write there. The Map Editor uses it when a
 relay is configured and the owner saved the key (`store 'ownerKey'`, `mePublishRelay`); otherwise the GitHub token in
 Options (`mePublish`, always to the game repo, `GAME_REPO` in mapedit.js). Setup steps: docs/DROPOFF-SETUP.md.
+
+## Map Editor tools (2026-11-17, owner's request)
+- **Handles** (`MG`, `meGizUpdate`, `meGizPick` in mapedit.js): arrows move along X / Y / Z, a ring turns about the vertical
+  (a layout turns pieces about Y only), a cube scales; shown for the current tool on the selection, constant size on
+  screen; Shift snaps (0.5 m, 15°). An arrow seen end-on drags at a steady speed. Dragging the piece itself still slides it.
+- **Toolbar** at the bottom left (#meBar): Move / Turn / Scale · Undo / Redo · Copy / Paste / Duplicate / Group / Ungroup /
+  Delete · Top view. Shift- or Ctrl-click picks more; a click picks a piece's whole group (Alt: just that piece).
+  Ctrl+C / Ctrl+V (pastes at the mouse), D or Ctrl+D, Ctrl+G / Ctrl+Shift+G. Groups live in the layer as `E.groups`
+  ([[id…]]; ids are "Name@x,z" keys or "add:<n>", fixed up when added pieces are deleted); meClean keeps them, map codes
+  carry them; the relay's cleanLayer drops them (they only matter while editing).
+- **Asset library** = the hand-made assets plus every piece of every map (`catalog()` in maps.js: first piece of each name,
+  copied from the maps as generated, set at the origin; not ground, shells of buildings and halls, edges, or anything over
+  40 m). `S.ASSETS` is a getter; `S.assetCatalog()` lists them per map; `S.assetObjs(name)` builds one alone. The panel
+  has a search box and a thumbnail per asset (`meThumb`: a small second renderer draws each once, cached; tiles are drawn
+  as they scroll into view, a few per frame). `visMesh` in worldview.js makes one drawn piece (shared with the map).
+  Library trees are built with a fixed seed (they look natural and the same every time).
+- **Trees** (natureKit): Birch after the pilot's photos (slender tapering white trunk, 9 branches reaching up and out, a
+  clump at every tip); **Split Birch**: two stems from one foot in a V, its opening a gap (`Split Birch opening`); a Moose
+  birch is split when `spot(x, z) < 0.35` (a hash: the map's random draws, and every other tree's place, are unchanged:
+  checked by comparing every piece key). Maple: a limb into every leaf clump.

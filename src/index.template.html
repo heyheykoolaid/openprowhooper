@@ -237,15 +237,15 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 
 body.meOn #music { display: none !important; }
 #mapEditUI { position: absolute; inset: 0; pointer-events: none; } #mapEditUI > * { pointer-events: auto; }
-#meLib { position: absolute; left: 0; top: 46px; bottom: 26px; width: 210px; overflow: auto; } #meSide { position: absolute; right: 0; top: 46px; bottom: 26px; width: 300px; overflow: auto; }
+#meLib { position: absolute; left: 0; top: 0; bottom: 26px; width: 250px; overflow: auto; } #meSide { position: absolute; right: 0; top: 0; bottom: 26px; width: 300px; overflow: auto; }
 #meLib h4, #meSide h4 { margin: 12px 0 4px; font: 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--acid); } #meLib .meGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-#meLib .meGrid button { padding: 5px 4px; font-size: 11px; min-width: 0; } #meLib .meGrid button.on, #meBar button.on { background: var(--acid); color: #111; }
-#meBar { position: absolute; left: 0; right: 0; top: 0; height: 40px; display: flex; gap: 6px; align-items: center; padding: 4px 10px; background: rgba(14,13,12,.92); border-bottom: 2px solid #0b0a09; }
+#meLib .meGrid button { padding: 5px 4px; font-size: 11px; min-width: 0; } #meLib .meGrid .meTile { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 3px; } #meLib .meTile img { width: 100%; aspect-ratio: 4 / 3; background: rgba(255,255,255,.06); border-radius: 2px; } #meLib .meTile span { font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; } #meQ { width: 100%; box-sizing: border-box; margin: 4px 0 6px; } #meLib .meGrid button.on, #meBar button.on { background: var(--acid); color: #111; }
+#meBar { position: absolute; left: 262px; right: 312px; bottom: 34px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: rgba(14,13,12,.9); border: 2px solid #0b0a09; width: max-content; max-width: calc(100% - 574px); }
 #meBar button { padding: 5px 10px; font-size: 12px; } #meBar .sep { width: 14px; } #meBar .mePlacing { margin-left: 12px; font: 12px var(--mono); color: var(--acid); }
 #meSide .meFields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; } #meSide .meFields label { display: flex; flex-direction: column; font: 11px var(--mono); } #meSide .meFields input { width: 100%; box-sizing: border-box; }
 #meSide .meLocked { border: 1px solid var(--acid); padding: 10px; margin: 8px 0 12px; background: rgba(214,255,60,.06); } #meSide .meLocked p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; } #meSide .meLocked input { width: 100%; box-sizing: border-box; margin: 4px 0 8px; }
 #meSide .meEnd { margin-top: 16px; } #meSide .meMode button.on { background: var(--acid); color: #111; } #meSide .bad { color: #ff7a5c; }
-#meHint { position: absolute; left: 210px; right: 300px; bottom: 0; height: 24px; padding: 4px 10px; font: 11px var(--mono); color: #cfc6b4; background: rgba(14,13,12,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#meHint { position: absolute; left: 250px; right: 300px; bottom: 0; height: 24px; padding: 4px 10px; font: 11px var(--mono); color: #cfc6b4; background: rgba(14,13,12,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #recapUI { position: absolute; inset: 0; pointer-events: none; } #recapUI > * { pointer-events: auto; }
 #recapSide { position: absolute; right: 0; top: 0; bottom: 0; width: 350px; overflow: auto; background: #12141aee; padding: 10px 12px; color: #eee; font-size: 13px; }
 #recapUI.quick #recapBar, #recapUI.quick #recapSticks { display: none; } #pause [data-act=quick] small { display: block; font-size: 11px; opacity: .75; } #recapUI.quick #recapSide { padding-bottom: 14px !important; top: auto; bottom: 22px; right: auto; left: 50%; transform: translateX(-50%); width: min(560px, 94vw); padding: 14px 18px; border: 2px solid var(--cyan); }

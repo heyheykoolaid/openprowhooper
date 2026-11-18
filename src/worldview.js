@@ -297,20 +297,24 @@ function staticFlush() {
 }
 // The map's objects (everything in world.objs), in their own group so the Map Editor can rebuild them after each change:
 // unmerged while editing (each mesh knows its object: userData.oid, for picking), merged for flying.
+// one drawn piece of an object as a mesh (the map, and the Map Editor's asset thumbnails); art: draw its graffiti too
+function visMesh(v, art) {
+  let m;
+  if (v.shape === 'box') {
+    m = new THREE.Mesh(boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);
+    m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
+    if (v.graffiti && art) addGraffiti(v);
+  } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
+  else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
+  else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
+  return m || null;
+}
 let objRoot = null;
 function buildObjects(merge = MERGE_STATIC) {
   if (objRoot) { playRoot.remove(objRoot); objRoot.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
   objRoot = new THREE.Group(); playRoot.add(objRoot);
   for (const o of world.objs) for (const v of o.vis) {
-    let m;
-    if (v.shape === 'box') {
-      m = new THREE.Mesh(boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);
-      m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
-      if (v.graffiti) addGraffiti(v);
-    } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
-    else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
-    else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
-    if (!m) continue;
+    const m = visMesh(v, true); if (!m) continue;
     m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
     m.userData.oid = o.id; if (!merge) objRoot.add(m); else staticAdd(m, v);
   }

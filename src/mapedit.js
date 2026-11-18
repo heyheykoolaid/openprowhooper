@@ -8,7 +8,7 @@
 const ME = { official: false, E: null, sel: new Set(), tool: 'move', place: null, vary: true, undo: [], redo: [], cam: { t: new THREE.Vector3(0, 0, 0), yaw: 0.6, pitch: 0.75, dist: 40 }, drag: null, pieces: [], byOid: new Map(), base: new Map(), testing: false, ref: null };
 const meCam = new THREE.PerspectiveCamera(55, 1, 0.05, 900);
 const ME_ASSETS = {
-  Trees: ['Cedar', 'Big Cedar', 'Young Cedar', 'Hemlock', 'Birch', 'Maple', 'Sakura Tree'],
+  Trees: ['Cedar', 'Big Cedar', 'Young Cedar', 'Hemlock', 'Birch', 'Split Birch', 'Maple', 'Sakura Tree'],
   Ground: ['Shrub', 'Bracken', 'Stump', 'Mossy Log', 'Boulder'],
   Park: ['Picnic Table', 'Bench', 'Bear Bin', 'Fence'],
   Play: ['Swing Set', 'Over/Under Bar', 'Gap Gate', 'Pole', 'Tire', 'Plywood Wall'],
@@ -23,6 +23,7 @@ function meClean(E) {   // a layer from a file or storage: only known fields, sa
   for (const [k, m] of Object.entries(E.moved || {}).slice(0, 5000)) if (typeof k === 'string' && k.length < 80 && m && typeof m === 'object') out.moved[k] = { dx: n(m.dx, 0, -500, 500), dy: n(m.dy, 0, -50, 100), dz: n(m.dz, 0, -500, 500), ry: n(m.ry, 0, -3600, 3600), s: n(m.s, 1, 0.1, 10) };
   for (const k of (Array.isArray(E.removed) ? E.removed : []).slice(0, 5000)) if (typeof k === 'string' && k.length < 80) out.removed.push(k);
   for (const a of (Array.isArray(E.added) ? E.added : []).slice(0, 3000)) if (a && S.ASSETS.includes(a.asset)) out.added.push({ asset: a.asset, x: n(a.x, 0, -500, 500), y: n(a.y, 0, -50, 100), z: n(a.z, 0, -500, 500), ry: n(a.ry, 0, -3600, 3600), s: n(a.s, 1, 0.1, 10) });
+  if (Array.isArray(E.groups)) out.groups = E.groups.slice(0, 500).filter(G => Array.isArray(G)).map(G => G.filter(i => typeof i === 'string' && i.length < 80).slice(0, 300)).filter(G => G.length > 1);
   return out;
 }
 function meSave() {
@@ -75,7 +76,7 @@ function meMode(official) {   // switch between the pilot's own layout and the o
 const ME_CODE = /^PWMAP1-([a-z0-9_]{1,24})-([A-Za-z0-9_-]{4,200000})$/;
 async function meZip(bytes, Stream) { const st = new Stream('deflate-raw'), w = st.writable.getWriter(); w.write(bytes); w.close(); const parts = [], r = st.readable.getReader(); let n = 0;
   for (;;) { const { done, value } = await r.read(); if (done) break; parts.push(value); n += value.length; if (n > 4e6) throw new Error('too big'); } const out = new Uint8Array(n); let o = 0; for (const q of parts) { out.set(q, o); o += q.length; } return out; }
-async function meCodeOf(E, name) { const j = JSON.stringify({ format: 'pro-whooper-mapedit/1', map: MAP_ID, name: name ? String(name).slice(0, 40) : undefined, moved: E.moved, removed: E.removed, added: E.added }), z = await meZip(new TextEncoder().encode(j), CompressionStream);
+async function meCodeOf(E, name) { const j = JSON.stringify({ format: 'pro-whooper-mapedit/1', map: MAP_ID, name: name ? String(name).slice(0, 40) : undefined, moved: E.moved, removed: E.removed, added: E.added, groups: E.groups }), z = await meZip(new TextEncoder().encode(j), CompressionStream);
   let bin = ''; for (let i = 0; i < z.length; i += 0x8000) bin += String.fromCharCode.apply(null, z.subarray(i, i + 0x8000));
   return `PWMAP1-${MAP_ID}-` + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 async function meCodeRead(str) { const m = ME_CODE.exec(String(str || '').trim().replace(/\s+/g, '')); if (!m) return null;
@@ -163,10 +164,37 @@ function closeMapEditor(to) {
   if (to === 'fly') { ME.testing = true; startFly(false); } else { ME.testing = false; mode = 'menu'; show('#mainMenu'); }
 }
 // ---- the screen
-function meLibrary() {
-  $('#meLib').innerHTML = `<h3>ASSETS</h3><label class="chk" title="Each one placed gets a random turn and a size from 85 to 115% (trees look planted, not stamped)"><input type="checkbox" id="meVary" ${ME.vary ? 'checked' : ''}> vary turn &amp; size</label>
-    ${Object.entries(ME_ASSETS).map(([g, list]) => `<h4>${g}</h4><div class="meGrid">${list.map(a => `<button data-measset="${esc(a)}" class="${ME.place === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>`).join('')}
-    <p class="note">Click an asset, then click the ground to place it. Hold Shift to keep placing. Esc stops.</p>`;
+function meLibrary() {   // the hand-made assets, then every map's pieces (S.assetCatalog), filtered by the search box
+  $('#meLib').innerHTML = `<h3>ASSETS</h3><input id="meQ" type="search" placeholder="search ${S.ASSETS.length} assets…" value="${esc(ME.q || '')}" autocomplete="off">
+    <label class="chk" title="Each one placed gets a random turn and a size from 85 to 115% (trees look planted, not stamped)"><input type="checkbox" id="meVary" ${ME.vary ? 'checked' : ''}> vary turn &amp; size</label>
+    <div id="meLibList"></div><p class="note">Click an asset, then click the ground to place it. Hold Shift to keep placing. Esc stops.</p>`;
+  meLibList();
+}
+function meLibList() {
+  const q = (ME.q || '').trim().toLowerCase(), cat = S.assetCatalog(), groups = [...Object.entries(ME_ASSETS), ...Object.entries(cat).map(([m, l]) => ['From ' + (S.MAPS[m] ? S.MAPS[m].title : m), l])];
+  const html = groups.map(([g, list]) => { const L = list.filter(a => !q || a.toLowerCase().includes(q) || g.toLowerCase().includes(q)); return L.length ? `<h4>${esc(g)}</h4><div class="meGrid">${L.map(a => `<button data-measset="${esc(a)}" class="meTile ${ME.place === a ? 'on' : ''}" title="${esc(a)}"><img data-thumb="${esc(a)}" alt="" ${THUMB.cache.has(a) ? `src="${THUMB.cache.get(a)}"` : ''}><span>${esc(a)}</span></button>`).join('')}</div>` : ''; }).join('');
+  const el = $('#meLibList'); if (!el) return; el.innerHTML = html || '<p class="note">Nothing matches.</p>';
+  if (!THUMB.io) THUMB.io = new IntersectionObserver(es => { for (const x of es) if (x.isIntersecting) { const n = x.target.dataset.thumb; THUMB.io.unobserve(x.target); if (!THUMB.cache.has(n)) THUMB.queue.push(x.target); } if (THUMB.queue.length) meThumbPump(); }, { root: $('#meLib'), rootMargin: '200px' });
+  for (const im of el.querySelectorAll('img[data-thumb]')) if (!im.getAttribute('src')) THUMB.io.observe(im);
+}
+// ---- asset thumbnails: each asset built on its own (S.assetObjs), drawn once by a small second renderer, kept as an image
+const THUMB = { r: null, scene: null, cam: null, cache: new Map(), queue: [], busy: false, io: null };
+function meThumb(name) {
+  if (THUMB.cache.has(name)) return THUMB.cache.get(name);
+  if (!THUMB.r) { THUMB.r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); THUMB.r.setPixelRatio(1); THUMB.r.setSize(128, 96); THUMB.r.outputColorSpace = renderer.outputColorSpace; THUMB.r.toneMapping = renderer.toneMapping;
+    THUMB.scene = new THREE.Scene(); THUMB.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x3a3428, 2.4)); const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 6, 4); THUMB.scene.add(sun); THUMB.cam = new THREE.PerspectiveCamera(32, 4 / 3, 0.05, 900); }
+  const g = new THREE.Group(); let url = '';
+  try { for (const o of S.assetObjs(name)) for (const v of o.vis) { const m = visMesh(v, false); if (m) g.add(m); }
+    THUMB.scene.add(g); const bb = new THREE.Box3().setFromObject(g); if (!bb.isEmpty()) { const c = bb.getCenter(new THREE.Vector3()), r = Math.max(0.3, bb.getSize(new THREE.Vector3()).length() / 2);
+      THUMB.cam.position.copy(c).add(new THREE.Vector3(1, 0.75, 1.2).normalize().multiplyScalar(r / Math.sin(16 * Math.PI / 180) * 0.95)); THUMB.cam.lookAt(c); THUMB.cam.updateProjectionMatrix();
+      THUMB.r.render(THUMB.scene, THUMB.cam); url = THUMB.r.domElement.toDataURL('image/png'); } } catch { url = ''; }
+  THUMB.scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); THUMB.cache.set(name, url); return url;
+}
+function meThumbPump() {   // a few thumbnails a frame, so the editor never stutters
+  if (THUMB.busy) return; THUMB.busy = true;
+  const step = () => { const t0 = performance.now(); while (THUMB.queue.length && performance.now() - t0 < 12) { const im = THUMB.queue.shift(), u = meThumb(im.dataset.thumb); if (u) im.src = u; }
+    if (THUMB.queue.length && mode === 'mapedit') requestAnimationFrame(step); else THUMB.busy = false; };
+  requestAnimationFrame(step);
 }
 function mePanels() {
   const el = $('#meSide'), ps = [...ME.sel].map(mePiece).filter(Boolean), E = ME.E, nMoved = Object.keys(E.moved).length;
@@ -201,10 +229,12 @@ function mePanels() {
 }
 function meToolbar() {
   $('#meBar').innerHTML = [['move', 'Move (G)'], ['rotate', 'Turn (R)'], ['scale', 'Scale (S)']].map(([t, l]) => `<button data-metool="${t}" class="${ME.tool === t && !ME.place ? 'on' : ''}">${l}</button>`).join('')
-    + `<span class="sep"></span><button data-me="undo" ${ME.undo.length ? '' : 'disabled'}>↶ Undo</button><button data-me="redo" ${ME.redo.length ? '' : 'disabled'}>↷ Redo</button><button data-me="top" title="T">Top view</button>`
+    + `<span class="sep"></span><button data-me="undo" ${ME.undo.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button><button data-me="redo" ${ME.redo.length ? '' : 'disabled'} title="Ctrl+Y">↷ Redo</button>`
+    + `<span class="sep"></span><button data-me="copy" title="Ctrl+C">Copy</button><button data-me="paste" title="Ctrl+V: at the mouse">Paste</button><button data-me="dup" title="D or Ctrl+D">Duplicate</button><button data-me="group" title="Ctrl+G">Group</button><button data-me="ungroup" title="Ctrl+Shift+G">Ungroup</button><button data-me="del" title="Delete">Delete</button>`
+    + `<span class="sep"></span><button data-me="top" title="T">Top view</button>`
     + (ME.place ? `<span class="mePlacing">placing <b>${esc(ME.place)}</b> · click the ground · Esc stops</span>` : '');
 }
-function meHint() { $('#meHint').textContent = 'Right-drag: orbit · Middle-drag or Shift+right-drag: pan · Wheel: zoom · WASD: move · F: focus · Q/E: turn 15° · [ ]: smaller / bigger · D: duplicate · Del: remove · Ctrl+Z / Ctrl+Y'; }
+function meHint() { $('#meHint').textContent = 'Drag the handles: arrows move, ring turns, cube scales (Shift snaps) · Shift/Ctrl-click: pick more · Alt-click: one piece of a group · Ctrl+C / V copy, paste · D duplicate · Ctrl+G group · Del · Right-drag orbit · Middle-drag pan · Wheel zoom · WASD · F focus · Ctrl+Z / Y'; }
 function meSelBox() {
   if (ME.box) { scene.remove(ME.box); ME.box = null; } if (!ME.sel.size || !objRoot) return;
   const ids = new Set([...ME.sel].map(mePiece).filter(Boolean).flatMap(p => p.ids)), bb = new THREE.Box3(); objRoot.traverse(o => { if (o.isMesh && ids.has(o.userData.oid)) bb.expandByObject(o); });
@@ -223,7 +253,7 @@ function mapEditFrame(dt) {
   const k = ME.keys || {}, sp = ME.cam.dist * 0.9 * dt, c = Math.cos(ME.cam.yaw), s = Math.sin(ME.cam.yaw);
   if (k.KeyW) { ME.cam.t.x -= s * sp; ME.cam.t.z -= c * sp; } if (k.KeyS && !ME.sel.size) { ME.cam.t.x += s * sp; ME.cam.t.z += c * sp; }
   if (k.KeyA) { ME.cam.t.x -= c * sp; ME.cam.t.z += s * sp; } if (k.KeyD && !ME.sel.size) { ME.cam.t.x += c * sp; ME.cam.t.z -= s * sp; }
-  const cam = meCamera(); droneMesh.visible = false; renderer.render(scene, cam); droneMesh.visible = true;
+  const cam = meCamera(); meGizUpdate(cam); droneMesh.visible = false; renderer.render(scene, cam); droneMesh.visible = true;
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 }
 // ---- live preview while dragging: each picked piece's meshes are transformed about its pivot, the map is rebuilt on release
@@ -233,6 +263,26 @@ function mePreview(d, dr, ds) {
     for (const m of it.meshes) { m.matrixAutoUpdate = false; m.matrix.multiplyMatrices(M, m.userData.m0); m.matrixWorldNeedsUpdate = true; } }
   if (ME.box) ME.box.visible = false;
 }
+// ---- handles on the selection (like the RaceGOW editor): arrows move along X / Y / Z, the ring turns it on the ground (a
+// layout turns pieces about the vertical only), the cube scales it. Constant size on screen; shown for the current tool.
+const MG = { grp: new THREE.Group(), move: new THREE.Group(), rot: new THREE.Group(), scl: new THREE.Group() };
+(() => { const col = { x: 0xff4b4b, y: 0x5fd35f, z: 0x4b8bff }, mat = c => new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.95 }), AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+  for (const ax of ['x', 'y', 'z']) { const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), AX[ax]);
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8), mat(col[ax])); sh.position.copy(AX[ax]).multiplyScalar(0.5); sh.quaternion.copy(q);
+    const hd = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.28, 12), mat(col[ax])); hd.position.copy(AX[ax]).multiplyScalar(1.0); hd.quaternion.copy(q);
+    const a = new THREE.Group(); a.add(sh, hd); a.userData.giz = { mode: 'move', axis: ax, dir: AX[ax] }; MG.move.add(a); }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.045, 8, 56), mat(col.y)); ring.rotation.x = Math.PI / 2; ring.userData.giz = { mode: 'rotate', axis: 'y' }; MG.rot.add(ring);
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mat(0xffd34d)); cube.position.set(0, 0.9, 0); cube.userData.giz = { mode: 'scale' }; MG.scl.add(cube);
+  MG.grp.add(MG.move, MG.rot, MG.scl); MG.grp.traverse(o => { o.renderOrder = 40; }); MG.grp.visible = false; scene.add(MG.grp); })();
+function meGizPivot() { const ps = [...ME.sel].map(mePiece).filter(Boolean); if (!ps.length) return null; const c = new THREE.Vector3(); for (const p of ps) c.add(mePivot(p)); return c.multiplyScalar(1 / ps.length); }
+function meGizUpdate(cam) {
+  const pv = mode === 'mapedit' && !ME.locked && !ME.place && ME.sel.size ? meGizPivot() : null; MG.grp.visible = !!pv; if (!pv) return;
+  const D = ME.drag; if (D && D.items) pv.add(D.d);
+  MG.grp.position.copy(pv); MG.grp.scale.setScalar(cam.position.distanceTo(pv) * 0.12);
+  MG.move.visible = ME.tool === 'move'; MG.rot.visible = ME.tool === 'rotate'; MG.scl.visible = ME.tool === 'scale';
+}
+function meGizPick(e) { if (!MG.grp.visible) return null; MG.grp.updateMatrixWorld(true); const hits = meCast(e).intersectObjects(MG.grp.children, true);
+  for (const h of hits) { let o = h.object; while (o && !o.userData.giz) o = o.parent; if (o && o.parent && o.parent.visible) return o.userData.giz; } return null; }
 function meStartDrag(e, kind) {
   const items = [...ME.sel].map(mePiece).filter(Boolean).map(p => { const ids = new Set(p.ids), meshes = []; objRoot.traverse(o => { if ((o.isMesh || o.isLight) && ids.has(o.userData.oid)) { o.updateMatrix(); o.userData.m0 = o.matrix.clone(); meshes.push(o); } }); return { p, pv: mePivot(p), meshes }; });
   if (!items.length) return; const y0 = items[0].pv.y; ME.drag = { kind, x: e.clientX, y: e.clientY, items, y0, f0: meFloor(e, y0), d: new THREE.Vector3(), dr: 0, ds: 1, moved: false, alt: e.altKey };
@@ -245,17 +295,28 @@ canvas.addEventListener('mousedown', e => {
   if (ME.place) { const f = meFloor(e); if (!f) return; mePush(); const v = ME.vary;
     ME.E.added.push({ asset: ME.place, x: +f.x.toFixed(2), y: 0, z: +f.z.toFixed(2), ry: v ? Math.round(Math.random() * 360) : Math.round(((ME.cam.yaw * 180 / Math.PI) % 360 + 360) % 360), s: v ? +(0.85 + Math.random() * 0.3).toFixed(2) : 1 });
     if (!e.shiftKey) { ME.place = null; meLibrary(); } meCommit(); ME.sel = new Set(['add:' + (ME.E.added.length - 1)]); meSelBox(); mePanels(); return; }
-  const p = mePick(e);
-  if (!p) { if (!e.shiftKey) { ME.sel.clear(); meSelBox(); mePanels(); } return; }
-  const id = meId(p); if (e.shiftKey) { if (ME.sel.has(id)) ME.sel.delete(id); else ME.sel.add(id); meSelBox(); mePanels(); return; }
-  if (!ME.sel.has(id)) { ME.sel = new Set([id]); meSelBox(); mePanels(); }
+  const gz = meGizPick(e);
+  if (gz) { meStartDrag(e, gz.mode); const D = ME.drag; if (!D) return; D.giz = gz; const r = canvas.getBoundingClientRect(), px = v => { const q = v.clone().project(meCam); return new THREE.Vector2((q.x + 1) / 2 * r.width + r.left, (1 - q.y) / 2 * r.height + r.top); };
+    const pv = meGizPivot(), p0 = px(pv); D.sc = p0; D.a0 = Math.atan2(e.clientY - p0.y, e.clientX - p0.x); if (gz.dir) D.sdir = px(pv.clone().add(gz.dir)).sub(p0); D.toward = meCam.position.y >= pv.y ? 1 : -1; return; }
+  const p = mePick(e), multi = e.shiftKey || e.ctrlKey || e.metaKey;
+  if (!p) { if (!multi) { ME.sel.clear(); meSelBox(); mePanels(); } return; }
+  const ids = e.altKey ? [meId(p)] : meGroupOf(meId(p));   /* a click picks the whole group (Alt: just this piece) */
+  if (multi) { const on = ids.every(i => ME.sel.has(i)); for (const i of ids) { if (on) ME.sel.delete(i); else ME.sel.add(i); } meSelBox(); mePanels(); return; }
+  if (!ME.sel.has(meId(p))) { ME.sel = new Set(ids); meSelBox(); mePanels(); }
   meStartDrag(e, ME.tool);
 });
 addEventListener('mousemove', e => {
+  if (mode === 'mapedit' && e.target === canvas) ME.mouseFloor = meFloor(e);
   if (mode !== 'mapedit' || !ME.drag) return; const D = ME.drag, dx = e.clientX - D.x, dy = e.clientY - D.y;
   if (D.kind === 'orbit') { ME.cam.yaw -= dx * 0.008; ME.cam.pitch = Math.max(0.08, Math.min(1.56, ME.cam.pitch + dy * 0.006)); D.x = e.clientX; D.y = e.clientY; return; }
   if (D.kind === 'pan') { const k = ME.cam.dist * 0.0016, c = Math.cos(ME.cam.yaw), s = Math.sin(ME.cam.yaw); ME.cam.t.x += (-dx * c - dy * s) * k; ME.cam.t.z += (dx * s - dy * c) * k; D.x = e.clientX; D.y = e.clientY; return; }
   if (Math.abs(dx) + Math.abs(dy) > 3) D.moved = true; if (!D.moved) return;
+  if (D.giz) { const g = D.giz;
+    if (g.mode === 'move') { const L2 = D.sdir.lengthSq() || 1; let m = Math.sqrt(L2) < 30 ? (g.dir.y ? -dy : dx) * ME.cam.dist * 0.0015 : (dx * D.sdir.x + dy * D.sdir.y) / L2;   /* an arrow seen end-on: a steady drag speed */ m = e.shiftKey ? Math.round(m * 2) / 2 : +m.toFixed(2);
+      D.d.set(g.dir.x * m, Math.max(-D.y0, g.dir.y * m), g.dir.z * m); }
+    if (g.mode === 'rotate') { let a = (Math.atan2(e.clientY - D.sc.y, e.clientX - D.sc.x) - D.a0) * 180 / Math.PI; while (a > 180) a -= 360; while (a < -180) a += 360; a = D.toward >= 0 ? -a : a; if (e.shiftKey) a = Math.round(a / 15) * 15; D.dr = Math.round(a); }
+    if (g.mode === 'scale') D.ds = +Math.max(0.2, Math.min(5, Math.exp(-dy * 0.006))).toFixed(3);
+    mePreview(D.d, D.dr, D.ds); return; }
   if (D.kind === 'move') { if (D.alt) D.d.set(0, Math.max(-D.y0, +(-dy * ME.cam.dist * 0.0015).toFixed(2)), 0); else { const f = meFloor(e, D.y0); if (f && D.f0) D.d.set(+(f.x - D.f0.x).toFixed(2), 0, +(f.z - D.f0.z).toFixed(2)); } }
   if (D.kind === 'rotate') { let a = dx * 0.5; if (e.shiftKey) a = Math.round(a / 15) * 15; D.dr = Math.round(a); }
   if (D.kind === 'scale') D.ds = +Math.max(0.2, Math.min(5, Math.exp(-dy * 0.006))).toFixed(3);
@@ -268,18 +329,39 @@ canvas.addEventListener('contextmenu', e => { if (mode === 'mapedit') e.preventD
 function meNudge(dr, ds) { const ps = [...ME.sel].map(mePiece).filter(Boolean); if (!ps.length) return; mePush(); for (const p of ps) meApply(p, new THREE.Vector3(), dr, ds); meCommit(); }
 function meDelete() { const ps = [...ME.sel].map(mePiece).filter(Boolean); if (!ps.length) return; mePush();
   const adds = ps.filter(p => p.addIdx != null).map(p => p.addIdx).sort((a, b) => b - a); for (const i of adds) ME.E.added.splice(i, 1);
+  if (ME.E.groups) { const gone = new Set(ps.map(meId)), shift = id => { const m = /^add:(\d+)$/.exec(id); if (!m) return id; const n = +m[1]; return 'add:' + (n - adds.filter(i => i < n).length); };
+    ME.E.groups = ME.E.groups.map(G => G.filter(i => !gone.has(i)).map(shift)).filter(G => G.length > 1); }
   for (const p of ps) if (p.addIdx == null) { delete ME.E.moved[p.key]; if (!ME.E.removed.includes(p.key)) ME.E.removed.push(p.key); }
   ME.sel.clear(); meCommit(); }
 function meDuplicate() { const ps = [...ME.sel].map(mePiece).filter(Boolean), made = [];
   for (const p of ps) { const asset = p.addIdx != null ? ME.E.added[p.addIdx].asset : S.ASSETS.includes(p.name) ? p.name : ME_SAME[p.name]; if (!asset) continue; const pv = mePivot(p), xf = meXf(p);
     if (!made.length) mePush(); ME.E.added.push({ asset, x: +(pv.x + 1.5).toFixed(2), y: +pv.y.toFixed(2), z: +(pv.z + 1.5).toFixed(2), ry: xf.ry, s: xf.s }); made.push('add:' + (ME.E.added.length - 1)); }
   if (!made.length) { flash('<b>CAN\'T DUPLICATE THAT</b><small>only things that are in the asset library</small>', 'near'); return; } meCommit(); ME.sel = new Set(made); meSelBox(); mePanels(); }
+// ---- groups (Ctrl+G / Ctrl+Shift+G): sets of pieces picked together, kept in the layer (E.groups: [[id…]]; ids are
+// "Name@x,z" keys or "add:<n>"); copy (Ctrl+C) and paste (Ctrl+V, at the mouse, or beside the copies)
+function meGroupOf(id) { const g = (ME.E.groups || []).find(G => G.includes(id)); return g ? g.filter(i => mePiece(i)) : [id]; }
+function meGroup() { const ids = [...ME.sel]; if (ids.length < 2) { flash('<b>PICK 2 OR MORE</b><small>Shift- or Ctrl-click pieces, then Group</small>', 'near'); return; } mePush();
+  ME.E.groups = (ME.E.groups || []).map(G => G.filter(i => !ids.includes(i))).filter(G => G.length > 1); ME.E.groups.push(ids); meCommit(); flash(`<b>GROUPED</b><small>${ids.length} pieces now pick and move together</small>`); }
+function meUngroup() { const ids = [...ME.sel]; const before = (ME.E.groups || []).length; if (!before) return; mePush(); ME.E.groups = ME.E.groups.filter(G => !G.some(i => ids.includes(i))); meCommit(); if (ME.E.groups.length < before) flash('<b>UNGROUPED</b>'); }
+function meCopy() { const ps = [...ME.sel].map(mePiece).filter(Boolean), items = [];
+  for (const p of ps) { const asset = p.addIdx != null ? ME.E.added[p.addIdx].asset : S.ASSETS.includes(p.name) ? p.name : ME_SAME[p.name]; if (!asset) continue; const pv = mePivot(p), xf = meXf(p); items.push({ asset, x: pv.x, y: pv.y, z: pv.z, ry: xf.ry, s: xf.s }); }
+  if (!items.length) { flash('<b>NOTHING TO COPY</b><small>pick pieces that are in the asset library</small>', 'near'); return; }
+  const c = items.reduce((a, it) => a.add(new THREE.Vector3(it.x, 0, it.z)), new THREE.Vector3()).multiplyScalar(1 / items.length); ME.clip = { items: items.map(it => ({ ...it, x: it.x - c.x, z: it.z - c.z })), at: c, n: 0, grouped: items.length > 1 };
+  flash(`<b>COPIED</b><small>${items.length} piece${items.length > 1 ? 's' : ''} · Ctrl+V pastes at the mouse</small>`); }
+function mePaste() { const C = ME.clip; if (!C) { flash('<b>NOTHING COPIED YET</b><small>pick pieces and press Ctrl+C</small>', 'near'); return; }
+  C.n++; const at = ME.mouseFloor ? ME.mouseFloor.clone() : C.at.clone().add(new THREE.Vector3(2 * C.n, 0, 2 * C.n)); mePush(); const made = [];
+  for (const it of C.items) { ME.E.added.push({ asset: it.asset, x: +(at.x + it.x).toFixed(2), y: +it.y.toFixed(2), z: +(at.z + it.z).toFixed(2), ry: it.ry, s: it.s }); made.push('add:' + (ME.E.added.length - 1)); }
+  if (C.grouped) { ME.E.groups = ME.E.groups || []; ME.E.groups.push(made.slice()); } meCommit(); ME.sel = new Set(made); meSelBox(); mePanels(); }
 function meFocus() { const ps = [...ME.sel].map(mePiece).filter(Boolean); if (!ps.length) return; const c = new THREE.Vector3(); for (const p of ps) c.add(mePivot(p)); c.multiplyScalar(1 / ps.length); ME.cam.t.copy(c); ME.cam.dist = Math.min(ME.cam.dist, 18); }
 addEventListener('keydown', e => {
   if (mode !== 'mapedit' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; ME.keys = ME.keys || {};
   if (/^Key[WASD]$/.test(e.code)) ME.keys[e.code] = true;
   const ctrl = e.ctrlKey || e.metaKey;
   if (ME.locked && !/^Key[WASDFT]$/.test(e.code) && e.code !== 'Escape' && !/^(Shift|Alt|Control|Meta)/.test(e.code)) return;   // an official map: the view moves, nothing else
+  if (ctrl && e.code === 'KeyC') { e.preventDefault(); meCopy(); return; }
+  if (ctrl && e.code === 'KeyV') { e.preventDefault(); mePaste(); return; }
+  if (ctrl && e.code === 'KeyD') { e.preventDefault(); meDuplicate(); return; }
+  if (ctrl && e.code === 'KeyG') { e.preventDefault(); if (e.shiftKey) meUngroup(); else meGroup(); return; }
   if (ctrl && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) meRedo(); else meUndo(); return; } if (ctrl && e.code === 'KeyY') { e.preventDefault(); meRedo(); return; }
   if (e.code === 'Escape') { if (ME.place) { ME.place = null; meLibrary(); meToolbar(); } else { ME.sel.clear(); meSelBox(); mePanels(); } return; }
   if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); meDelete(); return; }
@@ -301,7 +383,8 @@ document.addEventListener('click', e => {
   if (k === 'officialmap') { meLeaveMyMap(); return; }
   if (k === 'renamemap' && MY_MAP) { const n = prompt('Name of your map:', MY_MAP.name); if (n && n.trim()) { MY_MAP.name = n.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40); store.set('myMaps', MY_MAPS); world.title = MY_MAP.name; mePanels(); } return; }
   if (k === 'delmap' && MY_MAP && confirm(`Delete your map "${MY_MAP.name}"? This can't be undone (copy its map code first to keep it).`)) { const i = MY_MAPS.indexOf(MY_MAP); if (i >= 0) MY_MAPS.splice(i, 1); store.set('myMaps', MY_MAPS); meLeaveMyMap(); return; }
-  if (ME.locked && /^(undo|redo|del|dup|reset1|resetall)$/.test(k)) { meLockedHint(); return; }
+  if (ME.locked && /^(undo|redo|del|dup|reset1|resetall|paste|group|ungroup)$/.test(k)) { meLockedHint(); return; }
+  if (k === 'copy') meCopy(); if (k === 'paste') { ME.mouseFloor = null; mePaste(); } if (k === 'group') meGroup(); if (k === 'ungroup') meUngroup();
   if (k === 'undo') meUndo(); if (k === 'redo') meRedo(); if (k === 'top') ME.cam.pitch = 1.55; if (k === 'del') meDelete(); if (k === 'dup') meDuplicate();
   if (k === 'reset1') { const p = mePiece([...ME.sel][0]); if (p) { mePush(); delete ME.E.moved[p.key]; meCommit(); } }
   if (k === 'resetall' && confirm('Put every piece of this map back where it was and remove everything you added?')) { mePush(); ME.E = meEmpty(); ME.sel.clear(); meCommit(); }
@@ -312,6 +395,7 @@ document.addEventListener('click', e => {
   if (k === 'mode-own' && ME.official) meMode(false); if (k === 'mode-off' && !ME.official) meMode(true); if (k === 'publish') mePublish();
   if (k === 'discard' && confirm('Throw away your draft of the official map and go back to the published one?')) { const d = store.get('officialDraft', {}) || {}; delete d[MAP_ID]; store.set('officialDraft', d); ME.official = false; meMode(true); }
 });
+document.addEventListener('input', e => { if (mode === 'mapedit' && e.target.id === 'meQ') { ME.q = e.target.value; meLibList(); } });
 document.addEventListener('change', e => {
   if (mode !== 'mapedit') return; const t = e.target;
   if (t.id === 'meVary') ME.vary = t.checked;

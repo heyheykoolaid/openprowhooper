@@ -555,13 +555,38 @@
       { const c = S.makeCapsule(v3(x, h * 0.55, z), v3(x, h * 0.92, z), r * 0.6); c.leaf = true; o.prims.push(c); }   // the upper trunk inside the crown
       o.round = { c: v3(x, 0, z), r: R, under: base, over: h }; o.obstacle = { a: v3(x - R, 0, z), b: v3(x + R, 0, z), under: base, over: h };
       trees.push({ x, z, r: Math.max(R * 0.5, 1.2) }); return o; };
-    const birch = (x, z, h) => { const o = O('Birch', 'pole'), lx = rr(-0.6, 0.6), lz = rr(-0.6, 0.6);
-      pipe(o, v3(x, 0, z), v3(x + lx, h, z + lz), 0.11, 'birchBark');
-      for (let i = 0; i < 4; i++) ball(o, v3(x + lx * 0.8 + rr(-1, 1), h * rr(0.62, 0.95), z + lz * 0.8 + rr(-1, 1)), rr(0.9, 1.4), 'birchLeaf', { leafSolid: true });
-      trees.push({ x, z, r: 1.4 }); return o; };
+    // Birch: the trunk ends inside the top clump of leaves and a thin branch reaches every other clump (pilot: the trunk
+    // stuck out of the crown). split: two trunks from one foot in a V (the pilot's photo), each with its own crown, and the
+    // opening between them is a gap. undefined = the map decides from the spot (a hash, so the map's random numbers, and
+    // with them every other tree's place, stay as they were).
+    const spot = (x, z) => { const v = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return v - Math.floor(v); };
+    const birch = (x, z, h, split) => { if (split === undefined) split = spot(x, z) < 0.35;
+      // After the pilot's reference photos: slender white trunks that taper, branches reaching up and out from the upper
+      // two thirds, a small clump of leaves at each tip: an airy crown, not a few big balls. The map's random draws are
+      // made exactly as before (so every later tree keeps its place); the shape comes from its own seed (the spot).
+      const o = O(split ? 'Split Birch' : 'Birch', 'pole'), lx = rr(-0.6, 0.6), lz = rr(-0.6, 0.6); for (let i = 0; i < 4; i++) { rr(-1, 1); rr(0.62, 0.95); rr(-1, 1); rr(0.9, 1.4); }
+      let sd = (Math.floor(spot(x * 1.3 + 7, z * 0.7 - 3) * 4294967295) >>> 0) || 1; const rn = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; }, rg = (a, b) => a + (b - a) * rn();
+      const lerp = (a, b, f) => v3(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f), stems = [];
+      if (!split) stems.push({ foot: v3(x, 0, z), top: v3(x + lx, h, z + lz), r: 0.12 });
+      else { const a = spot(z, x) * Math.PI * 2, sx = 0.9 + 0.5 * spot(x + 1, z), d = v3(Math.cos(a), 0, Math.sin(a)), fork = v3(x, 0.35, z); pipe(o, v3(x, 0, z), fork, 0.15, 'birchBark');
+        for (const k of [-1, 1]) stems.push({ foot: fork, top: v3(x + lx * 0.5 + d.x * sx * k * 1.3, h * (k < 0 ? 0.97 : 0.86), z + lz * 0.5 + d.z * sx * k * 1.3), r: 0.095 });
+        const Y = Math.min(stems[0].top.y, stems[1].top.y), y0 = Y * 0.3, y1 = Y * 0.55, at = (st, y) => lerp(st.foot, st.top, (y - st.foot.y) / (st.top.y - st.foot.y));
+        const A0 = at(stems[0], y0), B0 = at(stems[1], y0), w0 = Math.hypot(A0.x - B0.x, A0.z - B0.z);
+        o.gapAfter = { c: v3((A0.x + B0.x) / 2, (y0 + y1) / 2, (A0.z + B0.z) / 2), n: v3(-d.z, 0, d.x), hu: Math.max(0.15, w0 / 2 - 0.12), hv: (y1 - y0) / 2, u: d }; }
+      for (const st of stems) { const mid = lerp(st.foot, st.top, 0.55); mid.x += rg(-0.15, 0.15); mid.z += rg(-0.15, 0.15);   // a slight bow, tapering
+        pipe(o, st.foot, mid, st.r, 'birchBark'); pipe(o, mid, st.top, st.r * 0.62, 'birchBark', { leafSolid: true });
+        const at = f => f < 0.55 ? lerp(st.foot, mid, f / 0.55) : lerp(mid, st.top, (f - 0.55) / 0.45), nb = split ? 7 : 9, ph = rg(0, Math.PI * 2);
+        for (let i = 0; i < nb; i++) { const f = 0.34 + 0.56 * i / (nb - 1) + rg(-0.04, 0.04), base = at(f), ang = ph + i * 2.4 + rg(-0.3, 0.3), tilt = rg(38, 62) * Math.PI / 180, len = rg(2.4, 3.6) * (1.25 - f * 0.6) * h / 12;
+          const tip = v3(base.x + Math.sin(tilt) * Math.cos(ang) * len, base.y + Math.cos(tilt) * len, base.z + Math.sin(tilt) * Math.sin(ang) * len), lr = rg(0.55, 0.9);
+          pipe(o, base, tip, 0.04, 'birchBark', { leafSolid: true }); ball(o, tip, lr, 'birchLeaf', { leafSolid: true }); ball(o, lerp(base, tip, 0.6), lr * 0.75, 'birchLeaf', { leafSolid: true }); }
+        ball(o, st.top, rg(0.6, 0.85), 'birchLeaf', { leafSolid: true }); }
+      if (o.gapAfter) { const g = o.gapAfter; delete o.gapAfter; O('Split Birch opening', 'gap', { gap: g }); }
+      trees.push({ x, z, r: 1.4 }); return o; };   /* same spacing as before: every other tree keeps its place */
     const shade = (x, z, h) => { const o = O('Maple', 'tree'), base = h * 0.32, R = h * 0.28;
-      pipe(o, v3(x, 0, z), v3(x, base + 1, z), 0.28, 'bark'); pipe(o, v3(x, base, z), v3(x + 1.2, base + 2, z + 0.5), 0.14, 'bark', { leafSolid: true }); pipe(o, v3(x, base, z), v3(x - 1, base + 2.2, z - 0.6), 0.14, 'bark', { leafSolid: true });
-      for (const [a, b, c, s] of [[0, 0.75, 0, 1], [0.9, 0.62, 0.5, 0.75], [-0.9, 0.6, -0.4, 0.8], [0.2, 0.55, -1, 0.7]]) ball(o, v3(x + a * R, h * b, z + c * R), R * 0.62 * s, 'mapleLeaf', { leafSolid: true });
+      // a limb from the top of the trunk into every clump of leaves (pilot: leaves floated with no branch)
+      pipe(o, v3(x, 0, z), v3(x, base + 1, z), 0.28, 'bark'); const fork = v3(x, base + 0.8, z);
+      for (const [a, b, c, s] of [[0, 0.75, 0, 1], [0.9, 0.62, 0.5, 0.75], [-0.9, 0.6, -0.4, 0.8], [0.2, 0.55, -1, 0.7]]) { const q = v3(x + a * R, h * b, z + c * R); ball(o, q, R * 0.62 * s, 'mapleLeaf', { leafSolid: true });
+        pipe(o, fork, v3(fork.x + (q.x - fork.x) * 0.8, fork.y + (q.y - fork.y) * 0.8, fork.z + (q.z - fork.z) * 0.8), a === 0 && c === 0 ? 0.2 : 0.13, 'bark', { leafSolid: true }); }
       o.round = { c: v3(x, 0, z), r: R, under: base + 0.6, over: h }; o.obstacle = { a: v3(x - R, 0, z), b: v3(x + R, 0, z), under: base + 0.6, over: h };
       trees.push({ x, z, r: R * 0.6 }); return o; };
     const picnic = (x, z, ry) => { const o = O('Picnic Table', 'deco'), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, y, z - u * s + w * c);
@@ -716,7 +741,7 @@
   // The asset library: what the editor can place. Each is built at the origin, standing on the ground, facing -z.
   const ASSETS = {
     'Cedar': (K, N) => N.conifer(0, 0, 24, 0.3, 'cedar'), 'Big Cedar': (K, N) => N.conifer(0, 0, 27, 0.55, 'cedar'), 'Young Cedar': (K, N) => N.conifer(0, 0, 11, 0.16, 'cedar'),
-    'Hemlock': (K, N) => N.conifer(0, 0, 22, 0.24, 'hemlock'), 'Birch': (K, N) => N.birch(0, 0, 12), 'Maple': (K, N) => N.shade(0, 0, 11),
+    'Hemlock': (K, N) => N.conifer(0, 0, 22, 0.24, 'hemlock'), 'Birch': (K, N) => N.birch(0, 0, 12, false), 'Split Birch': (K, N) => N.birch(0, 0, 11, true), 'Maple': (K, N) => N.shade(0, 0, 11),
     'Sakura Tree': K => { const tr = K.O('Sakura Tree', 'pole'); tr.round = { c: v3(0, 0, 0), r: 1.8, under: 2.2, over: 5.0 }; tr.obstacle = { a: v3(-1.8, 0, 0), b: v3(1.8, 0, 0), under: 2.2, over: 5.0 };
       K.pipe(tr, v3(0, 0, 0), v3(0, 2.9, 0), 0.14, 'bark'); K.ball(tr, v3(0, 3.7, 0), 1.4, 'blossom'); K.ball(tr, v3(0.9, 3.2, 0.4), 0.9, 'blossom'); K.ball(tr, v3(-0.8, 3.4, -0.5), 1.0, 'blossom'); },
     'Shrub': K => K.ball(K.O('Shrub', 'deco'), v3(0, 0.25, 0), 0.6, 'shrub', { leafSolid: true }), 'Bracken': K => K.ball(K.O('Bracken', 'deco'), v3(0, 0.25, 0), 0.6, 'bracken', { leafSolid: true }),
@@ -752,9 +777,10 @@
       for (const id of p.ids) moveObject(w.objs[id], p.pivot, d, ry, s); applied.moved++; }
     for (const key of (Array.isArray(E.removed) ? E.removed : []).slice(0, 5000)) { const p = find(key); if (!p) { applied.lost++; continue; }
       for (const id of p.ids) { const o = w.objs[id]; o.prims = []; o.vis = []; delete o.obstacle; delete o.round; delete o.gap; delete o.light; o.kind = 'deco'; o.removed = true; } applied.removed++; }
-    const K = kit(w); let seed = 77; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }, N = natureKit(K, (a, b) => (a + b) / 2, rnd);
+    const K = kit(w); let seed = 77; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }, N = natureKit(K, (a, b) => a + (b - a) * rnd(), rnd);   /* reseeded per asset: every library tree looks the same each time, and natural */
+    if ((Array.isArray(E.added) ? E.added : []).some(a => a && !ASSETS[a.asset])) catalog();
     (Array.isArray(E.added) ? E.added : []).slice(0, 3000).forEach((a, ai) => { const make = ASSETS[a && a.asset]; if (!make) { applied.lost++; return; }
-      const n0 = w.objs.length; make(K, N); const made = w.objs.slice(n0), g = made.length > 1 ? made[0].id : null;
+      const n0 = w.objs.length; seed = 77; make(K, N); const made = w.objs.slice(n0), g = made.length > 1 ? made[0].id : null;
       for (const o of made) { o.added = true; o.addIdx = ai; if (g != null) o.grp = 'a' + g; moveObject(o, v3(0, 0, 0), v3(num(a.x, 0, -500, 500), num(a.y, 0, -50, 100), num(a.z, 0, -500, 500)), num(a.ry, 0, -3600, 3600) * Math.PI / 180, num(a.s, 1, 0.1, 10)); }
       applied.added++; });
     const all = []; for (const o of w.objs) for (const p of o.prims) { p.owner = o.id; all.push(p); } w.prims = all; w.edits = applied; return w;
@@ -770,7 +796,28 @@
   if (typeof window !== 'undefined' && window.PW_OFFICIAL && typeof window.PW_OFFICIAL === 'object') for (const [k, v] of Object.entries(window.PW_OFFICIAL)) OFFICIAL[k] = v;
   else if (typeof require === 'function' && typeof __dirname === 'string') { try { const fs = require('fs'), path = require('path'), dir = path.join(__dirname, '..', 'maps', 'official');
     for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (f.endsWith('.json')) { try { OFFICIAL[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { /* a broken file is skipped */ } } } catch { /* no folder */ } }
-  S.mapPieces = mapPieces; S.applyMapEdits = applyMapEdits; S.ASSETS = Object.keys(ASSETS);
+  // Every piece of every map is in the library too (pilot: "it doesn't list all of the assets"): the first piece of each
+  // name, copied exactly as it stands in its map (shapes, looks, tags, lights) and set down at the origin. Not the ground,
+  // the shells of buildings and halls, map edges, or anything over 40 m across. Built once, on first use, from the maps as
+  // generated (no layouts), so it never depends on anyone's edits. Hand-made assets above keep their names.
+  const RAW = { moose: () => buildMoose(), school: () => buildSchool(), clappy: () => buildClappy(), warehouse: () => buildWarehouse(), playground: () => addPlaygroundExtras(S.buildPlayground()) };
+  let CATALOG = null;
+  function catalog() {
+    if (CATALOG) return CATALOG; CATALOG = { byMap: {} };
+    for (const [mid, mk] of Object.entries(RAW)) { let w; try { w = mk(); } catch { continue; } const list = CATALOG.byMap[mid] = [];
+      for (const pc of mapPieces(w)) { const o0 = w.objs[pc.ids[0]]; if (!pc.size || ASSETS[pc.name] || /opening$|edge$/.test(pc.name) || ['edge', 'ground', 'zone'].includes(o0.kind)) continue;
+        if (Math.max(pc.size.x, pc.size.z) > 40 || (o0.kind === 'wall' && Math.max(pc.size.x, pc.size.z) > 12) || !pc.ids.some(id => w.objs[id].vis.length)) continue;
+        const src = pc.ids.map(id => JSON.parse(JSON.stringify(w.objs[id]))), pv = pc.pivot, name = pc.name;
+        ASSETS[name] = K => { const made = []; K.together(() => { for (const so of src) { const o = K.O(so.name, so.kind); for (const k of Object.keys(so)) if (!['id', 'name', 'kind', 'grp', 'editKey', 'added', 'addIdx', 'baked', 'auto', 'parent'].includes(k)) o[k] = JSON.parse(JSON.stringify(so[k])); made.push(o); } });
+          for (const o of made) moveObject(o, v3(0, 0, 0), v3(-pv.x, 0, -pv.z), 0, 1); };
+        list.push(name); } }
+    return CATALOG; }
+  S.mapPieces = mapPieces; S.applyMapEdits = applyMapEdits;
+  Object.defineProperty(S, 'ASSETS', { configurable: true, get() { catalog(); return Object.keys(ASSETS); } });
+  S.assetCatalog = () => { catalog(); return CATALOG.byMap; };
+  // one library asset built on its own at the origin (the Map Editor draws its thumbnail from it)
+  S.assetObjs = name => { catalog(); const make = ASSETS[name]; if (!make) return []; const w = { objs: [] }, K = kit(w); let seed = 77;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; make(K, natureKit(K, (a, b) => a + (b - a) * rnd(), rnd)); return w.objs; };
   const edited = (id, w) => { if (OFFICIAL[id]) { applyMapEdits(w, OFFICIAL[id]); w.official = w.edits; } if (MAP_EDITS[id]) applyMapEdits(w, MAP_EDITS[id]); else if (OFFICIAL[id]) w.edits = null; return w; };
 
   // Every map is closed in (pilot, 2026-11-17: "proper bounding boxes"): invisible walls round everything that was built
