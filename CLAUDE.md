@@ -163,7 +163,7 @@ it does not count in `npm run bench` unless labels came with it.
 Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing, or
 presses **Continue without a name** (owner, 2026-11-18: `store 'anon'`, `anonOn()`): no name, sharing off, the waiting queue
 cleared, and `telQueue` / `telPump` refuse everything (flights, reviews, votes, bot judging, video, feedback); the board,
-RaceGOW sharing and map sharing need a name anyway. Setting a name or turning sharing on in Options ends it. Then
+RaceGOW sharing and map sharing need a name anyway. Setting a name or turning sharing on in Options ends it, and it skips the Warm-up prompt. Then
 the Pilot Warm-up is recommended once to anyone without a profile. The name goes with shared flights, labels and
 feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
@@ -366,10 +366,10 @@ Not changed, no data: yaw reaches full rate in 35-95 ms (the spec says 120-160; 
 ~4 min to 3.3 V): fit both from a Blackbox log. No gyro noise model yet (a guess without a log).
 
 ## Keyboard assist, pause button, 3D checkbox (2026-11-18)
-Keyboard is Mode 2 (owner, 2026-11-18): the arrows are the left stick (↑ ↓ throttle, ← → yaw), W A S D the right stick
-(pitch, roll), full stick range. Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls →
+Keyboard is Mode 2 (owner, 2026-11-18, settled after one swap): W A S D the left stick (W / S throttle, A / D yaw), the arrows
+the right stick (pitch, roll), full stick range; Space arms / disarms (a focused button is blurred so it never gets the press). Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls →
 Keyboard): `fc.modeOverride = 'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and
-height hold (↑ ↓ climb and sink, released = hover; a PI on vertical speed in input.js). Disarmed, ↑ still raises the
+height hold (W / S climb and sink, released = hover; a PI on vertical speed in input.js). Disarmed, W still raises the
 throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`, right of the score in `#scoreRow`, clear of the "what counted" list).
 The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 

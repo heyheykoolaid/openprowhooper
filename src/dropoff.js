@@ -182,7 +182,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-phys
   if (b.dataset.phys === 'reset') { store.set('feelBefore2', feelSnap()); for (const k of Object.keys(S.FEEL_KEYS)) tune[k] = 1; saveTune(); }
   store.set('phys2Asked', true); $('#pilotModal').classList.add('hide'); });
 function pilotWarmAsk() {
-  if (store.get('pilot', null) || store.get('warmAsked', false)) return;
+  if (store.get('pilot', null) || store.get('warmAsked', false) || anonOn()) return;   // no name chosen: no Warm-up prompt either (owner)
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Recommended first: Pilot Warm-up</h3>
     <input type="hidden" id="pilotNameIn" value="${esc(pilotName())}">
@@ -194,7 +194,8 @@ document.addEventListener('change', e => { if (e.target.id === 'optPilotName') {
 document.addEventListener('keydown', e => { if (e.target.id === 'pilotNameIn' && e.code === 'Enter') { const b = $('#pilotModal [data-pilot].primary'); if (b) b.click(); } }, true);
 document.addEventListener('click', async e => {
   const pb = e.target.closest('[data-pilot]');
-  if (pb && pb.dataset.pilot === 'anon') { store.set('pilotName', ''); store.set('anon', true); tel.on = false; tel.asked = true; saveTel(); await idb.clear('telemetry'); telState.mem = []; pilotShowName(); $('#pilotModal').classList.add('hide'); flashNote('Flying without a name: nothing is collected or shared'); pilotWarmAsk(); return; }
+  if (pb && pb.dataset.pilot === 'anon') { store.set('pilotName', ''); store.set('anon', true); tel.on = false; tel.asked = true; saveTel(); await idb.clear('telemetry'); telState.mem = []; pilotShowName(); $('#pilotModal').classList.add('hide'); flashNote('Flying without a name: nothing is collected or shared'); return; }
+  if (pb && (pb.dataset.pilot === 'warm' || pb.dataset.pilot === 'later')) { $('#pilotModal').classList.add('hide'); if (pb.dataset.pilot === 'warm') startWarmup(); else store.set('warmAsked', true); return; }
   if (pb) { const n = cleanName($('#pilotNameIn').value);
     if (n.length < 2) { $('#pilotMsg').textContent = 'Pick a name with at least 2 characters.'; $('#pilotNameIn').focus(); return; }
     store.set('pilotName', n); pilotShowName(); $('#pilotModal').classList.add('hide');
