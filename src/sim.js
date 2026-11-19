@@ -534,7 +534,7 @@ function buildPlayground() {
   const hp = O('Hoop Pole', 'pole');
   pipe(hp, v3(-11, 0, -14.2), v3(-11, 3.4, -14.2), 0.06, 'paintBlue');
   pipe(hp, v3(-11, 3.3, -14.2), v3(-11, 3.3, -13.4), 0.04, 'paintBlue');
-  box(hp, v3(-11, 3.35, -13.35), v3(0.9, 0.53, 0.02), 'backboard', 0, 0, 0, { graffiti: 'south' });
+  box(hp, v3(-11, 3.35, -13.35), v3(0.9, 0.53, 0.02), 'backboard', 0, 0, 0, { graffiti: 'south', art: [{ name: 'rwdc', x: 0.15, y: 0.8, h: 0.36, rot: -0.08 }] });
   const rim = O('Hoop', 'gap', { gap: { c: v3(-11, 3.05, -12.95), n: v3(0, 1, 0), hu: 0.21, hv: 0.21, u: v3(1, 0, 0), round: true } });
   for (let i = 0; i < 14; i++) {
     const a0 = i / 14 * Math.PI * 2, a1 = (i + 1) / 14 * Math.PI * 2;

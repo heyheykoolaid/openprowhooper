@@ -59,7 +59,10 @@ function makeTextures() {
   // chain link
   [c, g] = cnv(128, 128); g.clearRect(0, 0, 128, 128); g.strokeStyle = 'rgba(160,165,168,0.95)'; g.lineWidth = 2.2; for (let i = -128; i < 256; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 128, 128); g.stroke(); g.beginPath(); g.moveTo(i + 128, 0); g.lineTo(i, 128); g.stroke(); } TX.chainlink = tex(c);
   [c, g] = cnv(128, 128); g.fillStyle = '#4a3a2c'; g.fillRect(0, 0, 128, 128); for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(20,15,10,0.5)'; g.fillRect(rnd() * 128, 0, 2 + rnd() * 3, 128); } TX.bark = tex(c);
-  [c, g] = cnv(256, 256); g.fillStyle = '#e9e5dc'; g.fillRect(0, 0, 256, 256); stains(g, 256, 256, 20, 'rgba(60,50,40,A)', 10, 60, 0.35); g.strokeStyle = '#c4462c'; g.lineWidth = 8; g.strokeRect(78, 120, 100, 80); g.strokeRect(8, 8, 240, 240); TX.backboard = tex(c, 1);
+  // the backboard: drawn once across its face (72 x 42 in), the shooter's square 24 x 18 in, centred, its bottom edge level with
+  // the rim (owner, 2026-11-19: the lines sat anywhere, world-tiled like a wall texture)
+  [c, g] = cnv(512, 302); g.fillStyle = '#e9e5dc'; g.fillRect(0, 0, 512, 302); stains(g, 512, 302, 20, 'rgba(60,50,40,A)', 10, 60, 0.35); g.strokeStyle = '#c4462c'; g.lineWidth = 9;
+  g.strokeRect(9, 9, 494, 284); { const sw = 512 / 3, sh = 302 * 18 / 42, sb = 302 * (1 - 0.217); g.strokeRect(256 - sw / 2, sb - sh, sw, sh); } TX.backboard = tex(c, 1);
 }
 
 // ---- graffiti
@@ -390,7 +393,7 @@ function staticFlush() {
 function visMesh(v, art) {
   let m;
   if (v.shape === 'box') {
-    m = new THREE.Mesh(boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);
+    m = new THREE.Mesh(v.mat === 'backboard' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
     m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
     if (v.graffiti && art) addGraffiti(v);
   } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
