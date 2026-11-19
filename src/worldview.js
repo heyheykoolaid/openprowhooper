@@ -352,7 +352,7 @@ function boxGeo(h, density = 0.5, off = null) {   // off: the box's centre, to l
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) {
     const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
-    const X = p.getX(i) + (off ? off.x : 0), Y = p.getY(i) + (off ? off.y : 0), Z = p.getZ(i) + (off ? off.z : 0);
+    const X = p.getX(i) + (off ? h.x : 0), Y = p.getY(i) + (off ? off.y : 0), Z = p.getZ(i) + (off ? h.z : 0);   // off: along a face from its corner, up it from the ground
     let u, v; if (nx > 0.5) { u = Z; v = Y; } else if (ny > 0.5) { u = X; v = Z; } else { u = X; v = Y; }
     uv.setXY(i, u * density, v * density);
   }
@@ -640,11 +640,17 @@ function nycMats() {
 function nycBackdrop() {
   const R = (() => { let s = 9191; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const [c, g] = cnv(256, 256); g.fillStyle = '#5a5258'; g.fillRect(0, 0, 256, 256); for (let y = 8; y < 256; y += 32) for (let x = 6; x < 256; x += 24) { const lit = R() < 0.14; g.fillStyle = lit ? '#ffcf88' : (R() < 0.5 ? '#3a3640' : '#46424c'); g.fillRect(x, y, 13, 18); }
-  const t = tex(c); const mats = [0x8a7c78, 0x7a7484, 0x9a8a7a, 0x6e6a76].map(col => new THREE.MeshStandardMaterial({ map: t, color: col, roughness: 0.9, emissive: 0xffc070, emissiveMap: t, emissiveIntensity: 0.12 }));
+  const t = tex(c), roof = new THREE.MeshStandardMaterial({ color: 0x3e3a3a, roughness: 0.95 });
+  const mats = [0x8a7c78, 0x7a7484, 0x9a8a7a, 0x6e6a76].map(col => { const side = new THREE.MeshStandardMaterial({ map: t, color: col, roughness: 0.9, emissive: 0xffc070, emissiveMap: t, emissiveIntensity: 0.12 }); return [side, side, roof, roof, side, side]; });   // BoxGeometry's faces: ±x, ±y (the roof: a solid colour), ±z
+  const TILE = 9, PITCH = TILE / 8, snap = v => Math.max(2, Math.round(v / PITCH)) * PITCH;   // whole windows on every face
+  const tower = (w, h, d) => { const g = new THREE.BoxGeometry(w, h, d), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
+    for (let i = 0; i < p.count; i++) { const X = p.getX(i) + w / 2, Y = p.getY(i) + h / 2, Z = p.getZ(i) + d / 2;   // from the face's corner and the ground: windows start at the edge
+      if (Math.abs(n.getX(i)) > 0.5) uv.setXY(i, Z / TILE, Y / TILE); else if (Math.abs(n.getY(i)) > 0.5) uv.setXY(i, 0, 0); else uv.setXY(i, X / TILE, Y / TILE); }
+    return g; };
   for (let i = 0; i < 150; i++) { const near = i < 70, a = R() * Math.PI * 2, rad = near ? 68 + R() * 32 : 105 + R() * 70, w = 9 + R() * 16, d = 9 + R() * 16, h = near ? 10 + R() * 24 : 18 + R() * (R() < 0.15 ? 120 : 55);   // a ring of low blocks round the map, towers beyond
     const x = Math.cos(a) * rad, z = 7 + Math.sin(a) * rad; if (Math.abs(z - 6) < 9 && Math.abs(x) > 60) continue;   // the El's corridor stays open: the avenue's vista
-    const geo = boxGeo(new THREE.Vector3(w / 2, h / 2, d / 2), 1 / 9), m = new THREE.Mesh(geo, mats[i % 4]); m.position.set(x, h / 2, z); playRoot.add(m);
-    if (R() < 0.3) { const wt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 3, 10), MAT.towerWood); wt.position.set(x + (R() - 0.5) * w * 0.5, h + 3.2, z); playRoot.add(wt); const cn = new THREE.Mesh(new THREE.ConeGeometry(1.55, 1.3, 10), MAT.roofDark); cn.position.set(wt.position.x, h + 5.3, z); playRoot.add(cn); } }
+    const W = snap(w), D = snap(d), Hh = snap(h), geo = tower(W, Hh, D), m = new THREE.Mesh(geo, mats[i % 4]); m.position.set(x, Hh / 2, z); playRoot.add(m);
+    if (R() < 0.3) { const wt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 3, 10), MAT.towerWood); wt.position.set(x + (R() - 0.5) * W * 0.5, Hh + 1.5, z); playRoot.add(wt); const cn = new THREE.Mesh(new THREE.ConeGeometry(1.55, 1.3, 10), MAT.roofDark); cn.position.set(wt.position.x, Hh + 3.6, z); playRoot.add(cn); } }
 }
 function nycTick(dt) {
   NYC.t += dt; const t = NYC.t;

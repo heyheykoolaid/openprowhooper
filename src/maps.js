@@ -1514,7 +1514,7 @@
       for (const z of EL.zg) box(far, v3(s * 85, 6.65, z), v3(35, 0.35, 0.22), 'elGreen', 0, 0, 0, { noCollide: true }); box(far, v3(s * 85, 6.6, 6), v3(35, 0.06, 3.38), 'elDeck', 0, 0, 0, { noCollide: true }); } }
 
     // ---- 1 Yellow Fever: the start box, then east between stopped taxis and cars, under gates hung from signal arms
-    { const cars = []; for (const lz of [3.0, 6.0, 9.0]) { let x = -32 + rnd() * 3; while (x < 46) { cars.push([x, lz + (rnd() - 0.5) * 0.35, rnd() < 0.62]); x += 4.6 + 2.2 + rnd() * 5.5; } }
+    { const cars = []; for (const lz of [3.0, 6.0, 9.0]) { let x = -32 + rnd() * 3; while (x < 46) { cars.push([x, lz + (rnd() - 0.5) * 0.35, rnd() < 0.62]); x += 4.6 + 9 + rnd() * 14; } }   /* owner: fewer cars (gaps of 9-23 m) */
       for (const [x, z, taxi] of cars) { if (Math.abs(x - 23) < 4.5 && z > 7) continue;
         const c = O(taxi ? 'Taxi' : 'Parked Car', 'deco'), col = taxi ? 'taxiYellow' : ['carRed', 'carBlue', 'carSilver', 'carBlack'][Math.floor(rnd() * 4)], ry = (rnd() - 0.5) * 0.08;
         box(c, v3(x, 0.62, z), v3(2.3, 0.36, 0.9), col, ry); box(c, v3(x - 0.2, 1.2, z), v3(1.25, 0.25, 0.82), 'carGlass', ry); box(c, v3(x - 0.2, 1.47, z), v3(1.2, 0.03, 0.8), col, ry);
