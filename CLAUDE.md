@@ -201,6 +201,15 @@ artifact database, read the index documents (summary, events) with db_query; ask
 in the project database" in Options for the traces (they are too big to read through tools). Telemetry is unlabelled:
 it does not count in `npm run bench` unless labels came with it.
 
+**Long runs and walking away** (owner, 2026-11-19; `telSpill`, `telSqueeze`, `telPieceSend` in dropoff.js; test/pieces.js): the
+replay keeps the last 8 minutes (`RECAP_MAX`), and with sharing on what falls out of it is kept as **pieces** of up to 8 minutes of
+flying, each sent as its own flight (`id` `<run>.p<n>`, `ended: 'piece'`, `summary.piece` { of, n, t0, t1, gaps }, only the calls in
+its window), packed at a quiet moment (disarmed, crashed, or when two wait) or at the end in the processing pause. **Idle** rows
+(disarmed, crashed, or under 0.3 m/s with rates under 40 °/s and the sticks centred) longer than 15 s are cut out, keeping 1 s at each
+end (`summary.gaps`); a gap does not change the re-fly (checked on a real flight). Under 10 s of flying sends nothing, so a sim left
+open sends nothing. The final flight is squeezed the same way and carries only the calls of its own window (before, a 39-minute run
+listed every call over 8 minutes of trace, and tools/flights.js read the rest as "no longer called"). Pieces count toward `perDay`.
+
 ## First start (src/dropoff.js `pilotAsk`, `pilotWarmAsk`)
 Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing, or
 presses **Continue without a name** (owner, 2026-11-18: `store 'anon'`, `anonOn()`): no name, sharing off, the waiting queue

@@ -6,13 +6,13 @@
 // Saved as pro-whooper-session/2 (via: "review"), which test/benchmark.js already reads.
 const recap = { trace: [], events: [], flags: [], id: null, started: null, play: null, cam: 'fpv', back: 'pause', dirty: false };
 const RECAP_MAX = 100 * 60 * 8;   // 8 minutes at 100 Hz
-function recapReset() { recap.guest = false; recap.trace = []; recap.events = []; recap.flags = []; recap.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); recap.started = new Date().toISOString(); recap.dirty = false; recap.mode = null; try { recap.feel0 = feelSnap(); } catch { recap.feel0 = null; } }
+function recapReset() { recap.guest = false; recap.trace = []; recap.events = []; recap.flags = []; recap.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); recap.started = new Date().toISOString(); recap.dirty = false; recap.mode = null; recap.spill = null; recap.pieces = []; recap.pieceN = 0; recap.telUpTo = -Infinity; try { recap.feel0 = feelSnap(); } catch { recap.feel0 = null; } }
 // the game-feel settings a run was flown with (Garage → Advanced sliders, battery, flight mode, radio link, camera): shared
 // flights carry them in summary.feel so the defaults can be tuned from what pilots really choose (tools/feel.js)
 function feelSnap() { const f = {}; for (const k in S.FEEL_KEYS) f[k] = Number.isFinite(+tune[k]) ? +tune[k] : 1;
   for (const k of ['batteryLife', 'flightMode', 'rcLinkHz', 'rcDelayMs', 'rcSmooth', 'rcSmoothFactor', 'camTilt', 'camFov', 'ratesType', 'rateProfile', 'wallGrip']) if (tune[k] !== undefined) f[k] = tune[k];
   if (f.batteryLife === undefined) f.batteryLife = true; return f; }
-function recapRow(row) { if (mode !== 'fly' || race.on) return; if (!recap.id) recapReset(); recap.trace.push(row); if (!recap.mode && recap.trace.length > 100) recap.mode = train.on ? 'calibration' : session ? 'session' : 'free'; if (recap.trace.length > RECAP_MAX) recap.trace.shift(); }
+function recapRow(row) { if (mode !== 'fly' || race.on) return; if (!recap.id) recapReset(); recap.trace.push(row); if (!recap.mode && recap.trace.length > 100) recap.mode = train.on ? 'calibration' : session ? 'session' : 'free'; if (recap.trace.length > RECAP_MAX) telSpill(recap.trace.shift()); if (recap.pieces && recap.pieces.length && (!row[13] || row[14] || recap.pieces.length > 1)) telPieceGo(); }
 function recapEvent(ev) {
   if (mode !== 'fly' || race.on || ev.name === 'near' || ev.name === 'Crash') return;
   const toks = ev.toks || [], t = drone.time, t0 = toks.length ? t - (detector.time - Math.min(...toks.map(k => k.t0))) : t - (ev.laps ? ev.laps * 4 : 1.5);

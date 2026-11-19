@@ -39,6 +39,7 @@ const checks = [
   ['every lap counts (N powerloops round a bar in a row are N calls)', () => { const o = run('laps.js'); const m = o.match(/(\d+)\/(\d+) lap checks/); return m && m[1] === m[2] ? null : o; }],
   ['big sweeping moves (slow open-air Mattys that climb 12 m)', () => { const o = run('sweep.js'); const m = o.match(/(\d+)\/(\d+) sweep checks/); return m && m[1] === m[2] ? null : o; }],
   ['wall grip (a whoop pushed into a wall sticks; idle, it falls)', () => { const o = run('wallgrip.js'); const m = o.match(/(\d+)\/(\d+) wall grip checks/); return m && m[1] === m[2] ? null : o; }],
+  ['long runs in pieces, idle squeezed out (flight telemetry)', () => { const o = run('pieces.js'); const m = o.match(/(\d+)\/(\d+) piece checks/); return m && m[1] === m[2] ? null : o; }],
   ['knowledge bot (Judge the Bot flies the trick library\'s confirmed examples)', () => { const o = run('knowledgebot.js'); const m = o.match(/(\d+)\/(\d+) knowledge bot checks/); return m && m[1] === m[2] ? null : o; }],
   ['half matty pendulum (three chained half mattys = one trick)', () => { const o = run('pendulum.js'); const m = o.match(/(\d+)\/(\d+) pendulum checks/); return m && m[1] === m[2] ? null : o; }],
   ['side loop vs jump rope vs double dutch (upside-down over the top, upright, a flick at the peak)', () => { const o = run('jumprope.js'); const m = o.match(/(\d+)\/(\d+) jump-rope checks/); return m && m[1] === m[2] ? null : o; }],

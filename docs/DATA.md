@@ -112,7 +112,7 @@ can read decode identically (3.3 M values in the longest), and the one it can't 
 
 | | |
 |---|---|
-| Format | `pro-whooper-flight/1` — one finished Free Fly / Session run |
+| Format | `pro-whooper-flight/1` — one finished Free Fly / Session run (a run longer than 8 minutes also sends its earlier flying as pieces: `summary.piece`; idle stretches over 15 s are cut out: `summary.gaps`) |
 | Made by | `telCapture()` in `src/dropoff.js` when a run ends (restart, menu, session over, review saved) |
 | Skipped | runs under 20 s recorded or 10 s armed, RaceGOW, more than 40 runs a day from one browser |
 | Contents | `id`, `started`, `pilot` (random, per browser), `name` (the pilot name chosen on first start), `mode`, `camTilt`, `craft`, `tune`, `profile` (Pilot Warm-up), `input`, `score`, `events` (each call: `t`, `t0`, `name`, `exec`, `clean`, `obstacle`, `conf`, `fails`, `flagged`), `missed` (Q presses), `summary`, `trace` |

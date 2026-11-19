@@ -32,8 +32,10 @@ addEventListener('unhandledrejection', e => { const r = e && e.reason; errNote(r
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
   if (!tel.on || !recap.id || recap.telDone === recap.id || race.on || recap.guest) return null;
-  const rows = recap.trace; if (rows.length < TEL.minSeconds * TRACE_HZ) return null;
-  let armed = 0; for (const r of rows) armed += r[13]; if (armed < TEL.minArmed * TRACE_HZ) return null;
+  let rows = recap.trace; if (rows.length < TEL.minSeconds * TRACE_HZ && !(recap.pieces && recap.pieces.length) && !recap.spill) return null;
+  const sq = telSqueeze(rows.filter(r => r[0] > recap.telUpTo)); let act = 0; for (const r of sq.rows) act += rowActive(r) ? 1 : 0;
+  telSpillEnd(); const pend = recap.pieces.splice(0);   // the older pieces of a long run go first (packed in the background below)
+  if (sq.rows.length < TEL.minSeconds * TRACE_HZ || act < TEL.minArmed * TRACE_HZ) { return pend.length ? (async () => { for (const pc of pend) await telPieceSend(pc); return 'sent'; })() : null; }
   const day = new Date().toISOString().slice(0, 10), cnt = store.get('telDay', { day, n: 0 }); if (cnt.day !== day) { cnt.day = day; cnt.n = 0; }
   if (cnt.n >= TEL.perDay) return null; cnt.n++; store.set('telDay', cnt);
   recap.telDone = recap.id;
@@ -43,12 +45,57 @@ function telCapture(reason) {
     craft: { ...spec, names: params.names || null, stats: params.stats ? { auw: +params.stats.auw.toFixed(2), twr: +params.stats.twr.toFixed(2), hoverThrottle: +params.stats.hoverThrottle.toFixed(3) } : null },
     tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
     score: score ? { total: score.total, maxStreak: +score.maxStreak.toFixed(2) } : null,
-    events: recap.events.map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
-    missed: recap.flags.map(f => ({ t: f.t })) };
-  const stamp = telStamp(recap);
+    events: recap.events.filter(e => !sq.rows.length || e.t >= sq.rows[0][0] - 1).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, fails: e.fails && e.fails.length ? e.fails : undefined, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
+    missed: recap.flags.filter(f => !sq.rows.length || f.t >= sq.rows[0][0] - 1).map(f => ({ t: f.t })) };
+  const stamp = telStamp(recap); rows = sq.rows; recap.telUpTo = rows.length ? rows[rows.length - 1][0] : recap.telUpTo;
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); for (const pc of pend) await telPieceSend(pc); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (sq.gaps.length) head.summary.gaps = sq.gaps; if (recap.pieceN) head.summary.pieces = recap.pieceN; try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
+
+// ---- Long runs and walking away (owner, 2026-11-19). The replay keeps the last 8 minutes; with sharing on, what falls out of it
+// is kept as pieces of up to 8 minutes of flying (`summary.piece` { of, n, t0, t1, gaps }), each sent as its own flight, so a
+// 40-minute Free Fly is not 32 minutes lost. Idle time (disarmed, crashed, or sitting still with the sticks centred) longer
+// than `IDLE_CUT` s is squeezed out, keeping `IDLE_KEEP` s at each end (`gaps` lists what was cut: the re-fly is unchanged by
+// a gap, checked on real flights), and a stretch with under 10 s of flying sends nothing: the sim left open sends nothing.
+const IDLE_CUT = 15 * TRACE_HZ, IDLE_KEEP = 1 * TRACE_HZ, PIECE_ROWS = RECAP_MAX;
+function rowActive(r) { return !!r[13] && !r[14] && (Math.hypot(r[21], r[22], r[23]) > 0.3 || Math.abs(r[8]) + Math.abs(r[9]) + Math.abs(r[10]) > 40 || Math.abs(r[24]) + Math.abs(r[25]) + Math.abs(r[26]) > 0.05); }
+function telSqueeze(rows) {   // the same squeeze for a whole trace (the last 8 minutes)
+  const out = [], gaps = []; let idle = [];
+  const flush = (end) => { if (idle.length > IDLE_CUT || (end && idle.length > IDLE_KEEP) || (!out.length && idle.length > IDLE_KEEP)) {
+      const head = out.length ? idle.slice(0, IDLE_KEEP) : [], tail = end ? [] : idle.slice(-IDLE_KEEP), cut = idle.slice(head.length, idle.length - tail.length);
+      out.push(...head); if (cut.length && out.length) gaps.push([cut[0][0], cut[cut.length - 1][0]]); out.push(...tail); } else out.push(...idle); idle = []; };
+  for (const r of rows) { if (rowActive(r)) { if (idle.length) flush(false); out.push(r); } else idle.push(r); }
+  if (idle.length) flush(true); return { rows: out, gaps };
+}
+function telSpill(row) {   // a row leaving the replay buffer
+  if (!tel.on || anonOn() || recap.guest || !row || row[0] <= recap.telUpTo) return;
+  const sp = recap.spill || (recap.spill = { rows: [], gaps: [], idle: [], ih: null, it: null, g0: 0, g1: 0, act: 0 });
+  if (rowActive(row)) {
+    if (sp.ih) { if (sp.rows.length) { sp.rows.push(...sp.ih); sp.gaps.push([sp.g0, sp.g1]); } sp.rows.push(...sp.it); }
+    else if (!sp.rows.length && sp.idle.length > IDLE_KEEP) sp.rows.push(...sp.idle.slice(-IDLE_KEEP)); else sp.rows.push(...sp.idle);
+    sp.idle = []; sp.ih = sp.it = null; sp.rows.push(row); sp.act++;
+  } else if (sp.ih) { sp.it.push(row); const d = sp.it.shift(); sp.g1 = d[0]; }
+  else { sp.idle.push(row); if (sp.idle.length > IDLE_CUT) { sp.ih = sp.idle.slice(0, IDLE_KEEP); sp.it = sp.idle.slice(-IDLE_KEEP); const c = sp.idle.slice(IDLE_KEEP, -IDLE_KEEP); sp.g0 = c[0][0]; sp.g1 = c[c.length - 1][0]; sp.idle = []; } }
+  if (sp.rows.length >= PIECE_ROWS) telSeal();
+}
+function telSpillEnd() { const sp = recap.spill; if (!sp) return; if (sp.ih) { if (sp.rows.length) sp.rows.push(...sp.ih); } else if (sp.rows.length) sp.rows.push(...sp.idle.slice(0, IDLE_KEEP)); sp.idle = []; sp.ih = sp.it = null; telSeal(); }
+function telSeal() { const sp = recap.spill; recap.spill = null; if (!sp || sp.act < TEL.minArmed * TRACE_HZ) return; recap.pieces.push({ n: ++recap.pieceN, rows: sp.rows, gaps: sp.gaps, id: recap.id, started: recap.started }); }
+let telPieceBusy = false;
+function telPieceGo() { if (telPieceBusy || !recap.pieces.length) return; telPieceBusy = true; const pc = recap.pieces.shift();   // at a quiet moment (disarmed, crashed) or when two wait
+  setTimeout(() => telPieceSend(pc).finally(() => { telPieceBusy = false; }), 0); }
+async function telPieceSend(pc) {
+  try { const rows = pc.rows, t0 = rows[0][0], t1 = rows[rows.length - 1][0], day = new Date().toISOString().slice(0, 10), cnt = store.get('telDay', { day, n: 0 }); if (cnt.day !== day) { cnt.day = day; cnt.n = 0; }
+    if (cnt.n >= TEL.perDay) return false; cnt.n++; store.set('telDay', cnt);
+    const head = { format: 'pro-whooper-flight/1', build: '0.1', id: pc.id + '.p' + pc.n, started: pc.started, ended: 'piece', pilot: telPilot(), name: pilotName() || null, map: MAP_ID,
+      mode: recap.mode || 'free', camTilt: tune.camTilt, camFov: tune.camFov, craft: { ...spec, names: params.names || null }, tune: JSON.parse(JSON.stringify(tune)), profile: store.get('pilot', null), input: inputCfg.mode,
+      events: recap.events.filter(e => e.t >= t0 && e.t <= t1 + 0.5).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
+      missed: recap.flags.filter(f => f.t >= t0 && f.t <= t1).map(f => ({ t: f.t })) };
+    head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.summary.piece = { of: pc.id, n: pc.n, t0, t1, gaps: pc.gaps };
+    try { head.summary.feel = feelSnap(); } catch {} if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);
+    head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); pc.rows = null; await telQueue('flight', telStamp(pc) + '-p' + pc.n, head); return true;
+  } catch { return false; }
+}
+window.__pw.telSqueeze = rows => telSqueeze(rows); window.__pw.recapRow = r => recapRow(r); window.__pw.recap = recap;
 
 // ---- "Processing…": the heavy moments (packing and sending a flight, learning from a review) happen behind a short
 // pause with a progress bar instead of stuttering under the pilot's hands, and end with a thank-you when the flight was shared.
