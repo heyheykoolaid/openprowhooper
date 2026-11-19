@@ -370,9 +370,9 @@ function pipeMesh(a, b, r, mat, cone) {
 // Moose Knuckle Park's surroundings, seen between the trees: forested ridges all round (Mt Mackenzie and the Selkirks to
 // the east, the Monashees west) and Mt Begbie's snowy peak to the south-west. Far away and drawn without fog, pre-hazed.
 function pnwBackdrop() {
-  const ridge = (col) => new THREE.MeshBasicMaterial({ color: col, fog: false }), snow = ridge(0xe4e9ee);
+  const ridge = (col) => new THREE.MeshBasicMaterial({ color: col, fog: false }), snow = new THREE.MeshBasicMaterial({ color: 0xe4e9ee, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
   const add = (ang, R, h, r, col, snowy) => { const x = Math.cos(ang) * R, z = Math.sin(ang) * R, m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7, 1), ridge(col)); m.position.set(x, h / 2 - 6, z); m.rotation.y = ang * 3; playRoot.add(m);
-    if (snowy) { const s = new THREE.Mesh(new THREE.ConeGeometry(r * 0.22, h * 0.22, 7, 1), snow); s.position.set(x, h - 6 - h * 0.11 + 0.5, z); s.rotation.y = ang * 3; playRoot.add(s); } };
+    if (snowy) { const s = new THREE.Mesh(new THREE.ConeGeometry(r * 0.25, h * 0.22, 7, 1), snow); s.position.set(x, h - 6 - h * 0.11 + 0.8, z);   /* a touch wider than the peak and drawn in front of it: an exact fit flickered */ s.rotation.y = ang * 3; playRoot.add(s); } };
   for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + rnd() * 0.12, R = 210 + rnd() * 50; add(a, R, 55 + rnd() * 45, 50 + rnd() * 30, [0x5e7470, 0x6a7f7c, 0x566a68][i % 3], false); }
   add(Math.atan2(170, -150), 245, 150, 60, 0x7a8c92, true);   // Mt Begbie, south-west
   add(Math.atan2(-60, 230), 250, 120, 70, 0x6f8288, true);    // Mt Mackenzie, east
@@ -404,7 +404,7 @@ function staticFlush() {
 function visMesh(v, art) {
   let m;
   if (v.shape === 'box') {
-    m = new THREE.Mesh(v.mat === 'backboard' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
+    m = new THREE.Mesh(v.mat === 'backboard' || v.mat === 'mooseSign' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
     m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
     if (v.graffiti && art) addGraffiti(v);
   } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);

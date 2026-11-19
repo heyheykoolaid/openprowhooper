@@ -298,7 +298,7 @@ tunnel moved to the far south-east corner**, four half-buried tires standing in 
 the arch) on a bare dirt mound; a Split Birch by the park sign. Grove trees standing where these go are emptied (removed, as a
 layout removal does), so the rest of the grove keeps its place. The sign is a maroon and gold panel with a moose emblem on two
 metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `playYellow`, `slideBlue`); the lanes are dry
-winter grass (`dryGrass`), leaf litter at the birch corners (`leafLitter`); houses have shallow hip roofs (`natureKit` style
+winter grass (`dryGrass`), leaf litter at the birch corners (`leafLitter`); houses have shallow 22° gable roofs (the gable filled by two boxes laid along the slopes; a hip roof of boxes overlapped; `natureKit` style
 `lowRoof`); bench backrests have uprights; the carved moose stays (the owner loves it). Light: a clear winter afternoon (blue
 sky, low warm sun from the south-west, long shadows). `tools/map_thumbs.py --extra --only=moose` shoots the four corners.
 **Sun fix**: a comment ending a line in worldview.js had swallowed the line that places the sun and turns on its shadows, on

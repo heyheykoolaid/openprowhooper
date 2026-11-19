@@ -612,11 +612,11 @@
       for (const u of [-0.65, 0.65]) for (const w of [-0.6, 0.6]) pipe(o, P(u, 0, w), P(u, 0.74, w * 0.3), 0.025, 'darkMetal'); };
     const house = (x, z, W, D, ry, col) => { const o = O('House', 'building', { tall: 6 }), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, y, z - u * s + w * c), H = 2.9;
       box(o, P(0, H / 2, 0), v3(W / 2, H / 2, D / 2), col, ry);
-      if (style.lowRoof) {   // Moose (the owner's photos, 2026-11-19): low single-storey ranch houses under a shallow hip roof (22°)
-        const th = 22 * Math.PI / 180, tn = Math.tan(th), rise = D / 2 * tn, L = D / 2 + 0.5, Le = D / 2 + 0.35;
-        box(o, P(0, H + rise * 0.3, 0), v3(W / 2 - D * 0.3, rise * 0.3, D * 0.3), col, ry);   // the attic fill, hidden under the roof
-        for (const sgn of [-1, 1]) box(o, P(0, H + rise - L / 2 * tn + 0.05, sgn * L / 2), v3(Math.max(0.5, W / 2 - D / 2 + Le / 2), 0.07, L / (2 * Math.cos(th))), 'roofDark', ry, sgn * th);
-        for (const sgn of [-1, 1]) box(o, P(sgn * (W / 2 - D / 2 + Le / 2), H + rise - Le / 2 * tn + 0.05, 0), v3(Le / (2 * Math.cos(th)), 0.07, D / 2 + 0.5), 'roofDark', ry, 0, -sgn * th);
+      if (style.lowRoof) {   // Moose (the owner's photos, 2026-11-19): low single-storey ranch houses under a shallow gable roof (22°)
+        const th = 22 * Math.PI / 180, tn = Math.tan(th), rise = D / 2 * tn, L = D / 2 + 0.5, hw = (D / 2) / 2 / Math.cos(th), ht = rise * Math.cos(th) / 2 + 0.05;
+        // the gable: two boxes laid along the roof's slopes, their tops under the roof panels and their lower halves inside the walls
+        for (const sgn of [-1, 1]) box(o, P(0, H + rise - (D / 4) * tn - ht / Math.cos(th), sgn * D / 4), v3(W / 2, ht, hw), col, ry, sgn * th);
+        for (const sgn of [-1, 1]) box(o, P(0, H + rise - L / 2 * tn + 0.08, sgn * L / 2), v3(W / 2 + 0.35, 0.07, L / (2 * Math.cos(th)) + 0.04), 'roofDark', ry, sgn * th);
         box(o, P(W * 0.25, H + rise * 0.7, -0.6), v3(0.3, 0.7, 0.3), 'brick', ry);
       } else { const sq = D / 2 / Math.SQRT2; box(o, P(0, H, 0), v3(W / 2, sq, sq), col, ry, Math.PI / 4);   // the gable fill
         const e = D / 2 + 0.5, dl = Math.hypot(e, e) / 2; for (const sgn of [-1, 1]) box(o, P(0, H + D / 2 - e / 2 + 0.05, sgn * e / 2), v3(W / 2 + 0.35, 0.07, dl), 'roofDark', ry, sgn * Math.PI / 4);

@@ -40,6 +40,8 @@ EXTRA = {
     'moose-c2':     ('moose', [43, 1.3, 23], [32, 1.5, 12]),    # SE, over the tires
     'moose-c3':     ('moose', [-45.5, 1.6, -23.5], [-34, 1.6, -10]),  # NW, the sign and the double birch
     'moose-c4':     ('moose', [-45, 1.6, 22.5], [-30, 2, 0]),      # SW, toward the playground
+    'moose-house':  ('moose', [2, 5, -30], [2, 3, -42]),
+    'moose-signc':  ('moose', [-41, 1.8, -18.5], [-41, 1.8, -21.5]),
     'moose-play':   ('moose', [-27, 2.2, 7], [-33, 1.2, 2]),
     #'clappy-stairs': ('clappy', [3, 4, 3.5], [11, 3, -3.5]),
     #'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),
