@@ -530,7 +530,7 @@ function quickNext() { const Q = recap.quick; if (Q) quickGo(Q.k + 1); }
 // replicas (which send the verdict with them) are flown only then, with the final answers.
 function quickBack() { const Q = recap.quick; if (Q && Q.k > 0) quickGo(Q.k - 1); }
 function quickAnswer(i, val) { const Q = recap.quick, e = recap.events[i]; if (!Q || !e || !val) return; recapSetCall(i, val); Q.done = Q.done || {};
-  if (quickDecided(e) && !Q.done[i]) { Q.done[i] = true; Q.n++; quickBump(); } quickNext(); }
+  if (quickDecided(e) && !Q.done[i]) { Q.done[i] = true; Q.n++; quickBump(); } renderRecap(); }   // stays on this call (owner, 2026-11-19): add a combo or change the answer, then Next
 function quickReplicasGo() { const Q = recap.quick; if (!Q || Q.flown) return; Q.flown = true; for (const i of Object.keys(Q.done || {})) quickReplica(+i); }
 function renderQuick() {
   const el = $('#recapSide'), Q = recap.quick, i = Q.list[Q.k], e = recap.events[i], q = quickToday(), names = recapNames();
@@ -543,10 +543,10 @@ function renderQuick() {
   const ask = e.flag ? `You flagged <b>${esc(e.name)}</b>. What was it really?` : e.maybe ? `Was that a <b>${esc(e.name)}</b>? <small>(the game's guess)</small>` : `Was that a <b>${esc(e.name)}</b>?`;
   const was = e.verdict === 'yes' ? `✓ yes, a ${esc(e.name)}` : e.verdict === 'no' ? `✗ ${esc(e.actual || 'no')}` : '';
   el.innerHTML = `<div class="qkHead"><b>QUICK CHECK</b> <span class="note">${Q.k + 1} of ${Q.list.length}</span><span class="qkDots">${dots}</span></div>
-    <p class="qkQ">${ask}</p>${was ? `<p class="note">Your answer: <b>${was}</b> · pick again to change it, or Skip to keep it</p>` : ''}<p class="note">${e.obstacle ? esc(e.obstacle) : 'open air'}${sure} · it's looping above</p>
-    <div class="row">${e.flag ? '' : '<button data-qk="yes" class="primary" title="Y">✓ Yes</button>'}<select data-qkfix="${i}" title="N"><option value="">${e.flag ? 'it was…' : '✗ No, it was…'}</option><option>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option>${esc(n)}</option>`).join('')}</select><button data-qk="skip" class="ghost" title="K">Skip</button>${Q.k > 0 ? '<button data-qk="back" class="ghost" title="B: go back and change the last answer">← Back</button>' : ''}</div>
+    <p class="qkQ">${ask}</p>${was ? `<p class="note">Your answer: <b>${was}</b> · change it, add a combo with ＋ then…, or Next to move on</p>` : ''}<p class="note">${e.obstacle ? esc(e.obstacle) : 'open air'}${sure} · it's looping above</p>
+    <div class="row">${e.flag ? '' : '<button data-qk="yes" class="primary" title="Y">✓ Yes</button>'}<select data-qkfix="${i}" title="N"><option value="">${e.flag ? 'it was…' : '✗ No, it was…'}</option><option>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option>${esc(n)}</option>`).join('')}</select><button data-qk="skip" class="${was ? 'primary' : 'ghost'}" title="K">${was ? 'Next →' : 'Skip'}</button>${Q.k > 0 ? '<button data-qk="back" class="ghost" title="B: go back and change the last answer">← Back</button>' : ''}</div>
     <div class="row qkCombo"><span class="note">Combo?</span>${(e.extra || []).map((n, k) => `<span class="rcChip">→ ${esc(n)}<button data-qkdel="${k}" title="Take it out of the combo">✕</button></span>`).join('')}<select data-qkadd="${i}" title="It was more than one trick: add the next one (then answer what the first was)"><option value="">＋ then…</option>${names.map(n => `<option>${esc(n)}</option>`).join('')}</select></div>
-    <p class="note"><kbd>Y</kbd> yes · <kbd>N</kbd> no, pick what it was · <kbd>K</kbd> skip · <kbd>B</kbd> back · <kbd>C</kbd> camera · <kbd>Esc</kbd> stop${(e.extra || []).length ? ' · the combo is saved with your answer' : ' · a combo: add the other tricks with ＋ then…, then answer the first'}</p>`;
+    <p class="note"><kbd>Y</kbd> yes · <kbd>N</kbd> no, pick what it was · <kbd>K</kbd> skip / next · <kbd>B</kbd> back · <kbd>C</kbd> camera · <kbd>Esc</kbd> stop${(e.extra || []).length ? ' · the combo is saved with your answer' : ' · a combo: add the other tricks with ＋ then…, then answer the first'}</p>`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-qk]'); if (b && mode === 'recap' && recap.quick) { const a = b.dataset.qk, i = recap.quick.list[recap.quick.k];

@@ -548,7 +548,7 @@ Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in 
 "never used" variable still needs a grep for assignments.
 
 ## Review list: picking, combos, deleting
-Quick check takes combos too (owner, 2026-11-18): "＋ then…" adds the other tricks of the combo to the call (`extra`, as SKITTLES
+Quick check stays on a call after it is answered (owner, 2026-11-19: Next → or K moves on, so a combo or a change can be added). Quick check takes combos too (owner, 2026-11-18): "＋ then…" adds the other tricks of the combo to the call (`extra`, as SKITTLES
 mode's tiles), then the answer is given for the first. Judge the community has Hide / Show judged (`store 'jgHideDone'`).
 The main menu's title is smaller and a News box shows `news.txt` (build.py → `window.PW_NEWS`, plain text; empty = no box).
 The main menu's credits are one scrolling line (`#menuThanks .tkTrack`, `creditsTicker` in menus.js: text doubled for a seamless
