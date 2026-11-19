@@ -294,7 +294,7 @@ same pack, labels for the clip's tricks (big flips ~0 / 9 / 37 / 77 s, rolls ~29
 **Moose after the owner's photos from the four corners** (2026-11-19, "only one version of Moose"): the roads make an L round
 the north-west corner (Arrow Dr along the long north side, Park Dr along the short west side). Added last in `buildMoose` (seed
 3141): a straight row of big redcedars along Arrow Dr with low, touching crowns (a natureKit without `tall`); the **tire
-tunnel moved to the far south-east corner**, four separate half-buried tires (each `Tire` with its own `Tire opening` gap, inside
+tunnel moved to the far south-east corner**, four half-buried tires standing in a ring 2.2 m round, each arch across the ring so a lap threads them all (each `Tire` with its own `Tire opening` gap, inside
 the arch) on a bare dirt mound; a Split Birch by the park sign. Grove trees standing where these go are emptied (removed, as a
 layout removal does), so the rest of the grove keeps its place. The sign is a maroon and gold panel with a moose emblem on two
 metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `playYellow`, `slideBlue`); the lanes are dry

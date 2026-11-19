@@ -652,7 +652,7 @@
     zones.push({ shape: 'zone', mat: 'path', c: v3(-4, 0.006, 6.5), h: v3(40, 0, 0.6), ry: 0.2 });           // the worn trail along the south lane
     zones.push({ shape: 'zone', mat: 'path', c: v3(10, 0.006, -9), h: v3(26, 0, 0.5), ry: 0.12 });
     zones.push({ shape: 'zone', mat: 'leafLitter', c: v3(37, 0.0055, 15), h: v3(10, 0, 9) }); zones.push({ shape: 'zone', mat: 'leafLitter', c: v3(-40, 0.0055, -17), h: v3(6, 0, 6.5) });   // fallen leaves at the birch corners
-    zones.push({ shape: 'zone', mat: 'path', c: v3(38.4, 0.0062, 17.4), h: v3(4, 0, 2.6), ry: -0.45 });   // the bare dirt mound under the tires
+    zones.push({ shape: 'zone', mat: 'path', c: v3(38.4, 0.0062, 17.4), h: v3(3.4, 0, 3.4), ry: 0.4 });   // the bare dirt mound under the tire ring
     zones.push({ shape: 'zone', mat: 'woodchip', c: v3(-35, 0.007, 1), h: v3(8, 0, 5.5) });
     zones.push({ shape: 'zone', mat: 'asphalt', c: v3(0, 0.003, -30), h: v3(90, 0, 4) });                     // Arrow Dr
     zones.push({ shape: 'zone', mat: 'asphalt', c: v3(-52, 0.003, 0), h: v3(4, 0, 70) });                     // Park Dr
@@ -752,11 +752,13 @@
       const row = natureKit(K, g3, r3, trees, houses, {});   // full, low crowns: the roadside cedars' boughs come down to 4-6 m
       for (let x = -34; x <= 44; x += g3(5.2, 6.2)) { const z = -22.2 + g3(-0.4, 0.4); if (trees.some(t => Math.hypot(t.x - x, t.z - z) < 2.4)) continue; row.conifer(x, z, g3(26, 33), g3(0.45, 0.6), 'cedar'); }
       row.birch(-43.6, -19.2, 13, true);   // the double birch by the sign
-      together(() => { const R = 0.82, t = 0.24, Rm = R - t / 2, N = 11;   // the tire tunnel: four tractor tires, each its own arch
-        for (const [x, z] of [[36.2, 16.0], [37.9, 16.15], [39.5, 17.6], [40.9, 19.3]]) { const o = O('Tire', 'overunder', { obstacle: { a: v3(x - 0.3, 0, z), b: v3(x + 0.3, 0, z), under: R - t, over: R + t } });
-          for (let k = 0; k < N; k++) { const am = (k + 0.5) / N * Math.PI; box(o, v3(x, Math.sin(am) * Rm - 0.12, z + Math.cos(am) * Rm), v3(0.27, Math.PI * Rm / N / 2 + 0.02, t / 2), 'tireTread', 0, -am); }
-          O('Tire opening', 'gap', { gap: { c: v3(x, 0.18, z), n: v3(1, 0, 0), hu: 0.25, hv: 0.15, u: v3(0, 0, 1) } }); }   // inside the arch (its inner edge is 0.58 m round a centre 0.12 m underground)
-        const sp = O('Sign Post', 'pole'); pipe(sp, v3(37, 0, 13.9), v3(37, 1.6, 13.9), 0.04, 'galv'); box(sp, v3(37, 1.55, 13.9), v3(0.16, 0.16, 0.01), 'signWhite', 0, 0, 0, { noCollide: true }); }); }
+      together(() => { const R = 0.82, t = 0.24, Rm = R - t / 2, N = 11, cx = 38.4, cz = 17.4, RC = 2.2;   // the tire ring (owner, 2026-11-19: the tires form a circle):
+        for (let q = 0; q < 4; q++) { const ph = q * Math.PI / 2 + 0.3, tx = -Math.sin(ph), tz = Math.cos(ph), x = cx + RC * Math.cos(ph), z = cz + RC * Math.sin(ph), ry = -ph - Math.PI / 2;   // each arch stands across the ring, so a lap round it threads all four
+          const L = (u, y, w) => v3(x + u * Math.cos(ry) + w * Math.sin(ry), y, z - u * Math.sin(ry) + w * Math.cos(ry));
+          const o = O('Tire', 'overunder', { obstacle: { a: v3(x - tx * 0.3, 0, z - tz * 0.3), b: v3(x + tx * 0.3, 0, z + tz * 0.3), under: R - t, over: R + t } });
+          for (let k = 0; k < N; k++) { const am = (k + 0.5) / N * Math.PI; box(o, L(0, Math.sin(am) * Rm - 0.12, Math.cos(am) * Rm), v3(0.27, Math.PI * Rm / N / 2 + 0.02, t / 2), 'tireTread', ry, -am); }
+          O('Tire opening', 'gap', { gap: { c: v3(x, 0.18, z), n: v3(tx, 0, tz), hu: 0.25, hv: 0.15, u: v3(-Math.cos(ph), 0, -Math.sin(ph)) } }); }   // inside the arch (its inner edge is 0.58 m round a centre 0.12 m underground)
+        const sp = O('Sign Post', 'pole'); pipe(sp, v3(35.2, 0, 13.6), v3(35.2, 1.6, 13.6), 0.04, 'galv'); box(sp, v3(35.2, 1.55, 13.6), v3(0.16, 0.16, 0.01), 'signWhite', 0, 0, 0, { noCollide: true }); }); }
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
 
