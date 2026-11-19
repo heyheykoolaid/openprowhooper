@@ -21,12 +21,12 @@ function openMaps() {
   mapCar.n = maps.length; mapCar.i = Math.max(0, maps.findIndex(m => m.id === MAP_ID));
   $('#mapList').innerHTML = `<div class="mapCar"><button class="mapArrow" data-mapnav="-1" aria-label="previous map">‹</button><div class="mapViewport"><div class="mapTrack">${maps.map((m, k) => { const here = m.id === MAP_ID, cur = here && onOfficial;
       return `<div class="mapSlide ${here ? 'cur' : ''}" data-mapk="${k}">
-      <div class="mapThumb ${thumbs[m.id] ? '' : 'none'}" ${thumbs[m.id] ? `style="background-image:url('${thumbs[m.id]}')"` : ''}>${thumbs[m.id] ? '' : `<span>${esc(m.title)}</span>`}${here ? `<em>${cur ? 'you are here' : 'you are on a community map of this one'}</em>` : ''}</div>
+      <div class="mapThumb ${thumbs[m.id] ? '' : 'none'}" ${thumbs[m.id] ? `style="background-image:url('${thumbs[m.id]}')"` : ''}>${thumbs[m.id] ? '' : `<span>${esc(m.title)}</span>`}${here ? '<em>you are here</em>' : ''}</div>
       <div class="mapInfo"><b>${esc(m.title)}</b><small>${esc(m.blurb || '')}</small>${here && world.survey ? `<small class="mapStats">${world.survey.overUnders} over/unders · ${world.survey.gaps} gaps · ${world.survey.poles} poles · ${world.survey.walls} walls</small>` : ''}</div>
       <div class="mapGo">${cur ? '<span class="note">you are flying here</span>' : `<button data-mapid="${m.id}" class="primary">Fly here</button>`}</div>
-      <div class="commMaps" data-commbase="${m.id}">${commMapsHtml(m.id)}</div></div>`; }).join('')}</div></div><button class="mapArrow" data-mapnav="1" aria-label="next map">›</button></div>
+</div>`; }).join('')}</div></div><button class="mapArrow" data-mapnav="1" aria-label="next map">›</button></div>
     <div class="mapDots">${maps.map((m, k) => `<button data-mapdot="${k}" title="${esc(m.title)}" aria-label="${esc(m.title)}"></button>`).join('')}</div>`;
-  for (const m of maps) commMapsLoad(m.id);
+  // community maps are no longer listed here (owner, 2026-11-19); commMapsHtml / commMapsLoad stay for later
   mapCarGo(mapCar.i);
 }
 // ---- community maps per official map: the pilot's own first ("by you"), then other pilots' (newest of each)

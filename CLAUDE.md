@@ -890,8 +890,8 @@ official and community maps. Older per-map layouts (`store 'mapEdits'`) became "
 **Community maps**: "Share with the community" (`meShareMap`, the pilot's click) posts `pro-whooper-map/1` (name, `by`
 = pilot name, pilot id, `base`, the layer) to the relay, filed as `maps/community/<base>/<time>.<pilot>.<name b64url>.<by
 b64url>.json`; `GET /maps?base=` lists them (file names only, newest of each pilot's map name), `GET /map?base=&id=`
-returns one, cleaned again (tools/dropoff-worker.mjs; test/dropoff.js). The Maps carousel shows only the official maps;
-each slide lists its community maps (the pilot's own "by you", then other pilots', `commMapsHtml` / `commMapsLoad` /
+returns one, cleaned again (tools/dropoff-worker.mjs; test/dropoff.js). The Maps carousel shows only the official maps
+and, since 2026-11-19 (owner), no community maps (`commMapsHtml` / `commMapsLoad` kept, not called); before that each slide listed its community maps (the pilot's own "by you", then other pilots', `commMapsHtml` / `commMapsLoad` /
 `commFly` in menus.js). A downloaded map is cleaned with `meClean` and kept in `store 'commMaps'` (30 at most); the one
 flown is `store 'commMap'` (game.js `COMM_MAP`, read-only, a template for "Make my own map"). MAP_EDITS is the layer of
 whichever is loaded; flights carry it in `summary.layout` as before; the daily board is for official maps only. Map
