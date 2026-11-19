@@ -335,7 +335,7 @@ function mats() {
     MAT.fenceWood = std(TX.oldWood, { roughness: 0.9, color: 0xb59a7a }); MAT.polewood = std(TX.cedarBark, { color: 0x9a8a78 }); MAT.carvedCedar = std(TX.wood, { color: 0xc89a70, roughness: 0.9 }); MAT.mossLog = std(TX.cedarBark, { color: 0x8a9a62 });
     MAT.tireTread = std(TX.tireTread, { roughness: 0.95 }); MAT.mooseSign = std(TX.mooseSign, { roughness: 0.8 });
     const leaf = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.95, flatShading: true, emissive: col, emissiveIntensity: 0.28 });   // a little light through the needles: the undersides were black (owner, 2026-11-19)
-    MAT.cedarLeaf = leaf(0x2c4630); MAT.hemlockLeaf = leaf(0x34503a); MAT.mapleLeaf = leaf(0x56702e); MAT.birchLeaf = leaf(0x7a8a3c); MAT.shrub = leaf(0x3b5430); MAT.bracken = leaf(0x8a5a30);
+    MAT.cedarLeaf = leaf(0x2c4630); MAT.hemlockLeaf = leaf(0x34503a); MAT.mapleLeaf = leaf(0x6c9434); MAT.snagWood = new THREE.MeshStandardMaterial({ color: 0x8c8780, roughness: 0.95 }); MAT.birchLeaf = leaf(0x7a8a3c); MAT.shrub = leaf(0x3b5430); MAT.bracken = leaf(0x8a5a30);
     MAT.fadedBlue = P('#4f7090'); MAT.fadedRed = P('#8a4c3e'); MAT.playTan = P('#bca67a'); MAT.darkMetal = P('#3a3c3a', { metalness: 0.4 }); MAT.binGreen = P('#3d5a44', { metalness: 0.3 });
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
@@ -549,14 +549,14 @@ function buildScene() {
   if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
-  if (PNW) { gr.addColorStop(0, '#6f93b8'); gr.addColorStop(0.42, '#a9bfcf'); gr.addColorStop(0.6, '#cfd8da'); gr.addColorStop(0.72, '#a9b4ab'); gr.addColorStop(1, '#55604f'); }
+  if (PNW) { gr.addColorStop(0, '#9fb0bf'); gr.addColorStop(0.42, '#d2dbe1'); gr.addColorStop(0.6, '#e8ecec'); gr.addColorStop(0.72, '#b8c0b8'); gr.addColorStop(1, '#5a6452'); }   // a bright, flat overcast (the owner's video, 2026-11-19)
   else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   playRoot.add(sky);
   // lights
-  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xc6d6e2 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x6c7650 : 0x5a4532, IND ? 1.9 : PNW ? 1.95 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
-  const sun = new THREE.DirectionalLight(PNW ? 0xfff0d8 : 0xffcf98, PNW ? 2.15 : 2.6); if (PNW) sun.position.set(-18, 40, 14); else sun.position.set(-30, 22, 18); sun.castShadow = true;
+  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xc6d6e2 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x6e7454 : 0x5a4532, IND ? 1.9 : PNW ? 2.7 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  const sun = new THREE.DirectionalLight(PNW ? 0xf4f2ec : 0xffcf98, PNW ? 1.25 : 2.6);   // Moose: overcast: most light from the sky, faint shadows if (PNW) sun.position.set(-18, 40, 14); else sun.position.set(-30, 22, 18); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
@@ -578,7 +578,7 @@ function buildScene() {
   if (VAPOR || VICE_ || DUSK_) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
-  if (PNW) { scene.fog = new THREE.Fog(0xb4c0bc, 45, 190); pnwBackdrop(); }
+  if (PNW) { scene.fog = new THREE.Fog(0xc8d0cc, 50, 200); pnwBackdrop(); }
   // lamp lights are made with the objects (buildObjects)
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)
@@ -604,11 +604,13 @@ function addGraffiti(v) {
   if (hh > 10) opts = { heaven: true, stencil: 'NO WHOOPS', ppm: 64 };
   if (w < 3) opts.big = (opts.big || 1) * 0.5;
   // the pilot's pieces: a big wall of all three on the building, one per graffiti-wall section, small ones on props
-  const turn = () => ['heyhey', 'mopenguinz', 'clappy', 'byteme', 'rwdc'][artTurn++ % 5];   // the pilot's pieces, and friends of the project (MoPenguinz FPV, ByTe_Me)
+  const turn = () => ['heyhey', 'mopenguinz', 'roguemonkey', 'clappy', 'fpvyourworld', 'byteme', 'ridgeripper', 'rwdc'][artTurn++ % 8];   // the pilot's pieces, and friends of the project (MoPenguinz FPV, ByTe_Me, Rogue Monkey FPV, FPV Your World, RidgeRipper FPV)
+  const AH = { roguemonkey: 0.7, ridgeripper: 0.55 };   // the wide logos painted a little smaller, so they fit the wall like the rest
+  const piece = (x, y, h, rot) => { const name = turn(); return { name, x, y, h: h * (AH[name] || 1), rot }; };
   if (v.art) opts.art = v.art;   // a map can say exactly which pieces go where
   else if (hh > 10) opts.art = [{ name: 'clappy', x: 0.17, y: 6.2, h: 6.4, rot: -0.04 }, { name: 'heyhey', x: 0.5, y: 6.6, h: 4.6, rot: 0.02 }, { name: 'rwdc', x: 0.83, y: 6.0, h: 5.2, rot: 0.05 }];
-  else if (v.graffiti === 'east' && w > 12) opts.art = [{ name: turn(), x: 0.2 + rnd() * 0.12, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }, { name: turn(), x: 0.66 + rnd() * 0.12, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];   // long sections carry two
-  else if (v.graffiti === 'east' && w > 4) opts.art = [{ name: turn(), x: 0.25 + rnd() * 0.5, y: 1.75, h: 2.2, rot: (rnd() - 0.5) * 0.12 }];
+  else if (v.graffiti === 'east' && w > 12) opts.art = [piece(0.2 + rnd() * 0.12, 1.75, 2.2, (rnd() - 0.5) * 0.12), piece(0.66 + rnd() * 0.12, 1.75, 2.2, (rnd() - 0.5) * 0.12)];   // long sections carry two
+  else if (v.graffiti === 'east' && w > 4) opts.art = [piece(0.25 + rnd() * 0.5, 1.75, 2.2, (rnd() - 0.5) * 0.12)];
   else if (v.graffiti === 'south' && w > 2.5 && hh < 2) opts.art = [{ name: 'clappy', x: 0.5, y: hh * 0.5, h: hh * 0.86, rot: 0.06 }];
   else if (v.graffiti === 'south' && w < 2.5 && hh < 1.5) opts.art = [{ name: 'rwdc', x: 0.5, y: hh * 0.52, h: hh * 0.85 }];
   const t = graffitiTexture(w, hh, hh > 10 ? 1.4 : 1, opts);

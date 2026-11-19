@@ -275,6 +275,18 @@ sag, added in `addPlaygroundExtras`). The wires themselves still have no collide
 and Mattys on them. Moose's benches stand round the playground 1.8 m outside its border, facing in; the bear bins too. The Play Unit's roof is peaked (its panels tilted the wrong way: a V). Moose's shade is lighter: hemisphere 1.95 with a
 brighter ground bounce, sun 2.15, and the leaf materials glow a little (`emissiveIntensity` 0.28) so the cone undersides are not black.
 
+**Moose after the owner's FPV video of the real park** (2026-11-19; the video itself is not in the repo): conifers have bare trunks
+higher up and slimmer crowns (`natureKit(..., { tall: true })`: first bough ×1.55, crown radius ×0.8; the grove's spacing still
+uses the old radius, so every tree keeps its place), seven big cedars and hemlocks crowd the playground's edge, eight brighter
+maples stand among the cedars (`mapleLeaf` 0x6c9434), a Dead Snag (a bare 22 m pole, `snagWood`) at (-21.5, -10.5) — all added
+last with their own seed (`sd = 9119`) so the rest of the map is unchanged; black bucket swing seats; a chunkier curb; a bright
+flat overcast (sky whiter, hemisphere 2.7, sun 1.25: faint shadows; fog 0xc8d0cc). Next with real data: a Blackbox log from the
+same pack, labels for the clip's tricks (big flips ~0 / 9 / 37 / 77 s, rolls ~29-31 / 63-65 s, yaw-heavy turns ~26-30 s).
+**Wall art** (2026-11-19): the Rogue Monkey FPV, FPV Your World and RidgeRipper FPV logos (`assets/graffiti/roguemonkey`,
+`fpvyourworld`, `ridgeripper`; their makers' marks, at the owner's request, for this game only; credited on the main menu and in
+the README) are in the rotation for graffiti walls (`turn()` in worldview.js; wide logos painted smaller: `AH`), on Clappy's
+North Shops 3 and on the school's Main Hall.
+
 **Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls `EDGE_OUT` 25 m
 beyond every collider and the declared bounds, and a ceiling `EDGE_UP` 40 m above the tallest thing (at least 60 m):
 generous, they only stop endless flying (a tester's powerloop out through the warehouse skylight hit the first, tighter

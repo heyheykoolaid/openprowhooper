@@ -169,7 +169,8 @@
       spans.forEach(([a0, a1], i) => { const h = [4.2, 7.5, 5.4, 9.2, 6.3, 4.8][(i + n) % 6], c = (a0 + a1) / 2, hl = (a1 - a0) / 2, d0 = 24, d1 = 40, dm = (d0 + d1) / 2;
         const ax = along === 'x', ctr = ax ? v3(c, h / 2, out * dm) : v3(out * dm, h / 2, c), half = ax ? v3(hl, h / 2, 8) : v3(8, h / 2, hl);
         const o = O(`${name} ${i + 1}`, 'building', { wallNormal: ax ? v3(0, 0, -out) : v3(-out, 0, 0), tall: h, perchHeight: h });
-        const art = name === 'North Shops' && i === 1 ? { graffiti: 'south', art: [{ name: 'clappy', x: 0.3, y: 3.6, h: 5.6, rot: -0.03 }, { name: 'heyhey', x: 0.74, y: 3.8, h: 4.2, rot: 0.03 }] } : {};
+        const art = name === 'North Shops' && i === 1 ? { graffiti: 'south', art: [{ name: 'clappy', x: 0.3, y: 3.6, h: 5.6, rot: -0.03 }, { name: 'heyhey', x: 0.74, y: 3.8, h: 4.2, rot: 0.03 }] }
+          : name === 'North Shops' && i === 2 ? { graffiti: 'south', art: [{ name: 'roguemonkey', x: 0.18, y: 4.15, h: 1.9, rot: -0.03 }, { name: 'fpvyourworld', x: 0.5, y: 3.95, h: 2.7, rot: 0.02 }, { name: 'ridgeripper', x: 0.82, y: 4.2, h: 1.35, rot: -0.04 }] } : {};   // friends of the project (owner, 2026-11-19)
         box(o, ctr, half, ['brick', 'concrete', 'vConcrete', 'brick'][(i + n) % 4], 0, 0, 0, art);
         blocks.push({ ax, out, a0, a1, h });
         // street face: a shutter or storefront, an awning over it, balconies on the taller ones
@@ -413,7 +414,8 @@
     const HZ0 = -32, HZ1 = -16, HX = 18, HH = 10.4, hall = O('Main Hall', 'building', { wallNormal: v3(0, 0, 1), tall: HH });
     windowWall(hall, 'x', HZ0 - 0.2, -(HX + 0.4), HX + 0.4, 0, HH, 0.2, 'vLav', Array.from({ length: 8 }, (_, i) => ({ c: -15.75 + i * 4.5, hw: 1.3 })), [[5.4, 7.8]], 'Hall Window', 'neonPink');   // north wall, with a row of open windows
     // the south face: an open colonnade below, a band of wall above it carrying the pilot's pieces
-    box(hall, v3(0, 4.4 + (HH - 4.4) / 2, HZ1 + 0.2), v3(HX + 0.4, (HH - 4.4) / 2, 0.2), 'vConcrete', 0, 0, 0, { graffiti: 'south', art: [{ name: 'clappy', x: 0.1, y: 3.0, h: 5.0, rot: -0.04 }, { name: 'mopenguinz', x: 0.3, y: 3.0, h: 4.6, rot: 0.03 }, { name: 'heyhey', x: 0.5, y: 3.1, h: 4.2, rot: 0.02 }, { name: 'byteme', x: 0.7, y: 3.0, h: 4.8, rot: -0.03 }, { name: 'rwdc', x: 0.9, y: 2.9, h: 4.6, rot: 0.05 }] });
+    box(hall, v3(0, 4.4 + (HH - 4.4) / 2, HZ1 + 0.2), v3(HX + 0.4, (HH - 4.4) / 2, 0.2), 'vConcrete', 0, 0, 0, { graffiti: 'south', art: [{ name: 'clappy', x: 0.07, y: 3.0, h: 4.4, rot: -0.04 }, { name: 'roguemonkey', x: 0.19, y: 3.2, h: 2.3, rot: 0.02 }, { name: 'mopenguinz', x: 0.31, y: 3.0, h: 4.0, rot: 0.03 }, { name: 'fpvyourworld', x: 0.43, y: 3.0, h: 3.8, rot: -0.02 },
+      { name: 'heyhey', x: 0.56, y: 3.1, h: 3.8, rot: 0.02 }, { name: 'ridgeripper', x: 0.69, y: 3.3, h: 1.6, rot: -0.03 }, { name: 'byteme', x: 0.81, y: 3.0, h: 4.2, rot: -0.03 }, { name: 'rwdc', x: 0.93, y: 2.9, h: 4.0, rot: 0.05 }] });
     neon(hall, v3(0, 4.4, HZ1 + 0.42), v3(HX, 0.03, 0.03), 'neonPink');
     for (const s of [-1, 1]) {                                                                               // end walls with a tall doorway each
       const ew = O('Hall End Wall', 'wall', { wallNormal: v3(-s, 0, 0) }), x = s * (HX + 0.2), zc = (HZ0 + HZ1) / 2;
@@ -560,16 +562,17 @@
 
   // The park's makers (trees, picnic tables, houses, pickups): used by buildMoose and by the map editor's asset library.
   // trees / houses collect what was made (buildMoose spaces its groves with them).
-  function natureKit(K, rr, rnd, trees = [], houses = []) {
+  function natureKit(K, rr, rnd, trees = [], houses = [], style = {}) {
     const { O, box, pipe, ball, coneSolid } = K;
-    const conifer = (x, z, h, r, kind) => { const o = O(kind === 'cedar' ? 'Cedar' : 'Hemlock', r <= 0.25 ? 'pole' : 'tree'), base = h * (kind === 'cedar' ? rr(0.16, 0.26) : rr(0.22, 0.32)), R = Math.min(3.2, h * 0.13 + r * 1.2);
+    const conifer = (x, z, h, r, kind) => { const o = O(kind === 'cedar' ? 'Cedar' : 'Hemlock', r <= 0.25 ? 'pole' : 'tree'), base0 = h * (kind === 'cedar' ? rr(0.16, 0.26) : rr(0.22, 0.32)), R0 = Math.min(3.2, h * 0.13 + r * 1.2),
+        base = style.tall ? Math.min(h * 0.5, base0 * 1.55) : base0, R = style.tall ? R0 * 0.8 : R0;   // style.tall (Moose, after the owner's FPV video, 2026-11-19): bare trunks higher up, slimmer crowns, more sky between them
       pipe(o, v3(x, 0, z), v3(x, h * 0.55, z), r, 'cedarBark'); pipe(o, v3(x, h * 0.55, z), v3(x, h * 0.92, z), r * 0.6, 'cedarBark', { noCollide: true });
       pipe(o, v3(x, 0, z), v3(x, 0.5 + r, z), r * 1.7, 'cedarBark', { cone: true, noCollide: true });   // the flare at the foot
       const leaf = kind === 'cedar' ? 'cedarLeaf' : 'hemlockLeaf', n = 3;
       for (let i = 0; i < n; i++) { const y0 = base + (h - base) * i / n * 0.85, y1 = Math.min(h, y0 + (h - base) * 0.55), Ri = R * (1 - i * 0.26); pipe(o, v3(x, y0, z), v3(x, y1, z), Ri, leaf, { cone: true, noCollide: true }); coneSolid(o, v3(x, y0, z), v3(x, y1, z), Ri); }
       { const c = S.makeCapsule(v3(x, h * 0.55, z), v3(x, h * 0.92, z), r * 0.6); c.leaf = true; o.prims.push(c); }   // the upper trunk inside the crown
       o.round = { c: v3(x, 0, z), r: R, under: base, over: h }; o.obstacle = { a: v3(x - R, 0, z), b: v3(x + R, 0, z), under: base, over: h };
-      trees.push({ x, z, r: Math.max(R * 0.5, 1.2) }); return o; };
+      trees.push({ x, z, r: Math.max(R0 * 0.5, 1.2) }); return o; };   /* R0: the spacing of the grove is as it was (same trees, same places) */
     // Birch: the trunk ends inside the top clump of leaves and a thin branch reaches every other clump (pilot: the trunk
     // stuck out of the crown). split: two trunks from one foot in a V (the pilot's photo), each with its own crown, and the
     // opening between them is a gap. undefined = the map decides from the spot (a hash, so the map's random numbers, and
@@ -648,7 +651,7 @@
     const inLane = (x, z, pad = 0) => lanes.some(L => { const dx = x - L.c.x, dz = z - L.c.z, c = Math.cos(L.ry), s = Math.sin(L.ry), u = dx * c - dz * s, w = dx * s + dz * c; return Math.abs(u) < L.len + pad && Math.abs(w) < L.w + pad; });
     // ---- trees. Conifers: a flared trunk bare for the first few metres, then stacked drooping cones. Over/under under the
     // lowest boughs; slim trunks are poles to orbit. Flying into the middle of a crown hits it; brushing its edge does not.
-    const trees = [], houses = [], { conifer, birch, shade, picnic, house, truck } = natureKit(K, rr, rnd, trees, houses);
+    const trees = [], houses = [], { conifer, birch, shade, picnic, house, truck } = natureKit(K, rr, rnd, trees, houses, { tall: true });
     const clear = (x, z, d) => trees.every(t => Math.hypot(t.x - x, t.z - z) > d + t.r);
     const keepOut = [[-35, 1, 10.5], [-24, 8, 3.5], [36, -12, 4.5], [-41, -19, 4]];   // playground, the spawn, the tire tunnel, the sign
     const free = (x, z) => keepOut.every(([a, b, r]) => Math.hypot(x - a, z - b) > r);
@@ -666,11 +669,12 @@
     { for (const [x, z, a, l] of [[-8, 18, 0.4, 3.2], [12, -21, 1.2, 2.6], [32, 14, 2.4, 4]]) pipe(O('Mossy Log', 'deco'), v3(x, 0.22, z), v3(x + Math.cos(a) * l, 0.2, z + Math.sin(a) * l), 0.22, 'mossLog'); }
     { for (const [x, z, r] of [[-20, 4.5, 0.4], [9, -5, 0.35], [-2, 12.5, 0.45], [24, 2.5, 0.3]]) pipe(O('Stump', 'deco'), v3(x, 0, z), v3(x, 0.35, z), r, 'cedarBark'); }
     // ---- the playground (west end): a timber border round wood chips
-    { const b = O('Playground Border', 'deco'); for (const [c, h] of [[v3(-35, 0.08, -4.5), v3(8, 0.08, 0.1)], [v3(-35, 0.08, 6.5), v3(8, 0.08, 0.1)], [v3(-43, 0.08, 1), v3(0.1, 0.08, 5.5)], [v3(-27, 0.08, 1), v3(0.1, 0.08, 5.5)]]) box(b, c, h, 'oldWood'); }
+    { const b = O('Playground Border', 'deco'); for (const [c, h] of [[v3(-35, 0.11, -4.5), v3(8.14, 0.11, 0.14)], [v3(-35, 0.11, 6.5), v3(8.14, 0.11, 0.14)], [v3(-43, 0.11, 1), v3(0.14, 0.11, 5.5)], [v3(-27, 0.11, 1), v3(0.14, 0.11, 5.5)]]) box(b, c, h, 'oldWood'); }   // a chunky timber curb, as in the video
     // the A-frame swing set: faded blue legs, a 2.4 m top bar along x, two belt swings on chains
     together(() => { const x0 = -40, x1 = -35.6, z = -1.2, H = 2.4, sw = bar('Swing Set', v3(x0, H, z), v3(x1, H, z), 0.045, 'fadedBlue');
       for (const x of [x0, x1]) for (const s of [-1, 1]) pipe(sw, v3(x, H, z), v3(x + (x === x0 ? -0.35 : 0.35), 0, z + s * 1.25), 0.04, 'fadedBlue');
-      for (const x of [x0 + 1.2, x1 - 1.2]) { for (const s of [-0.22, 0.22]) pipe(sw, v3(x + s, H, z), v3(x + s, 0.5, z), 0.008, 'chain', { noCollide: true }); box(sw, v3(x, 0.47, z), v3(0.26, 0.03, 0.1), 'rubberBlack', 0, 0, 0, { noCollide: true }); }
+      for (const x of [x0 + 1.2, x1 - 1.2]) { for (const s of [-0.22, 0.22]) pipe(sw, v3(x + s, H, z), v3(x + s, 0.5, z), 0.008, 'chain', { noCollide: true }); box(sw, v3(x, 0.47, z), v3(0.17, 0.025, 0.14), 'rubberBlack', 0, 0, 0, { noCollide: true });   /* black bucket seats, as at the real park */
+        for (const s of [-1, 1]) { box(sw, v3(x, 0.56, z + s * 0.14), v3(0.17, 0.09, 0.02), 'rubberBlack', 0, 0, 0, { noCollide: true }); box(sw, v3(x + s * 0.17, 0.56, z), v3(0.02, 0.09, 0.14), 'rubberBlack', 0, 0, 0, { noCollide: true }); } }
       O('Swing Set opening', 'gap', { gap: { c: v3((x0 + x1) / 2, H / 2, z), n: v3(0, 0, 1), hu: (x1 - x0) / 2 - 0.1, hv: H / 2 - 0.05, u: v3(1, 0, 0) } }); });
     // the small multi-play unit: tan posts, a deck 1.2 m up under a faded red roof, steps on the west, a faded blue slide
     // east, and a short run of climbing bars on the north side
@@ -719,6 +723,16 @@
     // each span between the poles (and the runs out to the map's edges) is an over/under (owner, 2026-11-19: "power lines count")
     { const xs = [-62]; for (let x = -40; x <= 44; x += 28) xs.push(x); xs.push(62); for (let i = 1; i < xs.length; i++) O('Power Lines', 'overunder', { obstacle: { a: v3(xs[i - 1], 0, -26.8), b: v3(xs[i], 0, -26.8), under: 8.4, over: 8.62 } }); }
     truck(-50.5, -14, Math.PI / 2, 'truckRed'); truck(-6, -31.8, 0, 'truckGrey'); truck(28, -28.2, Math.PI, 'truckBlue'); truck(-58, 22, Math.PI / 2, 'truckGrey');
+    // ---- after the owner's FPV video of the real park (2026-11-19): big conifers crowd the playground's edge and hang over the
+    // swings (that is where the trippies are flown), bright broadleaf trees stand among the cedars, and a tall dead snag is a
+    // bare pole. Added last with their own random stream, so every tree above keeps its place (and old flights their world).
+    { let sd = 9119; const r2 = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; }, g2 = (a, b) => a + (b - a) * r2(), N2 = natureKit(K, g2, r2, trees, houses, { tall: true });
+      for (const [x, z, h, r, kind] of [[-45.0, -1.6, 30, 0.42, 'cedar'], [-44.9, 4.3, 26, 0.32, 'hemlock'], [-41.4, -6.7, 28, 0.46, 'cedar'], [-33.6, -6.5, 24, 0.3, 'hemlock'],
+        [-28.7, -6.4, 31, 0.5, 'cedar'], [-25.3, 5.3, 27, 0.38, 'cedar'], [-35.0, 8.7, 25, 0.4, 'cedar']]) if (clear(x, z, 0.6)) N2.conifer(x, z, h, r, kind);
+      { const x = -21.5, z = -10.5; if (clear(x, z, 0.5)) { const o = O('Dead Snag', 'pole'); pipe(o, v3(x, 0, z), v3(x, 22, z), 0.22, 'snagWood'); pipe(o, v3(x, 0, z), v3(x, 0.7, z), 0.4, 'snagWood', { cone: true, noCollide: true });
+        for (const [y, a, L] of [[9, 0.4, 1.4], [12.5, 2.6, 1.0], [15, 4.4, 1.6], [18, 1.5, 0.9]]) pipe(o, v3(x, y, z), v3(x + Math.cos(a) * L, y + L * 0.35, z + Math.sin(a) * L), 0.05, 'snagWood', { noSurvey: true });
+        trees.push({ x, z, r: 1 }); } }
+      for (const [x, z, h] of [[-47.5, 9.5, 11], [-22.5, -8.5, 12], [-46.5, -8.0, 10], [-19.5, 3.5, 11], [-10, 12.5, 12], [6, -21, 11], [20, 10.5, 12], [-2, 16, 10]]) if (clear(x, z, 1.0)) N2.shade(x, z, h); }
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
 
