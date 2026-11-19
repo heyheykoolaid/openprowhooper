@@ -192,8 +192,14 @@
           const rc = O('Rooftop Unit', 'deco'), ra = c + (i % 2 ? -1 : 1) * Math.min(4, hl / 3), rd = out * (dm + 2);
           box(rc, ax ? v3(ra, h + 0.45, rd) : v3(rd, h + 0.45, ra), v3(0.7, 0.45, 0.55), 'metal'); box(rc, ax ? v3(ra + 1.8, h + 0.35, rd - out * 1.5) : v3(rd - out * 1.5, h + 0.35, ra + 1.8), v3(0.5, 0.35, 0.5), 'metal');
           if (h > 6) { const tk = O('Water Tank', 'overunder'), tx = c - (i % 2 ? -1 : 1) * Math.min(5, hl / 2.5), tzz = out * (dm - 2), tp = ax ? v3(tx, 0, tzz) : v3(tzz, 0, tx);
-            for (const [u, w] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) pipe(tk, v3(tp.x + u, h, tp.z + w), v3(tp.x + u, h + 1.4, tp.z + w), 0.05, 'rust');
-            pipe(tk, v3(tp.x, h + 1.4, tp.z), v3(tp.x, h + 2.9, tp.z), 0.8, 'galv'); tk.obstacle = { a: v3(tp.x - 0.8, 0, tp.z), b: v3(tp.x + 0.8, 0, tp.z), under: h + 1.35, over: h + 2.9 }; }
+            // a stand you can see (owner, 2026-11-19: it read as "a floating tire"): four splayed legs on foot plates, X braces
+            // between them, a deck under the tank, the tank itself and a cone roof
+            const L = [[-0.62, -0.62], [0.62, -0.62], [0.62, 0.62], [-0.62, 0.62]];
+            for (const [u, w] of L) { pipe(tk, v3(tp.x + u * 1.25, h, tp.z + w * 1.25), v3(tp.x + u, h + 1.36, tp.z + w), 0.07, 'rust'); box(tk, v3(tp.x + u * 1.25, h + 0.02, tp.z + w * 1.25), v3(0.14, 0.02, 0.14), 'metal', 0, 0, 0, { noSurvey: true }); }
+            for (let k = 0; k < 4; k++) { const [u0, w0] = L[k], [u1, w1] = L[(k + 1) % 4]; pipe(tk, v3(tp.x + u0 * 1.2, h + 0.15, tp.z + w0 * 1.2), v3(tp.x + u1 * 1.02, h + 1.2, tp.z + w1 * 1.02), 0.025, 'rust', { noSurvey: true }); pipe(tk, v3(tp.x + u1 * 1.2, h + 0.15, tp.z + w1 * 1.2), v3(tp.x + u0 * 1.02, h + 1.2, tp.z + w0 * 1.02), 0.025, 'rust', { noSurvey: true }); }
+            box(tk, v3(tp.x, h + 1.37, tp.z), v3(0.95, 0.04, 0.95), 'metal', 0, 0, 0, { noSurvey: true });
+            pipe(tk, v3(tp.x, h + 1.4, tp.z), v3(tp.x, h + 2.9, tp.z), 0.8, 'galv');
+            pipe(tk, v3(tp.x, h + 2.9, tp.z), v3(tp.x, h + 3.35, tp.z), 0.86, 'rust', { cone: true, noCollide: true }); tk.obstacle = { a: v3(tp.x - 0.8, 0, tp.z), b: v3(tp.x + 0.8, 0, tp.z), under: h + 1.35, over: h + 2.9 }; }
           if (h > 7) { const hut = O('Stair Hut', 'deco'), hp = ax ? v3(a1 - 2.2, h + 1.15, out * (d1 - 2.2)) : v3(out * (d1 - 2.2), h + 1.15, a1 - 2.2); box(hut, hp, v3(1.3, 1.15, 1.3), 'concrete'); box(hut, v3(hp.x, hp.y + 1.2, hp.z), v3(1.4, 0.06, 1.4), 'metal'); } }
         // AC units and a drain pipe on the alley side
         const ac = O('AC Unit', 'deco'), pp = O('Drain Pipe', 'deco');
