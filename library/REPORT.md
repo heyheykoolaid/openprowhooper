@@ -1,6 +1,6 @@
 # Trick library
 
-2026-11-19 16:22 UTC · 411 examples of 69 tricks: 66 from the demo GIFs (the reference), 234 confirmed by pilots, 111 counter-examples (calls pilots rejected).
+2026-11-19 16:37 UTC · 411 examples of 69 tricks: 66 from the demo GIFs (the reference), 234 confirmed by pilots, 111 counter-examples (calls pilots rejected).
 
 "Maybe" calls are made only for tricks with a demo GIF or confirmed examples from 2+ pilots (trusted below).
 
@@ -80,4 +80,4 @@ Leave-one-out (each example's nearest other example is the same trick): **52%** 
 
 Demo clips left out: Beginner Matty: no clear move found; Matty 360: no clear move found; Matty Stall Rewind: no clear move found; Wall Ride: no clear move found; Wall Tap: no clear move found; Maverick Tap Rewind: no clear move found; Reverse Knife Edge: no clear move found; Ninja Star: no clear move found; Stall Rewind: no clear move found; Beginner Switch: no clear move found
 
-129 s.
+140 s.

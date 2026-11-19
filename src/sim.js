@@ -1036,7 +1036,10 @@ function libMo(m) {
   if (!okA(m.x, n, 1e5) || !okA(m.y, n, 1e5) || !okA(m.z, n, 1e5) || !okA(m.q, n * 3, 10001)) return null;
   const th = okA(m.th, n, 100) ? m.th.slice() : null, un = clamp(+m.un || 0, 0, 60), ov = clamp(+m.ov || 0, 0, 80);
   if (m.f === 'obj' && !(ov > un)) return null;
-  return { f: m.f, n, x: m.x.slice(), y: m.y.slice(), z: m.z.slice(), q: m.q.slice(), th, un, ov, hz: 25, ct: clamp(+m.ct || 20, -10, 60), hit: m.hit === 1 };
+  const s = (v, n, re) => typeof v === 'string' && v.length <= n && (!re || re.test(v)) ? v : null;
+  const o = Array.isArray(m.o) && m.o.length === 3 && m.o.every(v => Number.isFinite(v) && Math.abs(v) <= 2000) ? m.o.slice() : null;
+  return { f: m.f, n, x: m.x.slice(), y: m.y.slice(), z: m.z.slice(), q: m.q.slice(), th, un, ov, hz: 25, ct: clamp(+m.ct || 20, -10, 60), hit: m.hit === 1,
+    map: s(m.map, 24, /^[a-z0-9_-]+$/), o, yaw: o && Number.isFinite(m.yaw) ? clamp(+m.yaw, -7, 7) : null, on: s(m.on, 60), by: s(m.by, 30), at: s(m.at, 30, /^[0-9T:.\-Z+]+$/), t: Number.isFinite(m.t) ? clamp(+m.t, 0, 3600) : null };   // where / when / who: shown to the judge (always escaped)
 }
 function setLibrary(L) {
   if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) { LIBRARY = null; return null; }

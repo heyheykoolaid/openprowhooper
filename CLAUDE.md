@@ -668,6 +668,11 @@ from it. tools/library.js keeps motion on at most 6 examples per trick (heaviest
 (untrusted). First build: 131 examples with motion over 28 tricks, library 117 → 558 KB; re-flown on the playground, confirmed
 examples the detector called on their own flights are called again 122 of 195 times (Matty Flip, Powerloop, Inverted Yaw Spin
 ~100 %; the misses are moves whose reading depends on the original object). test/knowledgebot.js.
+**Where, when, who** (owner, 2026-11-19: "map position, time and name … within the parameters of the game, not a privacy
+concern"): each `mo` also carries `map`, `o` (where on it the move's frame starts) and `yaw`, `on` (the object's name), `at` (the
+flight's start time), `t` (label time) and `by` (the pilot's chosen name); `S.libMo` cleans them. On the example's own map 70 % of
+library flights go where the pilot flew it (`inPlace`, not mirrored, scale ±4 %; 29 of 30 called on playground / Moose), and the
+judge sees "flown from <name>'s confirmed trick on <map>, <date>" (escaped). Older uploads have no start time.
 
 ## Quick check and bot replicas (2026-11-17; src/recap.js `openQuick`, src/sim.js `replicaFly`)
 **Quick check** (pause menu, results screen; daily goal `QUICK_GOAL` 3 on the main menu, `store 'quickDay'`): after a run,

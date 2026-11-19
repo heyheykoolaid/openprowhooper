@@ -422,12 +422,17 @@
     // pick by weight (a reviewer's example counts more than one's own); the caller may ask for a given one
     const tot = all.reduce((a, x) => a + x.e.w, 0); let u = r() * tot, pickd = all[0]; for (const x of all) { u -= x.e.w; if (u <= 0) { pickd = x; break; } }
     if (opts.ex != null) pickd = all.find(x => x.i === opts.ex) || pickd;
-    const { e, i } = pickd, M = e.mo, n = M.n, hz = M.hz, k = range(r, 0.88, 1.12), mir = r() < 0.5 ? -1 : 1, sc = range(r, 0.9, 1.1), wob = wobble(r, opts.wobble ?? range(r, 0, 15));
+    const { e, i } = pickd, M = e.mo, n = M.n, hz = M.hz, k = range(r, 0.88, 1.12);
+    // on the map it was flown on, most flights go where the pilot flew it (same object, same heights): not mirrored there
+    const here = M.o && M.yaw != null && M.map && world.id === M.map && (opts.inPlace ?? r() < 0.7);
+    const mir = !here && r() < 0.5 ? -1 : 1, sc = here ? range(r, 0.96, 1.04) : range(r, 0.9, 1.1), wob = wobble(r, opts.wobble ?? range(r, 0, 15));
     const PT = [], Q = [];
     for (let j = 0; j < n; j++) { PT.push(v3(M.x[j] / 100 * sc * mir, M.y[j] / 100, M.z[j] / 100 * sc)); const qx = M.q[j * 3] / 1e4, qy = M.q[j * 3 + 1] / 1e4, qz = M.q[j * 3 + 2] / 1e4; let q = qnorm({ w: Math.sqrt(Math.max(0, 1 - qx * qx - qy * qy - qz * qz)), x: qx, y: qy, z: qz }); if (mir < 0) q = { w: q.w, x: q.x, y: -q.y, z: -q.z }; Q.push(q); }
     // where it goes: over a playground bar (heights mapped) or in open air (lifted clear of the ground)
     let place, object = 'open air';
-    if (M.f === 'obj') {   // the object most like the one the pilot flew it on (its over height), so the move keeps its shape
+    if (here) { const Y = qaxis(UP, M.yaw), O0 = v3(M.o[0], M.o[1], M.o[2]); object = M.f === 'obj' ? (M.on || 'its object') : 'open air';
+      place = p => { const d = S.qrot(Y, p); return v3(O0.x + d.x, Math.max(0.05, O0.y + d.y), O0.z + d.z); }; place.Y = Y; }
+    else if (M.f === 'obj') {   // the object most like the one the pilot flew it on (its over height), so the move keeps its shape
       let name = opts.object; if (!name) { const seen = new Set(), C = []; for (const o of world.objs) { if (!o.obstacle || o.round || o.auto || o.kind === 'edge' || o.kind === 'pilot' || seen.has(o.name)) continue; seen.add(o.name); C.push({ name: o.name, d: Math.abs(o.obstacle.over - M.ov) + 0.5 * Math.abs(o.obstacle.under - M.un) }); }
         C.sort((a, b) => a.d - b.d); name = C.length ? pick(r, C.slice(0, Math.min(3, C.length))).name : pick(r, KB_OBJ); }
       const F = frame(world, name, r); if (!F) return null; object = F.name;
@@ -443,7 +448,7 @@
       else if (u >= T0) { pos = add(W[n - 1], mul(v1, u - T0)); q = QW[n - 1]; if (pos.y < 0.3) pos.y = 0.3; }
       else { const x = u / k * hz, j = Math.min(n - 2, Math.floor(x)), f = x - j; pos = add(W[j], mul(sub(W[j + 1], W[j]), f)); q = slerpN(QW[j], QW[j + 1], f); }
       return { pos, q: qmul(q, wob(t)) }; };
-    return { T: lead + T0 + tail, object, source: 'library', ex: i, params: { ex: i, k: +k.toFixed(2), mirror: mir < 0, scale: +sc.toFixed(2), from: e.s }, at };
+    return { T: lead + T0 + tail, object, source: 'library', ex: i, inPlace: !!here, by: M.by || null, map: M.map || null, when: M.at || null, params: { ex: i, k: +k.toFixed(2), mirror: mir < 0, scale: +sc.toFixed(2), from: e.s, inPlace: !!here }, at };
   }
   // the scripted flight retimed to the library's pace for that trick (median duration of its examples)
   function blendWithLibrary(name, world, seed, opts = {}) {

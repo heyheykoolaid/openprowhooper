@@ -37,7 +37,7 @@ function judgeNext() {
   const scripted = MV.tricks.includes(judge.name), useKb = !scripted || Math.random() < KB_SHARE;
   judge.m = (useKb && MV.knowledge(judge.name, world, judge.seed, { human: true, tilt: 0 })) || (scripted ? MV.make(judge.name, world, judge.seed, { human: true }) : null);   // real whoops wander: drift, bob, uneven speed
   if (!judge.m) { judge.want = 'random'; return judgeNext(); }
-  judge.source = judge.m.source || 'script'; judge.ex = judge.m.ex ?? null;
+  judge.source = judge.m.source || 'script'; judge.ex = judge.m.ex ?? null; judge.from = judge.m.source === 'library' ? { by: judge.m.by, map: judge.m.map, when: judge.m.when, inPlace: judge.m.inPlace } : null;
   judge.events = MV.detect(judge.m, world, tune.camTilt, { rows: true }); judge.rows = judge.events.rows || null;
   judge.t = 0; judge.phase = 'watch'; trailClear();
   // spectator spot: beside the flight path, looking across it, like a pilot watching line-of-sight
@@ -69,7 +69,7 @@ function judgeVerdict(v) {
   const det = judge.events.map(e => e.name), detOK = det.length === 1 && det[0] === judge.name, valid = v !== 'wrong';
   const like = v === 'wrong' ? ($('#jLike') && $('#jLike').value) || null : null;
   const rec = { id: `${Date.now()}-${judge.seed}`, at: new Date().toISOString(), trick: judge.name, seed: judge.seed, human: true, object: judge.m.object, params: judge.m.params,
-    source: judge.source, ex: judge.ex, verdict: v, lookedLike: like, detected: judge.events.map(e => ({ name: e.name, exec: e.exec, clean: e.clean })), detectorRight: detOK, agree: valid === detOK, build: '0.1' };
+    source: judge.source, ex: judge.ex, inPlace: !!(judge.from && judge.from.inPlace), verdict: v, lookedLike: like, detected: judge.events.map(e => ({ name: e.name, exec: e.exec, clean: e.clean })), detectorRight: detOK, agree: valid === detOK, build: '0.1' };
   judge.session.push(rec); idb.put('judge', rec); judge.phase = 'reveal'; renderJudge(); judgeShare(rec);
   if (judge.session.filter(x => !x.up).length >= 10) judgeUpload();
 }
@@ -81,7 +81,7 @@ async function judgeShare(rec) {
   const id = `bot${rec.seed.toString(36)}${Date.now().toString(36).slice(-4)}`.slice(0, 40), T1 = rows[rows.length - 1][0], ev = judge.events.map(e => ({ t: +e.t.toFixed(3), t0: +Math.max(0, e.t - 1.5).toFixed(3), name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle || null, conf: e.watch ? e.watch.conf : null }));
   try {
     const trace = await FlightLog.pack(rows, TRACE_COLS, 100);
-    await telQueue('flight', id, { format: 'pro-whooper-flight/1', build: '0.1', id, started: rec.at, ended: 'judged', pilot: 'bot', name: 'bot', map: MAP_ID, mode: 'bot', camTilt: tune.camTilt, craft: null, tune: null, profile: null, input: null, score: null, events: ev, missed: [], summary: { bot: { trick: rec.trick, seed: rec.seed, object: rec.object || null, human: true, source: rec.source || 'script', ex: rec.ex ?? null }, seconds: +T1.toFixed(1) }, trace }, true);
+    await telQueue('flight', id, { format: 'pro-whooper-flight/1', build: '0.1', id, started: rec.at, ended: 'judged', pilot: 'bot', name: 'bot', map: MAP_ID, mode: 'bot', camTilt: tune.camTilt, craft: null, tune: null, profile: null, input: null, score: null, events: ev, missed: [], summary: { bot: { trick: rec.trick, seed: rec.seed, object: rec.object || null, human: true, source: rec.source || 'script', ex: rec.ex ?? null, inPlace: !!rec.inPlace }, seconds: +T1.toFixed(1) }, trace }, true);
     const span = { repStart: 0.3, t: +Math.max(0.5, T1 - 0.3).toFixed(3) }, labels = [], ok = rec.verdict !== 'wrong', what = ok ? rec.trick : rec.lookedLike;
     labels.push({ target: rec.trick, verdict: ok ? 'yes' : 'no', actual: ok ? rec.trick : (what || 'not a trick'), ...span, detected: ev.map(e => e.name), execActual: rec.verdict === 'clean' ? 'CLEAN' : rec.verdict === 'sloppy' ? 'SLOPPY' : null, via: 'judge-bot', src: 'bot' });
     for (const e of ev) if (e.name !== rec.trick && e.name !== what) labels.push({ target: e.name, verdict: 'no', actual: 'not a trick', repStart: e.t0, t: e.t, detected: [e.name], conf: e.conf, via: 'judge-bot', src: 'bot', inferred: true });   // the judge only looked at the scripted trick: other calls are a guess from the script (a bot flight is meant to be one trick), not a verdict, and carry little weight (tools/evidence.js)
@@ -104,7 +104,7 @@ function renderJudge() {
   const det = judge.events.length ? judge.events.map(e => `${e.name} <small>${e.exec}${e.clean != null ? ' ' + e.clean : ''}</small>`).join(' + ') : 'nothing';
   const detOK = judge.events.length === 1 && judge.events[0].name === judge.name;
   box.innerHTML = `<div class="trHead"><small>JUDGE THE BOT · DEV</small><span class="jStat">${n} judged · agree ${ag}/${n}</span></div>
-    <div class="trTarget">${judge.name}</div><div class="trObs">on <b>${judge.m.object === 'Pilot' ? 'the pilot' : judge.m.object}</b> · speed ×${judge.speed} · camera: ${judge.cam}${judge.phase === 'reveal' ? ` · flown from ${judge.source === 'library' ? 'a pilot\'s confirmed trick (the library)' : judge.source === 'blend' ? 'the script, at the library\'s pace' : 'the hand-written script'}` : ''}</div>
+    <div class="trTarget">${judge.name}</div><div class="trObs">on <b>${judge.m.object === 'Pilot' ? 'the pilot' : judge.m.object}</b> · speed ×${judge.speed} · camera: ${judge.cam}${judge.phase === 'reveal' ? ` · flown from ${judge.source === 'library' ? `${judge.from && judge.from.by ? esc(judge.from.by) + '\'s' : 'a pilot\'s'} confirmed trick${judge.from && judge.from.map ? ' on ' + esc((S.MAPS[judge.from.map] || {}).title || judge.from.map) : ''}${judge.from && judge.from.when ? ', ' + esc(String(judge.from.when).slice(0, 10)) : ''}${judge.from && judge.from.inPlace ? ' (where it was flown)' : ''}` : judge.source === 'blend' ? 'the script, at the library\'s pace' : 'the hand-written script'}` : ''}</div>
     <div class="trDesc">${descOf(judge.name)}</div>
     ${judge.phase === 'watch' ? `<div class="trLast">Watch the bot fly it… <kbd>R</kbd> replay · <kbd>S</kbd> slow-mo · <kbd>C</kbd> camera</div>` : ''}
     ${judge.phase === 'ask' ? `<div class="trLast">Did the bot fly a proper <b>${judge.name}</b>?</div>

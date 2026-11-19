@@ -5,9 +5,9 @@
 //     weight 3 (scaled by how much of the clip could be tracked). The text descriptions say less than these.
 //   - pilots' decided review labels on shared flights and leaderboard runs (tools/evidence.js): confirmed tricks are
 //     examples (reviewer 1.5, own 1.0), rejected calls are counter-examples. Custom tricks pilots named are examples too.
-// Only derived numbers go in the library (rotation curves and durations, an anonymous pilot number): no traces, names or ids.
-// Up to 6 confirmed examples per trick also carry their motion (`mo`: a few seconds of heading-relative path, attitude and
-// throttle, never a map position or time) for the knowledge bot (Judge the Bot, src/maneuvers.js fromLibrary).
+// The library holds rotation curves and durations and an anonymous pilot number, and up to 6 confirmed examples per trick
+// also carry their motion (`mo`: a few seconds of path, attitude and throttle, with the map, where on it, when and the pilot's
+// chosen name: owner, 2026-11-19, all within the game) for the knowledge bot (Judge the Bot, src/maneuvers.js fromLibrary).
 // --check re-flies every shared flight with the new library and reports the "maybe" calls it would make (and how many
 // of them land on a trick a pilot labelled), plus a leave-one-out score of the library against itself.
 const fs = require('fs'), path = require('path');
@@ -66,7 +66,8 @@ function motionOf(rows, det, world, from, sig) {
   else { const s0 = at(t0), vh = Math.hypot(s0.v.x, s0.v.z); origin = S.v3(s0.p.x, s0.p.y, s0.p.z);
     if (vh > 0.5) f = S.v3(s0.v.x / vh, 0, s0.v.z / vh); else { const fw = S.qrot(s0.q, S.v3(0, 0, -1)), fh = Math.hypot(fw.x, fw.z) || 1; f = S.v3(fw.x / fh, 0, fw.z / fh); } }
   const yawA = Math.atan2(-f.x, -f.z), Yi = S.qaxis(S.v3(0, 1, 0), -yawA);   // turns the heading back to -z
-  const mo = { f: frame, x: [], y: [], z: [], q: [], th: [] }; if (frame === 'obj') { mo.un = +un.toFixed(2); mo.ov = +ov.toFixed(2); }
+  const mo = { f: frame, x: [], y: [], z: [], q: [], th: [] }; if (frame === 'obj') { mo.un = +un.toFixed(2); mo.ov = +ov.toFixed(2); mo.on = String(o.name).slice(0, 60); }
+  mo.o = [+origin.x.toFixed(2), +origin.y.toFixed(2), +origin.z.toFixed(2)]; mo.yaw = +yawA.toFixed(4);   // where on its map it was flown (owner, 2026-11-19: map position, time and name are fine to ship)
   for (let t = t0; t <= t1 + 1e-6; t += 1 / 25) { const s = at(t), d = S.qrot(Yi, S.v3(s.p.x - origin.x, s.p.y - origin.y, s.p.z - origin.z)); let q = S.qmul(Yi, s.q); if (q.w < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
     mo.x.push(Math.round(d.x * 100)); mo.y.push(Math.round(d.y * 100)); mo.z.push(Math.round(d.z * 100)); mo.q.push(Math.round(q.x * 1e4), Math.round(q.y * 1e4), Math.round(q.z * 1e4)); mo.th.push(Math.round(Math.max(0, Math.min(1, s.th)) * 100)); }
   return S.libMo(mo) ? mo : null;
@@ -81,7 +82,7 @@ function flightExamples(runs) {
       const from = Math.max(r.rows[0][0], e.a - 3.5), { det, events: rev } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       const mo = e.kind === 'want' && e.botSrc !== 'library' ? motionOf(r.rows, det, r.world, from, sig) : null;
-      if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
+      if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.map = r.map || null; mo.by = r.name || null; mo.at = r.started || null; mo.t = +(+e.a).toFixed(1); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
       out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined, mo }); }
   }
   return out;
