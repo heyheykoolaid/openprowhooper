@@ -716,6 +716,14 @@ weighs the rest 0.5 (the label on the real flight already counts 1). test/replic
   re-arm before it stops (0.6 s grace) and fly away. The slide keeps a combo alive (`busy()`); test/slide.js flies it
   with the real physics. A whoop stops quickly: about 3 m of slide from 8 m/s.
 
+- **Cradle and Whiplash are never inverted** (owner, 2026-11-19): neither is made when the quad's up vector went below -0.15 from
+  2 s before the pass to the call, and a pending one is dropped if it goes upside-down before it is confirmed (re-flown: every
+  Whiplash call but one, and 4 of 6 Cradle calls, had been inverted; the two confirmed Cradles stayed at up.y 0.2-0.4). A Cradle
+  may also be read from the nose seen rising 0.7 and coming back down (an upright cradle's 60-80° pitch back is often slower
+  than a token), with no bank over 45° (a Side-Lock Rewind is not a cradle) and one per swing of the same pole. The bot's Cradle
+  pitches back 66-84° (it went 120-175°, over the top). The Tricktionary's "▶ watch" (the bot flies the trick to judge) shows
+  only for `TRICK_WATCHERS` in menus.js (heyheykoolaid, RodFPV; owner, 2026-11-19).
+
 ## Orbits vs trippies, tree trunks, solid foliage (2026-11-17, RodFPV / Autismo / tcmore)
 - **Trippy pose** (`sense`, `rolled`): a lap counts toward Trippy Spin only if the quad is not "nose well below the horizon
   while still right-way-up" (`f.y < -0.6 && up.y > -0.15`). Fast orbits (10-16 m/s round Clappy's sakura trees) lean ~70°

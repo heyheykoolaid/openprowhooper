@@ -240,11 +240,11 @@
     return { P, h, side, lat, d, y, C, v: range(r, 2.0, 3.4) };
   }
   const P_ = Math.PI;
-  // Cradle: pass the pole, pitch back to keep it in view (up and over), the momentum swings you back, pitch forward to
-  // level out and fly backward past it, looking at it the whole way
+  // Cradle: pass the pole, pitch back hard to brake and keep it in view (nose high, never inverted: owner, 2026-11-19; the
+  // confirmed cradles stayed at up.y 0.2-0.4), the momentum swings you back, pitch forward to level out and fly backward past it
   function cradle(world, r, o = {}) {
     const g = poleSetup(world, r, { ...o, close: true }), face = faceQ(g.h), wob = wobble(r, o.wobble ?? range(r, 0, 15));
-    const Ta = 1.4, pb = range(r, 120, 175), Tp = pb / range(r, 160, 320), Th = range(r, 0.15, 0.4), Tf = pb / range(r, 160, 320), back = range(r, 1.6, 2.4);
+    const Ta = 1.4, pb = range(r, 66, 84), Tp = pb / range(r, 160, 260), Th = range(r, 0.15, 0.4), Tf = pb / range(r, 160, 260), back = range(r, 1.6, 2.4);
     const x = t => t < Ta ? -g.v * (Ta - t) : (() => { const u = t - Ta, T = Tp + Th + Tf, k = Math.min(u, T) / T; const out = g.v * T * 0.35 * Math.sin(Math.PI * k); return u <= T ? out : -back * (u - T); })();
     const ang = t => { const u = t - Ta; if (u < 0) return 0; if (u < Tp) return pb * ease(u / Tp); if (u < Tp + Th) return pb; return pb * (1 - ease((u - Tp - Th) / Tf)); };
     const T = Ta + Tp + Th + Tf + 1.6;

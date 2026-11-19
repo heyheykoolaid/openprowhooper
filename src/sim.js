@@ -2099,7 +2099,9 @@ class StreamDetector extends TrickDetector {
       // heading from before the move began to now (this whip's own rotations; a slow cradle's can start up to 3 s back)
       const toks = this.toksIn(ps.tc - 1.5, t), turn = this.headingTurn(Math.min(ps.tc - 0.8, ...toks.map(k => k.t0 - 0.2)), t), tilt = this.maxTilt(ps.tc - 0.8, t);
       const turnC = this.headingTurn(Math.min(ps.tc - 0.8, ...this.toksIn(ps.tc - 3.0, t).map(k => k.t0 - 0.2)), t);
-      const pPlus = this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 60), pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 45);   // a slow cradle's pitch back can start well before the pass back
+      const fbC = this.fbIn(ps.tc - 3.0, t), bankMax = fbC.length ? Math.max(...fbC.map(x => Math.abs(x.f.z * x.up.x - x.f.x * x.up.z))) : 0, nose0 = fbC.length ? fbC[0].f.y : 0, noseHi = fbC.length ? Math.max(...fbC.map(x => x.f.y)) - nose0 : 0, noseEnd = fbC.length ? fbC[fbC.length - 1].f.y - nose0 : 1;   // relative to how it flew in (a tilted camera flies nose-down)
+      // an upright cradle's pitch back is 60-80°, often slower than a token: the nose seen going high and coming back down counts too
+      const pPlus = this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 50) || noseHi > 0.7, pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 40) || (noseHi > 0.7 && noseEnd < noseHi - 0.45);   // a slow cradle's pitch back can start well before the pass back
       const rAny = toks.some(x => x.ax === 'R' && x.raw >= 60) || (turn >= 100 && tilt >= 50), bigR = toks.some(x => x.ax === 'R' && x.raw >= 150), back = this.backFrac(t - 0.35, t) > 0.6;
       // an over/under pass in the same moment belongs to an obstacle trick (Split-S, loops, Mattys), not a pole trick
       const obst = this.crossLog.some(c => c.kind === 'O' && c.t > ps.tc - 3.5 && c.t < t + 0.1);   // (passing under a canopy or bar is fine)
@@ -2110,11 +2112,14 @@ class StreamDetector extends TrickDetector {
       // from it — and the game now waits to see that it holds (the Watcher's check, 0.7 s later) before confirming.
       const levelOut = !!this.lastD && this.lastD.up().y > 0.55;
       const rewound = this.rewinds.some(r => r.t1 > ps.tc - 1.5 && r.t0 < t);   // stopping and going back the way you came is a rewind, not a whip
-      if (!obst && !pBack && !bumped && !rewound && ps.dmin < 2.0 && vf >= 0.65 && turn >= 135 && back && levelOut && rAny) {
+      // owner, 2026-11-19: "Cradles and whiplashes are not inverted maneuvers": the quad never goes past upside-down-ish
+      // (a whip's roll toward the pole may reach knife-edge; a cradle's pitch back keeps the nose up, the belly never skyward)
+      const upright = this.minUpBetween(ps.tc - 2.0, t) > -0.15;
+      if (!obst && !pBack && !bumped && !rewound && ps.dmin < 2.0 && vf >= 0.65 && turn >= 135 && back && levelOut && rAny && (upright || this.pend.some(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5))) {
         const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
         if (prev) mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
         else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj, underObj: toks.some(x => x.ax === 'R' && x.raw >= 150 && (x.inv === true || x.inv > x.n * 0.5)) ? (this.crossLog.find(c => c.kind === 'U' && c.t > ps.tc - 2.6 && c.t <= t && (o => o && o.obstacle && !o.round)(this.world.objs.find(o => o.id === c.obj))) || {}).obj : undefined });   /* rolled upside-down under a bar or frame (a whip stays the right way up; a tree's canopy over its own trunk does not count) */
-      } else if (!obst && vf >= 0.4 && pPlus && pMinus && !bigR && back && turnC < 60) mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] });
+      } else if (!obst && upright && bankMax < 0.7 && vf >= 0.3 && pPlus && pMinus && !bigR && !this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'R' && x.raw >= 50) && back && turnC < 60 && !(this.lastCradle && this.lastCradle.obj === ps.obj && t >= this.lastCradle.t && t - this.lastCradle.t < 3)) { this.lastCradle = { obj: ps.obj, t }; mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] }); }   // one cradle per swing (a second close pass of the same pole in it is not another)
     }
     if (fresh.includes('rewind')) { const rw = this.rewinds[this.rewinds.length - 1];
       if (rw && !this.claimUsed.has(rw.id)) { const P = this.poles.find(p => Math.hypot(rw.p.x - p.x, rw.p.z - p.z) < 3);
@@ -2192,6 +2197,7 @@ class StreamDetector extends TrickDetector {
       // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
       // 'rollbacks' under the swing set were being called Whiplash)
       if (p.name === 'Whiplash' && p.underObj != null && this.crossLog.some(c => c.kind === 'U' && c.obj === p.underObj && c.t > p.tDone - 0.1)) { this.pend = this.pend.filter(x => x !== p); continue; }
+      if ((p.name === 'Whiplash' || p.name === 'Cradle') && this.minUpBetween(p.tDone, t) < -0.15) { this.pend = this.pend.filter(x => x !== p); continue; }   // turned upside-down before it was confirmed: not a whip / cradle (owner: never inverted)
       if (p.name === 'Whiplash' && p.underObj != null && t - p.tDone < 3.2) continue;   // give the way back under a moment to happen
       if (p.name === 'Whiplash' && t - p.tDone < 3.5 && this.lastD && !this.lastD.crashed && (() => { const P = this.poles.find(q => q.id === p.poleObj); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })()) continue;   // the second whip of a Pole Dance may follow
       this.commit(p, t);
