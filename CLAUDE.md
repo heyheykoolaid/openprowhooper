@@ -268,6 +268,12 @@ bear-resistant bins, the routed park sign and a carved cedar moose; steep-roofed
 ridges, Mt Begbie (SW) and Mt Mackenzie (E), unfogged and pre-hazed; cool sky, softer high sun, grass ground plane.
 Muted materials only (no bright primary plastic). No Trick Park on this map (the pilot's brief: a compact park).
 
+**Power lines are over/unders** (owner, 2026-11-19): every span between two poles is a shape-less `overunder` object along
+the wires (Moose's Power Lines, under 8.4 / over 8.62, now three wires side by side across the line, crossarms across it;
+Clappy's Overhead Wires per street span, 7.35 / 7.6; the playground's drawn-only skyline lines, 7.5 / 8.7 for their 0.6 m
+sag, added in `addPlaygroundExtras`). The wires themselves still have no collider. test/maps.js flies the bot's Powerloops
+and Mattys on them. Moose's benches stand round the playground 1.8 m outside its border, facing in; the bear bins too.
+
 **Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls `EDGE_OUT` 25 m
 beyond every collider and the declared bounds, and a ceiling `EDGE_UP` 40 m above the tallest thing (at least 60 m):
 generous, they only stop endless flying (a tester's powerloop out through the warehouse skylight hit the first, tighter

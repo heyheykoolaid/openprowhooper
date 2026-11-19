@@ -150,6 +150,7 @@
     const up = O('Utility Pole', 'pole'), poles = [];
     for (const t of [-18, -6, 6, 18]) for (const [x, z] of [[t, -23.3], [t, 23.3], [-23.3, t], [23.3, t]]) { pipe(up, v3(x, 0, z), v3(x, 8, z), 0.12, 'wood'); pipe(up, v3(x - 0.7, 7.5, z), v3(x + 0.7, 7.5, z), 0.05, 'wood', { noCollide: true }); poles.push(v3(x, 7.5, z)); }
     { const w = O('Overhead Wires', 'deco'); for (const side of ['N', 'S', 'E', 'W']) { const P = poles.filter(p => side === 'N' ? p.z < -23 : side === 'S' ? p.z > 23 : side === 'E' ? p.x > 23 : p.x < -23).sort((a, b) => (a.x + a.z) - (b.x + b.z));
+      for (let i = 1; i < P.length; i++) O('Overhead Wires', 'overunder', { obstacle: { a: v3(P[i - 1].x, 0, P[i - 1].z), b: v3(P[i].x, 0, P[i].z), under: 7.35, over: 7.6 } });   // each span an over/under (owner, 2026-11-19)
       for (let i = 1; i < P.length; i++) for (const dx of [-0.6, 0.6]) pipe(w, v3(P[i - 1].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i - 1].z + (side === 'N' || side === 'S' ? dx : 0)), v3(P[i].x + (side === 'N' || side === 'S' ? 0 : dx), 7.45, P[i].z + (side === 'N' || side === 'S' ? dx : 0)), 0.008, 'rubberBlack', { noCollide: true }); } }
     frame('Race Gate', 0, 18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 0, -18, 3.2, 2.6, 'z', 'paintRed'); frame('Race Gate', 18, 8, 3.2, 2.6, 'x', 'paintBlue');   /* east gate: down the street, clear of the footbridge (pilot, 2026-11-17) */ frame('Race Gate', -18, 0, 3.2, 2.6, 'x', 'paintBlue');
     // the footbridge from the plaza's east edge over the street to the east rooftops (5 m up), on two pillars
@@ -486,6 +487,9 @@
   // tricked. Placed in the empty corners so the flagpole, lamp posts and trees keep their room.
   function addPlaygroundExtras(w) {
     const K = kit(w), { O, box, pipe } = K;
+    // power lines count as over/unders (owner, 2026-11-19): the skyline's wires (drawn by worldview.js: 8.6 and 8.2 m at the
+    // poles, sagging 0.6 m in the middle of each span) get one over/under per span, under the lowest sag, over the highest wire
+    for (const [x0, x1] of [[-30, 0], [0, 30]]) O('Power Lines', 'overunder', { obstacle: { a: v3(x0, 0, 30), b: v3(x1, 0, 30), under: 7.5, over: 8.7 } });
     const stripe = (o, c, h, ry = 0) => box(o, c, h, 'plasticYellow', ry, 0, 0, { noCollide: true });
     const bar = (name, a, b, r, mat) => { const o = O(name, 'overunder', { obstacle: { a: v3(a.x, 0, a.z), b: v3(b.x, 0, b.z), under: Math.min(a.y, b.y) - r, over: Math.max(a.y, b.y) + r } }); pipe(o, a, b, r, mat); return o; };
     // ---- skate corner (south-east): ledges, a manual pad, kickers with a gap, a flat rail, stairs up to a platform
@@ -685,9 +689,10 @@
       const cb = O('Climbing Bars', 'deco'); for (const s of [-0.8, 0.8]) pipe(cb, v3(cx + s, 0, cz - 2.6), v3(cx + s, 1.9, cz - 2.6), 0.035, 'fadedBlue'); for (let i = 1; i < 6; i++) pipe(cb, v3(cx - 0.8, 1.9, cz - 0.95 - i * 0.28), v3(cx + 0.8, 1.9, cz - 0.95 - i * 0.28), 0.018, 'galv'); });
     // ---- picnic tables (wood on a dark metal frame), benches, bear-resistant bins, the park sign and a carved moose
     picnic(-29.2, -0.6, 0.1); picnic(-21, 5.5, 0.3); picnic(-9, -9, -0.2); picnic(12, 3.5, 0.15); picnic(26, -12.5, 0.4);
-    for (const [x, z, ry] of [[-38.5, 6, 0], [-27.5, 6.2, 0.2], [4, -10.4, 0.15]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry);
+    // benches round the playground, 1.8 m outside its timber border, each facing in (owner, 2026-11-19: they stood in it)
+    for (const [x, z, ry] of [[-39, 8.3, Math.PI], [-31, 8.3, Math.PI], [-37, -6.3, 0], [-25.2, 1, -Math.PI / 2], [4, -10.4, 0.15]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry);
       box(b, v3(x, 0.44, z), v3(0.9, 0.03, 0.2), 'oldWood', ry); box(b, v3(x - s * 0.18, 0.75, z - c * 0.18), v3(0.9, 0.12, 0.025), 'oldWood', ry); for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.22, z - u * s), v3(0.03, 0.22, 0.2), 'darkMetal', ry); }
-    for (const [x, z] of [[-27.2, -3.8], [-42.5, 6.4], [30.5, -9.5], [0, -23]]) { const b = O('Bear Bin', 'deco'); box(b, v3(x, 0.55, z), v3(0.42, 0.55, 0.38), 'binGreen'); box(b, v3(x, 1.13, z), v3(0.44, 0.04, 0.4), 'darkMetal'); }
+    for (const [x, z] of [[-25.6, -5.8], [-44.4, 7.9], [30.5, -9.5], [0, -23]]) { const b = O('Bear Bin', 'deco'); box(b, v3(x, 0.55, z), v3(0.42, 0.55, 0.38), 'binGreen'); box(b, v3(x, 1.13, z), v3(0.44, 0.04, 0.4), 'darkMetal'); }
     { const sg = O('Park Sign', 'deco'), x = -41, z = -21.5; for (const s of [-1, 1]) pipe(sg, v3(x + s * 1.1, 0, z), v3(x + s * 1.1, 1.5, z), 0.09, 'oldWood');
       box(sg, v3(x, 1.15, z), v3(1.35, 0.32, 0.05), 'mooseSign', 0, 0, 0, { sign: true }); box(sg, v3(x, 1.52, z), v3(1.5, 0.05, 0.14), 'oldWood'); }
     { const m = O('Carved Moose', 'deco'), x = -38.2, z = -20.6;   // a chainsaw-carved cedar moose by the sign
@@ -709,8 +714,10 @@
     for (let x = -30; x <= 40; x += 16) house(x, 37, rr(9, 12), rr(8, 9), 0, colors[(rnd() * 5) | 0]);                                   // south
     { const f = O('Back Fence', 'deco'); box(f, v3(PX + 2, 0.9, 0), v3(0.03, 0.9, PZ), 'fenceWood'); box(f, v3(4, 0.9, PZ + 2.5), v3(PX - 2, 0.9, 0.03), 'fenceWood');
       for (let z = -PZ; z <= PZ; z += 2.4) pipe(f, v3(PX + 2.05, 0, z), v3(PX + 2.05, 1.85, z), 0.05, 'fenceWood'); for (let x = -PX + 6; x <= PX + 2; x += 2.4) pipe(f, v3(x, 0, PZ + 2.55), v3(x, 1.85, PZ + 2.55), 0.05, 'fenceWood'); }
-    for (let x = -40; x <= 44; x += 28) { const p = O('Power Pole', 'pole'); pipe(p, v3(x, 0, -26.8), v3(x, 9, -26.8), 0.14, 'polewood'); box(p, v3(x, 8.4, -26.8), v3(1.1, 0.06, 0.06), 'polewood'); }
-    { const w = O('Power Lines', 'deco'); for (const dx of [-0.9, 0, 0.9]) pipe(w, v3(-62 + dx, 8.45, -26.8), v3(62 + dx, 8.45, -26.8), 0.012, 'chain', { noCollide: true }); }
+    for (let x = -40; x <= 44; x += 28) { const p = O('Power Pole', 'pole'); pipe(p, v3(x, 0, -26.8), v3(x, 9, -26.8), 0.14, 'polewood'); box(p, v3(x, 8.4, -26.8), v3(0.06, 0.06, 1.1), 'polewood'); }
+    { const w = O('Power Lines', 'deco'); for (const dz of [-0.9, 0, 0.9]) pipe(w, v3(-62, 8.5, -26.8 + dz), v3(62, 8.5, -26.8 + dz), 0.012, 'chain', { noCollide: true }); }
+    // each span between the poles (and the runs out to the map's edges) is an over/under (owner, 2026-11-19: "power lines count")
+    { const xs = [-62]; for (let x = -40; x <= 44; x += 28) xs.push(x); xs.push(62); for (let i = 1; i < xs.length; i++) O('Power Lines', 'overunder', { obstacle: { a: v3(xs[i - 1], 0, -26.8), b: v3(xs[i], 0, -26.8), under: 8.4, over: 8.62 } }); }
     truck(-50.5, -14, Math.PI / 2, 'truckRed'); truck(-6, -31.8, 0, 'truckGrey'); truck(28, -28.2, Math.PI, 'truckBlue'); truck(-58, 22, Math.PI / 2, 'truckGrey');
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
