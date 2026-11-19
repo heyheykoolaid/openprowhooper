@@ -47,7 +47,7 @@ function openRecap(from) {
 }
 function closeRecap() {
   quickReplicasGo();   // the answers are final now: fly their bot replicas
-  recap.quick = null; $('#recapUI').classList.remove('quick'); recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
+  recap.quick = null; $('#recapUI').classList.remove('quick'); recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); $('#hud').classList.remove('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();   /* the HUD comes back (owner: after Quick check there was no UI) */
   if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
     recap.guest = false; recap.guestOf = null; if (LB.keep) { Object.assign(recap, LB.keep); LB.keep = null; } else { recapReset(); recap.telDone = recap.id; }
     if (src === 'judge') { const k = (of0 || {}).clip; if (k && ev0.some(e => e.verdict)) { JG.done[k] = 1; store.set('judgeDone', JG.done); } mode = 'menu'; show('#judgeScreen'); judgeRender(); return; }

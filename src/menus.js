@@ -94,7 +94,7 @@ function startFlyGo(withSession) {
   flash(withSession ? `<b>2:00 SESSION</b><small>timer starts when you ${autoArmOn() ? 'take off' : 'arm'}</small>` : `<b>FREE FLY</b><small>${autoArmOn() ? 'throttle up to take off' : 'Space / arm switch to arm'}</small>`);
 }
 function pause() { mode = 'paused'; show('#pause'); }
-function resume() { mode = 'fly'; show(null); lastT = performance.now(); }
+function resume() { mode = 'fly'; show(null); $('#hud').classList.remove('hide'); lastT = performance.now(); }
 function endSession() {
   mode = 'paused'; drone.armed = false; const r = score;
   const best = store.get('best', 0); if (r.total > best) store.set('best', r.total);
