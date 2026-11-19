@@ -222,6 +222,23 @@ async function oneRun(request, env, fetchImpl, reply) {
 // an hour per address. Committed as maps/official/<map>.json to GAME_REPO (default heyheykoolaid/openprowhooper, which
 // GitHub Pages builds from), so GITHUB_TOKEN needs Contents: Read and write there too. Nothing else can be written.
 async function sameKey(a, b) { const h = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)))); const x = await h(a), y = await h(b); let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]; return d === 0; }
+async function ownerSigOk(key, payload, sig) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(key)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = [...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(String(payload.flight) + '|' + JSON.stringify(payload.labels))))].map(b => b.toString(16).padStart(2, '0')).join('');
+  let d = 0; for (let i = 0; i < 64; i++) d |= mac.charCodeAt(i) ^ sig.charCodeAt(i); return d === 0;
+}
+// POST /owner { key }: is this the owner key? (the game opens the owner's menus only then). Wrong keys count like /official's.
+async function ownerCheck(request, env, reply, origin, allowed) {
+  if (!allowed.includes(origin)) return reply(403, 'not from the game');
+  if (!env.OWNER_KEY) return reply(503, 'owner key not set up: add the secret OWNER_KEY in Cloudflare');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000), text = await request.text();
+  let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
+  if (!j || typeof j.key !== 'string' || j.key.length > 200) return reply(400, 'bad request');
+  if (!j.key) return reply(401, 'no key');
+  const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
+  if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
+  return reply(200, 'owner');
+}
 async function official(request, env, fetchImpl, reply, origin, allowed) {
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (!env.OWNER_KEY) return reply(503, 'publishing is not set up: add the secret OWNER_KEY in Cloudflare');
@@ -252,6 +269,7 @@ async function handle(request, env, fetchImpl = fetch) {
   if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
   if (request.method !== 'POST') return reply(405, 'POST only');
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
+  if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/owner')) return ownerCheck(request, env, reply, origin, allowed);
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (+(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'too large');
   const text = await request.text(); if (text.length > MAX_BYTES) return reply(413, 'too large');
@@ -259,6 +277,9 @@ async function handle(request, env, fetchImpl = fetch) {
   if (!j || typeof j !== 'object' || !Object.prototype.hasOwnProperty.call(FORMATS, j.kind)) return reply(400, 'not a Pro Whooper upload');
   if (/gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}/.test(text)) return reply(400, 'refused: looks like it contains an access token');
   const payload = clean(j.kind, j.payload); if (!payload) return reply(400, 'not a Pro Whooper upload');
+  // the owner's reviewer labels arrive signed with the owner key (an HMAC, never the key): marked ownerVerified when the
+  // signature holds. clean() drops any ownerVerified a client sends; only this line sets it, and the signature is not stored.
+  if (j.kind === 'labels' && env.OWNER_KEY && typeof j.ownerSig === 'string' && j.ownerSig.length === 64 && (await ownerSigOk(env.OWNER_KEY, payload, j.ownerSig))) payload.ownerVerified = true;
   const day = new Date().toISOString().slice(0, 10), ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   if (!(await bump(env, `ip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, +(env.PER_IP_HOUR || 30)))) return reply(429, 'slow down');
   if (!(await bump(env, `day:${day}`, 172800, +(env.DAILY_CAP || 800), true))) return reply(429, 'full for today');

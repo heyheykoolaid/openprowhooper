@@ -75,6 +75,11 @@ the new file, Deploy. Variables and the secret stay as they are. The leaderboard
 (Contents: read and write already covers it). Until the new code is deployed the game says the leaderboard cannot be
 reached, and everything else works as before.
 
+## The owner key also opens the owner's menus (2026-11-19)
+The same `OWNER_KEY` secret is what the game checks (`POST /owner`) before showing the owner's menus, and it signs the owner's
+reviewer labels so the learners can tell them from anyone else's. After redeploying the worker, type the key once in the game:
+Options → Owner (shown when your pilot name is heyheykoolaid). Until the worker is redeployed the game falls back to the name.
+
 ## Publishing official maps through the drop-off (owner only)
 The Map Editor's "Publish for everyone" (Official map mode, pilot name heyheykoolaid) can go through this relay instead
 of a GitHub token in the browser. The relay commits `maps/official/<map>.json` to the game repo; GitHub Pages rebuilds.

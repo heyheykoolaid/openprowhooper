@@ -210,6 +210,22 @@ end (`summary.gaps`); a gap does not change the re-fly (checked on a real flight
 open sends nothing. The final flight is squeezed the same way and carries only the calls of its own window (before, a 39-minute run
 listed every call over 8 minutes of trace, and tools/flights.js read the rest as "no longer called"). Pieces count toward `perDay`.
 
+## The owner's key (2026-11-19, before sharing the game widely; `ghMenus` in ghsync.js, `ownerVerify` / `ownerSign` in dropoff.js)
+The owner's menus (Tools & labs, Map Editor, RaceGOW, Judge the community, Flight desk, GitHub upload) open only when the pilot
+name is heyheykoolaid AND the owner key (the Cloudflare secret `OWNER_KEY`, typed once in Options → Owner; `store 'ownerKey'`)
+is confirmed by the relay's `POST /owner` (every start-up; `store 'ownerOk'` { k: keyTag(key) }). The name alone no longer
+does, except while the relay is old (it reads /owner as a bad upload: 400) or has no OWNER_KEY (503), or with no drop-off at all:
+then `ownerOk` { legacy: true } and the name still opens them, as before. The owner's reviewer labels go to the relay with
+`ownerSig` = HMAC-SHA256(key, flight + '|' + JSON labels) on the envelope (never the key); the relay marks the stored file
+`ownerVerified` (a client's own `ownerVerified` is dropped by `clean`). tools/evidence.js counts reviewer labels at reviewer
+weight only when `ownerVerified`, not through the relay's inbox (the owner's token, hand-added bundles), or stored by the relay
+before `REVIEWER_TRUST_UNTIL` (2026-11-20); anything else claiming to be a reviewer label is a vote (counts once a second pilot
+agrees). RodFPV's Tricktionary watch stays on the name (owner). test/dropoff.js. **Redeploy the relay** for the key check.
+**Low graphics** (`gfxPreset`, `gfxOffer` in play.js): Options → Graphics → Low / Normal; the first flight that runs under 45 fps
+offers Low once (`#gfxOffer`, `store 'gfxAsked'`): shadows, glow and screen effects off, 4 map lights, resolution 70 %.
+The first-start prompt says what goes into the trick library (motion, where and when, the pilot name) and the owner's note on
+the brief progress bar.
+
 ## First start (src/dropoff.js `pilotAsk`, `pilotWarmAsk`)
 Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing, or
 presses **Continue without a name** (owner, 2026-11-18: `store 'anon'`, `anonOn()`): no name, sharing off, the waiting queue

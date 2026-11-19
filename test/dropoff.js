@@ -87,6 +87,25 @@
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.4' }); check('after 5 wrong keys an address waits an hour (even with the right key)', r.status === 429);
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.5', env: env() }); check('without OWNER_KEY set, publishing is closed', r.status === 503);
     r = await pub({ key: KEY, map: 'moose', ...lay }, { ip: '9.9.0.6', origin: 'https://evil.example' }); check('other websites cannot publish', r.status === 403); }
+  { // the owner key opens the owner's menus (POST /owner), and signs the owner's reviewer labels (owner, 2026-11-19)
+    const KEY = 'correct horse battery staple', oenv = () => ({ ...env(), OWNER_KEY: KEY });
+    const own = (key, ip, e) => handle(new Request('https://drop/owner', { method: 'POST', headers: { Origin: GAME, 'CF-Connecting-IP': ip }, body: JSON.stringify({ key }) }), e || oenv(), gh);
+    let r = await own(KEY, '8.8.0.1'); check('POST /owner with the owner key says owner', r.status === 200);
+    r = await own('heyheykoolaid', '8.8.0.2'); check('a guessed key is refused', r.status === 403);
+    r = await own('', '8.8.0.3'); check('no key: refused without counting as a wrong guess', r.status === 401);
+    for (let i = 0; i < 5; i++) await own('nope' + i, '8.8.0.4'); r = await own(KEY, '8.8.0.4'); check('after 5 wrong keys an address waits an hour', r.status === 429);
+    r = await own(KEY, '8.8.0.5', env()); check('without OWNER_KEY the drop-off says so (the game keeps the name check)', r.status === 503);
+    const sign = async (key, p) => { const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      return [...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(String(p.flight) + '|' + JSON.stringify(p.labels))))].map(b => b.toString(16).padStart(2, '0')).join(''); };
+    const lab = { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: 'abc123', started: '2026-11-19T00:00:00Z', pilot: 'p1234567', name: 'heyheykoolaid', labels: [{ t: 5, actual: 'Flip', verdict: 'yes', reviewer: true, by: 'heyheykoolaid' }] };
+    const send = async (env2, ip) => { const n0 = calls.length; const r2 = await handle(new Request('https://drop/', { method: 'POST', headers: { Origin: GAME, 'CF-Connecting-IP': ip }, body: JSON.stringify(env2) }), oenv(), gh);
+      const put = calls.slice(n0).find(c => c.init && c.init.method === 'PUT'); return { r: r2, body: put ? JSON.parse(atob(JSON.parse(put.init.body).content)) : null }; };
+    let x = await send({ kind: 'labels', name: 'a', payload: lab, ownerSig: await sign(KEY, lab) }, '8.8.1.1');
+    check('signed owner reviews are stored marked ownerVerified, without the signature or key', x.r.status === 200 && x.body.ownerVerified === true && !JSON.stringify(x.body).includes(KEY) && !('ownerSig' in x.body));
+    x = await send({ kind: 'labels', name: 'a', payload: lab, ownerSig: await sign('wrong key', lab) }, '8.8.1.2');
+    check('a signature made with another key is not verified', x.r.status === 200 && !x.body.ownerVerified);
+    x = await send({ kind: 'labels', name: 'a', payload: { ...lab, ownerVerified: true } }, '8.8.1.3');
+    check('a client cannot mark its own labels ownerVerified', x.r.status === 200 && !x.body.ownerVerified); }
 
   { // RaceGOW: shared tracks, best laps and their ghosts
     require('../src/tricks.js'); require('../src/sim.js'); const RG = require('../src/racegow.js');

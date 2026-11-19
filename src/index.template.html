@@ -353,6 +353,8 @@ body.rcWide #recapBar { right: 12px; }
 #fbModal .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #fbModal button { padding: 5px 10px; font-size: 13px; } #fbModal .chk input { width: auto; }
 #fbToast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 3200; background: #15130f; color: #ffd34d; border: 2px solid #ffd34d; padding: 8px 16px; font: 14px system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .3s; } #fbToast.show { opacity: 1; }
 #mapList .commMaps { margin-top: 10px; text-align: left; max-height: 150px; overflow-y: auto; } #mapList .commMaps h5 { margin: 0 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--acid); } #mapList .commMaps ul { list-style: none; margin: 0; padding: 0; } #mapList .commMaps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.08); } #mapList .commMaps li b { flex: 0 1 auto; } #mapList .commMaps li small { flex: 1; opacity: .7; } #mapList .commMaps li button { padding: 2px 10px; font-size: 12px; } #mapList .commMaps li.cur { color: var(--acid); }
+#gfxOffer { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 40; max-width: 520px; background: rgba(12,14,20,.92); color: #e8ecf2; border: 1px solid #3a4250; border-radius: 10px; padding: 10px 14px; font-size: 14px; line-height: 1.4; }
+#gfxOffer .row { display: flex; gap: 8px; margin-top: 8px; }
 </style>
 <!--THREE-->
 <script>
@@ -377,6 +379,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <canvas id="view"></canvas>
 
 
+<div id="gfxOffer" class="hide"></div>
 <div id="hud" class="hide"><div id="passFeed"></div>
   <div id="scoreBox"><div id="scoreRow"><div id="score">0</div><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button></div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>

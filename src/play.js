@@ -146,7 +146,7 @@ function lightsAuto(dt) {
 const buzzE = new THREE.Euler(), buzzQ = new THREE.Quaternion(), buzzS = { x: 0, y: 0 };
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); resAutoTick(); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
+  let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); gfxOffer(); resAutoTick(); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
   if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;
@@ -256,6 +256,26 @@ function resAutoTick() { if (!PERF.resAuto || mode !== 'fly') { RA.t0 = 0; retur
   if (now - RA.t0 < 2000) return; const fps = RA.n * 1000 / (now - RA.t0); RA.t0 = now; RA.n = 0; let r = PERF.res;
   if (fps < 50 && r > 0.5) r = Math.max(0.5, r - 0.1); else if (fps > 58 && r < 1) r = Math.min(1, r + 0.05); if (r !== PERF.res) { PERF.res = +r.toFixed(2); perfApply(); } }
 function perfToggle(on) { PERF.on = on; store.set('perfHud', on); renderer.info.autoReset = !on; $('#perfHud').classList.toggle('hide', !on); PERF.shown = performance.now(); }
+// one-click presets (2026-11-19, before sharing widely): new players on older laptops judge the game by its frame rate.
+// The first flight offers Low once if it runs under 45 fps (`gfxOffer`, store 'gfxAsked'); Options → Graphics has both.
+function gfxPreset(kind) {
+  const low = kind === 'low';
+  PERF.shadows = !low; store.set('shadows', PERF.shadows); BLOOM.on = !low; store.set('bloom', BLOOM.on); PERF.fx = !low; store.set('screenFx', PERF.fx);
+  PERF.lights = low ? 'few' : 'auto'; store.set('mapLights', PERF.lights); PERF.lightsAuto = null; LA.t = 0; LA.t0 = 0; LA.n = 0; mapLightsBuild();
+  PERF.resAuto = !low; PERF.res = low ? 0.7 : 1; store.set('renderScale', low ? 0.7 : 'auto'); store.set('gfxAsked', true); perfApply();
+  flash(low ? '<b>LOW GRAPHICS</b><small>Options → Graphics to change it back</small>' : '<b>NORMAL GRAPHICS</b>', 'near');
+}
+const GO = { t0: 0, n: 0, done: store.get('gfxAsked', false) };
+function gfxOffer() {
+  if (GO.done || mode !== 'fly' || !drone.armed) return;
+  const now = performance.now() / 1000; if (!GO.t0) GO.t0 = now; const t = now - GO.t0; if (t < 3) return; GO.n++; if (t < 8) return;
+  GO.done = true; const fps = GO.n / (t - 3); if (fps >= 45 || !PERF.shadows) { if (fps >= 45) store.set('gfxAsked', true); return; }
+  store.set('gfxAsked', true); const el = $('#gfxOffer'); if (!el) return;
+  el.innerHTML = `<b>Running slowly?</b> ${Math.round(fps)} fps here. Low graphics turns off shadows, glow and screen effects for a smoother flight. <span class="row"><button data-gfx="low" class="primary">Use low graphics</button><button data-gfx="keep" class="ghost">Keep as is</button></span>`;
+  el.classList.remove('hide');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-gfx]'); if (!b) return; const k = b.dataset.gfx; const el = $('#gfxOffer'); if (el) el.classList.add('hide');
+  if (k === 'low' || k === 'normal') { gfxPreset(k); if (!$('#optionsScreen').classList.contains('hide')) openOptions(); } });
 function perfApply() {   // render resolution and shadows, live
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5) * PERF.res); resize();
   if (renderer.shadowMap.enabled !== PERF.shadows) { renderer.shadowMap.enabled = PERF.shadows; scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; }); }

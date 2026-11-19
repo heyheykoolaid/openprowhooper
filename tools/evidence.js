@@ -8,6 +8,7 @@ require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js')
 // like a trick and isn't, and pilots skip things): a decided label counts by who gave it; a label nobody actually decided
 // (`inferred`, e.g. Judge the Bot's 'other calls in a one-trick flight') counts barely more than an unreviewed call; anything
 // unreviewed is not a 'no' at all (keep: a faint reason to keep what was called).
+const REVIEWER_TRUST_UNTIL = Date.parse('2026-11-20T00:00:00Z');   // reviewer labels the relay stored before signed owner reviews
 const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, inferred: 0.15, keep: 0.1, cap: 6 };
 const worlds = {}, worldOf = (id, layout, official) => { const k = id + (layout ? JSON.stringify(layout) : '') + (official ? '|' + JSON.stringify(official) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground', was = S.officialEdits(m); S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); if (official !== undefined) S.setOfficialEdits(m, official && typeof official === 'object' ? official : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); S.setOfficialEdits(m, was); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
 const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
@@ -21,7 +22,8 @@ async function load(files) {
     for (const p of items) {
       if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id)) flights.set(p.id, { id: p.id, layout: p.summary && typeof p.summary === 'object' ? p.summary.layout || null : null, official: p.summary && typeof p.summary === 'object' && p.summary.official ? p.summary.official : undefined, replica: p.mode === 'replica' ? !!(p.summary && p.summary.replica && p.summary.replica.faithful === true) : null, botSrc: p.summary && p.summary.bot && typeof p.summary.bot.source === 'string' ? p.summary.bot.source : null, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), started: str(p.started, 30), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });
       if (p.format === 'pro-whooper-score/1' && str(p.flight) && p.trace && !flights.has(p.flight)) flights.set(p.flight, { id: p.flight, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), camTilt: +p.camTilt || 20, profile: null, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: [], src: 'leaderboard' });
-      if (p.format === 'pro-whooper-flight-labels/1' && str(p.flight) && Array.isArray(p.labels)) labelFiles.push(p);
+      if (p.format === 'pro-whooper-flight-labels/1' && str(p.flight) && Array.isArray(p.labels)) { const m = /[\\/]inbox[\\/](?:.*[\\/])?(\d{12,14})-[0-9a-f]+\.json$/.exec(f);
+        labelFiles.push({ ...p, _inbox: /[\\/]inbox[\\/]/.test(f), _relayAt: m ? +m[1] : null }); }
     } }
   const runs = [];
   for (const fl of flights.values()) {
@@ -38,7 +40,12 @@ async function load(files) {
       const author = l.reviewer ? who(l.by, l.byId) : who(lf.name, lf.pilot), bot = fl.pilot === 'bot', rev = !bot && (!!l.reviewer || (author !== fl.pilot && author !== '?'));   // a verdict on a bot flight is the judge's own call on a scripted move: weight 1, src 'bot'
       // a review of a leaderboard run (anyone can open one) is a vote: it counts once a second pilot agrees. The owner's
       // Flight desk reviews are reviewer labels.
-      const vote = !!l.judge || (rev && l.src === 'board');
+      // reviewer labels (the owner's Flight desk and Judge the community) count at reviewer weight only when they are really
+      // the owner's (2026-11-19, before sharing widely): signed with the owner key and marked ownerVerified by the drop-off,
+      // or not through the public drop-off at all (the owner's GitHub token, bundles he adds by hand), or stored by the relay
+      // before the key check existed. Anything else claiming to be a reviewer label is a vote: it counts once a second pilot agrees.
+      const trustedRev = !!lf.ownerVerified || !lf._inbox || (lf._relayAt != null && lf._relayAt < REVIEWER_TRUST_UNTIL);
+      const vote = !!l.judge || (rev && l.src === 'board') || (!!l.reviewer && !bot && !trustedRev);
       const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
       if (a < T0 - 5 || b > T1 + 5) continue;
       const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own' };

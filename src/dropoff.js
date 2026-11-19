@@ -145,8 +145,32 @@ async function telToDb(it) {
 }
 // ---- drop-off 2: the relay (a plain-text POST keeps it a simple cross-site request)
 async function telToRelay(it) {   // -> HTTP status (0: could not reach it)
-  try { const r = await fetch(TEL.relay, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: it.kind, name: it.name, payload: JSON.parse(it.body) }) }); return r.status; } catch { return 0; }
+  try { const payload = JSON.parse(it.body), env = { kind: it.kind, name: it.name, payload };
+    // the owner's reviewer labels carry a signature made with the owner key (never the key itself); the drop-off checks it and
+    // marks the file ownerVerified, and only those count at reviewer weight in the learners (tools/evidence.js)
+    if (it.kind === 'labels' && Array.isArray(payload.labels) && payload.labels.some(l => l && l.reviewer) && ghMenus() && store.get('ownerKey', '')) env.ownerSig = await ownerSign(store.get('ownerKey', ''), payload);
+    const r = await fetch(TEL.relay, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(env) }); return r.status; } catch { return 0; }
 }
+// ---- the owner (see ghMenus in ghsync.js)
+async function ownerSign(key, payload) { const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(String(payload.flight) + '|' + JSON.stringify(payload.labels))); return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+let ownerMsg = '';
+function ownerStatus() { const ok = store.get('ownerOk', null); return ownerMsg || (ghMenus() ? (ok && ok.legacy ? 'Owner menus on by name (the drop-off has no owner check yet: redeploy it in Cloudflare).' : 'Owner key checked ✓: owner menus on, your reviews count at reviewer weight.') : 'Enter the owner key (the OWNER_KEY secret in Cloudflare) to open the owner menus.'); }
+async function ownerVerify() {
+  if (!nameOwner()) { ownerMenus(); return; }
+  const key = store.get('ownerKey', ''), base = lbBase();
+  if (!base) { store.set('ownerOk', { legacy: true }); ownerMenus(); return; }   // a copy with no drop-off: nothing to protect
+  try { const r = await fetch(base + '/owner', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ key }) });
+    if (r.status === 200) { store.set('ownerOk', { k: keyTag(key), at: Date.now() }); ownerMsg = ''; }
+    else if (r.status === 400 || r.status === 404 || r.status === 405 || r.status === 503) store.set('ownerOk', { legacy: true });   // the drop-off predates the owner check (an old relay reads /owner as a bad upload: 400), or has no OWNER_KEY set
+    else { store.set('ownerOk', null); ownerMsg = r.status === 429 ? 'Too many wrong keys from here: wait an hour.' : key ? 'The drop-off did not accept that key.' : ''; }
+  } catch { /* offline: keep what was checked last */ }
+  ownerMenus(); const m = $('#ownerMsg'); if (m) m.textContent = ownerStatus(); const g = $('#ghSection'); if (g) g.classList.toggle('hide', !ghMenus());
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-owner]'); if (!b) return;
+  if (b.dataset.owner === 'save') { const v = (($('#optOwnerKey') || {}).value || '').trim(); if (!v) return; store.set('ownerKey', v); ownerMsg = 'Checking…'; const m = $('#ownerMsg'); if (m) m.textContent = ownerMsg; ownerMsg = ''; ownerVerify(); }
+  if (b.dataset.owner === 'forget') { store.set('ownerKey', ''); store.set('ownerOk', null); ownerVerify(); openOptions(); } });
+setTimeout(ownerVerify, 0);
 // ---- drop-off 3: GitHub with the player's own token
 async function telToGitHub(it) {
   if (!gh.token) return false;
@@ -199,12 +223,12 @@ async function telRenderStatus() {
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
 }
 // ---- first start: every pilot picks a name, and says yes or no to sharing, before the menu
-function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; ownerMenus(); }
+function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; ownerMenus(); if (nameOwner() && !store.get('ownerOk', null)) setTimeout(ownerVerify, 0); }   /* later: lbBase is set up further down this file */
 function pilotAsk() {
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
     <input type="text" id="pilotNameIn" maxlength="24" placeholder="your pilot name or handle" value="${esc(pilotName())}" onkeydown="event.stopPropagation()" autocomplete="off">
-    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Measurements from tricks you confirm (how the quad turned, no names) may go into the game's trick library for everyone. You can change it any time in Options.</p>`}
+    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Tricks you confirm may go into the game's trick library for everyone (how the quad moved, where and when on the map, and your pilot name, which Judge the Bot shows). You can change it any time in Options.</p><p class="note">Enabling telemetry will help us make this sim better for everyone, but will also cause a brief progress bar to appear when submitting data. Your contributions to the project would be greatly appreciated! Everyone benefits!</p>`}
     <p class="note" id="pilotMsg"></p>
     <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div>
     <p class="note"><button data-pilot="anon" class="ghost">Continue without a name</button> nothing is collected or shared (no flights, reviews, votes or feedback). You can add a name or turn sharing on later in Options.</p></div>`;

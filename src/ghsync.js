@@ -50,7 +50,14 @@ function uploadRun(reason) {
 }
 // The GitHub settings and upload buttons are the project owner's tools: shown only to the pilot named heyheykoolaid.
 // (This only tidies the menus for everyone else; it is not a lock. Nothing secret is behind it.)
-function ghMenus() { return pilotName().toLowerCase() === 'heyheykoolaid'; }
+// The owner's menus (owner, 2026-11-19, before sharing the game widely): the name is only a hint; they open with the owner
+// key (the Cloudflare secret OWNER_KEY, saved in this browser: store 'ownerKey'), checked once by the drop-off (`ownerVerify`).
+// While the drop-off has not been redeployed with /owner (it answers 404), or in a copy with no drop-off, the name still
+// does, as before (store 'ownerOk' = { legacy: true }). `keyTag` only ties the check to the key it was made with.
+const OWNER_NAME = 'heyheykoolaid', nameOwner = () => pilotName().toLowerCase() === OWNER_NAME;
+const keyTag = k => { let h = 2166136261; for (let i = 0; i < k.length; i++) { h ^= k.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
+function ghMenus() { if (!nameOwner()) return false; const ok = store.get('ownerOk', null), key = store.get('ownerKey', '');
+  return !!ok && (ok.legacy === true || (!!key && ok.k === keyTag(key))); }
 function renderGhStatus() { const el = $('#ghStatus'); if (el) el.textContent = !ghMenus() ? '' : !gh.enabled ? 'upload off (Options)' : gh.token ? (ghState.queue.length ? `uploading… (${ghState.queue.length} left)` : ghState.last || `ready → ${gh.owner}/${gh.repo}`) : 'not set up'; }
 function openOptions() {
   show('#optionsScreen'); if (mode === 'fly') { mode = 'paused'; train.pausedForList = true; }
@@ -59,6 +66,7 @@ function openOptions() {
     <label>Motor sound<input id="optVol" type="range" min="0" max="1" step="0.01" value="${store.get('vol', 0.35)}"></label>
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
     <h3>Graphics</h3>
+    <div class="row"><button data-gfx="low" title="Shadows, glow and screen effects off, 4 map lights, render resolution 70%">Low graphics (slower computers)</button><button data-gfx="normal" class="ghost" title="Shadows, glow and screen effects on, map lights Auto, resolution Auto">Normal graphics</button></div>
     <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
     <label class="chk big"><input type="checkbox" id="optShadows" ${PERF.shadows ? 'checked' : ''}> Shadows <small>(off is much lighter on slower computers)</small></label>
     <label class="chk big"><input type="checkbox" id="optFx" ${PERF.fx ? 'checked' : ''}> Screen effects <small>(vignette and scanlines)</small></label>
@@ -72,6 +80,7 @@ function openOptions() {
     <h3>Sharing data with the project</h3>
     ${telOptionsHtml()}
     <div id="learnBox">${learnHtml()}</div>
+    ${nameOwner() ? `<h3>Owner</h3><div class="row"><input id="optOwnerKey" type="password" placeholder="${store.get('ownerKey', '') ? 'owner key saved' : 'owner key'}" autocomplete="off"><button data-owner="save">Save</button>${store.get('ownerKey', '') ? '<button data-owner="forget" class="ghost">Forget</button>' : ''}</div><p class="note" id="ownerMsg">${ownerStatus()}</p>` : ''}
     <div id="ghSection" class="${ghMenus() ? '' : 'hide'}">
     <label class="chk big"><input type="checkbox" id="ghEnabled" ${gh.enabled ? 'checked' : ''}> Upload calibration data to GitHub</label>
     <details class="optExplain"><summary>What it does, why, and what is not sent</summary>

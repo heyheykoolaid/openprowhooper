@@ -378,7 +378,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-me]'); if (!b) return; const k = b.dataset.me;
   if (k === 'newmap') { meNewMap(($('#meNewName') || {}).value, COMM_MAP ? COMM_MAP.E : null); return; }   /* a community map is a template too */
   if (k === 'sharemap') { meShareMap(); return; }
-  if (k === 'savekey' && ghMenus()) { const v = (($('#meOwnerKey') || {}).value || '').trim(); if (v) { store.set('ownerKey', v); ME.pubMsg = 'Owner key saved in this browser. Now press Publish for everyone.'; } mePanels(); return; }
+  if (k === 'savekey' && ghMenus()) { const v = (($('#meOwnerKey') || {}).value || '').trim(); if (v) { store.set('ownerKey', v); ownerVerify(); ME.pubMsg = 'Owner key saved in this browser. Now press Publish for everyone.'; } mePanels(); return; }
   if (k === 'forgetkey') { store.set('ownerKey', ''); ME.pubMsg = 'Owner key removed from this browser.'; mePanels(); return; }
   if (k === 'savetoken' && ghMenus()) { const tk = (($('#meToken') || {}).value || '').trim(); if (tk) { gh.token = tk; saveGh(); ME.pubMsg = 'Token saved in this browser. Now press Publish for everyone.'; } mePanels(); return; }   /* the token stays in this browser only (saveGh: localStorage) */
   if (k === 'officialmap') { meLeaveMyMap(); return; }
