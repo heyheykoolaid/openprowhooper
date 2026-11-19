@@ -530,7 +530,12 @@
       for (const x of [-7.2, -3.2]) { pipe(o, v3(x, 0, z), v3(x, 3.4, z), 0.05, 'galv'); box(o, v3(x, 0.03, z), v3(0.18, 0.03, 0.18), 'metalPlate'); }
       pipe(o, v3(-7.2, 3.4, z), v3(-3.2, 3.4, z), 0.04, 'galv'); pipe(o, v3(-7.2, 3.1, z), v3(-3.2, 3.1, z), 0.03, 'galv');
       for (let i = 0; i < 8; i++) pipe(o, v3(-7.2 + i * 0.5, 3.1 + (i % 2) * 0.3, z), v3(-6.7 + i * 0.5, 3.4 - (i % 2) * 0.3, z), 0.012, 'galv', { noCollide: true });
-      box(o, v3(-5.2, 2.72, z), v3(1.1, 0.3, 0.015), 'paintOrange', 0, 0, 0, { noCollide: true });
+      // the sign (owner, 2026-11-19): a solid panel hung off the lower rail on four short straps, the Metal Craft FPV logo on both
+      // faces (assets/flags/metalcraft.webp, the pilot's own mark, added at the owner's request for this game only)
+      { const W = 2.6, H = 0.9, cy = 3.06 - 0.06 - H / 2, sb = makeBox(v3(-5.2, cy, z), v3(W / 2, H / 2, 0.02)); sb.leaf = true; o.prims.push(sb);
+        o.vis.push({ shape: 'box', c: v3(-5.2, cy, z), h: v3(W / 2, H / 2, 0.02), mat: 'metal', euler: [0, 0, 0] });
+        for (const s of [1, -1]) o.vis.push({ shape: 'sign', c: v3(-5.2, cy, z + s * 0.023), w: W, h: H, ry: s > 0 ? 0 : Math.PI, mat: 'signMetalcraft' });
+        for (const dx of [-1.15, -0.4, 0.4, 1.15]) pipe(o, v3(-5.2 + dx, cy + H / 2, z), v3(-5.2 + dx, 3.08, z), 0.012, 'galv', { noSurvey: true }); }
     }   // (the two hanging planks that were here were taken out at the pilot's request)
     // ---- up high: fire-escape landings on the building's east end, and things to play with on the roof
     for (const [y, x0, x1] of [[4.6, 13.7, 15.8], [9.4, 13.7, 15.8]]) { const z = -21.45, o = O('Fire Escape', 'overunder', { obstacle: { a: v3(x0, 0, z), b: v3(x1, 0, z), under: y - 0.03, over: y + 0.03 } });

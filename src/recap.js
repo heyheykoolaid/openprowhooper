@@ -46,6 +46,7 @@ function openRecap(from) {
   renderRecap();
 }
 function closeRecap() {
+  quickReplicasGo();   // the answers are final now: fly their bot replicas
   recap.quick = null; $('#recapUI').classList.remove('quick'); recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();
   if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
     recap.guest = false; recap.guestOf = null; if (LB.keep) { Object.assign(recap, LB.keep); LB.keep = null; } else { recapReset(); recap.telDone = recap.id; }
@@ -400,7 +401,7 @@ document.addEventListener('change', e => {
 });
 addEventListener('keydown', e => {
   if (mode !== 'recap' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
-  if (recap.quick) { const k = { KeyY: 'yes', KeyK: 'skip', Enter: 'next' }[e.code]; if (k) { const b = document.querySelector(`#recapSide [data-qk="${k}"]`); if (b) { e.preventDefault(); b.click(); } return; }
+  if (recap.quick) { const k = { KeyY: 'yes', KeyK: 'skip', KeyB: 'back', Enter: 'next' }[e.code]; if (k) { const b = document.querySelector(`#recapSide [data-qk="${k}"]`); if (b) { e.preventDefault(); b.click(); } return; }
     if (e.code === 'KeyN') { const s = $('#recapSide [data-qkfix]'); if (s) { e.preventDefault(); s.focus(); } return; } if (e.code === 'Escape') { closeRecap(); return; } if (e.code !== 'Space' && e.code !== 'KeyC') return; }
   const p = recap.play, click = a => { const b = document.querySelector(`#recapBar [data-rc="${a}"]`); if (b) b.click(); };
   const map = { KeyS: 'split', KeyT: 'then', Equal: 'zin', Minus: 'zout', Space: 'toggle', ArrowLeft: 'back', ArrowRight: 'fwd', Comma: 'fb', Period: 'ff', BracketLeft: 'prev', BracketRight: 'next', KeyL: 'loop', KeyC: 'cam', KeyA: 'add', Delete: 'remove', Backspace: 'remove', KeyI: 'in', KeyO: 'out' };
@@ -521,27 +522,36 @@ function openQuick(from) {
   const list = quickPick(); if (!list.length) { flash('<b>NOTHING TO CHECK</b><small>no calls waiting for an answer in this run</small>', 'near'); return; }
   recap.quick = { list: list.map(x => x.i), k: 0, n: 0 }; openRecap(from); recapPlay(list[0]); renderRecap();
 }
-function quickNext() { const Q = recap.quick; if (!Q) return; Q.k++; const i = Q.list[Q.k]; if (i != null) recapPlay({ kind: 'call', i, t: recap.events[i].t, e: recap.events[i] }); renderRecap(); }
-function quickAnswer(i, val) { const Q = recap.quick, e = recap.events[i]; if (!Q || !e || !val) return; recapSetCall(i, val); if (quickDecided(e)) { Q.n++; quickBump(); setTimeout(() => quickReplica(i), 30); } quickNext(); }
+function quickGo(k) { const Q = recap.quick; if (!Q) return; Q.k = Math.max(0, Math.min(Q.list.length, k)); const i = Q.list[Q.k]; if (i != null) recapPlay({ kind: 'call', i, t: recap.events[i].t, e: recap.events[i] });
+  renderRecap(); }
+function quickNext() { const Q = recap.quick; if (Q) quickGo(Q.k + 1); }
+// Back (owner, 2026-11-19: "go back a step in case you mislabelled a trick, before submitting"): the answer stays changeable
+// until the check is closed (Done, Esc, or on to SKITTLES mode); an answer counts once however often it is changed, and the bot
+// replicas (which send the verdict with them) are flown only then, with the final answers.
+function quickBack() { const Q = recap.quick; if (Q && Q.k > 0) quickGo(Q.k - 1); }
+function quickAnswer(i, val) { const Q = recap.quick, e = recap.events[i]; if (!Q || !e || !val) return; recapSetCall(i, val); Q.done = Q.done || {};
+  if (quickDecided(e) && !Q.done[i]) { Q.done[i] = true; Q.n++; quickBump(); } quickNext(); }
+function quickReplicasGo() { const Q = recap.quick; if (!Q || Q.flown) return; Q.flown = true; for (const i of Object.keys(Q.done || {})) quickReplica(+i); }
 function renderQuick() {
   const el = $('#recapSide'), Q = recap.quick, i = Q.list[Q.k], e = recap.events[i], q = quickToday(), names = recapNames();
   const dots = Q.list.map((_, k) => `<i class="${k < Q.k ? 'done' : k === Q.k ? 'on' : ''}"></i>`).join('');
   if (!e) { el.innerHTML = `<div class="qkHead"><b>QUICK CHECK</b><span class="qkDots">${dots}</span></div>
-      <p class="qkQ">${Q.n ? `Thanks! ${Q.n} answer${Q.n === 1 ? '' : 's'} saved.` : 'Nothing answered this time.'}</p>${quickReplicaLine()}
+      <p class="qkQ">${Q.n ? `Thanks! ${Q.n} answer${Q.n === 1 ? '' : 's'}: Done saves ${Q.n === 1 ? 'it' : 'them'}, ← Back changes one.` : 'Nothing answered this time.'}</p>${quickReplicaLine()}
       <p class="note">${Q.n ? (tel.on ? 'They go to the project with this flight and teach your game your tricks.' : 'They teach your game your tricks. Turn on sharing in Options to help everyone\'s detection too.') : ''} Today: ${q.n}${q.n >= QUICK_GOAL ? ' ✓' : ' / ' + QUICK_GOAL}.</p>
-      <div class="row"><button data-qk="full" class="ghost">Open SKITTLES mode</button><button data-qk="done" class="primary">Done</button></div>`; return; }
+      <div class="row"><button data-qk="back" class="ghost" title="B: change the last answer">← Back</button><button data-qk="full" class="ghost">Open SKITTLES mode</button><button data-qk="done" class="primary">Done</button></div>`; return; }
   const sure = e.conf != null && !e.maybe ? ` · the game was ${Math.round(e.conf * 100)}% sure` : '';
   const ask = e.flag ? `You flagged <b>${esc(e.name)}</b>. What was it really?` : e.maybe ? `Was that a <b>${esc(e.name)}</b>? <small>(the game's guess)</small>` : `Was that a <b>${esc(e.name)}</b>?`;
+  const was = e.verdict === 'yes' ? `✓ yes, a ${esc(e.name)}` : e.verdict === 'no' ? `✗ ${esc(e.actual || 'no')}` : '';
   el.innerHTML = `<div class="qkHead"><b>QUICK CHECK</b> <span class="note">${Q.k + 1} of ${Q.list.length}</span><span class="qkDots">${dots}</span></div>
-    <p class="qkQ">${ask}</p><p class="note">${e.obstacle ? esc(e.obstacle) : 'open air'}${sure} · it's looping above</p>
-    <div class="row">${e.flag ? '' : '<button data-qk="yes" class="primary" title="Y">✓ Yes</button>'}<select data-qkfix="${i}" title="N"><option value="">${e.flag ? 'it was…' : '✗ No, it was…'}</option><option>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option>${esc(n)}</option>`).join('')}</select><button data-qk="skip" class="ghost" title="K">Skip</button></div>
+    <p class="qkQ">${ask}</p>${was ? `<p class="note">Your answer: <b>${was}</b> · pick again to change it, or Skip to keep it</p>` : ''}<p class="note">${e.obstacle ? esc(e.obstacle) : 'open air'}${sure} · it's looping above</p>
+    <div class="row">${e.flag ? '' : '<button data-qk="yes" class="primary" title="Y">✓ Yes</button>'}<select data-qkfix="${i}" title="N"><option value="">${e.flag ? 'it was…' : '✗ No, it was…'}</option><option>not a trick</option>${names.filter(n => n !== e.name).map(n => `<option>${esc(n)}</option>`).join('')}</select><button data-qk="skip" class="ghost" title="K">Skip</button>${Q.k > 0 ? '<button data-qk="back" class="ghost" title="B: go back and change the last answer">← Back</button>' : ''}</div>
     <div class="row qkCombo"><span class="note">Combo?</span>${(e.extra || []).map((n, k) => `<span class="rcChip">→ ${esc(n)}<button data-qkdel="${k}" title="Take it out of the combo">✕</button></span>`).join('')}<select data-qkadd="${i}" title="It was more than one trick: add the next one (then answer what the first was)"><option value="">＋ then…</option>${names.map(n => `<option>${esc(n)}</option>`).join('')}</select></div>
-    <p class="note"><kbd>Y</kbd> yes · <kbd>N</kbd> no, pick what it was · <kbd>K</kbd> skip · <kbd>C</kbd> camera · <kbd>Esc</kbd> stop${(e.extra || []).length ? ' · the combo is saved with your answer' : ' · a combo: add the other tricks with ＋ then…, then answer the first'}</p>`;
+    <p class="note"><kbd>Y</kbd> yes · <kbd>N</kbd> no, pick what it was · <kbd>K</kbd> skip · <kbd>B</kbd> back · <kbd>C</kbd> camera · <kbd>Esc</kbd> stop${(e.extra || []).length ? ' · the combo is saved with your answer' : ' · a combo: add the other tricks with ＋ then…, then answer the first'}</p>`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-qk]'); if (b && mode === 'recap' && recap.quick) { const a = b.dataset.qk, i = recap.quick.list[recap.quick.k];
-    if (a === 'yes') quickAnswer(i, recap.events[i].name); if (a === 'skip') quickNext();
-    if (a === 'full') { recap.quick = null; recap.review = true; store.set('recapReview', true); renderRecap(); } if (a === 'done') closeRecap(); return; }
+    if (a === 'yes') quickAnswer(i, recap.events[i].name); if (a === 'skip') quickNext(); if (a === 'back') quickBack();
+    if (a === 'full') { quickReplicasGo(); recap.quick = null; recap.review = true; store.set('recapReview', true); renderRecap(); } if (a === 'done') closeRecap(); return; }
   const o = e.target.closest('[data-act="quick"]'); if (o) openQuick(mode === 'paused' && !$('#resultsScreen').classList.contains('hide') ? 'results' : mode === 'menu' ? 'menu' : 'pause');
 });
 document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.qkfix !== undefined && recap.quick) quickAnswer(+e.target.dataset.qkfix, e.target.value);

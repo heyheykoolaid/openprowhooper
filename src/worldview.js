@@ -305,6 +305,11 @@ function mats() {
   MAT.wood = std(TX.wood); MAT.chainlink = new THREE.MeshStandardMaterial({ map: TX.chainlink, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, metalness: 0.5, roughness: 0.5 });
   MAT.rubberBlack = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 }); MAT.tire = MAT.rubberBlack;
   MAT.cone = new THREE.MeshStandardMaterial({ color: 0xe8541c, roughness: 0.6 }); MAT.bark = std(TX.bark);
+  // the playground's sign gantry: the Metal Craft FPV logo (assets/flags/metalcraft.webp, credited on the main menu), centred on
+  // the logo's own deep navy; plain navy until the picture has loaded
+  { const [c, g] = cnv(1040, 360); g.fillStyle = '#10142a'; g.fillRect(0, 0, 1040, 360); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    MAT.signMetalcraft = new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, metalness: 0.1 });
+    const src = (window.PW_FLAGS || {}).metalcraft; if (src) { const im = new Image(); im.onload = () => { const gr = g.createLinearGradient(0, 0, 1040, 0); gr.addColorStop(0, '#10142a'); gr.addColorStop(0.5, '#101c2f'); gr.addColorStop(1, '#100e1d'); g.fillStyle = gr; g.fillRect(0, 0, 1040, 360); const h = 344, w = h * im.width / im.height; g.drawImage(im, (1040 - w) / 2, 8, w, h); t.needsUpdate = true; }; im.src = src; } }
   MAT.leaves = new THREE.MeshStandardMaterial({ color: 0x4f6b2f, roughness: 0.9, flatShading: true });
   MAT.lampHead = new THREE.MeshStandardMaterial({ color: 0x333333, emissive: 0xffd9a0, emissiveIntensity: 0.6 });
   MAT.hoodie = new THREE.MeshStandardMaterial({ color: 0x2b2d33, roughness: 0.9 }); MAT.jeans = new THREE.MeshStandardMaterial({ color: 0x34476b, roughness: 0.9 });
