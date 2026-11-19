@@ -1024,11 +1024,25 @@ function libDist(a, b) {
   return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d)))) + libExtra(a, b);
 }
 function libK(k) { return k && typeof k === 'object' && Array.isArray(k.th) && k.th.length === 8 && k.th.every(Number.isFinite) && Number.isFinite(+k.cmd) ? { th: k.th.map(v => clamp(Math.round(v), 0, 100)), cmd: clamp(Math.round(+k.cmd), 0, 100) } : null; }
+// A library example's motion (tools/library.js; the knowledge bot in maneuvers.js flies it): 25 Hz from just before the move
+// to just after, in a frame turned to the flight's own heading (forward = -z, as the body), so no map position travels:
+// f 'open' (origin = where it started) or 'obj' (origin = where it first crossed the object's over/under line; y is height
+// above the ground, un / ov the object's under / over heights then); x y z in cm, q the attitude's x y z ×1e4 (w ≥ 0), th
+// throttle 0-100. Untrusted input: every number is checked and clamped.
+function libMo(m) {
+  if (!m || typeof m !== 'object' || (m.f !== 'open' && m.f !== 'obj')) return null;
+  const n = Array.isArray(m.x) ? m.x.length : 0; if (n < 8 || n > 400) return null;
+  const okA = (a, len, lim) => Array.isArray(a) && a.length === len && a.every(v => Number.isFinite(v) && Math.abs(v) <= lim);
+  if (!okA(m.x, n, 1e5) || !okA(m.y, n, 1e5) || !okA(m.z, n, 1e5) || !okA(m.q, n * 3, 10001)) return null;
+  const th = okA(m.th, n, 100) ? m.th.slice() : null, un = clamp(+m.un || 0, 0, 60), ov = clamp(+m.ov || 0, 0, 80);
+  if (m.f === 'obj' && !(ov > un)) return null;
+  return { f: m.f, n, x: m.x.slice(), y: m.y.slice(), z: m.z.slice(), q: m.q.slice(), th, un, ov, hz: 25, ct: clamp(+m.ct || 20, -10, 60), hit: m.hit === 1 };
+}
 function setLibrary(L) {
   if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) { LIBRARY = null; return null; }
   const ex = [], by = {};
   for (const e of L.examples.slice(0, 5000)) { if (!e || typeof e.t !== 'string' || e.t.length > 60 || !Array.isArray(e.c) || e.c.length !== LIB_N * 3 || !e.c.every(Number.isFinite) || !(+e.d > 0)) continue;
-    const x = { t: e.t, d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs, ps: typeof e.ps === 'string' && /^[OUG]{0,8}$/.test(e.ps) ? e.ps : null, k: libK(e.k) };
+    const x = { t: e.t, d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs, ps: typeof e.ps === 'string' && /^[OUG]{0,8}$/.test(e.ps) ? e.ps : null, k: libK(e.k), mo: libMo(e.mo) };
     ex.push(x); const b = by[x.t] || (by[x.t] = { pos: 0, neg: 0, demo: false, pilots: new Set(), dur: [] }); if (x.neg) b.neg++; else { b.pos++; if (x.s === 'demo') b.demo = true; else b.pilots.add(x.p); b.dur.push(x.d); } }
   for (const [k, b] of Object.entries(by)) { b.dur.sort((p, q) => p - q); b.trusted = b.demo || b.pilots.size >= 2;
     // only tricks the rotation itself defines are said as maybes (tap, stall, wall, pole and dive tricks need what the rules see)
@@ -1663,7 +1677,7 @@ class TrickDetector {
   }
   libSeq(a, b) { return (this.lib ? this.lib.buf : []).filter(r => r[0] >= a - 0.02 && r[0] <= b + 0.06); }
   libSigOf(a, b) { const R = this.libSeq(a, b), sig = libSig(R.map(r => [r[1], r[2], r[3]]), LIB_HZ, R.map(r => r[4])); if (!sig) return null;
-    const [i0, i1] = sig.span, A = R[i0][0] - 1 / LIB_HZ, B = R[i1][0];
+    const [i0, i1] = sig.span, A = R[i0][0] - 1 / LIB_HZ, B = R[i1][0]; Object.defineProperty(sig, 'at', { value: [A, B] });   // when the move was (the detector's clock), for tools/library.js's motion
     // the passes during the move (an over/under can come just before the rotation starts: a Matty goes over, then flips)
     sig.ps = this.crossLog.filter(c => c.t >= A - 0.6 && c.t <= B + 0.3 && (c.kind === 'O' || c.kind === 'U' || c.kind === 'G')).map(c => c.kind).join('').slice(0, 8);
     // the sticks over the move, when they were recorded (not for a GIF or an old trace)
@@ -3024,6 +3038,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

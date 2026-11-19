@@ -652,6 +652,23 @@ model (`makeWhoopMesh` returns `lens`, `droneLens` in worldview.js; `params.camP
 camera barrel now points forward and up by the tilt. The model is drawn 2.5x only in Judge the Bot's spectator view
 (set every frame in play.js); starting a flight closes Judge the Bot whatever way it was left.
 
+## The knowledge bot (2026-11-19, owner: "Judge the Bot should be the game's current cumulative knowledge of the trick")
+Judge the Bot now mostly flies what the game has learned (`KB_SHARE` 0.75 in judge.js; the rest the hand-written script, so
+verdicts on both keep coming): `MV.knowledge(name, world, seed)` → **`fromLibrary`**: a confirmed example's motion from the trick
+library (`mo` on the example: 25 Hz, from 0.6 s before the move to 0.6 s after, heading-relative path in cm, attitude x y z ×1e4,
+throttle, the pilot's camera tilt `ct`, and `hit` = whether today's detector called it on the original flight; frame `open`, or
+`obj` = relative to where it first crossed an object's over/under line, with that object's under / over heights), picked by
+weight, flown with small variations (time ×0.88-1.12, mirrored half the time, path ±10 %, a little wobble) over the playground
+object whose heights are most like the original's (heights mapped piecewise) or in open air; or **`blendWithLibrary`**: the script
+retimed to the library's median duration for that trick. Only tricks the rotation and over/under passes define (`KB_OK`: open-air,
+obstacle and jump-rope / maverick families); taps, wall rides, dives and pole tricks stay scripted. Every judged flight carries
+`summary.bot.source` ('library' | 'blend' | 'script') and `ex` (the example), shown after the verdict. tools/evidence.js gives a
+yes on a 'library' flight half weight (`W.replica`: it re-confirms an existing example) and tools/library.js takes no new motion
+from it. tools/library.js keeps motion on at most 6 examples per trick (heaviest first, one pilot at a time); `S.libMo` cleans it
+(untrusted). First build: 131 examples with motion over 28 tricks, library 117 → 558 KB; re-flown on the playground, confirmed
+examples the detector called on their own flights are called again 122 of 195 times (Matty Flip, Powerloop, Inverted Yaw Spin
+~100 %; the misses are moves whose reading depends on the original object). test/knowledgebot.js.
+
 ## Quick check and bot replicas (2026-11-17; src/recap.js `openQuick`, src/sim.js `replicaFly`)
 **Quick check** (pause menu, results screen; daily goal `QUICK_GOAL` 3 on the main menu, `store 'quickDay'`): after a run,
 the 3 calls most worth asking about (flagged with F, then the library's maybes, then the lowest Watcher confidence) loop

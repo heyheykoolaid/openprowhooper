@@ -403,7 +403,59 @@
     Object.defineProperty(got, 'det', { value: det }); if (rows) Object.defineProperty(got, 'rows', { value: rows });   // for inspecting the Watcher's reviews
     return got;
   }
+  // ---- the knowledge bot (owner, 2026-11-19: "the bot should be the game's current cumulative knowledge of the trick").
+  // It flies what the game has learned instead of a hand-written script: a confirmed example's motion from the trick
+  // library (Sim.library: pilots' confirmed tricks, `mo` from tools/library.js) with small variations (time ×0.88-1.12,
+  // mirrored half the time, a little wobble, path ±10 %), over one of the playground's bars when the example went over an
+  // object (heights mapped onto the new object's under / over) or in open air. Where no example has motion it "blends":
+  // the scripted flight, retimed so its move lasts as long as the library's examples of that trick do. Every flight says
+  // where it came from (`source`: 'library' | 'blend' | 'script', and `ex` = which example), so verdicts stay traceable.
+  const KB_OBJ = ['Swing Set', 'Monkey Bars', 'Jungle Gym'];
+  const conj = q => ({ w: q.w, x: -q.x, y: -q.y, z: -q.z });
+  const slerpN = (a, b, f) => { let d = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z; const s = d < 0 ? -1 : 1; return qnorm({ w: a.w + (s * b.w - a.w) * f, x: a.x + (s * b.x - a.x) * f, y: a.y + (s * b.y - a.y) * f, z: a.z + (s * b.z - a.z) * f }); };
+  // tricks the rotation and the over / under passes define (taps, wall rides, dives and pole tricks need their own scenery: scripted)
+  const KB_OK = new Set([...S.OPEN_TRICKS.map(t => t.name), ...S.OBSTACLE_TRICKS.map(t => t.name), 'Jump Rope', 'Side Loop', 'Double Dutch', 'Burrito Roll', 'Cinnamon Roll', 'Maverick Loop', 'Mavvy Roll', 'Beginner Matty', 'Half Matty Pendulum']);
+  function kbExamples(name) { if (!KB_OK.has(name)) return []; const L = S.library; if (!L || !L.ex) return []; return L.ex.map((e, i) => ({ e, i })).filter(x => x.e.t === name && !x.e.neg && !x.e.custom && x.e.mo); }
+  function kbCan(name) { return kbExamples(name).length > 0; }
+  function fromLibrary(name, world, seed, opts = {}) {
+    const r = rng(seed), all = kbExamples(name); if (!all.length) return null;
+    // pick by weight (a reviewer's example counts more than one's own); the caller may ask for a given one
+    const tot = all.reduce((a, x) => a + x.e.w, 0); let u = r() * tot, pickd = all[0]; for (const x of all) { u -= x.e.w; if (u <= 0) { pickd = x; break; } }
+    if (opts.ex != null) pickd = all.find(x => x.i === opts.ex) || pickd;
+    const { e, i } = pickd, M = e.mo, n = M.n, hz = M.hz, k = range(r, 0.88, 1.12), mir = r() < 0.5 ? -1 : 1, sc = range(r, 0.9, 1.1), wob = wobble(r, opts.wobble ?? range(r, 0, 15));
+    const PT = [], Q = [];
+    for (let j = 0; j < n; j++) { PT.push(v3(M.x[j] / 100 * sc * mir, M.y[j] / 100, M.z[j] / 100 * sc)); const qx = M.q[j * 3] / 1e4, qy = M.q[j * 3 + 1] / 1e4, qz = M.q[j * 3 + 2] / 1e4; let q = qnorm({ w: Math.sqrt(Math.max(0, 1 - qx * qx - qy * qy - qz * qz)), x: qx, y: qy, z: qz }); if (mir < 0) q = { w: q.w, x: q.x, y: -q.y, z: -q.z }; Q.push(q); }
+    // where it goes: over a playground bar (heights mapped) or in open air (lifted clear of the ground)
+    let place, object = 'open air';
+    if (M.f === 'obj') {   // the object most like the one the pilot flew it on (its over height), so the move keeps its shape
+      let name = opts.object; if (!name) { const seen = new Set(), C = []; for (const o of world.objs) { if (!o.obstacle || o.round || o.auto || o.kind === 'edge' || o.kind === 'pilot' || seen.has(o.name)) continue; seen.add(o.name); C.push({ name: o.name, d: Math.abs(o.obstacle.over - M.ov) + 0.5 * Math.abs(o.obstacle.under - M.un) }); }
+        C.sort((a, b) => a.d - b.d); name = C.length ? pick(r, C.slice(0, Math.min(3, C.length))).name : pick(r, KB_OBJ); }
+      const F = frame(world, name, r); if (!F) return null; object = F.name;
+      const yaw = Math.atan2(-F.h.x, -F.h.z), Y = qaxis(UP, yaw), un0 = M.un, ov0 = M.ov, un1 = F.under, ov1 = F.over;
+      const ym = y => y <= un0 ? y * un1 / Math.max(0.05, un0) : y <= ov0 ? un1 + (y - un0) * (ov1 - un1) / Math.max(0.05, ov0 - un0) : ov1 + (y - ov0);
+      place = p => { const d = S.qrot(Y, v3(p.x, 0, p.z)); return v3(F.C.x + d.x, Math.max(0.08, ym(p.y)), F.C.z + d.z); }; place.Y = Y; }
+    else { const yaw = range(r, 0, 2 * P), Y = qaxis(UP, yaw), lift = Math.max(0, 1.2 - Math.min(...PT.map(p => p.y)) - OPEN.y);
+      place = p => { const d = S.qrot(Y, p); return v3(OPEN.x + d.x, OPEN.y + lift + d.y, OPEN.z + d.z); }; place.Y = Y; }
+    const W = PT.map(place), QW = Q.map(q => qmul(place.Y, q)), T0 = (n - 1) / hz * k, lead = 0.6, tail = 1.8;
+    const v0 = mul(sub(W[1], W[0]), hz / k), v1 = mul(sub(W[n - 1], W[n - 2]), hz / k);
+    const at = t => { const u = t - lead; let pos, q;
+      if (u <= 0) { pos = add(W[0], mul(v0, u)); q = QW[0]; }
+      else if (u >= T0) { pos = add(W[n - 1], mul(v1, u - T0)); q = QW[n - 1]; if (pos.y < 0.3) pos.y = 0.3; }
+      else { const x = u / k * hz, j = Math.min(n - 2, Math.floor(x)), f = x - j; pos = add(W[j], mul(sub(W[j + 1], W[j]), f)); q = slerpN(QW[j], QW[j + 1], f); }
+      return { pos, q: qmul(q, wob(t)) }; };
+    return { T: lead + T0 + tail, object, source: 'library', ex: i, params: { ex: i, k: +k.toFixed(2), mirror: mir < 0, scale: +sc.toFixed(2), from: e.s }, at };
+  }
+  // the scripted flight retimed to the library's pace for that trick (median duration of its examples)
+  function blendWithLibrary(name, world, seed, opts = {}) {
+    const L = S.library, B = L && L.by && L.by[name]; if (!B || !B.dur || !B.dur.length || !LIB[name]) return null;
+    const m = LIB[name](world, rng(seed), opts); if (!m) return null;
+    // the scripted move's own length: where it turns faster than 60 °/s
+    let a = null, b = null, prev = m.at(0).q; for (let t = 0.04; t < m.T; t += 0.04) { const q = m.at(t).q, d = Math.abs(q.w * prev.w + q.x * prev.x + q.y * prev.y + q.z * prev.z), ang = 2 * Math.acos(Math.min(1, d)) / 0.04 / D; if (ang > 60) { if (a == null) a = t; b = t; } prev = q; }
+    if (a == null) return null; const want = B.dur[Math.floor(B.dur.length / 2)], got = b - a + 0.04, k = clamp(want / got, 0.6, 1.6);
+    return { T: m.T * k, object: m.object, source: 'blend', params: { ...(m.params || {}), time: +k.toFixed(2) }, at: t => m.at(t / k) };
+  }
   // pole-dance flights built from the TPW text only (no demo measurement yet): left out of the quick suites until real reps confirm them
   const DRAFT_BOT = ['Pole Dance'];
-  root.Maneuvers = { DRAFT_BOT, _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = LIB[name](world, rng(seed), opts); return opts.human ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; } finally { TILT_Q = ID; } }, humanize, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
+  root.Maneuvers = { fromLibrary, blendWithLibrary, kbCan, kbExamples, kbTricks: () => [...KB_OK].filter(kbCan), knowledge: (name, world, seed, opts = {}) => {   // the game's current knowledge of the trick (see fromLibrary)
+      TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = fromLibrary(name, world, seed, opts) || blendWithLibrary(name, world, seed, opts); if (m) return opts.human && m.source !== 'library' ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; }   /* a library flight is already a human's */ finally { TILT_Q = ID; } return null; }, DRAFT_BOT, _h: { chain, line, hold, sweep, pitchQ, rollQ, yawQ, faceQ, frame, loopGeo, arc, wobble, ID, X, UP, ROLL, YAW, D, P }, LIB, CONFUSERS, rng, detect, tricks: Object.keys(LIB), make: (name, world, seed, opts = {}) => { TILT_Q = qaxis(X, -(opts.tilt || 0) * D); try { const m = LIB[name](world, rng(seed), opts); return opts.human ? humanize(m, rng(seed ^ 0x5bd1e995), opts.human === true ? 1 : opts.human) : m; } finally { TILT_Q = ID; } }, humanize, withTilt: (tilt, fn) => { TILT_Q = qaxis(X, -(tilt || 0) * D); try { return fn(); } finally { TILT_Q = ID; } } };
 })(typeof window !== 'undefined' ? window : globalThis);

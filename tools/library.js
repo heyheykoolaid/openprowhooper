@@ -6,6 +6,8 @@
 //   - pilots' decided review labels on shared flights and leaderboard runs (tools/evidence.js): confirmed tricks are
 //     examples (reviewer 1.5, own 1.0), rejected calls are counter-examples. Custom tricks pilots named are examples too.
 // Only derived numbers go in the library (rotation curves and durations, an anonymous pilot number): no traces, names or ids.
+// Up to 6 confirmed examples per trick also carry their motion (`mo`: a few seconds of heading-relative path, attitude and
+// throttle, never a map position or time) for the knowledge bot (Judge the Bot, src/maneuvers.js fromLibrary).
 // --check re-flies every shared flight with the new library and reports the "maybe" calls it would make (and how many
 // of them land on a trick a pilot labelled), plus a leave-one-out score of the library against itself.
 const fs = require('fs'), path = require('path');
@@ -42,6 +44,33 @@ function demoExamples() {
   }
   return { out, notes };
 }
+// ---------- a confirmed move's motion (the knowledge bot flies it: src/maneuvers.js fromLibrary). Heading-relative, from just
+// before the move to just after, 25 Hz; never where on the map it was. Over an object: relative to where the flight first
+// crossed that object's over/under line, with the object's heights, so the bot can fly it over any object.
+const MO_PAD = 0.6;
+function motionOf(rows, det, world, from, sig) {
+  if (!sig || !sig.at) return null; const [A, B] = sig.at, t0 = from + A - MO_PAD, t1 = from + B + MO_PAD;
+  const R = rows.filter(r => r[0] >= t0 - 0.05 && r[0] <= t1 + 0.05); if (R.length < 10) return null;
+  const at = t => { let j = R.findIndex(r => r[0] >= t); if (j <= 0) j = Math.max(1, j < 0 ? R.length - 1 : 1); const a = R[j - 1], b = R[j], f = b[0] > a[0] ? Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))) : 0; const L = i => a[i] + (b[i] - a[i]) * f;
+    let qw = L(4), qx = L(5), qy = L(6), qz = L(7); const n = Math.hypot(qw, qx, qy, qz) || 1; return { p: S.v3(L(1), L(2), L(3)), q: { w: qw / n, x: qx / n, y: qy / n, z: qz / n }, v: S.v3(L(21), L(22), L(23)), th: L(11) }; };
+  // which object, if any: the one passed most during the move (as libSigOf counts passes)
+  const pass = det.crossLog.filter(c => c.t >= A - 0.6 && c.t <= B + 0.3 && (c.kind === 'O' || c.kind === 'U')), cnt = {};
+  for (const c of pass) cnt[c.obj] = (cnt[c.obj] || 0) + 1;
+  const oid = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0], o = oid != null ? world.objs.find(x => String(x.id) === oid) : null;
+  let origin, f, frame = 'open', un = 0, ov = 0;
+  if (o && (o.obstacle || o.round)) { const c0 = pass.find(c => String(c.obj) === oid), s0 = at(from + c0.t); frame = 'obj';
+    un = o.round ? o.round.under : o.obstacle.under; ov = o.round ? o.round.over : o.obstacle.over;
+    if (!o.round && o.obstacle) { const { a, b } = o.obstacle, ab = S.v3(b.x - a.x, 0, b.z - a.z), L2 = ab.x * ab.x + ab.z * ab.z || 1, k = Math.max(0, Math.min(1, ((c0.p.x - a.x) * ab.x + (c0.p.z - a.z) * ab.z) / L2));
+      origin = S.v3(a.x + ab.x * k, 0, a.z + ab.z * k); const nl = Math.sqrt(L2), nrm = S.v3(-ab.z / nl, 0, ab.x / nl); f = (s0.v.x * nrm.x + s0.v.z * nrm.z) >= 0 ? nrm : S.v3(-nrm.x, 0, -nrm.z); }
+    else { origin = S.v3(c0.p.x, 0, c0.p.z); const vh = Math.hypot(s0.v.x, s0.v.z) || 1; f = S.v3(s0.v.x / vh, 0, s0.v.z / vh); } }
+  else { const s0 = at(t0), vh = Math.hypot(s0.v.x, s0.v.z); origin = S.v3(s0.p.x, s0.p.y, s0.p.z);
+    if (vh > 0.5) f = S.v3(s0.v.x / vh, 0, s0.v.z / vh); else { const fw = S.qrot(s0.q, S.v3(0, 0, -1)), fh = Math.hypot(fw.x, fw.z) || 1; f = S.v3(fw.x / fh, 0, fw.z / fh); } }
+  const yawA = Math.atan2(-f.x, -f.z), Yi = S.qaxis(S.v3(0, 1, 0), -yawA);   // turns the heading back to -z
+  const mo = { f: frame, x: [], y: [], z: [], q: [], th: [] }; if (frame === 'obj') { mo.un = +un.toFixed(2); mo.ov = +ov.toFixed(2); }
+  for (let t = t0; t <= t1 + 1e-6; t += 1 / 25) { const s = at(t), d = S.qrot(Yi, S.v3(s.p.x - origin.x, s.p.y - origin.y, s.p.z - origin.z)); let q = S.qmul(Yi, s.q); if (q.w < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
+    mo.x.push(Math.round(d.x * 100)); mo.y.push(Math.round(d.y * 100)); mo.z.push(Math.round(d.z * 100)); mo.q.push(Math.round(q.x * 1e4), Math.round(q.y * 1e4), Math.round(q.z * 1e4)); mo.th.push(Math.round(Math.max(0, Math.min(1, s.th)) * 100)); }
+  return S.libMo(mo) ? mo : null;
+}
 // ---------- pilots' labels
 function flightExamples(runs) {
   const out = [], pid = {}, P = a => pid[a] || (pid[a] = String(Object.keys(pid).length + 1));
@@ -49,9 +78,11 @@ function flightExamples(runs) {
     // each labelled stretch is re-flown through the detector itself, so the example is measured exactly as the game measures
     // a move live: rotation, up.y, the over/under/gap passes and the sticks (the detector's libSigOf)
     for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue; if (e.inferred) continue;   // a guessed 'no' is never a counter-example
-      const from = Math.max(r.rows[0][0], e.a - 3.5), { det } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
+      const from = Math.max(r.rows[0][0], e.a - 3.5), { det, events: rev } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
-      out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined }); }
+      const mo = e.kind === 'want' && e.botSrc !== 'library' ? motionOf(r.rows, det, r.world, from, sig) : null;
+      if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
+      out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined, mo }); }
   }
   return out;
 }
@@ -61,7 +92,12 @@ function flightExamples(runs) {
   const { runs } = await load(files);
   S.setLibrary({ format: 'pro-whooper-library/1', examples: [] });   // an empty library switches on the detector's library ear (libTick) for the re-flights
   const fl = flightExamples(runs), examples = [...demos, ...fl];
-  const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (typeof e.ps === 'string') o.ps = e.ps; if (e.k) o.k = e.k; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; return o; }) };
+  // motion travels for at most MO_KEEP examples per trick (the heaviest, one pilot at a time round-robin): the knowledge bot
+  // needs variety, not every rep, and the shipped library stays small
+  { const MO_KEEP = 6, by = {}; for (const e of examples) if (e.mo) (by[e.t] || (by[e.t] = [])).push(e);
+    for (const L of Object.values(by)) { L.sort((a, b) => b.w - a.w); const per = {}, keep = new Set(); for (let round = 0; keep.size < MO_KEEP && round < L.length; round++) for (const e of L) { if (keep.size >= MO_KEEP) break; if (keep.has(e) || (per[e.p] || 0) > round) continue; per[e.p] = (per[e.p] || 0) + 1; keep.add(e); }
+      for (const e of L) if (!keep.has(e)) e.mo = null; } }
+  const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (typeof e.ps === 'string') o.ps = e.ps; if (e.k) o.k = e.k; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; if (e.mo) o.mo = e.mo; return o; }) };
   const L = S.setLibrary(lib);
   // leave-one-out: does the nearest OTHER example of the same clip's trick come out on top?
   const loo = {}; let right = 0, tot = 0;
