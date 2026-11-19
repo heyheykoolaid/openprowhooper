@@ -678,8 +678,8 @@
       for (const [a, b] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) box(o, v3(cx + a, 1.3, cz + b), v3(0.055, 1.3, 0.055), 'playTan');
       box(o, v3(cx, D, cz), v3(0.8, 0.04, 0.8), 'playTan');
       O('Under the Play Unit', 'gap', { gap: { c: v3(cx, D / 2, cz), n: v3(1, 0, 0), hu: 0.72, hv: D / 2 - 0.05, u: v3(0, 0, 1) } }); O('Under the Play Unit', 'gap', { gap: { c: v3(cx, D / 2, cz), n: v3(0, 0, 1), hu: 0.72, hv: D / 2 - 0.05, u: v3(1, 0, 0) } });
-      const roof = O('Play Unit Roof', 'overunder', { obstacle: { a: v3(cx - 0.95, 0, cz), b: v3(cx + 0.95, 0, cz), under: 2.5, over: 2.75 } });
-      box(roof, v3(cx, 2.62, cz - 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, 0.35); box(roof, v3(cx, 2.62, cz + 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, -0.35);
+      const roof = O('Play Unit Roof', 'overunder', { obstacle: { a: v3(cx - 0.95, 0, cz), b: v3(cx + 0.95, 0, cz), under: 2.5, over: 2.85 } });
+      box(roof, v3(cx, 2.62, cz - 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, -0.35); box(roof, v3(cx, 2.62, cz + 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, 0.35);   // peaked (the tilts were the wrong way round: a V)
       for (const s of [-1, 1]) box(o, v3(cx + s * 0.8, D + 0.45, cz), v3(0.03, 0.4, 0.75), 'fadedRed');   // side panels
       for (let i = 0; i < 4; i++) box(o, v3(cx - 1.0 - i * 0.28, D - (i + 1) * 0.28 + 0.1, cz + 0.3), v3(0.14, 0.03, 0.42), 'playTan');   // steps down to the west
       const ang = 0.55, L = D / Math.sin(ang), sl = O('Slide', 'deco');

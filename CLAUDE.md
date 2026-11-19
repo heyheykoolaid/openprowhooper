@@ -272,7 +272,8 @@ Muted materials only (no bright primary plastic). No Trick Park on this map (the
 the wires (Moose's Power Lines, under 8.4 / over 8.62, now three wires side by side across the line, crossarms across it;
 Clappy's Overhead Wires per street span, 7.35 / 7.6; the playground's drawn-only skyline lines, 7.5 / 8.7 for their 0.6 m
 sag, added in `addPlaygroundExtras`). The wires themselves still have no collider. test/maps.js flies the bot's Powerloops
-and Mattys on them. Moose's benches stand round the playground 1.8 m outside its border, facing in; the bear bins too.
+and Mattys on them. Moose's benches stand round the playground 1.8 m outside its border, facing in; the bear bins too. The Play Unit's roof is peaked (its panels tilted the wrong way: a V). Moose's shade is lighter: hemisphere 1.95 with a
+brighter ground bounce, sun 2.15, and the leaf materials glow a little (`emissiveIntensity` 0.28) so the cone undersides are not black.
 
 **Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls `EDGE_OUT` 25 m
 beyond every collider and the declared bounds, and a ceiling `EDGE_UP` 40 m above the tallest thing (at least 60 m):
