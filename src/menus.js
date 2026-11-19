@@ -170,6 +170,7 @@ function renderGarage() {
       <label>Camera FOV ° (horiz)<input type=number data-t="camFov" value="${tune.camFov}"></label>
       <label class="chk"><input type=checkbox data-tb="airmode" ${tune.airmode ? 'checked' : ''}> Airmode</label>
       <label class="chk"><input type=checkbox data-tb="itermRelax" ${tune.itermRelax ? 'checked' : ''}> I-term relax</label>
+      <label class="chk" title="Draw the whoop's own frame, ducts and props in the FPV view (H while flying). Off: a clean picture with nothing of the quad in it. The chase view always shows it."><input type=checkbox id="gShowFrame" ${showFrame ? 'checked' : ''}> Show the frame in FPV</label>
       <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
       <label class="chk" title="Betaflight's 3D mode: throttle stick in the middle is zero thrust, below the middle the motors spin backward so the quad can fly upside-down. Same as the 3 key while flying (1 acro, 2 angle)."><input type=checkbox data-t3d ${tune.flightMode === '3d' ? 'checked' : ''}> 3D mode (reversible motors)</label>
     </div>
@@ -314,6 +315,7 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => { const t = e.target, k = t.dataset && t.dataset.adv; if (!k) return;
   const d = [...ADV_SL.wobble, ...ADV_SL.filters, ...ADV_SL.extras].find(x => x[0] === k) || { gyroLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], dtermLpfExpo: [k, '', 0, 0, 0, 1, '', '', 5], rcDelayMs: [k, '', 0, 0, 0, 1, ' ms', '', 0], rcSmoothFactor: [k, '', 0, 0, 0, 1, '', '', 30] }[k];
   tune[k] = +t.value; const b = $('#advV-' + k); if (b && d) b.textContent = advShow(d); });
+document.addEventListener('change', e => { if (e.target && e.target.id === 'gShowFrame') setShowFrame(e.target.checked); });
 document.addEventListener('change', async e => { const t = e.target;
   if (t.dataset && t.dataset.adv) saveTune();
   if (t.id === 'advBbl' && t.files && t.files[0]) { const msg = $('#advMsg');
@@ -396,7 +398,7 @@ function renderControls() {
       ${cur ? `<h3>${isR ? 'Channel monitor' : 'Raw axes'}</h3><div class="chmon">${cur.axes.map((_, i) => `<div><span>${isR ? 'CH' + (i + 1) : 'A' + i}</span><div class="bar"><i id="raw_${i}"></i></div></div>`).join('')}</div>` : ''}`;
   }
   $('#cBody').innerHTML = `<div class="tabs">${tabs}</div>${body}
-    <div class="keys"><b>Keyboard</b> W/S throttle (assist: climb / sink, let go to hover) · A/D yaw · ↑↓ pitch · ←→ roll · Space arm / disarm · Shift faster · X cut · Space arm · T flip over · R respawn · 1 / 2 / 3 acro, angle, 3D mode · C chase cam · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
+    <div class="keys"><b>Keyboard</b> W/S throttle (assist: climb / sink, let go to hover) · A/D yaw · ↑↓ pitch · ←→ roll · Space arm / disarm · Shift faster · X cut · Space arm · T flip over · R respawn · 1 / 2 / 3 acro, angle, 3D mode · C chase cam · H show / hide the frame · V stick overlay · F flag the last call as wrong · Q flag a missed trick · Tab score breakdown · G trick debug · Esc pause</div>`;
 }
 let calib = null, detecting = null;
 function liveControls() {

@@ -947,9 +947,12 @@ class Drone {
 // spreadsheet's "Custom Trick Building Blocks") + obstacle crossing events + rules.
 const TRICK_DATA = root.TPW_TRICKS || [];
 // Tricks the owner named that the TPW book does not have (scored like book tricks; pts are the owner's to set, draft until then)
+const WALL_STICK_MIN = 1.0;   // s held on the wall (owner, 2026-11-19: "1 second")
 const EXTRA_TRICKS = [
   { cat: 'Matty Flips', name: 'Half Matty Pendulum', diff: 'Advanced', pts: 1050, extra: true,
-    desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' }];
+    desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' },
+  { cat: 'Wall Tricks', name: 'Wall Stick', diff: 'Novice', pts: 200, extra: true,
+    desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' }];
 for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
 function trickPoints(name) { const t = TRICK_DATA.find(t => t.name.trim() === name); return t ? t.pts : 0; }
 
@@ -1171,7 +1174,7 @@ class TrickDetector {
     this.pending = null; this.debug = [];
     this.active = false; this.samples = []; this.restT = 0; this.events = []; this.crossLog = [];
     this.prevSide = {}; this.contacts = []; this.out = []; this.wallRide = null; this.diveMaxY = 0; this.dive = null;
-    this.climb = null; this.slide = null; this.perch = null; this.lastTap = -10; this.time = 0;
+    this.climb = null; this.slide = null; this.perch = null; this.stick = null; this.lastTap = -10; this.time = 0;
   }
   // call every physics step (or every few)
   update(d, dt, rc) {
@@ -1573,12 +1576,27 @@ class TrickDetector {
     // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
     // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
     if (d.contactThisStep) this.lastTouch = t;
+    this.stickTick(d, t);
     const sl = this.slide;
     if (sl) { const hs = Math.hypot(d.vel.x, d.vel.z);
       if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) { sl.lastC = t; const o = this.world.objs[d.contactOwner]; sl.surface = d.contactGround || !o ? 'the ground' : o.name; }
       const on = t - sl.lastC < 0.15; if (on) sl.dist += hs * dt;
       if (on && hs < 0.15) { if (sl.stopT == null) sl.stopT = t; } else sl.stopT = null;
       if (d.crashed || t - sl.t > 10 || (sl.stopT != null && t - sl.stopT > 1.0)) this.slide = null;   // came to rest: the moment has passed
+    }
+  }
+  // Wall Stick (owner, 2026-11-19): held against a wall or the side of anything (a sideways contact, not the ground or a top),
+  // nearly still, for WALL_STICK_MIN or more, then a clean fly-away (postStep: a second off every surface, armed, moving).
+  // Needs the game's wall grip (tune.wallGrip) to be possible at ordinary throttle.
+  stickTick(d, t) {
+    const n = d.contactNormal, side = d.contactThisStep && n && Math.abs(n.y) < 0.7 && !d.contactGround, slow = len(d.vel) < 0.35;
+    let st = this.stick;
+    if (side && slow && d.armed && !d.crashed) {
+      if (!st) st = this.stick = { t0: t, lastC: t, obstacle: null };
+      st.lastC = t; const o = this.world.objs[d.contactOwner]; if (o && o.name) st.obstacle = o.name;
+    } else if (st && (t - st.lastC > 0.15 || d.crashed || !d.armed)) {
+      const held = st.lastC - st.t0; this.stick = null;
+      if (held >= WALL_STICK_MIN && !d.crashed && d.armed && !this.pendingFly) this.pendingFly = { name: 'Wall Stick', t, y0: d.pos.y, obstacle: st.obstacle, seconds: held };
     }
   }
   onArmChange(d, armed) {
@@ -1595,9 +1613,9 @@ class TrickDetector {
   }
   postStep(d) {
     const pf = this.pendingFly; if (!pf) return;
-    const away = pf.name === 'Perch' ? d.pos.y > 0.6 : (d.pos.y > pf.y0 + 0.35 || this.time - (this.lastTouch ?? -9) > 0.35);   // off the surface and flying
-    if (d.crashed || this.time - pf.t > 4) this.pendingFly = null;
-    else if (away && len(d.vel) > 1) { this.emit({ name: pf.name, exec: 'CLEAN', clean: 90, continuous: true, obstacle: pf.obstacle || undefined, meters: pf.meters }); this.pendingFly = null; }
+    const away = pf.name === 'Perch' ? d.pos.y > 0.6 : pf.name === 'Wall Stick' ? this.time - (this.lastTouch ?? -9) > 1.0 && d.armed : (d.pos.y > pf.y0 + 0.35 || this.time - (this.lastTouch ?? -9) > 0.35);   // off the surface and flying (a wall stick: a whole second clear of everything)
+    if (d.crashed || this.time - pf.t > (pf.name === 'Wall Stick' ? 5 : 4)) this.pendingFly = null;
+    else if (away && len(d.vel) > 1) { this.emit({ name: pf.name, exec: 'CLEAN', clean: 90, continuous: true, obstacle: pf.obstacle || undefined, meters: pf.meters, seconds: pf.seconds, draft: pf.name === 'Wall Stick' || undefined }); this.pendingFly = null; }
   }
   nearWall(d) {
     let best = null;
@@ -2445,7 +2463,7 @@ class StreamDetector extends TrickDetector {
   drainReviews() { const r = this.reviews; this.reviews = []; return r; }
   pushDebug(x) { (this.debug = this.debug || []).push(x); if (this.debug.length > 12) this.debug.shift(); }
   provisional() { return this.pend.map(p => p.name); }
-  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly; }
+  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly || !!(this.stick && this.time - this.stick.t0 > 0.5); }
 }
 
 // ================================================================= THE WATCHER (second, live judge)
@@ -2833,7 +2851,7 @@ function importDiff(text, tune) {
   return { tune: t, found };
 }
 
-const EVENT_TRICKS_DRAFT = ['Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
+const EVENT_TRICKS_DRAFT = ['Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
 // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
 const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];

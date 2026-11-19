@@ -140,6 +140,7 @@ function onKey(e) {
   if (e.code === 'Tab') { e.preventDefault(); $('#breakdown').classList.toggle('hide'); }
   if (e.code === 'KeyB' && race.on && race.fromEditor) { backToEditor(); return; }
   if (e.code === 'KeyB') freshPack();
+  if (e.code === 'KeyH') setShowFrame(!showFrame);   // H: show / hide the whoop's own frame in the FPV view (also in the Garage)
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); }   // V: stick overlay
 }
 let lastRC = { thr: 0, roll: 0, pitch: 0, yaw: 0 };
@@ -169,6 +170,11 @@ function stickHud(rc) {
   drawSticks(cv, rc, stickUI.trail);
 }
 // a fresh battery (B, or the pause menu): a full pack, the brown-out cleared; the quad stays where it is
+// The whoop's own frame, ducts and props in the FPV view (owner, 2026-11-19): on by default; H while flying, or the Garage.
+// Only the pilot's view: chase, replays and Judge the Bot's spectator view always draw the whoop.
+let showFrame = store.get('showFrame', true) !== false;
+function setShowFrame(on) { showFrame = !!on; store.set('showFrame', showFrame); const c = $('#gShowFrame'); if (c) c.checked = showFrame;
+  if (mode === 'fly') flash(`<b>FRAME ${showFrame ? 'SHOWN' : 'HIDDEN'}</b><small>the whoop's frame in the FPV view · H to toggle</small>`); }
 function freshPack() { drone.soc = 1; drone.mAh = 0; drone.brownout = false; drone.lowV = 0; batWarn.low = false; flash('<b>FRESH PACK</b><small>battery swapped</small>', 'good'); }
 const batWarn = { low: false, dead: false };
 function setArmed(on, byThrottle) {

@@ -446,6 +446,16 @@ thrust: estimated from the 1102) and **45 mm (1.8 in) props** 2- and 3-blade (`p
 fits them until there is a toothpick frame). 85 mm 2S + 1003 + 45 mm hovers at ~35 %. Fit both from Metal Craft's toothpick
 Blackbox log when it arrives (71 mm wheelbase, 45 mm props, open props: a toothpick frame is still to do).
 
+**Wall Stick** (owner, 2026-11-19; `EXTRA_TRICKS`, 200 pts, draft; `stickTick` in StreamDetector, `WALL_STICK_MIN` 1 s): held
+against a wall or the side of anything (a sideways contact, not the ground), under 0.35 m/s, armed, for 1 s or more; then a
+clean fly-away (postStep: a whole second clear of every surface, armed, over 1 m/s, within 5 s). Keeps a combo alive
+(`busy()`). How it flies in the sim: belly-flat (thrust straight into the wall) the friction holding the whoop's weight acts
+~2 cm off its centre of mass, a torque about equal to its whole pitch authority, so the PID saturates and it cannot peel off;
+tipped about 45° into the wall at ~30 % it holds with authority to spare, and pitching away from the wall peels it off (the
+way pilots leave a wall). After a long hold at zero throttle airmode's wound-up I-term can keep it on the wall (no I-term
+windup limit in the sim's FC yet). test/wallgrip.js. **Frame in FPV**: `showFrame` (input.js, `store 'showFrame'`, on by
+default): H while flying, or "Show the frame in FPV" in the Garage, hides the whoop's own model in the FPV view only.
+
 ## Physics feel (Garage → Advanced; `FEEL_KEYS`, `Drone.setParams`)
 Six sliders, all 100% by default (and at 100% the physics is exactly as built from the parts: `d.p === params`):
 `tune.weightFeel` (mass and inertia, 50-150%), `dragFeel` (body cdA and rotor H-drag, 50-200%), `washFeel` (prop wash /
