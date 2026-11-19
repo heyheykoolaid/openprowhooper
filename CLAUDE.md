@@ -291,6 +291,18 @@ maples stand among the cedars (`mapleLeaf` 0x6c9434), a Dead Snag (a bare 22 m p
 last with their own seed (`sd = 9119`) so the rest of the map is unchanged; black bucket swing seats; a chunkier curb; a bright
 flat overcast (sky whiter, hemisphere 2.7, sun 1.25: faint shadows; fog 0xc8d0cc). Next with real data: a Blackbox log from the
 same pack, labels for the clip's tricks (big flips ~0 / 9 / 37 / 77 s, rolls ~29-31 / 63-65 s, yaw-heavy turns ~26-30 s).
+**Moose after the owner's photos from the four corners** (2026-11-19, "only one version of Moose"): the roads make an L round
+the north-west corner (Arrow Dr along the long north side, Park Dr along the short west side). Added last in `buildMoose` (seed
+3141): a straight row of big redcedars along Arrow Dr with low, touching crowns (a natureKit without `tall`); the **tire
+tunnel moved to the far south-east corner**, four separate half-buried tires (each `Tire` with its own `Tire opening` gap, inside
+the arch) on a bare dirt mound; a Split Birch by the park sign. Grove trees standing where these go are emptied (removed, as a
+layout removal does), so the rest of the grove keeps its place. The sign is a maroon and gold panel with a moose emblem on two
+metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `playYellow`, `slideBlue`); the lanes are dry
+winter grass (`dryGrass`), leaf litter at the birch corners (`leafLitter`); houses have shallow hip roofs (`natureKit` style
+`lowRoof`); bench backrests have uprights; the carved moose stays (the owner loves it). Light: a clear winter afternoon (blue
+sky, low warm sun from the south-west, long shadows). `tools/map_thumbs.py --extra --only=moose` shoots the four corners.
+**Sun fix**: a comment ending a line in worldview.js had swallowed the line that places the sun and turns on its shadows, on
+every map, since the morning of 2026-11-19; restored.
 **Wall art** (2026-11-19): the Rogue Monkey FPV, FPV Your World and RidgeRipper FPV logos (`assets/graffiti/roguemonkey`,
 `fpvyourworld`, `ridgeripper`; their makers' marks, at the owner's request, for this game only; credited on the main menu and in
 the README) are in the rotation for graffiti walls (`turn()` in worldview.js; wide logos painted smaller: `AH`), on Clappy's

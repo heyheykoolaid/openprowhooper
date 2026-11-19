@@ -323,20 +323,26 @@ function mats() {
     TX.woodchip = T('#7b5638', ['#a07450', '#5a3c26', '#8e6a4a', '#c09068'], 9000, 2, 5, 0.6);
     TX.path = T('#6e5a46', ['#5a4836', '#857059', '#4a3c30'], 9000, 1, 3, 0.5, 'rgba(40,30,20,A)');
     TX.gravel = T('#8a8478', ['#a39c90', '#6a655c', '#c0b8a8'], 12000, 1, 3, 0.6);
+    TX.dryGrass = T('#8a8152', ['#9e9060', '#6f7044', '#7a6548', '#b0a070', '#5f6a3e'], 16000, 1, 3, 0.55, 'rgba(100,80,50,A)');   // winter lawn: dry, patchy, bare dirt showing
+    TX.leafLitter = T('#4e3a2a', ['#7a5634', '#5e4228', '#2e2018', '#8e6a3e', '#a8925e', '#3e4a26'], 9000, 3, 7, 0.7, 'rgba(40,50,30,A)');   // fallen birch and cottonwood leaves on moss
     TX.cedarBark = (() => { [c, g] = cnv(128, 256); g.fillStyle = '#6a4434'; g.fillRect(0, 0, 128, 256); for (let i = 0; i < 70; i++) { g.fillStyle = ['rgba(40,24,16,0.55)', 'rgba(150,110,85,0.35)', 'rgba(90,60,45,0.5)'][i % 3]; g.fillRect(rnd() * 128, 0, 1 + rnd() * 4, 256); } return tex(c); })();
     TX.birchBark = (() => { [c, g] = cnv(128, 256); g.fillStyle = '#ddd8cc'; g.fillRect(0, 0, 128, 256); for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(30,28,26,' + (0.4 + rnd() * 0.5) + ')'; g.fillRect(rnd() * 128, rnd() * 256, 4 + rnd() * 18, 1 + rnd() * 3); } return tex(c); })();
     TX.oldWood = T('#8c8278', ['#6e655c', '#a69c90', '#5a524a'], 6000, 1, 2, 0.4, 'rgba(50,45,40,A)');
     TX.tireTread = (() => { [c, g] = cnv(64, 256); g.fillStyle = '#1e1e1e'; g.fillRect(0, 0, 64, 256); g.fillStyle = '#0c0c0c'; for (let y = 0; y < 256; y += 16) { g.fillRect(0, y, 28, 8); g.fillRect(36, y + 8, 28, 8); } return tex(c); })();
-    TX.mooseSign = (() => { [c, g] = cnv(512, 128); g.fillStyle = '#5a3a24'; g.fillRect(0, 0, 512, 128); speckle(g, 512, 128, 3000, ['#3e2818', '#7a5434'], 1, 3, 0.4); g.strokeStyle = '#3a2416'; g.lineWidth = 8; g.strokeRect(6, 6, 500, 116);
-      g.fillStyle = '#e8c766'; g.font = 'bold 50px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('MOOSE KNUCKLE PARK', 256, 56); g.font = '20px Georgia, serif'; g.fillText('City of Revelstoke · open dawn to dusk', 256, 100); const t2 = tex(c); t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping; return t2; })();
+    TX.mooseSign = (() => { [c, g] = cnv(512, 340); g.fillStyle = '#6a262a'; g.fillRect(0, 0, 512, 340); speckle(g, 512, 340, 2500, ['#521c20', '#7e3236'], 1, 3, 0.35);   // maroon with a gold border and a moose emblem (the owner's photo, 2026-11-19)
+      g.strokeStyle = '#d8b25a'; g.lineWidth = 10; g.strokeRect(10, 10, 492, 320); g.lineWidth = 3; g.strokeRect(24, 24, 464, 292);
+      g.fillStyle = '#e2bf66'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 50px Georgia, serif'; g.fillText('MOOSE KNUCKLE', 256, 70); g.font = 'bold 42px Georgia, serif'; g.fillText('PARK', 256, 118);
+      g.beginPath(); g.arc(256, 200, 46, 0, Math.PI * 2); g.fill(); g.fillStyle = '#6a262a';   // the emblem: a plain moose silhouette in a gold disc
+      g.fillRect(222, 196, 62, 22); g.fillRect(226, 216, 7, 22); g.fillRect(272, 216, 7, 22); g.fillRect(278, 178, 14, 26); g.fillRect(286, 190, 18, 12); g.fillRect(266, 168, 30, 7); g.fillRect(266, 160, 6, 10); g.fillRect(288, 160, 6, 10);
+      g.fillStyle = '#e2bf66'; g.font = '24px Georgia, serif'; g.fillText('1625 Arrow Dr', 256, 284); const t2 = tex(c); t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping; return t2; })();
     const P = (hex, o = {}) => std(T(hex, ['#ffffff', '#000000', '#5a4a3a'], 2500, 1, 2, 0.12, 'rgba(70,60,50,A)'), { roughness: 0.75, metalness: 0.1, ...o });
-    for (const k of ['grass', 'duff', 'woodchip', 'path', 'gravel']) MAT[k] = std(TX[k], { roughness: 0.95 });
+    for (const k of ['grass', 'duff', 'woodchip', 'path', 'gravel', 'dryGrass', 'leafLitter']) MAT[k] = std(TX[k], { roughness: 0.95 });
     MAT.cedarBark = std(TX.cedarBark, { roughness: 0.95 }); MAT.birchBark = std(TX.birchBark, { roughness: 0.8 }); MAT.oldWood = std(TX.oldWood, { roughness: 0.9 });
     MAT.fenceWood = std(TX.oldWood, { roughness: 0.9, color: 0xb59a7a }); MAT.polewood = std(TX.cedarBark, { color: 0x9a8a78 }); MAT.carvedCedar = std(TX.wood, { color: 0xc89a70, roughness: 0.9 }); MAT.mossLog = std(TX.cedarBark, { color: 0x8a9a62 });
     MAT.tireTread = std(TX.tireTread, { roughness: 0.95 }); MAT.mooseSign = std(TX.mooseSign, { roughness: 0.8 });
     const leaf = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.95, flatShading: true, emissive: col, emissiveIntensity: 0.28 });   // a little light through the needles: the undersides were black (owner, 2026-11-19)
     MAT.cedarLeaf = leaf(0x2c4630); MAT.hemlockLeaf = leaf(0x34503a); MAT.mapleLeaf = leaf(0x6c9434); MAT.snagWood = new THREE.MeshStandardMaterial({ color: 0x8c8780, roughness: 0.95 }); MAT.birchLeaf = leaf(0x7a8a3c); MAT.shrub = leaf(0x3b5430); MAT.bracken = leaf(0x8a5a30);
-    MAT.fadedBlue = P('#4f7090'); MAT.fadedRed = P('#8a4c3e'); MAT.playTan = P('#bca67a'); MAT.darkMetal = P('#3a3c3a', { metalness: 0.4 }); MAT.binGreen = P('#3d5a44', { metalness: 0.3 });
+    MAT.fadedBlue = P('#4f7090'); MAT.fadedRed = P('#8a4c3e'); MAT.playTan = P('#bca67a'); MAT.playRed = P('#a8322c'); MAT.playYellow = P('#d8b234'); MAT.slideBlue = P('#2f63b4', { roughness: 0.5 });   /* the play unit as it is now: red and yellow, two blue slides */ MAT.darkMetal = P('#3a3c3a', { metalness: 0.4 }); MAT.binGreen = P('#3d5a44', { metalness: 0.3 });
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
@@ -549,14 +555,16 @@ function buildScene() {
   if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
-  if (PNW) { gr.addColorStop(0, '#9fb0bf'); gr.addColorStop(0.42, '#d2dbe1'); gr.addColorStop(0.6, '#e8ecec'); gr.addColorStop(0.72, '#b8c0b8'); gr.addColorStop(1, '#5a6452'); }   // a bright, flat overcast (the owner's video, 2026-11-19)
+  if (PNW) { gr.addColorStop(0, '#4f86c6'); gr.addColorStop(0.42, '#8fb6dc'); gr.addColorStop(0.6, '#cfe0ec'); gr.addColorStop(0.72, '#b4c2c4'); gr.addColorStop(1, '#5a6452'); }   // clear winter blue (the owner's photos, 2026-11-19)
   else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   playRoot.add(sky);
   // lights
-  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xc6d6e2 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x6e7454 : 0x5a4532, IND ? 1.9 : PNW ? 2.7 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
-  const sun = new THREE.DirectionalLight(PNW ? 0xf4f2ec : 0xffcf98, PNW ? 1.25 : 2.6);   // Moose: overcast: most light from the sky, faint shadows if (PNW) sun.position.set(-18, 40, 14); else sun.position.set(-30, 22, 18); sun.castShadow = true;
+  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
+  const sun = new THREE.DirectionalLight(PNW ? 0xffe2bc : 0xffcf98, PNW ? 2.7 : 2.6);
+  if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18); sun.castShadow = true;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
@@ -578,7 +586,7 @@ function buildScene() {
   if (VAPOR || VICE_ || DUSK_) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
-  if (PNW) { scene.fog = new THREE.Fog(0xc8d0cc, 50, 200); pnwBackdrop(); }
+  if (PNW) { scene.fog = new THREE.Fog(0xc6d4de, 60, 220); pnwBackdrop(); }
   // lamp lights are made with the objects (buildObjects)
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)

@@ -36,11 +36,11 @@ EXTRA = {
     'ship-rail':    ('ship', [36, 9.5, 4], [47, 6.5, 0]),
     'ship-roof':    ('ship', [-34, 21, 12], [-10, 17.5, -2]),
     'clappy-underpass': ('clappy', [18.5, 1.6, 6], [18, 2.6, -6]),
-    #'moose-play':   ('moose', [-24, 2.2, 9], [-34, 1.2, 0]),
-    #'moose-lane':   ('moose', [-30, 2.0, 9], [10, 3, -2]),
-    #'moose-tires':  ('moose', [30, 1.6, -8], [36, 0.5, -12]),
-    #'moose-sign':   ('moose', [-36, 2.0, -15], [-40, 1.2, -21]),
-    #'moose-high':   ('moose', [-60, 30, 40], [0, 0, -5]),
+    'moose-c1':     ('moose', [45, 1.6, -21], [-20, 4, -21]),     # the owner's corner photos (2026-11-19): NE, along Arrow Dr
+    'moose-c2':     ('moose', [43, 1.3, 23], [32, 1.5, 12]),    # SE, over the tires
+    'moose-c3':     ('moose', [-45.5, 1.6, -23.5], [-34, 1.6, -10]),  # NW, the sign and the double birch
+    'moose-c4':     ('moose', [-45, 1.6, 22.5], [-30, 2, 0]),      # SW, toward the playground
+    'moose-play':   ('moose', [-27, 2.2, 7], [-33, 1.2, 2]),
     #'clappy-stairs': ('clappy', [3, 4, 3.5], [11, 3, -3.5]),
     #'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),
     #'clappy-tower':  ('clappy', [-1, 4, -1], [-6, 2.5, -5]),

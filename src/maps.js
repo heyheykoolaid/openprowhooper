@@ -611,9 +611,16 @@
       box(o, P(0, 0.76, 0), v3(0.9, 0.035, 0.38), 'oldWood', ry); for (const w of [-0.68, 0.68]) box(o, P(0, 0.45, w), v3(0.9, 0.03, 0.15), 'oldWood', ry);
       for (const u of [-0.65, 0.65]) for (const w of [-0.6, 0.6]) pipe(o, P(u, 0, w), P(u, 0.74, w * 0.3), 0.025, 'darkMetal'); };
     const house = (x, z, W, D, ry, col) => { const o = O('House', 'building', { tall: 6 }), c = Math.cos(ry), s = Math.sin(ry), P = (u, y, w) => v3(x + u * c + w * s, y, z - u * s + w * c), H = 2.9;
-      box(o, P(0, H / 2, 0), v3(W / 2, H / 2, D / 2), col, ry); const sq = D / 2 / Math.SQRT2; box(o, P(0, H, 0), v3(W / 2, sq, sq), col, ry, Math.PI / 4);   // the gable fill
-      const e = D / 2 + 0.5, dl = Math.hypot(e, e) / 2; for (const sgn of [-1, 1]) box(o, P(0, H + D / 2 - e / 2 + 0.05, sgn * e / 2), v3(W / 2 + 0.35, 0.07, dl), 'roofDark', ry, sgn * Math.PI / 4);
-      box(o, P(W * 0.25, H + D / 2 - 0.4, -0.6), v3(0.3, 0.9, 0.3), 'brick', ry);   // chimney
+      box(o, P(0, H / 2, 0), v3(W / 2, H / 2, D / 2), col, ry);
+      if (style.lowRoof) {   // Moose (the owner's photos, 2026-11-19): low single-storey ranch houses under a shallow hip roof (22°)
+        const th = 22 * Math.PI / 180, tn = Math.tan(th), rise = D / 2 * tn, L = D / 2 + 0.5, Le = D / 2 + 0.35;
+        box(o, P(0, H + rise * 0.3, 0), v3(W / 2 - D * 0.3, rise * 0.3, D * 0.3), col, ry);   // the attic fill, hidden under the roof
+        for (const sgn of [-1, 1]) box(o, P(0, H + rise - L / 2 * tn + 0.05, sgn * L / 2), v3(Math.max(0.5, W / 2 - D / 2 + Le / 2), 0.07, L / (2 * Math.cos(th))), 'roofDark', ry, sgn * th);
+        for (const sgn of [-1, 1]) box(o, P(sgn * (W / 2 - D / 2 + Le / 2), H + rise - Le / 2 * tn + 0.05, 0), v3(Le / (2 * Math.cos(th)), 0.07, D / 2 + 0.5), 'roofDark', ry, 0, -sgn * th);
+        box(o, P(W * 0.25, H + rise * 0.7, -0.6), v3(0.3, 0.7, 0.3), 'brick', ry);
+      } else { const sq = D / 2 / Math.SQRT2; box(o, P(0, H, 0), v3(W / 2, sq, sq), col, ry, Math.PI / 4);   // the gable fill
+        const e = D / 2 + 0.5, dl = Math.hypot(e, e) / 2; for (const sgn of [-1, 1]) box(o, P(0, H + D / 2 - e / 2 + 0.05, sgn * e / 2), v3(W / 2 + 0.35, 0.07, dl), 'roofDark', ry, sgn * Math.PI / 4);
+        box(o, P(W * 0.25, H + D / 2 - 0.4, -0.6), v3(0.3, 0.9, 0.3), 'brick', ry); }   // chimney
       for (const w of [-1, 1]) for (const u of [-W / 4, W / 4]) box(o, P(u, 1.6, w * (D / 2 + 0.02)), v3(0.6, 0.55, 0.02), 'glass', ry, 0, 0, { noCollide: true });
       box(o, P(-W / 2 + 1.2, 1.05, -(D / 2 + 0.03)), v3(0.45, 1.05, 0.03), 'oldWood', ry, 0, 0, { noCollide: true });
       box(o, P(-W / 2 + 1.2, 0.15, -(D / 2 + 0.9)), v3(1, 0.15, 0.8), 'oldWood', ry);   // a small deck at the door
@@ -640,10 +647,12 @@
     // ---- ground: the park's needle-covered floor, the two grass lanes (rotated), worn dirt paths, the streets, driveways
     zones.push({ shape: 'zone', mat: 'duff', c: v3(0, 0.004, 0), h: v3(PX, 0, PZ) });
     const lanes = [{ c: v3(-2, 0.005, -11), len: 47, w: 6.5, ry: 0.16 }, { c: v3(-4, 0.005, 9), len: 46, w: 8, ry: 0.21 }];
-    for (const L of lanes) zones.push({ shape: 'zone', mat: 'grass', c: L.c, h: v3(L.len, 0, L.w), ry: L.ry });
-    zones.push({ shape: 'zone', mat: 'grass', c: v3(-36, 0.005, 0), h: v3(9, 0, 12) });                       // open ground round the playground
+    for (const L of lanes) zones.push({ shape: 'zone', mat: 'dryGrass', c: L.c, h: v3(L.len, 0, L.w), ry: L.ry });   // dry, patchy winter lawn (the owner's photos, 2026-11-19)
+    zones.push({ shape: 'zone', mat: 'dryGrass', c: v3(-36, 0.005, 0), h: v3(9, 0, 12) });                       // open ground round the playground
     zones.push({ shape: 'zone', mat: 'path', c: v3(-4, 0.006, 6.5), h: v3(40, 0, 0.6), ry: 0.2 });           // the worn trail along the south lane
     zones.push({ shape: 'zone', mat: 'path', c: v3(10, 0.006, -9), h: v3(26, 0, 0.5), ry: 0.12 });
+    zones.push({ shape: 'zone', mat: 'leafLitter', c: v3(37, 0.0055, 15), h: v3(10, 0, 9) }); zones.push({ shape: 'zone', mat: 'leafLitter', c: v3(-40, 0.0055, -17), h: v3(6, 0, 6.5) });   // fallen leaves at the birch corners
+    zones.push({ shape: 'zone', mat: 'path', c: v3(38.4, 0.0062, 17.4), h: v3(4, 0, 2.6), ry: -0.45 });   // the bare dirt mound under the tires
     zones.push({ shape: 'zone', mat: 'woodchip', c: v3(-35, 0.007, 1), h: v3(8, 0, 5.5) });
     zones.push({ shape: 'zone', mat: 'asphalt', c: v3(0, 0.003, -30), h: v3(90, 0, 4) });                     // Arrow Dr
     zones.push({ shape: 'zone', mat: 'asphalt', c: v3(-52, 0.003, 0), h: v3(4, 0, 70) });                     // Park Dr
@@ -651,7 +660,7 @@
     const inLane = (x, z, pad = 0) => lanes.some(L => { const dx = x - L.c.x, dz = z - L.c.z, c = Math.cos(L.ry), s = Math.sin(L.ry), u = dx * c - dz * s, w = dx * s + dz * c; return Math.abs(u) < L.len + pad && Math.abs(w) < L.w + pad; });
     // ---- trees. Conifers: a flared trunk bare for the first few metres, then stacked drooping cones. Over/under under the
     // lowest boughs; slim trunks are poles to orbit. Flying into the middle of a crown hits it; brushing its edge does not.
-    const trees = [], houses = [], { conifer, birch, shade, picnic, house, truck } = natureKit(K, rr, rnd, trees, houses, { tall: true });
+    const trees = [], houses = [], { conifer, birch, shade, picnic, house, truck } = natureKit(K, rr, rnd, trees, houses, { tall: true, lowRoof: true });
     const clear = (x, z, d) => trees.every(t => Math.hypot(t.x - x, t.z - z) > d + t.r);
     const keepOut = [[-35, 1, 10.5], [-24, 8, 3.5], [36, -12, 4.5], [-41, -19, 4]];   // playground, the spawn, the tire tunnel, the sign
     const free = (x, z) => keepOut.every(([a, b, r]) => Math.hypot(x - a, z - b) > r);
@@ -679,36 +688,32 @@
     // the small multi-play unit: tan posts, a deck 1.2 m up under a faded red roof, steps on the west, a faded blue slide
     // east, and a short run of climbing bars on the north side
     together(() => { const cx = -31.6, cz = 3.4, D = 1.2, o = O('Play Unit', 'deco');
-      for (const [a, b] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) box(o, v3(cx + a, 1.3, cz + b), v3(0.055, 1.3, 0.055), 'playTan');
-      box(o, v3(cx, D, cz), v3(0.8, 0.04, 0.8), 'playTan');
+      for (const [a, b] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) box(o, v3(cx + a, 1.3, cz + b), v3(0.055, 1.3, 0.055), 'playRed');
+      box(o, v3(cx, D, cz), v3(0.8, 0.04, 0.8), 'playYellow');
       O('Under the Play Unit', 'gap', { gap: { c: v3(cx, D / 2, cz), n: v3(1, 0, 0), hu: 0.72, hv: D / 2 - 0.05, u: v3(0, 0, 1) } }); O('Under the Play Unit', 'gap', { gap: { c: v3(cx, D / 2, cz), n: v3(0, 0, 1), hu: 0.72, hv: D / 2 - 0.05, u: v3(1, 0, 0) } });
       const roof = O('Play Unit Roof', 'overunder', { obstacle: { a: v3(cx - 0.95, 0, cz), b: v3(cx + 0.95, 0, cz), under: 2.5, over: 2.85 } });
-      box(roof, v3(cx, 2.62, cz - 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, -0.35); box(roof, v3(cx, 2.62, cz + 0.42), v3(0.95, 0.03, 0.5), 'fadedRed', 0, 0.35);   // peaked (the tilts were the wrong way round: a V)
-      for (const s of [-1, 1]) box(o, v3(cx + s * 0.8, D + 0.45, cz), v3(0.03, 0.4, 0.75), 'fadedRed');   // side panels
-      for (let i = 0; i < 4; i++) box(o, v3(cx - 1.0 - i * 0.28, D - (i + 1) * 0.28 + 0.1, cz + 0.3), v3(0.14, 0.03, 0.42), 'playTan');   // steps down to the west
+      box(roof, v3(cx, 2.62, cz - 0.42), v3(0.95, 0.03, 0.5), 'playRed', 0, -0.35); box(roof, v3(cx, 2.62, cz + 0.42), v3(0.95, 0.03, 0.5), 'playRed', 0, 0.35);   // peaked (the tilts were the wrong way round: a V)
+      for (const s of [-1, 1]) box(o, v3(cx + s * 0.8, D + 0.45, cz), v3(0.03, 0.4, 0.75), 'playYellow');   // side panels
+      for (let i = 0; i < 4; i++) box(o, v3(cx - 1.0 - i * 0.28, D - (i + 1) * 0.28 + 0.1, cz + 0.3), v3(0.14, 0.03, 0.42), 'playYellow');   // steps down to the west
       const ang = 0.55, L = D / Math.sin(ang), sl = O('Slide', 'deco');
-      box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.04, cz + 0.3), v3(L / 2, 0.03, 0.26), 'fadedBlue', 0, 0, -ang);
-      for (const s of [-1, 1]) box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.16, cz + 0.3 + s * 0.27), v3(L / 2, 0.1, 0.02), 'fadedBlue', 0, 0, -ang);
-      bar('Climbing Bars', v3(cx - 0.8, 1.9, cz - 0.95), v3(cx - 0.8, 1.9, cz - 2.6), 0.03, 'fadedBlue'); bar('Climbing Bars', v3(cx + 0.8, 1.9, cz - 0.95), v3(cx + 0.8, 1.9, cz - 2.6), 0.03, 'fadedBlue');
-      const cb = O('Climbing Bars', 'deco'); for (const s of [-0.8, 0.8]) pipe(cb, v3(cx + s, 0, cz - 2.6), v3(cx + s, 1.9, cz - 2.6), 0.035, 'fadedBlue'); for (let i = 1; i < 6; i++) pipe(cb, v3(cx - 0.8, 1.9, cz - 0.95 - i * 0.28), v3(cx + 0.8, 1.9, cz - 0.95 - i * 0.28), 0.018, 'galv'); });
+      box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.04, cz + 0.3), v3(L / 2, 0.03, 0.26), 'slideBlue', 0, 0, -ang);
+      for (const s of [-1, 1]) box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.16, cz + 0.3 + s * 0.27), v3(L / 2, 0.1, 0.02), 'slideBlue', 0, 0, -ang);
+      box(sl, v3(cx - 0.8 - Math.cos(ang) * L / 2, D / 2 + 0.04, cz - 0.35), v3(L / 2, 0.03, 0.26), 'slideBlue', 0, 0, ang);   // the second slide, the other way (two blue slides, as now)
+      for (const s of [-1, 1]) box(sl, v3(cx - 0.8 - Math.cos(ang) * L / 2, D / 2 + 0.16, cz - 0.35 + s * 0.27), v3(L / 2, 0.1, 0.02), 'slideBlue', 0, 0, ang);
+      bar('Climbing Bars', v3(cx - 0.8, 1.9, cz - 0.95), v3(cx - 0.8, 1.9, cz - 2.6), 0.03, 'playRed'); bar('Climbing Bars', v3(cx + 0.8, 1.9, cz - 0.95), v3(cx + 0.8, 1.9, cz - 2.6), 0.03, 'playRed');
+      const cb = O('Climbing Bars', 'deco'); for (const s of [-0.8, 0.8]) pipe(cb, v3(cx + s, 0, cz - 2.6), v3(cx + s, 1.9, cz - 2.6), 0.035, 'playRed'); for (let i = 1; i < 6; i++) pipe(cb, v3(cx - 0.8, 1.9, cz - 0.95 - i * 0.28), v3(cx + 0.8, 1.9, cz - 0.95 - i * 0.28), 0.018, 'galv'); });
     // ---- picnic tables (wood on a dark metal frame), benches, bear-resistant bins, the park sign and a carved moose
     picnic(-29.2, -0.6, 0.1); picnic(-21, 5.5, 0.3); picnic(-9, -9, -0.2); picnic(12, 3.5, 0.15); picnic(26, -12.5, 0.4);
     // benches round the playground, 1.8 m outside its timber border, each facing in (owner, 2026-11-19: they stood in it)
     for (const [x, z, ry] of [[-39, 8.3, Math.PI], [-31, 8.3, Math.PI], [-37, -6.3, 0], [-25.2, 1, -Math.PI / 2], [4, -10.4, 0.15]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry);
-      box(b, v3(x, 0.44, z), v3(0.9, 0.03, 0.2), 'oldWood', ry); box(b, v3(x - s * 0.18, 0.75, z - c * 0.18), v3(0.9, 0.12, 0.025), 'oldWood', ry); for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.22, z - u * s), v3(0.03, 0.22, 0.2), 'darkMetal', ry); }
-    for (const [x, z] of [[-25.6, -5.8], [-44.4, 7.9], [30.5, -9.5], [0, -23]]) { const b = O('Bear Bin', 'deco'); box(b, v3(x, 0.55, z), v3(0.42, 0.55, 0.38), 'binGreen'); box(b, v3(x, 1.13, z), v3(0.44, 0.04, 0.4), 'darkMetal'); }
-    { const sg = O('Park Sign', 'deco'), x = -41, z = -21.5; for (const s of [-1, 1]) pipe(sg, v3(x + s * 1.1, 0, z), v3(x + s * 1.1, 1.5, z), 0.09, 'oldWood');
-      box(sg, v3(x, 1.15, z), v3(1.35, 0.32, 0.05), 'mooseSign', 0, 0, 0, { sign: true }); box(sg, v3(x, 1.52, z), v3(1.5, 0.05, 0.14), 'oldWood'); }
+      box(b, v3(x, 0.44, z), v3(0.9, 0.03, 0.2), 'oldWood', ry); box(b, v3(x - s * 0.18, 0.75, z - c * 0.18), v3(0.9, 0.12, 0.025), 'oldWood', ry); for (const u of [-0.7, 0.7]) { box(b, v3(x + u * c, 0.22, z - u * s), v3(0.03, 0.22, 0.2), 'darkMetal', ry); box(b, v3(x + u * c - s * 0.2, 0.65, z - u * s - c * 0.2), v3(0.03, 0.22, 0.02), 'darkMetal', ry); } }   /* uprights hold the backrest (it floated over the seat) */
+    for (const [x, z] of [[-25.6, -5.8], [-44.4, 7.9], [30.5, -9.5], [0, -18.6]]) { const b = O('Bear Bin', 'deco'); box(b, v3(x, 0.55, z), v3(0.42, 0.55, 0.38), 'binGreen'); box(b, v3(x, 1.13, z), v3(0.44, 0.04, 0.4), 'darkMetal'); }
+    { const sg = O('Park Sign', 'deco'), x = -41, z = -21.5; for (const s of [-1, 1]) pipe(sg, v3(x + s * 0.64, 0, z), v3(x + s * 0.64, 2.35, z), 0.035, 'galv');   // two metal posts, a maroon and gold panel up high (the owner's photo)
+      box(sg, v3(x, 1.88, z - 0.05), v3(0.6, 0.4, 0.025), 'mooseSign', 0, 0, 0, { sign: true }); }
     { const m = O('Carved Moose', 'deco'), x = -38.2, z = -20.6;   // a chainsaw-carved cedar moose by the sign
       box(m, v3(x, 1.25, z), v3(0.8, 0.38, 0.32), 'carvedCedar'); for (const [a, b] of [[-0.6, -0.2], [-0.6, 0.2], [0.55, -0.2], [0.55, 0.2]]) pipe(m, v3(x + a, 0, z + b), v3(x + a, 0.95, z + b), 0.08, 'carvedCedar');
       pipe(m, v3(x + 0.7, 1.4, z), v3(x + 1.05, 1.75, z), 0.15, 'carvedCedar'); box(m, v3(x + 1.25, 1.65, z), v3(0.3, 0.13, 0.12), 'carvedCedar', 0, 0, -0.3);
       for (const s of [-1, 1]) box(m, v3(x + 1.0, 2.05, z + s * 0.38), v3(0.18, 0.04, 0.3), 'carvedCedar', s * 0.3, s * 0.5); }
-    // ---- the tire tunnel (east): four tractor tires half buried in a row among birch and bracken, a small sign post
-    together(() => { const x0 = 34.5, z = -12, R = 0.82, t = 0.24, o = O('Tire Tunnel', 'overunder', { obstacle: { a: v3(x0, 0, z - R), b: v3(x0 + 3, 0, z - R), under: R - t, over: R + t } });
-      for (let i = 0; i < 4; i++) { const x = x0 + i * 0.95 + (i === 2 ? 0.15 : 0); const N = 11, Rm = R - t / 2; for (let k = 0; k < N; k++) { const am = (k + 0.5) / N * Math.PI;   // a wide tread band, buried below the ground at both ends
-          box(o, v3(x, Math.sin(am) * Rm - 0.12, z + Math.cos(am) * Rm), v3(0.27, Math.PI * Rm / N / 2 + 0.02, t / 2), 'tireTread', 0, -am); } }
-      O('Tire Tunnel opening', 'gap', { gap: { c: v3(x0 + 1.45, 0.3, z), n: v3(1, 0, 0), hu: R - t - 0.05, hv: 0.3, u: v3(0, 0, 1) } });
-      const sp = O('Sign Post', 'pole'); pipe(sp, v3(x0 + 2.5, 0, z - 1.6), v3(x0 + 2.5, 1.6, z - 1.6), 0.04, 'galv'); box(sp, v3(x0 + 2.5, 1.55, z - 1.6), v3(0.16, 0.16, 0.01), 'signWhite', 0, 0, 0, { noCollide: true }); });
     // ---- round the edges: Arrow Dr and Park Dr with houses across them, back fences and houses east and south, wooden
     // power poles, a few parked pickups
     const colors = ['houseSage', 'houseTan', 'houseBlue', 'houseCream', 'houseRed'];
@@ -733,6 +738,25 @@
         for (const [y, a, L] of [[9, 0.4, 1.4], [12.5, 2.6, 1.0], [15, 4.4, 1.6], [18, 1.5, 0.9]]) pipe(o, v3(x, y, z), v3(x + Math.cos(a) * L, y + L * 0.35, z + Math.sin(a) * L), 0.05, 'snagWood', { noSurvey: true });
         trees.push({ x, z, r: 1 }); } }
       for (const [x, z, h] of [[-47.5, 9.5, 11], [-22.5, -8.5, 12], [-46.5, -8.0, 10], [-19.5, 3.5, 11], [-10, 12.5, 12], [6, -21, 11], [20, 10.5, 12], [-2, 16, 10]]) if (clear(x, z, 1.0)) N2.shade(x, z, h); }
+    // ---- after the owner's photos from the four corners (2026-11-19). The roads make an L round the north-west corner (Arrow Dr
+    // along the long north side, Park Dr along the short west side). Along Arrow Dr a straight row of big redcedars whose crowns
+    // touch; the tire tunnel is in the far south-east corner, four tires as separate half-buried arches on a dirt mound under
+    // the birches; a double birch stands by the sign. The trees that stood where these go are taken out (the grove's random
+    // draws are unchanged, so every other tree keeps its place).
+    { const gone = (x, z) => (z < -19.6 && x > -37 && x < 47) || Math.hypot(x - 38.4, z - 17.4) < 4.6 || Math.hypot(x + 43.6, z + 19.2) < 1.6;
+      const at = o => { const v = o.vis[0]; return v ? (v.a || v.c) : o.gap ? o.gap.c : null; };
+      for (const o of K.objs) { if (o.removed || !/^(Cedar|Hemlock|Birch|Split Birch|Split Birch opening|Maple|Shrub|Bracken|Stump|Mossy Log)$/.test(o.name) || o.grp != null) continue;
+        const c = at(o); if (!c || !gone(c.x, c.z)) continue; o.prims = []; o.vis = []; delete o.obstacle; delete o.round; delete o.gap; o.kind = 'deco'; o.removed = true; }
+      for (let i = trees.length - 1; i >= 0; i--) if (gone(trees[i].x, trees[i].z)) trees.splice(i, 1);
+      let sd = 3141; const r3 = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; }, g3 = (a, b) => a + (b - a) * r3();
+      const row = natureKit(K, g3, r3, trees, houses, {});   // full, low crowns: the roadside cedars' boughs come down to 4-6 m
+      for (let x = -34; x <= 44; x += g3(5.2, 6.2)) { const z = -22.2 + g3(-0.4, 0.4); if (trees.some(t => Math.hypot(t.x - x, t.z - z) < 2.4)) continue; row.conifer(x, z, g3(26, 33), g3(0.45, 0.6), 'cedar'); }
+      row.birch(-43.6, -19.2, 13, true);   // the double birch by the sign
+      together(() => { const R = 0.82, t = 0.24, Rm = R - t / 2, N = 11;   // the tire tunnel: four tractor tires, each its own arch
+        for (const [x, z] of [[36.2, 16.0], [37.9, 16.15], [39.5, 17.6], [40.9, 19.3]]) { const o = O('Tire', 'overunder', { obstacle: { a: v3(x - 0.3, 0, z), b: v3(x + 0.3, 0, z), under: R - t, over: R + t } });
+          for (let k = 0; k < N; k++) { const am = (k + 0.5) / N * Math.PI; box(o, v3(x, Math.sin(am) * Rm - 0.12, z + Math.cos(am) * Rm), v3(0.27, Math.PI * Rm / N / 2 + 0.02, t / 2), 'tireTread', 0, -am); }
+          O('Tire opening', 'gap', { gap: { c: v3(x, 0.18, z), n: v3(1, 0, 0), hu: 0.25, hv: 0.15, u: v3(0, 0, 1) } }); }   // inside the arch (its inner edge is 0.58 m round a centre 0.12 m underground)
+        const sp = O('Sign Post', 'pole'); pipe(sp, v3(37, 0, 13.9), v3(37, 1.6, 13.9), 0.04, 'galv'); box(sp, v3(37, 1.55, 13.9), v3(0.16, 0.16, 0.01), 'signWhite', 0, 0, 0, { noCollide: true }); }); }
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
 
