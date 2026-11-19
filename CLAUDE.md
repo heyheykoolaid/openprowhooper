@@ -301,7 +301,7 @@ metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `p
 winter grass (`dryGrass`), leaf litter at the birch corners (`leafLitter`); houses have shallow 22° gable roofs (the gable filled by two boxes laid along the slopes; a hip roof of boxes overlapped; `natureKit` style
 `lowRoof`); bench backrests have uprights; the carved moose stays (the owner loves it). Light: a clear winter afternoon (blue
 sky, low warm sun from the south-west, long shadows). `tools/map_thumbs.py --extra --only=moose` shoots the four corners.
-**Sun fix**: a comment ending a line in worldview.js had swallowed the line that places the sun and turns on its shadows, on
+**Mountains** (`pnwBackdrop`): far, flat and unfogged, so they are drawn back to front with no depth test (renderOrder from -3000, the sky -4000 before them): crossing cones and the snow caps flickered in the far depth buffer. **Sun fix**: a comment ending a line in worldview.js had swallowed the line that places the sun and turns on its shadows, on
 every map, since the morning of 2026-11-19; restored.
 **Wall art** (2026-11-19): the Rogue Monkey FPV, FPV Your World and RidgeRipper FPV logos (`assets/graffiti/roguemonkey`,
 `fpvyourworld`, `ridgeripper`; their makers' marks, at the owner's request, for this game only; credited on the main menu and in

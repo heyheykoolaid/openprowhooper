@@ -42,6 +42,7 @@ EXTRA = {
     'moose-c4':     ('moose', [-45, 1.6, 22.5], [-30, 2, 0]),      # SW, toward the playground
     'moose-house':  ('moose', [2, 5, -30], [2, 3, -42]),
     'moose-signc':  ('moose', [-41, 1.8, -18.5], [-41, 1.8, -21.5]),
+    'moose-mtn':    ('moose', [-40, 4, 20], [-140, 60, 160]),
     'moose-play':   ('moose', [-27, 2.2, 7], [-33, 1.2, 2]),
     #'clappy-stairs': ('clappy', [3, 4, 3.5], [11, 3, -3.5]),
     #'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),

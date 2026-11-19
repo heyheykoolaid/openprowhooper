@@ -370,12 +370,17 @@ function pipeMesh(a, b, r, mat, cone) {
 // Moose Knuckle Park's surroundings, seen between the trees: forested ridges all round (Mt Mackenzie and the Selkirks to
 // the east, the Monashees west) and Mt Begbie's snowy peak to the south-west. Far away and drawn without fog, pre-hazed.
 function pnwBackdrop() {
-  const ridge = (col) => new THREE.MeshBasicMaterial({ color: col, fog: false }), snow = new THREE.MeshBasicMaterial({ color: 0xe4e9ee, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
-  const add = (ang, R, h, r, col, snowy) => { const x = Math.cos(ang) * R, z = Math.sin(ang) * R, m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7, 1), ridge(col)); m.position.set(x, h / 2 - 6, z); m.rotation.y = ang * 3; playRoot.add(m);
-    if (snowy) { const s = new THREE.Mesh(new THREE.ConeGeometry(r * 0.25, h * 0.22, 7, 1), snow); s.position.set(x, h - 6 - h * 0.11 + 0.8, z);   /* a touch wider than the peak and drawn in front of it: an exact fit flickered */ s.rotation.y = ang * 3; playRoot.add(s); } };
+  // Far away, flat-coloured and unfogged. Drawn back to front with no depth test (owner, 2026-11-19: where the cones crossed
+  // each other, and the snow met its peak, the far-off depth buffer flickered): each mountain simply paints over the ones
+  // behind it, and everything nearer (the ground plane, the map) is drawn later and paints over them all.
+  const ridge = (col) => new THREE.MeshBasicMaterial({ color: col, fog: false, depthTest: false, depthWrite: false }), snow = new THREE.MeshBasicMaterial({ color: 0xe4e9ee, fog: false, depthTest: false, depthWrite: false });
+  const peaks = [], add = (ang, R, h, r, col, snowy) => peaks.push({ ang, R, h, r, col, snowy });
   for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2 + rnd() * 0.12, R = 210 + rnd() * 50; add(a, R, 55 + rnd() * 45, 50 + rnd() * 30, [0x5e7470, 0x6a7f7c, 0x566a68][i % 3], false); }
   add(Math.atan2(170, -150), 245, 150, 60, 0x7a8c92, true);   // Mt Begbie, south-west
   add(Math.atan2(-60, 230), 250, 120, 70, 0x6f8288, true);    // Mt Mackenzie, east
+  peaks.sort((a, b) => b.R - a.R); let order = -3000;
+  for (const { ang, R, h, r, col, snowy } of peaks) { const x = Math.cos(ang) * R, z = Math.sin(ang) * R, m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7, 1), ridge(col)); m.position.set(x, h / 2 - 6, z); m.rotation.y = ang * 3; m.renderOrder = order++; playRoot.add(m);
+    if (snowy) { const s = new THREE.Mesh(new THREE.ConeGeometry(r * 0.22, h * 0.22, 7, 1), snow); s.position.set(x, h - 6 - h * 0.11, z); s.rotation.y = ang * 3; s.renderOrder = order++; playRoot.add(s); } }
 }
 // ---- Static batching (performance, 2026-11-17: testers reported heavy CPU). Every piece of scenery used to be its own
 // mesh: a thousand or more draw calls a frame, twice over with shadows. The scenery never moves, so pieces that share a
@@ -559,7 +564,7 @@ function buildScene() {
   else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
-  playRoot.add(sky);
+  sky.renderOrder = -4000; playRoot.add(sky);   // drawn first: the backdrops' mountains paint over it
   // lights
   playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
   // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
