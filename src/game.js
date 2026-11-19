@@ -27,6 +27,10 @@ if (!store.get('feel4', false)) { const on3 = Object.entries(FEEL3).every(([k, v
 const FEEL_DEF = { shake: 0.7, shakeTau: 0.22, shakeMove: 0.1, loopDelayMs: 0, camBuzz: 0 };
 if (!store.get('feel5', false)) { if (Object.entries(FEEL_FIT).every(([k, v]) => tune[k] === v)) Object.assign(tune, FEEL_DEF); store.set('feel5', true); }
 for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
+// Wall grip (2026-11-19, Metal Craft Fpv: "I can't wall stick, I just slide down the wall"): ducts on a wall grip like TPU,
+// 0.9, not the 0.45 of everything else; with it a whoop pushed into a wall sticks from about a third throttle. Physics
+// (Node) keeps no wallGrip, so its hash is unchanged; the game fills it in for pilots who have none.
+const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_DEF;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

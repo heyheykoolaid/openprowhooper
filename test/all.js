@@ -38,6 +38,7 @@ const checks = [
   ['whoop feel (thrust vs BetaFPV figures, motor lag, hover, no coasting, ground cushion)', () => { const o = run('feel.js'); const m = o.match(/(\d+)\/(\d+) feel checks/); return m && m[1] === m[2] ? null : o.split('\n').filter(l => l.startsWith('✗')).join('\n') || o; }],
   ['every lap counts (N powerloops round a bar in a row are N calls)', () => { const o = run('laps.js'); const m = o.match(/(\d+)\/(\d+) lap checks/); return m && m[1] === m[2] ? null : o; }],
   ['big sweeping moves (slow open-air Mattys that climb 12 m)', () => { const o = run('sweep.js'); const m = o.match(/(\d+)\/(\d+) sweep checks/); return m && m[1] === m[2] ? null : o; }],
+  ['wall grip (a whoop pushed into a wall sticks; idle, it falls)', () => { const o = run('wallgrip.js'); const m = o.match(/(\d+)\/(\d+) wall grip checks/); return m && m[1] === m[2] ? null : o; }],
   ['half matty pendulum (three chained half mattys = one trick)', () => { const o = run('pendulum.js'); const m = o.match(/(\d+)\/(\d+) pendulum checks/); return m && m[1] === m[2] ? null : o; }],
   ['side loop vs jump rope vs double dutch (upside-down over the top, upright, a flick at the peak)', () => { const o = run('jumprope.js'); const m = o.match(/(\d+)\/(\d+) jump-rope checks/); return m && m[1] === m[2] ? null : o; }],
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],

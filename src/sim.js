@@ -69,6 +69,10 @@ const PARTS = {
     m0802_16k:   { name: '0802 16000KV (2S)', kv: 16000, mass: 2.4, rm: 1.05, i0: 0.11, bellJ: 3.6e-9, bearing: 1.1 },
     m1102_13k:   { name: '1102 13500KV (2S)', kv: 13500, mass: 3.2, rm: 0.85, i0: 0.13, bellJ: 6.0e-9, bearing: 1.0 },
     m1103_11k:   { name: '1103 11000KV (2S)', kv: 11000, mass: 3.9, rm: 0.66, i0: 0.14, bellJ: 8.5e-9, bearing: 1.0 },
+    // Flywoo ROBO 1003 14800KV (Metal Craft Fpv's toothpick, 2026-11-19): 1-2S, 10 x 3 mm stator, 9N12P, 13.5 mm bell, dual
+    // bearings, 3.3 g with 4 cm of wire (flywoo.net). No published resistance or thrust: winding and idle current estimated
+    // from the 1102 13500KV (copper scaled by KV² and stator volume); fit them from his Blackbox log when it arrives
+    m1003_15k:   { name: 'Flywoo ROBO 1003 14800KV (1-2S)', kv: 14800, mass: 3.3, rm: 0.65, i0: 0.14, bellJ: 6.5e-9, bearing: 0.9 },
   },
   props: { // Ct/Cq: static coefficients, jmax: advance ratio where thrust ~0, mass per prop (g)
     gf1219s: { name: 'Gemfan 1219S 3-blade 31mm', d: 31, blades: 3, ct: 0.120, cq: 0.0125, jmax: 0.95, mass: 0.23 },
@@ -76,6 +80,9 @@ const PARTS = {
     gf1207:  { name: 'Gemfan 1207 3-blade 31mm', d: 31, blades: 3, ct: 0.097, cq: 0.0090, jmax: 0.75, mass: 0.20 },
     p40_2b:  { name: '40mm 2-blade', d: 40, blades: 2, ct: 0.095, cq: 0.0085, jmax: 0.85, mass: 0.32 },
     p40_3b:  { name: '40mm 3-blade', d: 40, blades: 3, ct: 0.112, cq: 0.0110, jmax: 0.85, mass: 0.40 },
+    // 45 mm (1.8 inch): toothpick / 85 mm-class props (estimates between the 40 and 51 mm ones)
+    p45_2b:  { name: '45mm (1.8 inch) 2-blade', d: 45, blades: 2, ct: 0.098, cq: 0.0088, jmax: 0.87, mass: 0.40 },
+    p45_3b:  { name: '45mm (1.8 inch) 3-blade', d: 45, blades: 3, ct: 0.110, cq: 0.0106, jmax: 0.87, mass: 0.50 },
     p51_3b:  { name: '2 inch (51mm) 3-blade', d: 51, blades: 3, ct: 0.105, cq: 0.0100, jmax: 0.9, mass: 0.62 },
     p51_4b:  { name: '2 inch (51mm) 4-blade', d: 51, blades: 4, ct: 0.118, cq: 0.0122, jmax: 0.88, mass: 0.75 },
     // 3D props: symmetrical blades push the same both ways (rev = share of normal thrust when spun backward; ordinary props ~0.55)
@@ -899,7 +906,11 @@ class Drone {
               const tdir = mul(vt, 1 / vtl);
               const rxt = cross(rB, qinv(this.q, tdir)); const It = v3(rxt.x / p.I.x, rxt.y / p.I.y, rxt.z / p.I.z);
               const kt = 1 / p.mass + dot(cross(It, rB), qinv(this.q, tdir));
-              const jt = Math.min(vtl / kt, (sf ? sf.f : p.friction) * jn);
+              // tune.wallGrip: the friction of a duct pressed on a wall or the side of anything (a contact facing sideways, not the
+              // ground or a top); absent = p.friction, the physics as it was. The game sets 0.9 (TPU ducts grip: a whoop pushed
+              // into a wall sticks at moderate throttle; at 0.45 it slid down at anything under full throttle: Metal Craft Fpv)
+              const WG = this.tune.wallGrip, mu = sf ? sf.f : (WG == null || ct.ground || Math.abs(ct.n.y) > 0.7) ? p.friction : +WG;
+              const jt = Math.min(vtl / kt, mu * jn);
               J = sub(J, mul(tdir, jt));
             }
             this.vel = add(this.vel, mul(J, 1 / p.mass));
@@ -921,7 +932,9 @@ class Drone {
       const up = this.up();
       const speed = len(this.vel);
       if (hit && up.y < -0.35 && speed < 0.6 && !this.fc.reversible) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }   // in 3D mode upside-down on the ground is just a place to take off from
-      else if (hit && speed < 0.25 && Math.abs(up.y) < 0.6) { this.restOnGround += dt; if (this.restOnGround > 0.9) this.crash('stuck'); }
+      // "stuck": wedged on its side with no way out. With tune.wallGrip (the game) a quad pushing into a wall at half its
+      // weight or more is not stuck but wall-sticking; absent, the rule is as it always was (physics hash unchanged)
+      else if (hit && speed < 0.25 && Math.abs(up.y) < 0.6 && !(this.tune.wallGrip != null && this.thrust.reduce((a, b) => a + Math.abs(b), 0) > 0.5 * p.mass * G)) { this.restOnGround += dt; if (this.restOnGround > 0.9) this.crash('stuck'); }
       else this.restOnGround = Math.max(0, this.restOnGround - dt);
     }
     if (this.pos.y < -1) { this.pos.y = 0.05; this.vel = v3(); }

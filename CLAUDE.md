@@ -434,6 +434,18 @@ Off by default (the sticks reach the FC instantly: crisper than a real quad; a p
 PT1, the default), `off`, or `auto` (Betaflight's rule: PT3 at link rate × 1.5 / (1 + `rcSmoothFactor`/10)). "Real
 radio feel" sets 250 Hz, 12 ms, auto 30. Defaults leave the physics hash unchanged; test/modes.js covers the options.
 
+## Wall grip and new 2S parts (2026-11-19, Metal Craft Fpv: "I can't wall stick, I just slide down the wall")
+Every contact used one friction, 0.45: pressed belly-first into a wall a whoop needed to push with over twice its weight to
+stop sliding, and once it did stop, the "stuck" crash rule (slow, on its side, in contact for 0.9 s) disarmed it. **`tune.wallGrip`**
+(absent = the physics as it was; the game fills in `WALL_GRIP_DEF` 0.9 in game.js; Advanced physics → Feel → Wall grip) is the
+friction of any contact facing sideways (|n.y| ≤ 0.7, not the ground; RaceGOW `surf.f` still wins), and with it a quad whose
+thrust is at least half its weight is never "stuck". An Air65 / Champion / 2S 75 mm now sticks from ~35 % throttle and creeps
+2-8 cm/s; idle, it falls off (test/wallgrip.js). Ground friction (Slide Disarm) is unchanged. Shared flights carry it in
+`summary.feel.wallGrip` and `tune`. New parts: **Flywoo ROBO 1003 14800KV** (`m1003_15k`, 1-2S, 3.3 g; no published winding or
+thrust: estimated from the 1102) and **45 mm (1.8 in) props** 2- and 3-blade (`p45_2b`, `p45_3b`; only the 85 mm 2S frame
+fits them until there is a toothpick frame). 85 mm 2S + 1003 + 45 mm hovers at ~35 %. Fit both from Metal Craft's toothpick
+Blackbox log when it arrives (71 mm wheelbase, 45 mm props, open props: a toothpick frame is still to do).
+
 ## Physics feel (Garage → Advanced; `FEEL_KEYS`, `Drone.setParams`)
 Six sliders, all 100% by default (and at 100% the physics is exactly as built from the parts: `d.p === params`):
 `tune.weightFeel` (mass and inertia, 50-150%), `dragFeel` (body cdA and rotor H-drag, 50-200%), `washFeel` (prop wash /
