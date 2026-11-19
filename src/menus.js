@@ -17,7 +17,7 @@ function openMaps() {
   show('#mapScreen'); if (mode === 'fly') { mode = 'paused'; }
   // the official maps; each lists its community maps: the pilot's own (named copies, Map Editor) and the ones other pilots
   // shared (relay GET /maps?base=, by pilot name; other people's text: always esc)
-  const thumbs = window.PW_MAPTHUMBS || {}, maps = Object.values(S.MAPS), onOfficial = !MY_MAP && !COMM_MAP;
+  const thumbs = window.PW_MAPTHUMBS || {}, maps = Object.values(S.MAPS).filter(m => !m.hidden || m.id === MAP_ID), onOfficial = !MY_MAP && !COMM_MAP;
   mapCar.n = maps.length; mapCar.i = Math.max(0, maps.findIndex(m => m.id === MAP_ID));
   $('#mapList').innerHTML = `<div class="mapCar"><button class="mapArrow" data-mapnav="-1" aria-label="previous map">‹</button><div class="mapViewport"><div class="mapTrack">${maps.map((m, k) => { const here = m.id === MAP_ID, cur = here && onOfficial;
       return `<div class="mapSlide ${here ? 'cur' : ''}" data-mapk="${k}">

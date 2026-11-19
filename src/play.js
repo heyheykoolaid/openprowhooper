@@ -32,6 +32,28 @@ function crashFart() {
   const out = actx.createGain(); out.gain.value = 1.6; o.connect(g); g.connect(lp); lp.connect(out); out.connect(window._master);
   for (const x of [o, wob, flut]) { x.start(t); x.stop(t + dur + 0.15); }
 }
+// The bodega cat (Slackvegan City): completely static, extremely judgmental. Touching it gets a meow and a little burst of
+// "meow"s floating up; once a flight, a word from the cat. CAT.ids: the objects marked cat (rebuilt when the world is).
+const CAT = { ids: new Set(), prims: null, last: -9, said: false, bursts: [], tex: null };
+function catIdsFor() { if (CAT.prims !== world.prims) { CAT.prims = world.prims; CAT.ids = new Set(world.objs.filter(o => o.cat).map(o => o.id)); } }
+function catMeow() {
+  if (!actx) return; const t = actx.currentTime, f0 = 560 + Math.random() * 140, o = actx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f0 * 1.5, t + 0.16); o.frequency.linearRampToValueAtTime(f0 * 0.78, t + 0.55);
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5; bp.frequency.setValueAtTime(900, t); bp.frequency.linearRampToValueAtTime(1900, t + 0.18); bp.frequency.linearRampToValueAtTime(750, t + 0.55);
+  const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.9, t + 0.05); g.gain.setValueAtTime(0.9, t + 0.38); g.gain.linearRampToValueAtTime(0.0001, t + 0.62);
+  o.connect(bp); bp.connect(g); g.connect(window._master); o.start(t); o.stop(t + 0.66); }
+function catHit() {
+  const now = performance.now() / 1000; if (now - CAT.last < 1.2) return; CAT.last = now;
+  try { catMeow(); } catch {}
+  const cat = world.objs.find(o => CAT.ids.has(o.id)), c = cat && cat.vis[0] && cat.vis[0].c; if (!c) return;
+  if (!CAT.tex) { const [cv, g] = cnv(256, 96); g.font = "900 64px 'Comic Sans MS', 'Arial Black', sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 8; g.strokeStyle = '#1a1a1a'; g.strokeText('meow', 128, 50); g.fillStyle = '#fff6d8'; g.fillText('meow', 128, 50); CAT.tex = new THREE.CanvasTexture(cv); CAT.tex.colorSpace = THREE.SRGBColorSpace; }
+  for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: CAT.tex, transparent: true, depthWrite: false, toneMapped: false })); const s = 0.35 + Math.random() * 0.3; sp.scale.set(s, s * 0.375, 1);
+    sp.position.set(c.x, c.y + 0.4, c.z); scene.add(sp); CAT.bursts.push({ sp, v: new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.0 + Math.random() * 1.2, -Math.random() * 1.4), age: 0 }); }
+  if (!CAT.said) { CAT.said = true; flash('<b>THE BODEGA CAT JUDGES YOU</b><small>spiritually costly</small>'); } }
+function meowTick(dt) {
+  catIdsFor();
+  for (let i = CAT.bursts.length - 1; i >= 0; i--) { const b = CAT.bursts[i]; b.age += dt; b.sp.position.addScaledVector(b.v, dt); b.v.y -= 0.6 * dt; b.sp.material.opacity = Math.max(0, 1 - b.age / 1.4);
+    if (b.age > 1.4) { scene.remove(b.sp); b.sp.material.dispose(); CAT.bursts.splice(i, 1); } } }
 function updateAudio() {
   if (!actx) return;
   if (drone.crashed && !audioWasCrashed) { try { isRidgeRipper() ? crashFart() : crashThud(); } catch {} } audioWasCrashed = drone.crashed; const t = actx.currentTime; const blades = S.PARTS.props[spec.prop].blades;
@@ -155,6 +177,7 @@ function frame(now) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
       if (pf) { const a = performance.now(); drone.step(rc, DT); const b = performance.now(); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } tPh += b - a; tDe += performance.now() - b; }
       else { drone.step(rc, DT); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } }
+      if (drone.contactThisStep && CAT.ids.has(drone.contactOwner)) catHit();   // Slackvegan's bodega cat
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
     }
@@ -215,8 +238,10 @@ function frame(now) {
   const rT0 = pf ? performance.now() : 0;
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   if (world.theme === 'dusk') duskTick(Math.min(0.1, dt || 0.016));
+  if (world.theme === 'nyc') nycTick(Math.min(0.1, dt || 0.016));
+  meowTick(Math.min(0.1, dt || 0.016));
   renderer.render(scene, cam);
-  if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk')) bloomRender(cam);   // racing: the gates' LEDs glow
+  if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk' || world.theme === 'nyc')) bloomRender(cam);   // racing: the gates' LEDs glow
   if (PERF.fx) fxRender();
   if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
   if (mode === 'recap' && recap.rec) recapRecFrame();

@@ -346,13 +346,14 @@ function mats() {
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
-  vaporMats(); viceMats(); duskMats();
+  vaporMats(); viceMats(); duskMats(); nycMats();
 }
-function boxGeo(h, density = 0.5) {
+function boxGeo(h, density = 0.5, off = null) {   // off: the box's centre, to lay the texture in world space (facades: windows on a floor grid)
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) {
     const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
-    let u, v; if (nx > 0.5) { u = p.getZ(i); v = p.getY(i); } else if (ny > 0.5) { u = p.getX(i); v = p.getZ(i); } else { u = p.getX(i); v = p.getY(i); }
+    const X = p.getX(i) + (off ? off.x : 0), Y = p.getY(i) + (off ? off.y : 0), Z = p.getZ(i) + (off ? off.z : 0);
+    let u, v; if (nx > 0.5) { u = Z; v = Y; } else if (ny > 0.5) { u = X; v = Z; } else { u = X; v = Y; }
     uv.setXY(i, u * density, v * density);
   }
   return g;
@@ -409,7 +410,7 @@ function staticFlush() {
 function visMesh(v, art) {
   let m;
   if (v.shape === 'box') {
-    m = new THREE.Mesh(v.mat === 'backboard' || v.mat === 'mooseSign' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
+    m = new THREE.Mesh(v.mat === 'backboard' || v.mat === 'mooseSign' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : NYC_DENS[v.mat] ? boxGeo(v.h, NYC_DENS[v.mat], v.c) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
     m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
     if (v.graffiti && art) addGraffiti(v);
   } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
@@ -552,29 +553,127 @@ function duskTick(dt) {
   if (MAT.oilSlick) MAT.oilSlick.color.setHSL((0.75 + 0.1 * Math.sin(t * 0.5)) % 1, 0.25, 0.04);
   if (DUSK.dust) { const a = DUSK.dust.geometry.attributes.position; for (let i = 0; i < a.count; i += 7) { let x = a.getX(i) + dt * 0.25, y = a.getY(i) + Math.sin(t + i) * dt * 0.05; if (x > 46) x = -46; a.setXY(i, x, y); } a.needsUpdate = true; }
 }
+// ============================================================ Slackvegan City (theme 'nyc'): a sticky New York block at golden hour.
+// Brick and brutalist facades with their windows on a floor grid (the texture is laid in world space: NYC_DENS), the El's green
+// steel, taxis, shop windows, neon, the bodega cat. Its own random stream, so the other maps' looks are unchanged.
+const NYC = { t: 0, flick: [] };
+const NYC_DENS = { nycBrick: 1 / 7.2, nycBrickTan: 1 / 7.2, brutal: 1 / 7.2, trainSide: 1 / 3.75, shaftWall: 1 / 7.2 };   // texture tile = this many metres⁻¹, aligned to the ground
+function nycMats() {
+  const R = (() => { let s = 4242; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const dots = (g, w, h, n, cols, s0 = 1, s1 = 3, a = 0.3) => { for (let i = 0; i < n; i++) { g.globalAlpha = a * R(); g.fillStyle = cols[(R() * cols.length) | 0]; const s = s0 + R() * (s1 - s0); g.fillRect(R() * w, R() * h, s, s); } g.globalAlpha = 1; };
+  const S2 = (o = {}) => new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.05, ...o }), B = (hex, o = {}) => new THREE.MeshBasicMaterial({ color: hex, toneMapped: false, ...o });
+  const T = (w, h, draw, srgb = true) => { const [c, g] = cnv(w, h); draw(g, w, h); return tex(c, 1, srgb); };
+  // a 2 x 2 bay facade (7.2 m square): four windows, one or two lit warm, sills and lintels; ground floors get shutters drawn over
+  const facade = (wallCol, mortar, frameCol, kind) => T(512, 512, (g, w, h) => {
+    g.fillStyle = wallCol; g.fillRect(0, 0, w, h);
+    if (kind === 'brick') { g.strokeStyle = mortar; g.lineWidth = 1.4; for (let y = 0; y < h; y += 6.4) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); for (let x = ((y / 6.4) % 2) * 7; x < w; x += 14) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 6.4); g.stroke(); } }
+      dots(g, w, h, 2600, ['#00000055', '#ffffff22', '#3a1a10'], 1, 4, 0.35); }
+    else { dots(g, w, h, 5000, ['#00000033', '#ffffff22', '#6a6660'], 1, 3, 0.4); g.strokeStyle = '#00000022'; g.lineWidth = 2; for (let x = 0; x < w; x += 128) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } }   // raw concrete, panel joints
+    for (let by = 0; by < 2; by++) for (let bx = 0; bx < 2; bx++) { const ox = bx * 256, oy = by * 256, px = 256 / 3.6;
+      if (kind === 'brutal') { const gr = g.createLinearGradient(0, oy + 0.8 * px, 0, oy + 2.1 * px); gr.addColorStop(0, '#46525e'); gr.addColorStop(1, '#161c22'); g.fillStyle = gr; g.fillRect(ox, oy + 0.8 * px, 256, 1.3 * px);
+        if (R() < 0.18) { g.fillStyle = '#e8b878'; g.globalAlpha = 0.7; g.fillRect(ox + 66 + ((R() * 3) | 0) * 64, oy + 0.85 * px, 54, 1.2 * px); g.globalAlpha = 1; }   // a lit office
+        g.fillStyle = '#7e7a74'; for (let x = 0; x < 256; x += 64) g.fillRect(ox + x, oy + 0.75 * px, 10, 1.4 * px); g.fillStyle = '#00000055'; g.fillRect(ox, oy + 2.1 * px, 256, 5); continue; }
+      const wx = ox + 128 - 0.68 * px, wy = oy + 0.8 * px, ww = 1.36 * px, wh = 1.9 * px, lit = R() < 0.32;
+      g.fillStyle = frameCol; g.fillRect(wx - 6, wy - 9, ww + 12, wh + 15); g.fillStyle = '#d2c8b6'; g.fillRect(wx - 10, wy + wh + 4, ww + 20, 8);
+      const gr = g.createLinearGradient(0, wy, 0, wy + wh); if (lit) { gr.addColorStop(0, '#ffd59a'); gr.addColorStop(1, '#c87a3a'); } else { gr.addColorStop(0, '#5c6c7c'); gr.addColorStop(0.5, '#26303a'); gr.addColorStop(1, '#141a20'); }
+      g.fillStyle = gr; g.fillRect(wx, wy, ww, wh); g.fillStyle = frameCol; g.fillRect(wx, wy + wh / 2 - 2, ww, 4); g.fillRect(wx + ww / 2 - 2, wy, 4, wh);
+      if (!lit && R() < 0.4) { g.fillStyle = ['#a8584a', '#4a6a8a', '#d8c8a0'][(R() * 3) | 0]; g.globalAlpha = 0.8; g.fillRect(wx, wy, ww * (0.3 + R() * 0.4), wh); g.globalAlpha = 1; }   // a curtain
+      if (R() < 0.25) { g.fillStyle = '#d0d0cc'; g.fillRect(wx + 6, wy + wh - 26, ww - 12, 22); }   // an AC unit in the window
+    } });
+  MAT.nycBrick = S2({ map: facade('#7a3a2a', '#4a2a22', '#e8e2d6', 'brick'), roughness: 0.9 });
+  MAT.nycBrickTan = S2({ map: facade('#b49a78', '#7a6650', '#2a2a2a', 'brick'), roughness: 0.9 });
+  MAT.brutal = S2({ map: facade('#8e8c88', '#000', '#000', 'brutal'), roughness: 0.95 });
+  MAT.nycConcrete = S2({ map: TX.concrete, color: 0xc8c0b4, roughness: 0.95 }); MAT.columnConcrete = S2({ color: 0x9a968e, roughness: 0.9 });
+  MAT.roofTar = S2({ map: T(128, 128, (g, w, h) => { g.fillStyle = '#3a3634'; g.fillRect(0, 0, w, h); dots(g, w, h, 1500, ['#2a2624', '#4e4a46', '#5a4a3a'], 1, 3, 0.5); g.strokeStyle = '#2a2826'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2); }), roughness: 0.95 });
+  MAT.bodegaTile = S2({ map: T(64, 64, (g, w, h) => { for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = (x + y) % 2 ? '#d8d2c4' : '#6a2a2a'; g.fillRect(x * 32, y * 32, 32, 32); } }), roughness: 0.5 }); MAT.nycTrim = S2({ color: 0xcfc6b4, roughness: 0.8 });
+  MAT.shaftWall = S2({ map: T(256, 256, (g, w, h) => { g.fillStyle = '#4c4e52'; g.fillRect(0, 0, w, h); dots(g, w, h, 2000, ['#00000044', '#ffffff18'], 1, 3, 0.5); g.fillStyle = '#2a2c30'; for (let y = 0; y < h; y += 64) g.fillRect(0, y, w, 3); }), roughness: 0.9 });
+  MAT.neonCyanTrim = S2({ color: 0x46d8ff, emissive: 0x2ad0ff, emissiveIntensity: 1.4, roughness: 0.4 });
+  MAT.lobbyFloor = S2({ map: T(256, 256, (g, w, h) => { g.fillStyle = '#d6cebf'; g.fillRect(0, 0, w, h); dots(g, w, h, 5000, ['#8a8070', '#ffffff', '#5a5248', '#b0a48e'], 1, 3, 0.5); }), roughness: 0.25, metalness: 0.05 });
+  MAT.marbleDark = S2({ color: 0x26262c, roughness: 0.2, metalness: 0.1 });
+  MAT.shopFront = S2({ color: 0x2c2622, roughness: 0.6, metalness: 0.2 });
+  MAT.nycSidewalk = S2({ map: T(256, 256, (g, w, h) => { g.fillStyle = '#a8a29a'; g.fillRect(0, 0, w, h); dots(g, w, h, 6000, ['#8c867e', '#bab4ac', '#6a6660', '#2a2a2a'], 1, 3, 0.4); g.strokeStyle = '#6e6a64'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, w - 3, h - 3); for (let i = 0; i < 4; i++) { g.fillStyle = '#2a2826'; g.globalAlpha = 0.5; g.beginPath(); g.arc(R() * w, R() * h, 2 + R() * 4, 0, 7); g.fill(); g.globalAlpha = 1; } }), roughness: 0.95 });   // gum spots
+  MAT.yellowLines = S2({ map: T(64, 64, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#e8b830'; g.fillRect(0, 4, w, 20); g.fillRect(0, 40, w, 20); }), alphaTest: 0.3, roughness: 0.7 });
+  { const t = MAT.yellowLines.map; t.repeat.set(1, 1 / 0.36); }
+  MAT.laneDash = S2({ map: T(256, 16, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#e8e6de'; g.fillRect(0, 0, w * 0.45, h); }), alphaTest: 0.3, roughness: 0.7 });
+  { const t = MAT.laneDash.map; t.repeat.set(0.5, 1 / 0.16); }
+  MAT.crosswalk = S2({ map: T(16, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#ecebe4'; for (let y = 0; y < h; y += 128) g.fillRect(0, y + 8, w, 56); }), alphaTest: 0.3, roughness: 0.8 });
+  MAT.startBox = new THREE.MeshStandardMaterial({ alphaTest: 0.3, roughness: 0.8, map: T(512, 416, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#f2f0e8'; g.lineWidth = 14; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = '#f2f0e8'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = "900 120px Impact, 'Arial Black', sans-serif"; g.fillText('START', w / 2, h * 0.44); g.font = "900 46px Impact, 'Arial Black', sans-serif"; g.fillStyle = '#f2c018'; g.fillText('YELLOW FEVER', w / 2, h * 0.74); }) });
+  MAT.stairDown = new THREE.MeshStandardMaterial({ roughness: 0.9, map: T(512, 228, (g, w, h) => { for (let x = 0; x < w; x += 32) { g.fillStyle = x % 64 ? '#1a1a1a' : '#2a2a28'; g.fillRect(x, 0, 32, h); } g.fillStyle = '#ffffff'; g.font = "900 54px Helvetica, Arial, sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SUBWAY ↓', w / 2, h / 2); }) });
+  MAT.elGreen = S2({ map: T(128, 128, (g, w, h) => { g.fillStyle = '#3e5a48'; g.fillRect(0, 0, w, h); dots(g, w, h, 900, ['#6a4a32', '#2a3a30', '#5a7a64'], 1, 4, 0.5); g.fillStyle = '#26342c'; for (let y = 8; y < h; y += 32) for (let x = 8; x < w; x += 32) { g.beginPath(); g.arc(x, y, 2.5, 0, 7); g.fill(); } }), roughness: 0.7, metalness: 0.35 });
+  MAT.elDeck = S2({ color: 0x2a2826, roughness: 0.9 }); MAT.iron = S2({ color: 0x2c2a28, roughness: 0.6, metalness: 0.5 });
+  MAT.trainSide = S2({ map: T(256, 256, (g, w, h) => { g.fillStyle = '#b4b8bc'; g.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 8) { g.fillStyle = x % 16 ? '#a4a8ac' : '#c4c8cc'; g.fillRect(x, 0, 4, h); }
+    g.fillStyle = '#1a2028'; g.fillRect(24, 99, 208, 82); g.fillStyle = '#3a4a5a'; g.fillRect(28, 103, 98, 74); g.fillRect(130, 103, 98, 74); g.fillStyle = '#7a3aa8'; g.fillRect(0, 201, w, 21); }), roughness: 0.35, metalness: 0.75 });
+  MAT.signRoute = new THREE.MeshBasicMaterial({ map: signTex(['Q  ·  SLACKVEGAN AV'], '#ffd23a', '#ff9a00', 512, 72), toneMapped: false });
+  MAT.taxiYellow = S2({ color: 0xf2b40c, roughness: 0.32, metalness: 0.3 }); MAT.carRed = S2({ color: 0x8e1d1d, roughness: 0.32, metalness: 0.4 }); MAT.carBlue = S2({ color: 0x24427a, roughness: 0.32, metalness: 0.4 }); MAT.carSilver = S2({ color: 0xa8acb0, roughness: 0.3, metalness: 0.6 });
+  MAT.carGlass = S2({ color: 0x1a2430, roughness: 0.08, metalness: 0.6, transparent: true, opacity: 0.72 });
+  MAT.taxiSign = S2({ color: 0xfff4c8, emissive: 0xffe08a, emissiveIntensity: 0.9 }); MAT.signalLit = B(0xff3a2a); MAT.globeGreen = B(0x6cff8a);
+  MAT.trashBag = S2({ color: 0x141414, roughness: 0.25, metalness: 0.25 });
+  MAT.shutter = S2({ map: T(64, 64, (g, w, h) => { for (let y = 0; y < h; y += 4) { g.fillStyle = y % 8 ? '#7c7e80' : '#a0a2a4'; g.fillRect(0, y, w, 4); } dots(g, w, h, 200, ['#5a3a2a', '#00000066'], 1, 3, 0.5); }), roughness: 0.55, metalness: 0.5 });
+  MAT.shutterTag = S2({ map: T(256, 256, (g, w, h) => { for (let y = 0; y < h; y += 8) { g.fillStyle = y % 16 ? '#7c7e80' : '#a0a2a4'; g.fillRect(0, y, w, 8); }
+    for (let i = 0; i < 7; i++) { g.strokeStyle = ['#ff3aa8', '#2ad0ff', '#f2f0e8', '#ffd21e', '#7aff3a', '#141414'][(R() * 6) | 0]; g.lineWidth = 3 + R() * 7; g.lineCap = 'round'; g.beginPath(); let x = R() * w, y = 40 + R() * 170; g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (R() - 0.3) * 60; y += (R() - 0.5) * 50; g.quadraticCurveTo(x - 20, y - 30, x, y); } g.stroke(); } }), roughness: 0.55, metalness: 0.4 });
+  const stripes = (a, b) => S2({ map: T(64, 64, (g, w, h) => { for (let x = 0; x < w; x += 32) { g.fillStyle = a; g.fillRect(x, 0, 16, h); g.fillStyle = b; g.fillRect(x + 16, 0, 16, h); } }), roughness: 0.9, side: THREE.DoubleSide });
+  MAT.awnRed = stripes('#b32a26', '#e8e0d0'); MAT.awnGreen = stripes('#2a6a3a', '#1e4a2a'); MAT.awnBlue = stripes('#2a4a8a', '#e8e0d0');
+  // shop windows: bread glowing on trays, the deli's meats and cheeses (lit from inside: drawn unlit so they glow at dusk)
+  MAT.winBakery = new THREE.MeshBasicMaterial({ toneMapped: false, map: T(512, 210, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ffcf8a'); gr.addColorStop(1, '#a8602a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    for (const y of [70, 132, 192]) { g.fillStyle = '#5a3a22'; g.fillRect(0, y, w, 7); for (let x = 14; x < w - 20; x += 30 + R() * 18) { const loaf = R(); g.fillStyle = ['#c8843a', '#b06a2a', '#e0a050', '#8a4a1e'][(R() * 4) | 0]; g.beginPath(); if (loaf < 0.3) g.ellipse(x + 14, y - 8, 22, 6, 0, 0, 7); else g.ellipse(x + 10, y - 11, 12, 11, 0, 0, 7); g.fill(); g.fillStyle = '#ffe2a066'; g.beginPath(); g.ellipse(x + 8, y - 15, 5, 2, 0, 0, 7); g.fill(); } }
+    g.fillStyle = '#f6efe2'; g.font = "italic 700 36px Georgia, serif"; g.textAlign = 'center'; g.fillText('Fresh Bread Daily', w / 2, 38); }) });
+  MAT.winDeli = new THREE.MeshBasicMaterial({ toneMapped: false, map: T(320, 216, (g, w, h) => { g.fillStyle = '#d8b07a'; g.fillRect(0, 0, w, h); g.fillStyle = '#6a3a22'; g.fillRect(0, 20, w, 4);
+    for (let x = 16; x < w; x += 26) { g.strokeStyle = '#3a2a1a'; g.beginPath(); g.moveTo(x, 22); g.lineTo(x, 34); g.stroke(); g.fillStyle = ['#8a2a22', '#a8442a', '#6a1e18'][(R() * 3) | 0]; g.beginPath(); g.ellipse(x, 62, 9, 28, 0, 0, 7); g.fill(); }
+    g.fillStyle = '#e8c040'; for (let x = 30; x < w; x += 70) { g.beginPath(); g.arc(x, 176, 26, 0, 7); g.fill(); g.fillStyle = '#c89a28'; g.fillRect(x - 26, 176, 52, 14); g.fillStyle = '#e8c040'; }
+    g.fillStyle = '#b81e1e'; g.font = "900 30px 'Arial Black', sans-serif"; g.textAlign = 'center'; g.fillText('HEROS · SUBS', w / 2, 128); }) });
+  const door = (col) => S2({ map: T(128, 256, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h); g.fillStyle = '#2a3440'; g.fillRect(16, 16, 96, 120); g.fillStyle = '#c8a040'; g.fillRect(96, 150, 12, 6); g.strokeStyle = '#00000055'; g.lineWidth = 4; g.strokeRect(16, 150, 96, 90); }), roughness: 0.6 });
+  MAT.doorBakery = door('#6a2a22'); MAT.doorDeli = door('#2a4a32');
+  const neonSign = (k, lines, col, glow, w, h) => { MAT[k] = new THREE.MeshBasicMaterial({ map: signTex(lines, col, glow, w, h), toneMapped: false }); NYC.flick.push({ m: MAT[k], base: MAT[k].color.clone(), p: R() * 10 }); };
+  neonSign('signBakery', ['BAKERY'], '#ffd7a0', '#ff9a40'); neonSign('signDeli', ['DELI'], '#ff6a5a', '#ff2a1a'); neonSign('signBodega', ['BODEGA · 24 HR'], '#5af0ff', '#00b8ff', 768, 80);
+  neonSign('signOpen', ['OPEN'], '#ff4a5a', '#ff1a2a', 256, 200); neonSign('signFresh', ['FRESH'], '#f6e2a8', '#d89a40', 256, 96); neonSign('signDiner', ['D', 'I', 'N', 'E', 'R'], '#ff5ad2', '#ff1aa8', 160, 260);
+  neonSign('signFinish', ['FINISH'], '#ff5ad2', '#ff1aa8', 384, 96); neonSign('signSpine', ['THE SPINE'], '#5af0ff', '#00b8ff', 512, 104); neonSign('signPawn', ['PAWN & LOAN'], '#ffd23a', '#ff9a00', 512, 120);
+  neonSign('signSlackvegan', ['SLACKVEGAN CITY', 'IT IS NOT CLEAN · NOW SEND IT'], '#ffd23a', '#ff5a1a', 1024, 372);
+  MAT.gateOrange = S2({ color: 0xff6a1a, roughness: 0.45, metalness: 0.2, emissive: 0x401400, emissiveIntensity: 0.6 });
+  MAT.catFur = S2({ color: 0x18181a, roughness: 0.95 }); MAT.catWhite = S2({ color: 0xeeeae2, roughness: 0.95 }); MAT.catEye = B(0x9cff3a);
+  MAT.terracotta = S2({ color: 0xb5562e, roughness: 0.9 }); MAT.cardboard = S2({ map: T(64, 64, (g, w, h) => { g.fillStyle = '#b48a5a'; g.fillRect(0, 0, w, h); dots(g, w, h, 300, ['#8a6640', '#c8a070'], 1, 2, 0.5); g.fillStyle = '#c8b48a'; g.fillRect(0, 28, w, 8); }), roughness: 0.95 });
+  MAT.towerWood = S2({ map: T(128, 128, (g, w, h) => { for (let x = 0; x < w; x += 8) { g.fillStyle = ['#6e5038', '#7a5a3e', '#5e4430'][(x / 8) % 3]; g.fillRect(x, 0, 8, h); } dots(g, w, h, 600, ['#3a2a1e', '#9a7a5a'], 1, 3, 0.4); }), roughness: 0.95 });
+  for (const [k, hex] of [['cloth1', 0xe8e4da], ['cloth2', 0x3d6ab0], ['cloth3', 0xd84a4a], ['cloth4', 0xe8c040]]) MAT[k] = S2({ color: hex, roughness: 0.95, side: THREE.DoubleSide });
+  MAT.lightShaft = new THREE.MeshBasicMaterial({ color: 0xffc890, transparent: true, opacity: 0.06, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide, fog: false });
+}
+// the city beyond the block: towers in the haze, lit windows, a few water towers on their roofs
+function nycBackdrop() {
+  const R = (() => { let s = 9191; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const [c, g] = cnv(256, 256); g.fillStyle = '#5a5258'; g.fillRect(0, 0, 256, 256); for (let y = 8; y < 256; y += 32) for (let x = 6; x < 256; x += 24) { const lit = R() < 0.14; g.fillStyle = lit ? '#ffcf88' : (R() < 0.5 ? '#3a3640' : '#46424c'); g.fillRect(x, y, 13, 18); }
+  const t = tex(c); const mats = [0x8a7c78, 0x7a7484, 0x9a8a7a, 0x6e6a76].map(col => new THREE.MeshStandardMaterial({ map: t, color: col, roughness: 0.9, emissive: 0xffc070, emissiveMap: t, emissiveIntensity: 0.12 }));
+  for (let i = 0; i < 150; i++) { const near = i < 70, a = R() * Math.PI * 2, rad = near ? 68 + R() * 32 : 105 + R() * 70, w = 9 + R() * 16, d = 9 + R() * 16, h = near ? 10 + R() * 24 : 18 + R() * (R() < 0.15 ? 120 : 55);   // a ring of low blocks round the map, towers beyond
+    const x = Math.cos(a) * rad, z = 7 + Math.sin(a) * rad; if (Math.abs(z - 6) < 9 && Math.abs(x) > 60) continue;   // the El's corridor stays open: the avenue's vista
+    const geo = boxGeo(new THREE.Vector3(w / 2, h / 2, d / 2), 1 / 9), m = new THREE.Mesh(geo, mats[i % 4]); m.position.set(x, h / 2, z); playRoot.add(m);
+    if (R() < 0.3) { const wt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 3, 10), MAT.towerWood); wt.position.set(x + (R() - 0.5) * w * 0.5, h + 3.2, z); playRoot.add(wt); const cn = new THREE.Mesh(new THREE.ConeGeometry(1.55, 1.3, 10), MAT.roofDark); cn.position.set(wt.position.x, h + 5.3, z); playRoot.add(cn); } }
+}
+function nycTick(dt) {
+  NYC.t += dt; const t = NYC.t;
+  for (const s of NYC.flick) { const k = Math.sin(t * 0.6 + s.p * 3) > 0.96 ? (Math.random() < 0.5 ? 0.2 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a tired neon tube now and then
+}
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
-  const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk';
+  const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk', NYC_ = world.theme === 'nyc';   // Slackvegan City: golden hour down the avenue
   if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
-  if (PNW) { gr.addColorStop(0, '#4f86c6'); gr.addColorStop(0.42, '#8fb6dc'); gr.addColorStop(0.6, '#cfe0ec'); gr.addColorStop(0.72, '#b4c2c4'); gr.addColorStop(1, '#5a6452'); }   // clear winter blue (the owner's photos, 2026-11-19)
+  if (NYC_) { gr.addColorStop(0, '#4e6a9e'); gr.addColorStop(0.4, '#9aaabc'); gr.addColorStop(0.56, '#f0c890'); gr.addColorStop(0.64, '#f49a58'); gr.addColorStop(0.74, '#b8705a'); gr.addColorStop(1, '#5a4a48'); }
+  else if (PNW) { gr.addColorStop(0, '#4f86c6'); gr.addColorStop(0.42, '#8fb6dc'); gr.addColorStop(0.6, '#cfe0ec'); gr.addColorStop(0.72, '#b4c2c4'); gr.addColorStop(1, '#5a6452'); }   // clear winter blue (the owner's photos, 2026-11-19)
   else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.renderOrder = -4000; playRoot.add(sky);   // drawn first: the backdrops' mountains paint over it
   // lights
-  playRoot.add(new THREE.HemisphereLight(IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
   // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
-  const sun = new THREE.DirectionalLight(PNW ? 0xffe2bc : 0xffcf98, PNW ? 2.7 : 2.6);
-  if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18); sun.castShadow = true;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
+  const sun = new THREE.DirectionalLight(NYC_ ? 0xffb066 : PNW ? 0xffe2bc : 0xffcf98, NYC_ ? 3.1 : PNW ? 2.7 : 2.6);
+  if (NYC_) sun.position.set(-62, 17, 9); else if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18);   /* Slackvegan: low in the west, straight down the avenue: long golden shadows */ sun.castShadow = true;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;
-  TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 60, guv.getY(i) * 60);
+  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(new THREE.PlaneGeometry(GS, GS), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
+  TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * GS / 4, guv.getY(i) * GS / 4);
   playRoot.add(gnd);
   }
   for (const z of world.zones) {
@@ -592,6 +691,7 @@ function buildScene() {
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
   if (PNW) { scene.fog = new THREE.Fog(0xc6d4de, 60, 220); pnwBackdrop(); }
+  if (NYC_) { scene.fog = new THREE.Fog(0xd8b08a, 55, 230); nycBackdrop(); }
   // lamp lights are made with the objects (buildObjects)
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)

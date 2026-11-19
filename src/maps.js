@@ -1405,14 +1405,285 @@
     zones.unshift(zones.pop());   // the cracked floor first, the patches on top of it
     return K.done({ id: 'murderdome', title: 'The Murderdome', theme: 'dusk', zones, fields, searchlights, spawn: { pos: v3(-7, 0.03, 33), yaw: -Math.PI / 2 }, bounds: { x: [-RW - 1, RW + 1], z: [-RW - 1, RW + 1] } });
   }
+  // =============================================================== Slackvegan City (theme 'nyc'; owner's design brief, 2026-11-19)
+  // A dense, slightly sticky New York city block frozen in late-afternoon light. 1 unit = 1 m; x runs east, z south. The avenue
+  // runs east-west (road z 0..12, sidewalks -4..0 and 12..16) under an elevated subway (pillars at z 0.9 / 11.1 every 10 m, the
+  // deck 6.3-7.0 m up, a train parked over x -5..25). South of it: the bakery, the deli and the corner bodega (and its cat),
+  // a cross street (x 20..26) and the brutalist skyscraper (x 26..44, z 20..38, 48 m) with round voids into two sky lobbies
+  // (A 18-25 m, B 32-38 m) and the Spine, a 6 x 6 m shaft from the roof to the lobby. North of it: walk-ups, the water tower roof.
+  // The circuit (clockwise-ish): 1 Yellow Fever east down the avenue between stopped taxis, under signal-arm gates; 2 hard right
+  // along the bakery and deli; 3 up the skyscraper's fire escape on the cross street; 4 in through a round void into sky lobby A,
+  // the web of round openings (out and up to B); 5 the Spine: drop down the shaft through its slalom gates, out of the lobby's round
+  // arch; 6 west under the El through gates hung from its beams, over the deck; 7 up onto the water-tower roof, then the steep
+  // gates down to the finish: a neon frame under the tracks right above the start box. Static world: the cars are parked, the
+  // train waits at its signal.
+  function buildSlackvegan() {
+    const K = kit(), { O, box, pipe, ball, neon, together } = K, { frame, bar } = parts(K), zones = [];
+    let seed = 7070; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const SOFT = { e: 0.45, f: 0.35 }, HARD = { e: 0.12, f: 0.9, crash: 5 }, NS = { noSurvey: true };
+    const surf = (o, S0, from = 0) => { for (let i = from; i < o.prims.length; i++) o.prims[i].surf = S0; return o; };
+    const lamp = (name, at, col, pw, rg) => O(name, 'deco', { light: at, lightColor: col, lightPower: pw, lightRange: rg });
+    const gapO = (name, c, n, u, hu, hv) => O(name, 'gap', { gap: { c, n, u, hu, hv } });
+    // a flat picture: a neon sign, a shop window's display, a painted decal (rx -π/2 lies it on the ground); solid unless told
+    const pic = (o, c, w, h, ry, mat, opt = {}) => { if (opt.solid !== false) { const sb = makeBox(c, v3(w / 2, h / 2, 0.035), ry); sb.leaf = true; if (opt.surf) sb.surf = opt.surf; o.prims.push(sb); }
+      o.vis.push({ shape: 'sign', c, w, h, ry, rx: opt.rx || 0, mat, glow: opt.glow !== false });
+      if (opt.both) o.vis.push({ shape: 'sign', c: v3(c.x - Math.sin(ry) * 0.02, c.y, c.z - Math.cos(ry) * 0.02), w, h, ry: ry + Math.PI, mat, glow: opt.glow !== false }); };
+    // a wall along x (axis 'x', at z = fixed) or along z (axis 'z', at x = fixed) from u0 to u1, y0 to y1, thickness t, with
+    // holes: rectangles { a, b, y0, y1 } or circles { u, y, r } (cut in 16 slices inside the circle, a round trim drawn over the steps)
+    const wall = (o, axis, fixed, u0, u1, y0, y1, t, holes, mat, trim = 'nycTrim') => {
+      const rect = [];
+      for (const h of holes) { if (h.r == null) { rect.push(h); continue; }
+        const N = 16; for (let i = 0; i < N; i++) { const ya = -h.r + 2 * h.r * i / N, yb = ya + 2 * h.r / N, ym = Math.max(Math.abs(ya), Math.abs(yb)), w = Math.sqrt(Math.max(0, h.r * h.r - ym * ym));
+          rect.push({ a: h.u - w, b: h.u + w, y0: h.y + ya, y1: h.y + yb }); }
+        const M = 18, P = a => axis === 'x' ? v3(h.u + Math.cos(a) * h.r, h.y + Math.sin(a) * h.r, fixed) : v3(fixed, h.y + Math.sin(a) * h.r, h.u + Math.cos(a) * h.r);
+        for (let i = 0; i < M; i++) pipe(o, P(i / M * Math.PI * 2), P((i + 1) / M * Math.PI * 2), Math.min(0.26, t * 0.6), trim, NS); }
+      const seg = (a, b, ya, yb) => { ya += 0.004; yb -= 0.004; if (b - a < 0.01 || yb - ya < 0.01) return; const cu = (a + b) / 2, cy = (ya + yb) / 2, hu = (b - a) / 2, hy = (yb - ya) / 2;
+        if (axis === 'x') box(o, v3(cu, cy, fixed), v3(hu, hy, t / 2), mat, 0, 0, 0, NS); else box(o, v3(fixed, cy, cu), v3(t / 2, hy, hu), mat, 0, 0, 0, NS); };
+      const cuts = [...new Set([u0, u1, ...rect.flatMap(h => [h.a, h.b])])].filter(x => x >= u0 && x <= u1).sort((p, q) => p - q);
+      for (let i = 0; i + 1 < cuts.length; i++) { const a = cuts[i], b = cuts[i + 1], m = (a + b) / 2, hs = rect.filter(h => h.a <= m && h.b >= m).sort((p, q) => p.y0 - q.y0);
+        let y = y0; for (const h of hs) { seg(a, b, y, h.y0); y = Math.max(y, h.y1); } seg(a, b, y, y1); } };
+    // a floor slab over x0..x1 × z0..z1 at height y (top), with an optional rectangular hole
+    const slab = (o, x0, x1, z0, z1, y, th, hole, mat = 'nycConcrete') => {
+      const B = (a, b, c, d) => { if (b - a > 0.01 && d - c > 0.01) box(o, v3((a + b) / 2, y - th / 2, (c + d) / 2), v3((b - a) / 2, th / 2, (d - c) / 2), mat, 0, 0, 0, NS); };
+      if (!hole) return B(x0, x1, z0, z1);
+      B(x0, x1, z0, hole.z0); B(x0, x1, hole.z1, z1); B(x0, hole.x0, hole.z0, hole.z1); B(hole.x1, x1, hole.z0, hole.z1); };
+    // a race gate: an open frame w × h round its centre c, flown along dir 'x' / 'z' (standing) or 'y' (lying flat, flown down
+    // through); its bars never count as over/unders of their own, its opening is a gap
+    const gate = (name, c, w, h, dir, mat = 'gateOrange', glow = 'neonMagenta') => { const o = O(name, 'deco'), t = 0.06, hw = w / 2 + t, hh = h / 2 + t;
+      const B = (dx, dy, dz, hx, hy, hz) => box(o, v3(c.x + dx, c.y + dy, c.z + dz), v3(hx, hy, hz), mat, 0, 0, 0, NS);
+      if (dir === 'x') { B(0, hh, 0, t, t, hw + t); B(0, -hh, 0, t, t, hw + t); B(0, 0, hw, t, hh, t); B(0, 0, -hw, t, hh, t); }
+      else if (dir === 'z') { B(0, hh, 0, hw + t, t, t); B(0, -hh, 0, hw + t, t, t); B(hw, 0, 0, t, hh, t); B(-hw, 0, 0, t, hh, t); }
+      else { B(0, 0, hh, hw + t, t, t); B(0, 0, -hh, hw + t, t, t); B(hw, 0, 0, t, t, hh); B(-hw, 0, 0, t, t, hh); }
+      if (glow) { if (dir === 'x') neon(o, v3(c.x, c.y + h / 2 - 0.02, c.z), v3(0.025, 0.02, w / 2), glow); else if (dir === 'z') neon(o, v3(c.x, c.y + h / 2 - 0.02, c.z), v3(w / 2, 0.02, 0.025), glow); else neon(o, v3(c.x, c.y + 0.07, c.z + h / 2), v3(w / 2, 0.02, 0.025), glow); }
+      const gu = w / 2 - 0.06, gv = h / 2 - 0.06;   // a little inside the bars
+      if (dir === 'x') gapO(name + ' opening', v3(c.x, c.y, c.z), v3(1, 0, 0), v3(0, 0, 1), gu, gv);
+      else if (dir === 'z') gapO(name + ' opening', v3(c.x, c.y, c.z), v3(0, 0, 1), v3(1, 0, 0), gu, gv);
+      else gapO(name + ' opening', v3(c.x, c.y, c.z), v3(0, 1, 0), v3(1, 0, 0), gu, gv);
+      surf(o, HARD); return o; };
+    const hang = (o, a, b) => pipe(o, a, b, 0.018, 'chain', { noCollide: true });
+    // a building block: a box of brick or concrete with a ground floor of shutters, a parapet, and roof clutter
+    const block = (name, x0, x1, z0, z1, h, mat, face, opts = {}) => {
+      const o = O(name, 'building', { wallNormal: v3(0, 0, face), tall: h, perchHeight: h });
+      box(o, v3((x0 + x1) / 2, h / 2, (z0 + z1) / 2), v3((x1 - x0) / 2, h / 2, (z1 - z0) / 2), mat);
+      box(o, v3((x0 + x1) / 2, h + 0.02, (z0 + z1) / 2), v3((x1 - x0) / 2 - 0.01, 0.02, (z1 - z0) / 2 - 0.01), 'roofTar', 0, 0, 0, NS);
+      const fz = face < 0 ? z0 : z1, cap = O(name + ' Parapet', 'deco');
+      for (const [a, b, c, d] of [[x0, x1, z0, z0 + 0.3], [x0, x1, z1 - 0.3, z1], [x0, x0 + 0.3, z0 + 0.3, z1 - 0.3], [x1 - 0.3, x1, z0 + 0.3, z1 - 0.3]]) box(cap, v3((a + b) / 2, h + 0.45, (c + d) / 2), v3((b - a) / 2, 0.45, (d - c) / 2), 'nycTrim', 0, 0, 0, NS);
+      if (!opts.noShops) { const sh = O(name + ' Shutters', 'deco');
+        for (let x = x0 + 2.4; x < x1 - 1.4; x += 4.2) { box(sh, v3(x, 1.5, fz + face * 0.04), v3(1.7, 1.5, 0.04), rnd() < 0.5 ? 'shutter' : 'shutterTag', 0, 0, 0, NS);
+          if (rnd() < 0.45) { const aw = O('Awning', 'deco'); box(aw, v3(x, 3.25, fz + face * 0.75), v3(1.9, 0.04, 0.78), ['awnRed', 'awnGreen', 'awnBlue'][Math.floor(rnd() * 3)], 0, face * 0.32, 0); surf(aw, SOFT); } } }
+      const roof = O(name + ' Roof Gear', 'deco');
+      for (let i = 0; i < 2 + Math.floor(rnd() * 3); i++) { const x = x0 + 2 + rnd() * (x1 - x0 - 4), z = z0 + 2 + rnd() * (z1 - z0 - 4); box(roof, v3(x, h + 0.55, z), v3(0.7, 0.55, 0.55), 'galv'); }
+      return o; };
+
+    const AV0 = 0, AV1 = 12, XW = 50;
+
+    // ---- the ground: sidewalks, curbs, lane lines, crosswalks, the plaza, the painted start box
+    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(0, 0.005, -2), h: v3(XW, 0, 2) });
+    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(-15.2, 0.005, 14), h: v3(34.8, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(38, 0.005, 14), h: v3(12, 0, 2) });
+    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(35, 0.006, 18), h: v3(9, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(47, 0.006, 28), h: v3(3, 0, 12) });
+    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(19.2, 0.006, 29), h: v3(0.8, 0, 13) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(25.4, 0.006, 29), h: v3(0.6, 0, 13) });
+    zones.push({ shape: 'zone', mat: 'yellowLines', c: v3(0, 0.007, 6), h: v3(XW, 0, 0.18) });
+    for (const z of [3.2, 8.8]) zones.push({ shape: 'zone', mat: 'laneDash', c: v3(0, 0.007, z), h: v3(XW, 0, 0.08) });
+    zones.push({ shape: 'zone', mat: 'crosswalk', c: v3(18.3, 0.008, 6), h: v3(1.2, 0, 6) }, { shape: 'zone', mat: 'crosswalk', c: v3(23, 0.008, 14), h: v3(1.4, 0, 3), ry: Math.PI / 2 });
+    { const cb = O('Curb', 'deco'); for (const [x0, x1, z] of [[-XW, XW, 0], [-XW, 19.6, 12], [26, XW, 12]]) box(cb, v3((x0 + x1) / 2, 0.07, z), v3((x1 - x0) / 2, 0.07, 0.12), 'nycConcrete', 0, 0, 0, NS);
+      box(cb, v3(19.6, 0.07, 29), v3(0.12, 0.07, 13), 'nycConcrete', 0, 0, 0, NS); box(cb, v3(26.1, 0.07, 30.5), v3(0.12, 0.07, 1.5), 'nycConcrete', 0, 0, 0, NS); }
+    zones.push({ shape: 'zone', mat: 'bodegaTile', c: v3(16.8, 0.006, 18.1), h: v3(2.6, 0, 1.9) });
+    { const sb = O('Start Box', 'deco'); pic(sb, v3(-38.5, 0.012, 6), 4.2, 3.4, -Math.PI / 2, 'startBox', { rx: -Math.PI / 2, solid: false, glow: false }); }
+
+    // ---- the elevated subway: green steel pillars (poles), cross beams, two girders and a deck, ties and rails; a train waits
+    // over the middle three spans. Each span is an over/under (under the deck, over the rails or over the train)
+    const EL = { z0: 0.9, z1: 11.1, beam: 6.0, gb: 6.3, gt: 7.0, zg: [2.4, 9.6] }, TRAIN = [-5, 25];
+    for (let x = -45; x <= 45; x += 10) {
+      for (const z of [EL.z0, EL.z1]) { const p = O('El Pillar', 'pole'); pipe(p, v3(x, 0, z), v3(x, 5.75, z), 0.22, 'elGreen'); box(p, v3(x, 0.08, z), v3(0.36, 0.08, 0.36), 'elGreen', 0, 0, 0, NS); surf(p, HARD); }
+      const bm = O('El Cross Beam', 'deco'); box(bm, v3(x, EL.beam, 6), v3(0.24, 0.3, 5.45), 'elGreen', 0, 0, 0, NS); for (const s of [-1, 1]) box(bm, v3(x, 5.35, 6 + s * 4.6), v3(0.06, 0.45, 0.6), 'elGreen', 0, 0.7 * s, 0, NS); surf(bm, HARD); }
+    for (let x = -50; x < 50; x += 10) { const x0 = x, x1 = x + 10, xm = (x0 + x1) / 2, inTrain = xm > TRAIN[0] && xm < TRAIN[1];
+      const sp = O('El Track', 'overunder', { obstacle: { a: v3(x0, 0, 6), b: v3(x1, 0, 6), under: EL.gb, over: inTrain ? 10.5 : EL.gt + 0.12 } });
+      for (const z of EL.zg) box(sp, v3(xm, (EL.gb + EL.gt) / 2, z), v3(5, (EL.gt - EL.gb) / 2, 0.22), 'elGreen');
+      box(sp, v3(xm, 6.6, 6), v3(5, 0.06, 3.38), 'elDeck');
+      for (let tx = x0 + 0.4; tx < x1; tx += 0.8) box(sp, v3(tx, 6.71, 6), v3(0.11, 0.05, 1.5), 'oldWood', 0, 0, 0, { noCollide: true });
+      for (const z of [5.28, 6.72]) pipe(sp, v3(x0, 6.8, z), v3(x1, 6.8, z), 0.04, 'galv', { noCollide: true });
+      surf(sp, HARD); }
+    together(() => { for (const [x0, x1, n] of [[-4.7, 9.9, 1], [10.3, 24.7, 2]]) { const tr = O(`Subway Car ${n}`, 'deco'), xm = (x0 + x1) / 2;
+        box(tr, v3(xm, 8.75, 6), v3((x1 - x0) / 2, 1.6, 1.4), 'trainSide', 0, 0, 0, NS); box(tr, v3(xm, 10.42, 6), v3((x1 - x0) / 2 - 0.1, 0.08, 1.25), 'galv', 0, 0, 0, NS);
+        for (const xb of [x0 + 2.4, x1 - 2.4]) box(tr, v3(xb, 7.0, 6), v3(1.1, 0.16, 1.0), 'rubberBlack', 0, 0, 0, NS);
+        pic(tr, v3(xm, 9.7, 4.58), 3.0, 0.42, Math.PI, 'signRoute', { solid: false }); pic(tr, v3(xm, 9.7, 7.42), 3.0, 0.42, 0, 'signRoute', { solid: false });
+        surf(tr, HARD); }
+      const g = O('Subway Gangway', 'deco'); box(g, v3(10.1, 8.6, 6), v3(0.2, 1.2, 0.8), 'rubberBlack', 0, 0, 0, NS); });
+    // the El runs on beyond the block (drawn only; the map edges stop flying long before)
+    { const far = O('El Beyond', 'deco'); for (const s of [-1, 1]) { for (let k = 0; k < 7; k++) { const x = s * (55 + k * 10); for (const z of [EL.z0, EL.z1]) pipe(far, v3(x, 0, z), v3(x, 5.75, z), 0.22, 'elGreen', { noCollide: true }); box(far, v3(x, EL.beam, 6), v3(0.24, 0.3, 5.45), 'elGreen', 0, 0, 0, { noCollide: true }); }
+      for (const z of EL.zg) box(far, v3(s * 85, 6.65, z), v3(35, 0.35, 0.22), 'elGreen', 0, 0, 0, { noCollide: true }); box(far, v3(s * 85, 6.6, 6), v3(35, 0.06, 3.38), 'elDeck', 0, 0, 0, { noCollide: true }); } }
+
+    // ---- 1 Yellow Fever: the start box, then east between stopped taxis and cars, under gates hung from signal arms
+    { const cars = []; for (const lz of [3.0, 6.0, 9.0]) { let x = -32 + rnd() * 3; while (x < 46) { cars.push([x, lz + (rnd() - 0.5) * 0.35, rnd() < 0.62]); x += 4.6 + 2.2 + rnd() * 5.5; } }
+      for (const [x, z, taxi] of cars) { if (Math.abs(x - 23) < 4.5 && z > 7) continue;
+        const c = O(taxi ? 'Taxi' : 'Parked Car', 'deco'), col = taxi ? 'taxiYellow' : ['carRed', 'carBlue', 'carSilver', 'carBlack'][Math.floor(rnd() * 4)], ry = (rnd() - 0.5) * 0.08;
+        box(c, v3(x, 0.62, z), v3(2.3, 0.36, 0.9), col, ry); box(c, v3(x - 0.2, 1.2, z), v3(1.25, 0.25, 0.82), 'carGlass', ry); box(c, v3(x - 0.2, 1.47, z), v3(1.2, 0.03, 0.8), col, ry);
+        for (const dx of [-1.45, 1.45]) pipe(c, v3(x + dx, 0.33, z - 0.92), v3(x + dx, 0.33, z + 0.92), 0.32, 'rubberBlack', NS);
+        if (taxi) box(c, v3(x - 0.2, 1.62, z), v3(0.3, 0.12, 0.12), 'taxiSign', ry);
+        surf(c, HARD); } }
+    for (const [x, gz, n] of [[-27, 4.4, 1], [-15, 8.0, 2]]) { const sg = O('Traffic Signal', 'pole'); pipe(sg, v3(x, 0, 13.3), v3(x, 5.5, 13.3), 0.12, 'darkMetal'); surf(sg, HARD);
+      const arm = O('Signal Arm', 'deco'); pipe(arm, v3(x, 5.35, 13.3), v3(x, 5.35, 2.2), 0.08, 'darkMetal', NS); for (const z of [9.5, 5.5]) { box(arm, v3(x, 4.9, z), v3(0.2, 0.45, 0.2), 'plasticYellow', 0, 0, 0, NS); box(arm, v3(x - 0.21, 4.9, z), v3(0.01, 0.38, 0.12), 'signalLit', 0, 0, 0, { noCollide: true, glow: true }); }
+      const g = gate(`Yellow Fever Gate ${n}`, v3(x + 0.6, 4.05, gz), 2.4, 1.8, 'x'); for (const s of [-1, 1]) hang(g, v3(x + 0.6, 5.0, gz + s * 1.2), v3(x, 5.3, gz + s * 1.2)); }
+    { const sl = O('Streetlight', 'pole'); pipe(sl, v3(-3, 0, -1.2), v3(-3, 5.6, -1.2), 0.1, 'darkMetal'); pipe(sl, v3(-3, 5.5, -1.2), v3(-3, 5.5, 4.6), 0.06, 'darkMetal', NS); box(sl, v3(-3, 5.4, 4.8), v3(0.25, 0.08, 0.4), 'lampHead', 0, 0, 0, NS); surf(sl, HARD);
+      const g = gate('Yellow Fever Gate 3', v3(-2.4, 4.15, 3.2), 2.2, 1.7, 'x'); for (const s of [-1, 1]) hang(g, v3(-2.4, 5.06, 3.2 + s * 1.1), v3(-3, 5.48, 3.2 + s * 1.1)); }
+    for (const x of [-44, -33, -21, 30, 40]) { const sl = O('Streetlight', 'pole'); pipe(sl, v3(x, 0, 15.2), v3(x, 5.6, 15.2), 0.1, 'darkMetal'); pipe(sl, v3(x, 5.5, 15.2), v3(x, 5.5, 13), 0.06, 'darkMetal', NS); box(sl, v3(x, 5.42, 12.9), v3(0.25, 0.08, 0.35), 'lampHead', 0, 0, 0, NS); surf(sl, HARD); }
+    for (const [x, z] of [[-41, -1.2], [-12, 13.4], [5.5, -1.3], [27, 13.4], [36, -1.2]]) { const h = O('Hydrant', 'deco'); pipe(h, v3(x, 0, z), v3(x, 0.62, z), 0.13, 'paintRed'); ball(h, v3(x, 0.66, z), 0.12, 'paintRed'); pipe(h, v3(x - 0.2, 0.42, z), v3(x + 0.2, 0.42, z), 0.06, 'paintRed', NS); }
+    for (const [x, z] of [[-36, -2.5], [-8, 14.8], [2, -2.6], [33, 14.9]]) { const b = O('Trash Bags', 'deco'); for (let i = 0; i < 4; i++) ball(b, v3(x + (rnd() - 0.5) * 1.1, 0.3, z + (rnd() - 0.5) * 0.6), 0.3 + rnd() * 0.1, 'trashBag', { leafSolid: true }); surf(b, SOFT); }
+    { const nb = O('News Boxes', 'deco'); for (let i = 0; i < 3; i++) box(nb, v3(0.4 + i * 0.6, 0.55, -3.3), v3(0.26, 0.55, 0.24), ['paintBlue', 'paintRed', 'plasticYellow'][i]); }
+    // the subway entrance on the north sidewalk: railings round the stair, globe lamps (the stair is painted dark: no digging)
+    { const se = O('Subway Entrance', 'deco'); for (const z of [-3.6, -1.8]) pipe(se, v3(-9.5, 1.0, z), v3(-5.6, 1.0, z), 0.04, 'elGreen', NS); pipe(se, v3(-9.5, 1.0, -3.6), v3(-9.5, 1.0, -1.8), 0.04, 'elGreen', NS);
+      for (const [x, z] of [[-9.5, -3.6], [-9.5, -1.8], [-5.6, -3.6], [-5.6, -1.8], [-7.5, -3.6], [-7.5, -1.8]]) pipe(se, v3(x, 0, z), v3(x, 1.0, z), 0.04, 'elGreen', NS);
+      for (const z of [-3.6, -1.8]) { pipe(se, v3(-5.6, 1.0, z), v3(-5.6, 2.2, z), 0.04, 'elGreen', NS); ball(se, v3(-5.6, 2.38, z), 0.17, 'globeGreen', { glow: true }); }
+      pic(se, v3(-7.6, 0.012, -2.7), 3.6, 1.6, 0, 'stairDown', { rx: -Math.PI / 2, solid: false, glow: false }); }
+
+    // ---- the blocks: the north side of the avenue (the walk-up with the water tower is the roof drop) and the south side
+    block('Corner Tower', -XW, -30.4, -24, -4, 24, 'nycBrickTan', 1);
+    const walk = block('Walk-up', -30.4, -6, -22, -4, 16, 'nycBrick', 1);
+    block('Laundromat', -6, 10.4, -20, -4, 9, 'nycBrickTan', 1);
+    block('Billboard Building', 10.4, 24.4, -22, -4, 20, 'nycConcrete', 1);
+    block('Pawn & Loan', 24.4, XW, -24, -4, 13, 'nycBrick', 1);
+    block('Tenement West', -XW, -31.5, 16, 34, 18, 'nycBrick', -1);
+    block('Tenement', -31.5, -10.6, 16, 32, 14, 'nycBrickTan', -1);
+    block('Pharmacy', -10.6, -0.4, 16, 30, 10, 'nycConcrete', -1);
+    block('Rowhouse', 4, 19.6, 26, 42, 18, 'nycBrick', -1, { noShops: true });
+    block('East Walk-up', 44.4, XW, 20, 42, 16, 'nycBrickTan', -1, { noShops: true });
+    // the billboard on its roof, facing the avenue
+    { const bb = O('Slackvegan Billboard', 'deco'); for (const x of [13.5, 21.8]) pipe(bb, v3(x, 20, -8), v3(x, 24.2, -8), 0.12, 'darkMetal'); box(bb, v3(17.65, 26.2, -8), v3(5.3, 2.0, 0.12), 'darkMetal', 0, 0, 0, NS);
+      pic(bb, v3(17.65, 26.2, -7.85), 10.4, 3.8, 0, 'signSlackvegan', { solid: false }); surf(bb, HARD); }
+    // the deck-side neon on the Pawn & Loan, a diner's blade sign on the walk-up (the first of the drop gates hangs from it)
+    { const pn = O('Pawn Sign', 'deco'); pic(pn, v3(34, 7.6, -3.94), 6, 1.4, 0, 'signPawn', { solid: false }); }
+
+    // ---- 2 the Bakery & Deli run, and the bodega on the corner (with its cat): a three-storey brick row above the shops
+    const SF = 16, ST = 0.3;
+    { const up = O('Shop Row', 'building', { wallNormal: v3(0, 0, -1), tall: 12, perchHeight: 12 }); box(up, v3(9.8, 7.8, 21), v3(9.8, 4.2, 5), 'nycBrick'); box(up, v3(9.8, 12.02, 21), v3(9.79, 0.02, 4.99), 'roofTar', 0, 0, 0, NS);
+      const back = O('Shop Row Back', 'deco'); box(back, v3(7, 1.8, 22.6), v3(7, 1.8, 3.4), 'nycBrick', 0, 0, 0, NS); box(back, v3(16.8, 1.8, 23), v3(2.8, 1.8, 3), 'nycBrick', 0, 0, 0, NS); box(back, v3(14.05, 1.8, 18.1), v3(0.06, 1.8, 2.0), 'nycBrick', 0, 0, 0, NS);
+      const cap = O('Shop Row Parapet', 'deco'); box(cap, v3(9.8, 12.45, 16.15), v3(9.8, 0.45, 0.15), 'nycTrim', 0, 0, 0, NS);
+      const fr = O('Shopfronts', 'deco'), holes = [{ a: 0.8, b: 6.4, y0: 0.6, y1: 2.9 }, { a: 6.8, b: 7.9, y0: 0, y1: 2.5 }, { a: 8.8, b: 12.2, y0: 0.6, y1: 2.9 }, { a: 12.5, b: 13.7, y0: 0, y1: 2.5 }, { a: 14.4, b: 15.6, y0: 0.6, y1: 2.6 }, { a: 15.9, b: 17.5, y0: 0, y1: 2.45 }, { a: 17.8, b: 19.2, y0: 0.6, y1: 2.6 }];
+      wall(fr, 'x', SF, -0.4, 19.6, 0, 3.6, ST, holes, 'shopFront');
+      wall(fr, 'z', 19.6, SF, 20, 0, 3.6, ST, [{ a: 17, b: 19.3, y0: 0.6, y1: 2.6 }], 'shopFront');
+      box(fr, v3(-0.25, 1.8, 18), v3(0.15, 1.8, 2), 'nycBrick', 0, 0, 0, NS);
+      // the windows: bread trays glowing in the bakery, meats and cheese in the deli, the bodega's crowded shelves; glass over them
+      const wn = O('Shop Windows', 'deco'); pic(wn, v3(3.6, 1.75, SF + 0.35), 5.6, 2.3, Math.PI, 'winBakery', { solid: false }); pic(wn, v3(10.5, 1.75, SF + 0.35), 3.4, 2.3, Math.PI, 'winDeli', { solid: false });
+      pic(wn, v3(7.35, 1.25, SF + 0.2), 1.1, 2.5, Math.PI, 'doorBakery', { solid: false, glow: false }); pic(wn, v3(13.1, 1.25, SF + 0.2), 1.2, 2.5, Math.PI, 'doorDeli', { solid: false, glow: false });
+      for (const [a, b] of [[0.8, 6.4], [8.8, 12.2], [6.8, 7.9], [12.5, 13.7]]) { const g = makeBox(v3((a + b) / 2, 1.6, SF + 0.05), v3((b - a) / 2, 1.4, 0.02)); g.leaf = true; wn.prims.push(g); wn.vis.push({ shape: 'box', c: v3((a + b) / 2, 1.6, SF + 0.05), h: v3((b - a) / 2, 1.4, 0.02), mat: 'carGlass', euler: [0, 0, 0], alpha: true }); }
+      // signs and awnings (soft: a duct bounces off canvas)
+      pic(fr, v3(3.6, 3.25, SF - 0.2), 5.4, 0.62, Math.PI, 'signBakery', { solid: false }); pic(fr, v3(11.2, 3.25, SF - 0.2), 4.2, 0.62, Math.PI, 'signDeli', { solid: false });
+      for (const [x0, x1, m] of [[0.4, 7.9, 'awnRed'], [8.5, 13.8, 'awnGreen'], [14.2, 19.4, 'awnBlue']]) { const aw = O('Awning', 'deco'); box(aw, v3((x0 + x1) / 2, 2.98, SF - 0.8), v3((x1 - x0) / 2, 0.04, 0.85), m, 0, -0.34, 0); box(aw, v3((x0 + x1) / 2, 2.62, SF - 1.62), v3((x1 - x0) / 2, 0.2, 0.02), m, 0, 0, 0, NS); surf(aw, SOFT); }
+      // the bodega: open door, neon in the window, shelves, a counter, the cat
+      const bo = O('Bodega', 'deco'); pic(bo, v3(16.9, 3.4, SF - 0.25), 4.6, 0.45, Math.PI, 'signBodega', { solid: false });
+      pic(bo, v3(15.0, 1.65, SF + 0.18), 1.1, 0.9, Math.PI, 'signOpen', { solid: false }); pic(bo, v3(18.5, 1.6, SF + 0.18), 1.2, 0.8, Math.PI, 'signSpider', { solid: false });
+      for (let i = 0; i < 3; i++) box(bo, v3(17, 0.4 + i * 0.7, 19.6), v3(2.4, 0.04, 0.35), 'oldWood', 0, 0, 0, NS); for (const x of [14.65, 19.35]) box(bo, v3(x, 1.15, 19.6), v3(0.04, 1.15, 0.35), 'oldWood', 0, 0, 0, NS);
+      for (let i = 0; i < 18; i++) box(bo, v3(15 + rnd() * 4, 0.55 + Math.floor(rnd() * 3) * 0.7, 19.55), v3(0.1 + rnd() * 0.1, 0.12 + rnd() * 0.08, 0.1), ['paintRed', 'plasticYellow', 'paintBlue', 'paintGreen', 'paintOrange'][i % 5], 0, 0, 0, { noCollide: true });
+      box(bo, v3(15.2, 0.5, 18), v3(0.45, 0.5, 1.2), 'oldWood'); box(bo, v3(15.2, 1.02, 17.5), v3(0.2, 0.02, 0.25), 'radio', 0, 0, 0, { noCollide: true });
+      gapO('Bodega Door', v3(16.7, 1.525, SF), v3(0, 0, 1), v3(1, 0, 0), 0.7, 0.875);   // above the cat
+      lamp('Bodega Light', v3(17, 3.2, 18.2), 0xfff0d0, 4, 7); lamp('Bakery Glow', v3(3.6, 2.6, 15.2), 0xffb060, 5, 9); }
+    // the bodega cat: completely static, extremely judgmental. Hitting it costs you spiritually (play.js: a meow and a burst)
+    together(() => { const x = 16.7, z = SF + 0.05, cat = O('Bodega Cat', 'deco', { cat: true });
+      ball(cat, v3(x, 0.16, z), 0.17, 'catFur'); ball(cat, v3(x, 0.3, z - 0.07), 0.12, 'catFur'); ball(cat, v3(x, 0.45, z - 0.11), 0.105, 'catFur');
+      for (const s of [-1, 1]) pipe(cat, v3(x + s * 0.05, 0.52, z - 0.12), v3(x + s * 0.075, 0.62, z - 0.13), 0.03, 'catFur', { noCollide: true, cone: true });
+      for (const s of [-1, 1]) ball(cat, v3(x + s * 0.04, 0.47, z - 0.2), 0.02, 'catEye', { noCollide: true, glow: true });
+      pipe(cat, v3(x + 0.12, 0.05, z + 0.08), v3(x + 0.26, 0.08, z - 0.12), 0.03, 'catFur', { noCollide: true });
+      for (const s of [-1, 1]) ball(cat, v3(x + s * 0.06, 0.04, z - 0.15), 0.045, 'catWhite', { noCollide: true }); });
+    // the low gate between the bakery window and the deli door, the dangling FRESH sign, the hanging plants, boxes
+    { const g = frame('Bakery Low Gate', 8.15, 14.1, 2.2, 1.35, 'z', 'gateOrange', 'neonMagenta'); surf(g, HARD); }
+    { const fs = O('Fresh Sign', 'deco'); pic(fs, v3(3.2, 2.15, 14.55), 1.3, 0.48, Math.PI, 'signFresh', { both: true, surf: SOFT }); for (const dx of [-0.55, 0.55]) hang(fs, v3(3.2 + dx, 2.39, 14.55), v3(3.2 + dx, 2.7, 14.55)); }
+    for (const x of [9.6, 12.4]) { const pl = O('Hanging Plant', 'deco'); ball(pl, v3(x, 2.0, 14.6), 0.24, 'leaves', { leafSolid: true }); pipe(pl, v3(x, 1.76, 14.6), v3(x, 1.95, 14.6), 0.2, 'terracotta', { noCollide: true }); hang(pl, v3(x, 2.2, 14.6), v3(x, 2.68, 14.6)); surf(pl, SOFT); }
+    { const cb = O('Cardboard Boxes', 'deco'); for (const [x, y, z, s] of [[14.0, 0.3, 15.2, 0.3], [14.05, 0.82, 15.2, 0.22], [13.4, 0.25, 15.4, 0.25], [-1.0, 0.3, 15.2, 0.3], [-0.9, 0.82, 15.1, 0.22]]) box(cb, v3(x, y, z), v3(s * 1.2, s, s), 'cardboard', rnd() * 0.5); surf(cb, SOFT); }
+
+    // ---- 3 + 4 + 5 the skyscraper: round voids into two sky lobbies, the Spine (a 6 x 6 m shaft) down the middle, the lobby's
+    // round arch out to the avenue; its fire escape climbs the west face from the cross street
+    const X0 = 26, X1 = 44, Z0 = 20, Z1 = 38, H = 48, T = 0.5, SX0 = 32, SX1 = 38, SZ0 = 26, SZ1 = 32, ST2 = 0.4, YA = 21.5, YB = 35.2;
+    const tower = O('Spine Tower', 'building', { wallNormal: v3(-1, 0, 0), tall: H, perchHeight: H });
+    wall(tower, 'x', Z0, X0 + T / 2, X1 - T / 2, 0, H + 1, T, [{ u: 35, y: 3.4, r: 3.0 }, { u: 30.6, y: YA, r: 2.5 }, { u: 39.4, y: YA, r: 2.5 }, { u: 35, y: YB, r: 2.4 }], 'brutal');
+    wall(tower, 'x', Z1, X0 + T / 2, X1 - T / 2, 0, H + 1, T, [{ u: 35, y: YA, r: 2.5 }], 'brutal');
+    wall(tower, 'z', X0, Z0 - T / 2, Z1 + T / 2, 0, H + 1, T, [{ u: 29, y: YA, r: 2.6 }, { u: 29, y: YB, r: 2.4 }], 'brutal');
+    wall(tower, 'z', X1, Z0 - T / 2, Z1 + T / 2, 0, H + 1, T, [{ u: 29, y: YA, r: 2.5 }], 'brutal');
+    { const fl = O('Spine Tower Floors', 'deco'), hole = { x0: SX0 - ST2, x1: SX1 + ST2, z0: SZ0 - ST2, z1: SZ1 + ST2 }, ix0 = X0 + T / 2, ix1 = X1 - T / 2, iz0 = Z0 + T / 2, iz1 = Z1 - T / 2;
+      for (const [y, th] of [[7.5, 0.5], [18, 0.4], [25.4, 0.4], [32.4, 0.4], [38.4, 0.4], [H, 0.5]]) slab(fl, ix0, ix1, iz0, iz1, y, th, hole, y === 18 || y === 32.4 ? 'lobbyFloor' : 'nycConcrete');
+      // the shaft's walls from the lobby ceiling to the roof, with round openings onto the two sky lobbies
+      const sh = O('The Spine', 'wall', { wallNormal: v3(1, 0, 0), tall: H });
+      wall(sh, 'z', SX0 - ST2 / 2, SZ0 - ST2, SZ1 + ST2, 7.5, H + 1, ST2, [{ u: 29, y: YA, r: 2.0 }, { u: 29, y: YB, r: 1.9 }], 'shaftWall', 'neonCyanTrim');
+      wall(sh, 'z', SX1 + ST2 / 2, SZ0 - ST2, SZ1 + ST2, 7.5, H + 1, ST2, [{ u: 29, y: YA, r: 2.0 }], 'shaftWall', 'neonCyanTrim');
+      wall(sh, 'x', SZ0 - ST2 / 2, SX0, SX1, 7.5, H + 1, ST2, [{ u: 35, y: YA, r: 2.0 }, { u: 35, y: YB, r: 1.9 }], 'shaftWall', 'neonCyanTrim');
+      wall(sh, 'x', SZ1 + ST2 / 2, SX0, SX1, 7.5, H + 1, ST2, [{ u: 35, y: YA, r: 2.0 }], 'shaftWall', 'neonCyanTrim');
+      // round openings are gaps (the inscribed square)
+      const rg = (name, c, n, u, r) => gapO(name, c, n, u, (r - 0.42) / Math.SQRT2, (r - 0.42) / Math.SQRT2);   // the square inside the round trim
+      rg('Lobby Arch', v3(35, 3.4, Z0), v3(0, 0, 1), v3(1, 0, 0), 3.0);
+      rg('Circular Gap North A1', v3(30.6, YA, Z0), v3(0, 0, 1), v3(1, 0, 0), 2.5); rg('Circular Gap North A2', v3(39.4, YA, Z0), v3(0, 0, 1), v3(1, 0, 0), 2.5); rg('Circular Gap North B', v3(35, YB, Z0), v3(0, 0, 1), v3(1, 0, 0), 2.4);
+      rg('Circular Gap South A', v3(35, YA, Z1), v3(0, 0, 1), v3(1, 0, 0), 2.5); rg('Circular Gap West A', v3(X0, YA, 29), v3(1, 0, 0), v3(0, 0, 1), 2.6); rg('Circular Gap West B', v3(X0, YB, 29), v3(1, 0, 0), v3(0, 0, 1), 2.4);
+      rg('Circular Gap East A', v3(X1, YA, 29), v3(1, 0, 0), v3(0, 0, 1), 2.5);
+      for (const [n, c, nn, u] of [['West', v3(SX0 - 0.2, YA, 29), v3(1, 0, 0), v3(0, 0, 1)], ['East', v3(SX1 + 0.2, YA, 29), v3(1, 0, 0), v3(0, 0, 1)], ['North', v3(35, YA, SZ0 - 0.2), v3(0, 0, 1), v3(1, 0, 0)], ['South', v3(35, YA, SZ1 + 0.2), v3(0, 0, 1), v3(1, 0, 0)]]) rg(`Spine Window ${n} A`, c, nn, u, 2.0);
+      rg('Spine Window West B', v3(SX0 - 0.2, YB, 29), v3(1, 0, 0), v3(0, 0, 1), 1.9); rg('Spine Window North B', v3(35, YB, SZ0 - 0.2), v3(0, 0, 1), v3(1, 0, 0), 1.9);
+      gapO('Spine Top', v3(35, H + 0.6, 29), v3(0, 1, 0), v3(1, 0, 0), 2.9, 2.9); gapO('Spine Bottom', v3(35, 7.25, 29), v3(0, 1, 0), v3(1, 0, 0), 2.9, 2.9); }
+    // the slalom inside the Spine: flat gates hung from the shaft walls at different heights, offset in turn
+    [[43.5, 35, 29], [40.5, 36.4, 30.2], [29.8, 33.6, 29.4], [27.4, 36.4, 28.0], [15.2, 35, 30.6], [11.2, 35, 27.4]].forEach(([y, x, z], i) => {
+      const g = gate(`Spine Gate ${i + 1}`, v3(x, y, z), 1.7, 1.7, 'y', 'gateOrange', 'neonCyan');
+      for (const [dx, dz] of [[-0.92, -0.92], [0.92, 0.92], [-0.92, 0.92], [0.92, -0.92]]) { const ax = x + dx, az = z + dz, wx = dx < 0 ? SX0 : SX1, wz = dz < 0 ? SZ0 : SZ1, toX = Math.abs(ax - wx) < Math.abs(az - wz);
+        hang(g, v3(ax, y, az), toX ? v3(wx, y + 1.4, az) : v3(ax, y + 1.4, wz)); } });
+    { const sg = O('Spine Sign', 'deco'); pic(sg, v3(35, 7.8, Z0 - 0.3), 5, 1.0, Math.PI, 'signSpine', { solid: false }); }
+    // inside: the lobby (a desk, round columns), sky lobby A and B (round columns, benches); light through the west voids
+    { const lb = O('Lobby Desk', 'deco'); box(lb, v3(30, 0.55, 33), v3(2, 0.55, 0.6), 'marbleDark'); box(lb, v3(30, 1.12, 33), v3(2.05, 0.03, 0.65), 'brass', 0, 0, 0, NS); }
+    for (const [x, z] of [[29.2, 23.2], [40.8, 23.2], [29.2, 34.8], [40.8, 34.8]]) { for (const [y0, y1] of [[0, 7], [18, 25], [32.4, 38]]) { const c = O('Tower Column', 'pole'); pipe(c, v3(x, y0, z), v3(x, y1, z), 0.24, 'columnConcrete'); surf(c, HARD); } }
+    for (const [y, z] of [[18, 36.4], [32.4, 21.6]]) { const b = O('Sky Lobby Bench', 'deco'); box(b, v3(35, y + 0.23, z), v3(1.6, 0.23, 0.3), 'marbleDark'); }
+    lamp('Lobby Light', v3(35, 6.6, 24), 0xffe4c0, 6, 12); lamp('Sky Lobby A', v3(35, 24.6, 23), 0xfff0e0, 5, 12); lamp('Spine Glow', v3(35, 30, 29), 0x7af0ff, 5, 10);
+    { const ls = O('Light Shafts', 'deco'); pipe(ls, v3(X0 - 0.4, YA, 29), v3(36, YA - 2.4, 30.5), 1.9, 'lightShaft', { noCollide: true, glow: true, alpha: true }); pipe(ls, v3(X0 - 0.4, YB, 29), v3(33, YB - 1.6, 30), 1.7, 'lightShaft', { noCollide: true, glow: true, alpha: true }); }
+    // the fire escape: five landings up the west face, zigzag stairs between them inside its rail, square gates hung off it
+    together(() => { const fe = O('Fire Escape', 'deco'), xa = X0 - T / 2, xo = xa - 1.25, xm = (xa + xo) / 2, ys = [3.6, 7.2, 10.8, 14.4, 18.0];
+      ys.forEach((y, k) => { box(fe, v3(xm, y, 29), v3(0.62, 0.04, 6), 'iron'); pipe(fe, v3(xo, y + 1.0, 23), v3(xo, y + 1.0, 35), 0.025, 'iron', NS);
+        for (let z = 23; z <= 35.01; z += 1.5) pipe(fe, v3(xo, y, z), v3(xo, y + 1.0, z), 0.018, 'iron', NS);
+        for (const z of [23, 35]) pipe(fe, v3(xo, y + 1.0, z), v3(xa, y + 1.0, z), 0.025, 'iron', NS);
+        if (k) { const up = k % 2, za = up ? 33.5 : 24.5, zb = up ? 25.5 : 32.5, y0 = ys[k - 1], L = Math.hypot(zb - za, y - y0) / 2, ang = Math.atan2(y - y0, zb - za);
+          box(fe, v3(xa - 0.33, (y + y0) / 2, (za + zb) / 2), v3(0.28, 0.03, L), 'iron', 0, -ang, 0, NS); } });
+      for (const [x, y] of [[xo, 3.6], [xa - 0.05, 3.6]]) pipe(fe, v3(x, 0.0, 34.9), v3(x, y, 34.9), 0.02, 'iron', NS);
+      surf(fe, HARD); });
+    [[2.0, 24.0], [5.4, 34.0], [9.0, 24.0], [12.6, 34.0], [16.2, 24.0]].forEach(([y, z], i) => { const xg = X0 - T / 2 - 2.15;
+      const g = gate(`Fire Escape Gate ${i + 1}`, v3(xg, y, z), 1.5, 1.5, 'z', 'gateOrange', 'neonLime');
+      if (y > 3) { const yl = [3.6, 7.2, 10.8, 14.4, 18.0].filter(q => q < y).pop(); pipe(g, v3(xg + 0.81, y - 0.6, z), v3(X0 - T / 2 - 1.25, yl + 0.02, z), 0.03, 'iron', NS); pipe(g, v3(xg + 0.81, y + 0.6, z), v3(X0 - T / 2 - 1.25, yl + 1.0, z), 0.03, 'iron', NS); }
+      else for (const dx of [-0.81, 0.81]) pipe(g, v3(xg + dx, 0, z), v3(xg + dx, y - 0.81, z), 0.04, 'gateOrange', NS); });
+    // laundry lines across the cross street, south of the fire escape (soft: they give)
+    for (const [y, z] of [[8.6, 36.6], [10.6, 37.4], [12.4, 36.2]]) { const ln = bar('Laundry Line', v3(19.6, y, z), v3(X0 - T / 2, y + 0.15, z), 0.015, 'chain'); surf(ln, SOFT);
+      const cl = O('Laundry', 'deco'); for (let x = 20.4; x < 25; x += 0.75 + rnd() * 0.5) { const w = 0.25 + rnd() * 0.25, h = 0.35 + rnd() * 0.4; box(cl, v3(x, y - h / 2 + 0.05 * (x - 19.6) / 6, z), v3(w, h / 2, 0.01), ['cloth1', 'cloth2', 'cloth3', 'cloth4'][Math.floor(rnd() * 4)], 0, 0, 0, NS); } surf(cl, SOFT); }
+    { const pc = O('Parked Car', 'deco'); for (const z of [28, 33.6, 39]) { box(pc, v3(20.9, 0.62, z), v3(0.9, 0.36, 2.3), 'carSilver'); box(pc, v3(20.9, 1.2, z + 0.2), v3(0.82, 0.25, 1.25), 'carGlass'); for (const dz of [-1.45, 1.45]) pipe(pc, v3(20.0, 0.33, z + dz), v3(21.8, 0.33, z + dz), 0.32, 'rubberBlack', NS); } surf(pc, HARD); }
+
+    // ---- 7 the walk-up roof: the water tower on its stilts, AC units, a stair hut; a roof gate, then the drop gates to the finish
+    { const RY = 16, wx = -15.5, wz = -13, wt = O('Water Tower', 'overunder', { obstacle: { a: v3(wx - 1.3, 0, wz), b: v3(wx + 1.3, 0, wz), under: RY + 3.4, over: RY + 8.6 } });
+      for (const [dx, dz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) pipe(wt, v3(wx + dx, RY, wz + dz), v3(wx + dx * 0.85, RY + 3.4, wz + dz * 0.85), 0.1, 'iron');
+      for (const s of [-1, 1]) { pipe(wt, v3(wx - 1.3, RY + 1.6, wz + s * 1.25), v3(wx + 1.3, RY + 1.6, wz + s * 1.25), 0.04, 'iron', NS); pipe(wt, v3(wx + s * 1.25, RY + 1.6, wz - 1.3), v3(wx + s * 1.25, RY + 1.6, wz + 1.3), 0.04, 'iron', NS); }
+      box(wt, v3(wx, RY + 3.45, wz), v3(1.75, 0.08, 1.75), 'oldWood', 0, 0, 0, NS);
+      pipe(wt, v3(wx, RY + 3.53, wz), v3(wx, RY + 7.3, wz), 1.6, 'towerWood'); pipe(wt, v3(wx, RY + 7.25, wz), v3(wx, RY + 8.6, wz), 1.78, 'roofDark', { cone: true, noCollide: true });
+      for (const y of [RY + 4.3, RY + 5.6, RY + 6.8]) pipe(wt, v3(wx, y, wz), v3(wx, y + 0.06, wz), 1.63, 'iron', { noCollide: true });
+      surf(wt, HARD);
+      const ac = O('AC Units', 'deco'); for (const [x, z] of [[-22, -9], [-24.5, -9], [-9.5, -17], [-11.5, -8]]) { box(ac, v3(x, RY + 0.6, z), v3(0.9, 0.6, 0.7), 'galv'); box(ac, v3(x, RY + 1.22, z), v3(0.45, 0.02, 0.45), 'darkMetal', 0, 0, 0, { noCollide: true }); }
+      const hut = O('Stair Hut', 'building', { tall: 2.6 }); box(hut, v3(-26.5, RY + 1.3, -18), v3(1.6, 1.3, 1.8), 'nycBrick'); box(hut, v3(-26.5, RY + 2.63, -18), v3(1.65, 0.03, 1.85), 'roofTar', 0, 0, 0, NS);
+      const g = gate('Roof Gate', v3(-27.4, RY + 1.6, -9), 2.2, 1.9, 'x'); for (const dz of [-1.16, 1.16]) pipe(g, v3(-27.4, RY, -9 + dz), v3(-27.4, RY + 0.63, -9 + dz), 0.05, 'gateOrange', NS);
+      // the diner's blade sign sticks out of the walk-up's face; the first drop gate hangs from it
+      const ds = O('Diner Sign', 'deco'); box(ds, v3(-28.6, 12.6, -2.95), v3(0.08, 1.6, 1.05), 'darkMetal', 0, 0, 0, NS); pic(ds, v3(-28.69, 12.6, -2.9), 1.8, 2.9, -Math.PI / 2, 'signDiner', { solid: false }); pic(ds, v3(-28.51, 12.6, -2.9), 1.8, 2.9, Math.PI / 2, 'signDiner', { solid: false });
+      pipe(ds, v3(-28.6, 14.3, -4), v3(-28.6, 14.3, -0.3), 0.05, 'darkMetal', NS); surf(ds, HARD);
+      const d1 = gate('Drop Gate 1', v3(-29.4, 12.6, -0.6), 2.0, 1.8, 'z'); for (const dx of [-1.06, 1.06]) hang(d1, v3(-29.4 + dx, 13.56, -0.6), v3(-28.6, 14.3, -0.6));
+      const d2 = gate('Drop Gate 2', v3(-33.2, 4.9, 3.6), 2.0, 1.8, 'x'); for (const dz of [-1.06, 1.06]) hang(d2, v3(-33.2, 5.86, 3.6 + dz), v3(-33.2, 6.54, 3.6 + dz)); }
+    // the finish: a glowing neon frame hung under the tracks, right over the start box
+    { const FX = -38.5, fo = O('Finish Gate', 'deco'), zc = 6, w = 4.0, h = 2.3, yc = 4.9;
+      for (const [c, hh] of [[v3(FX, yc + h / 2 + 0.05, zc), v3(0.05, 0.05, w / 2 + 0.1)], [v3(FX, yc - h / 2 - 0.05, zc), v3(0.05, 0.05, w / 2 + 0.1)], [v3(FX, yc, zc - w / 2 - 0.05), v3(0.05, h / 2 + 0.1, 0.05)], [v3(FX, yc, zc + w / 2 + 0.05), v3(0.05, h / 2 + 0.1, 0.05)]]) box(fo, c, hh, 'neonMagenta', 0, 0, 0, { noSurvey: true, glow: true });
+      for (const dz of [-w / 2, w / 2]) hang(fo, v3(FX, yc + h / 2 + 0.1, zc + dz), v3(FX, 6.54, zc + dz));
+      pic(fo, v3(FX - 0.08, yc + h / 2 + 0.45, zc), 2.2, 0.55, -Math.PI / 2, 'signFinish', { solid: false }); pic(fo, v3(FX + 0.08, yc + h / 2 + 0.45, zc), 2.2, 0.55, Math.PI / 2, 'signFinish', { solid: false });
+      surf(fo, HARD); gapO('Finish Gate opening', v3(FX, yc, zc), v3(1, 0, 0), v3(0, 0, 1), w / 2 - 0.08, h / 2 - 0.08);
+      lamp('Finish Neon', v3(FX + 0.5, 5.6, 6), 0xff40c8, 5, 10); }
+    // ---- 6 the Tram Weave: gates hung under the cross beams, one standing on the deck west of the train
+    [[25, 4.0], [15, 8.0], [5, 4.0], [-5, 8.0]].forEach(([x, z], i) => { const g = gate(`Tram Weave Gate ${i + 1}`, v3(x - 0.5, 4.75, z), 2.2, 1.6, 'x', 'gateOrange', 'neonCyan');
+      for (const dz of [-1.16, 1.16]) hang(g, v3(x - 0.5, 5.62, z + dz), v3(x - 0.2, 5.72, z + dz)); });
+    { const g = gate('Deck Gate', v3(-13, 8.15, 6), 2.6, 2.2, 'x', 'gateOrange', 'neonCyan'); for (const dz of [-1.36, 1.36]) pipe(g, v3(-13, 6.66, 6 + dz), v3(-13, 6.99, 6 + dz), 0.06, 'gateOrange', NS); }
+
+    return K.done({ id: 'slackvegan', title: 'Slackvegan City', theme: 'nyc', zones, spawn: { pos: v3(-41, 0.03, 6), yaw: -Math.PI / 2 }, bounds: { x: [-XW - 1, XW + 1], z: [-25, 43] } });
+  }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet Revelstoke park: tall cedars to weave through, swings, a tire tunnel and mountain views.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },
-    school: { id: 'school', title: 'Vaporwave School', blurb: 'An abandoned school at sunset: a bowl, chrome pillars, rooftop gaps and empty classrooms.', build: () => closeIn(S.surveyObstacles(edited('school', buildSchool()))) },
+    school: { id: 'school', hidden: true, title: 'Vaporwave School', blurb: 'An abandoned school at sunset: a bowl, chrome pillars, rooftop gaps and empty classrooms.', build: () => closeIn(S.surveyObstacles(edited('school', buildSchool()))) },
     clappy: { id: 'clappy', title: 'Clappy Park', blurb: 'A sunny city park: slides and climbing bars, cherry trees, rooftops and alleys to rip.', build: () => closeIn(S.surveyObstacles(edited('clappy', buildClappy()))) },
     warehouse: { id: 'warehouse', title: 'More Warehouse', blurb: 'A huge warehouse: rack aisles, container stacks, catwalks and skylights to dive through.', build: () => closeIn(S.surveyObstacles(edited('warehouse', buildWarehouse()))) },
     ship: { id: 'ship', title: 'Ship Drugs', blurb: 'An 80s cruise ship mid police raid: a neon atrium, a drained pool, slide tubes and lots of gaps.', build: () => closeIn(S.surveyObstacles(edited('ship', buildShip()))) },
     murderdome: { id: 'murderdome', title: 'The Murderdome', blurb: 'A ruined dome at dusk: scrap, fire, chain-link and a bowl. Witness me!', build: () => closeIn(S.surveyObstacles(edited('murderdome', buildMurderdome()))) },
+    slackvegan: { id: 'slackvegan', title: 'Slackvegan City', blurb: 'A sticky New York block at golden hour: taxis, the El, fire escapes, round voids and a full-building dive. The bodega cat judges.', build: () => closeIn(S.surveyObstacles(edited('slackvegan', buildSlackvegan()))) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'Where it all started: swings, slides, monkey bars, a brick wall and a skate corner.', build: () => closeIn(S.surveyObstacles(edited('playground', Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })))) },
   };
-  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose; S.buildMurderdome = buildMurderdome;
+  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose; S.buildMurderdome = buildMurderdome; S.buildSlackvegan = buildSlackvegan;
 })(typeof window !== 'undefined' ? window : globalThis);

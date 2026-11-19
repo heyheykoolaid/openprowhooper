@@ -350,11 +350,11 @@ async function lbPost() {
   LB.busy = false; lbResultsBox(); if (msg) { const n = document.querySelector('#lbBox p.note:last-child'); if (n) n.textContent = msg; }
 }
 // one board per map, shown as a carousel like the Maps screen (← → while it is open)
-function lbView(dir) { const ids = Object.keys(S.MAPS), k = ids.indexOf(S.MAPS[LB.view] ? LB.view : MAP_ID); LB.view = ids[(k + dir + ids.length) % ids.length]; LB.open = null; lbRender(); }
+function lbView(dir) { const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden), k = ids.indexOf(S.MAPS[LB.view] ? LB.view : MAP_ID); LB.view = ids[(k + dir + ids.length) % ids.length]; LB.open = null; lbRender(); }
 document.addEventListener('keydown', e => { if ($('#lbScreen').classList.contains('hide') || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return; if (e.key === 'ArrowLeft') { lbView(-1); e.preventDefault(); } if (e.key === 'ArrowRight') { lbView(1); e.preventDefault(); } });
 function lbOpen(from) { LB.from = from || (mode === 'menu' ? 'menu' : 'results'); LB.open = null; LB.view = MAP_ID; show('#lbScreen'); lbRender(); lbLoad(lbToday()).then(lbRender); }
 function lbRender() {
-  const el = $('#lbPanel'); if (!el) return; const ids = Object.keys(S.MAPS), V = S.MAPS[LB.view] ? LB.view : MAP_ID, runs = (LB.runs || []).filter(e => e.map === V), R = LB.open, th = (window.PW_MAPTHUMBS || {})[V];
+  const el = $('#lbPanel'); if (!el) return; const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden), V = S.MAPS[LB.view] ? LB.view : MAP_ID, runs = (LB.runs || []).filter(e => e.map === V), R = LB.open, th = (window.PW_MAPTHUMBS || {})[V];
   const count = id => (LB.runs || []).filter(e => e.map === id).length;
   el.innerHTML = `<h2>DAILY LEADERBOARD</h2>
     <p class="note">Best 2:00 Session per pilot. Today's board only: a new one starts every day at 00:00 UTC. Scores are what each player's game reported. Click a run to see how it was scored and watch it.</p>
@@ -437,9 +437,9 @@ async function judgeLoad(id) {
   JG.msgs[id] = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(id)} today yet.`;
   } finally { JG.busy = false; } judgeRender();
 }
-function judgeView(d) { const ids = Object.keys(S.MAPS); JG.view = ids[(ids.indexOf(JG.view) + d + ids.length) % ids.length]; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); }
+function judgeView(d) { const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden); JG.view = ids[(ids.indexOf(JG.view) + d + ids.length) % ids.length]; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); }
 function judgeRender() {
-  const el = $('#judgePanel'); if (!el) return; const ids = Object.keys(S.MAPS), V = S.MAPS[JG.view] ? JG.view : MAP_ID, C = JG.byMap[V] || [], th = (window.PW_MAPTHUMBS || {})[V], myName = pilotName().toLowerCase();
+  const el = $('#judgePanel'); if (!el) return; const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden), V = S.MAPS[JG.view] ? JG.view : MAP_ID, C = JG.byMap[V] || [], th = (window.PW_MAPTHUMBS || {})[V], myName = pilotName().toLowerCase();
   const count = id => (LB.runs || []).filter(e => e.map === id && String(e.name).toLowerCase() !== myName).length;
   el.innerHTML = `<h2>JUDGE THE COMMUNITY</h2>
     <p class="note">Moments from today's posted runs where the game is unsure, or now calls something different from what it called during the run. Pick a map, open a moment, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>

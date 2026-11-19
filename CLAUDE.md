@@ -235,7 +235,7 @@ the Pilot Warm-up is recommended once to anyone without a profile. The name goes
 feedback. Crashes play a thud (`crashThud`), except for the pilot named RidgeRipperFPV (`crashFart`) — on request.
 
 ## Maps (src/maps.js) and their look (src/worldview.js)
-`Sim.MAPS` lists the maps (carousel order): `moose` (Moose Knuckle Park, the default since 2026-11-17: `MAP_ID` in game.js), `school` (the Abandoned Vaporwave School), `clappy`, `warehouse` and `playground` (the original;
+`Sim.MAPS` lists the maps (carousel order): `moose` (Moose Knuckle Park, the default since 2026-11-17: `MAP_ID` in game.js), `school` (the Abandoned Vaporwave School; hidden since 2026-11-19), `slackvegan` (Slackvegan City), `clappy`, `warehouse` and `playground` (the original;
 `buildPlayground()` in sim.js). The game builds one at start-up from `store 'map'`; the Map button on the main menu
 switches and reloads. A map is `{ objs, prims, zones, spawn, id, title, theme }`; the detector reads only tags
 (`obstacle`, `round`, `gap`, kind 'pole' capsules up to 0.25 m radius, kind 'wall'/'building', kind 'pilot'), so any
@@ -878,6 +878,30 @@ spider sugar sign"); the dust devils are a funnel of motes (`duskDevils` in worl
 read as "a ghostly christmas tree"); brighter fill (hemisphere 2.9, bounce 1.5, sun 3.9: "quite dark"). **Dome Rib
 over/unders**: every metre of each rib no steeper than ~40° is an over/under at the rib's chord height, unders counting only
 3 m below it (192 of them, 15-23 m up; the bot's Powerloops and Mattys on a rib are called: test/maps.js).
+
+## Slackvegan City (`slackvegan`, `buildSlackvegan` in maps.js, theme 'nyc'; 2026-11-19, from the owner's design brief)
+A sticky New York block at golden hour. x east, z south; the avenue runs east-west (road z 0..12, sidewalks -4..0 / 12..16) under
+an elevated subway (green pillars at z 0.9 / 11.1 every 10 m are poles; each 10 m span of deck is an over/under, over the rails
+or, under the parked train (x -5..25), over the train). The circuit: 1 Yellow Fever from the painted start box (x -38.5) east
+between stopped taxis under gates hung from signal arms; 2 hard right along the Bakery (glowing bread), the Deli and the corner
+Bodega, a low gate between bakery window and deli door, a dangling FRESH sign and hanging plants (soft); 3 up the skyscraper's
+fire escape on the cross street (x 20..26; five landings, five square gates hung off it, laundry lines south of it); 4 in through
+round voids into sky lobby A (18-25 m) and B (32-38 m) of the brutalist Spine Tower (x 26..44, z 20..38, 48 m); 5 **the Spine**,
+a 6 x 6 m shaft from the open roof to the lobby with six flat slalom gates, out through the lobby's round arch; 6 west under the
+El through gates hung from its cross beams, a gate standing on the deck; 7 the walk-up roof (water tower over/under, AC units,
+Roof Gate), two drop gates (one from the diner's blade sign, one from the El) to the **finish**: a neon frame under the tracks
+right above the start box. Round holes are walls cut in 16 slices inside the circle with a round trim over the steps (`wall` in
+buildSlackvegan); their gaps are the square inside the trim. Surfaces: awnings, signs, plants, trash bags, boxes and laundry soft;
+cars, gates, pillars and the fire escape hard (crash over 5 m/s). **The bodega cat** (`cat: true` on the object): static; touching
+it plays a meow and a burst of floating "meow"s, and once a flight THE BODEGA CAT JUDGES YOU (`catHit`, `meowTick` in play.js).
+Not in (static world, the owner: "parked cars for now"): moving traffic, the passing train and its turbulence, warm ground-effect
+zones, sounds of the city. worldview.js: `nycMats` (its own random stream, so the other maps look the same), facade textures laid
+in world space so windows sit on a floor grid (`NYC_DENS`, `boxGeo(h, d, off)`), `nycBackdrop` (a ring of low blocks and towers
+in the haze, on a 480 m ground), `nycTick` (tired neon). Zone paint must never be `transparent` (zones skip the depth test; a
+transparent material is drawn after everything and showed through roofs). test/maps.js flies the bot on the Bakery Low Gate, the
+Water Tower and a Laundry Line; `tools/map_thumbs.py --extra --only=sv` shoots the check views.
+**The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
+and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
 
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
