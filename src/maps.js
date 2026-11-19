@@ -1482,7 +1482,7 @@
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(-15.2, 0.005, 14), h: v3(34.8, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(38, 0.005, 14), h: v3(12, 0, 2) });
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(35, 0.006, 18), h: v3(9, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(47, 0.006, 28), h: v3(3, 0, 12) });
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(19.2, 0.006, 29), h: v3(0.8, 0, 13) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(25.4, 0.006, 29), h: v3(0.6, 0, 13) });
-    zones.push({ shape: 'zone', mat: 'yellowLines', c: v3(0, 0.007, 6), h: v3(XW, 0, 0.18) });
+    zones.push({ shape: 'zone', mat: 'yellowLines', c: v3((-XW - 40.8) / 2, 0.007, 6), h: v3((XW - 40.8) / 2, 0, 0.18) }, { shape: 'zone', mat: 'yellowLines', c: v3((XW - 36.2) / 2, 0.007, 6), h: v3((XW + 36.2) / 2, 0, 0.18) });   // broken under the start box
     for (const z of [3.2, 8.8]) zones.push({ shape: 'zone', mat: 'laneDash', c: v3(0, 0.007, z), h: v3(XW, 0, 0.08) });
     zones.push({ shape: 'zone', mat: 'crosswalk', c: v3(18.3, 0.008, 6), h: v3(1.2, 0, 6) }, { shape: 'zone', mat: 'crosswalk', c: v3(23, 0.008, 14), h: v3(1.4, 0, 3), ry: Math.PI / 2 });
     { const cb = O('Curb', 'deco'); for (const [x0, x1, z] of [[-XW, XW, 0], [-XW, 19.6, 12], [26, XW, 12]]) box(cb, v3((x0 + x1) / 2, 0.07, z), v3((x1 - x0) / 2, 0.07, 0.12), 'nycConcrete', 0, 0, 0, NS);

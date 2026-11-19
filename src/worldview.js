@@ -597,8 +597,11 @@ function nycMats() {
   MAT.laneDash = S2({ map: T(256, 16, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#e8e6de'; g.fillRect(0, 0, w * 0.45, h); }), alphaTest: 0.3, roughness: 0.7 });
   { const t = MAT.laneDash.map; t.repeat.set(0.5, 1 / 0.16); }
   MAT.crosswalk = S2({ map: T(16, 256, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#ecebe4'; for (let y = 0; y < h; y += 128) g.fillRect(0, y + 8, w, 56); }), alphaTest: 0.3, roughness: 0.8 });
-  MAT.startBox = new THREE.MeshStandardMaterial({ alphaTest: 0.3, roughness: 0.8, map: T(512, 416, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#f2f0e8'; g.lineWidth = 14; g.strokeRect(10, 10, w - 20, h - 20);
-    g.fillStyle = '#f2f0e8'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = "900 120px Impact, 'Arial Black', sans-serif"; g.fillText('START', w / 2, h * 0.44); g.font = "900 46px Impact, 'Arial Black', sans-serif"; g.fillStyle = '#f2c018'; g.fillText('YELLOW FEVER', w / 2, h * 0.74); }) });
+  // the start box: a painted outline round the Static Massive logo (assets/flags/staticmassive.webp, white paint on the road; their
+  // mark, at the owner's request, for this game only); the outline alone until the picture has loaded
+  { const [c, g] = cnv(512, 416); g.strokeStyle = '#f2f0e8'; g.lineWidth = 14; g.strokeRect(10, 10, 492, 396); const t = tex(c); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    MAT.startBox = new THREE.MeshStandardMaterial({ alphaTest: 0.3, roughness: 0.8, map: t });
+    const src = (window.PW_FLAGS || {}).staticmassive; if (src) { const im = new Image(); im.onload = () => { const w = 452, h = w * im.height / im.width; g.drawImage(im, 256 - w / 2, 208 - h / 2, w, h); t.needsUpdate = true; }; im.src = src; } }
   MAT.stairDown = new THREE.MeshStandardMaterial({ roughness: 0.9, map: T(512, 228, (g, w, h) => { for (let x = 0; x < w; x += 32) { g.fillStyle = x % 64 ? '#1a1a1a' : '#2a2a28'; g.fillRect(x, 0, 32, h); } g.fillStyle = '#ffffff'; g.font = "900 54px Helvetica, Arial, sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SUBWAY ↓', w / 2, h / 2); }) });
   MAT.elGreen = S2({ map: T(128, 128, (g, w, h) => { g.fillStyle = '#3e5a48'; g.fillRect(0, 0, w, h); dots(g, w, h, 900, ['#6a4a32', '#2a3a30', '#5a7a64'], 1, 4, 0.5); g.fillStyle = '#26342c'; for (let y = 8; y < h; y += 32) for (let x = 8; x < w; x += 32) { g.beginPath(); g.arc(x, y, 2.5, 0, 7); g.fill(); } }), roughness: 0.7, metalness: 0.35 });
   MAT.elDeck = S2({ color: 0x2a2826, roughness: 0.9 }); MAT.iron = S2({ color: 0x2c2a28, roughness: 0.6, metalness: 0.5 });

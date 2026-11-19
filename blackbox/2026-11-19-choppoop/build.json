@@ -1,0 +1,33 @@
+{
+  "format": "pro-whooper-blackbox/1",
+  "saved": "2026-11-19T23:19:23.598Z",
+  "fc": {
+    "api": "1.48",
+    "firmware": "BTFL",
+    "version": "26.6.0",
+    "board": "G473",
+    "craftName": "choppoop"
+  },
+  "gameCraft": {
+    "frame": "air65",
+    "motor": "m0702ii_30k",
+    "prop": "hq31ul",
+    "battery": "b300",
+    "electronics": "air",
+    "look": {
+      "frame": "#7b0193",
+      "canopy": "#000000",
+      "props": "#fb00ff"
+    },
+    "names": {
+      "frame": "Air65 frame",
+      "motor": "0702 II 30000KV",
+      "prop": "HQ 31mm Ultralight 3-blade",
+      "battery": "1S 300mAh LiHV",
+      "electronics": "Air AIO 5-in-1 + C03 cam + Air canopy"
+    }
+  },
+  "buildSheet": {
+    "auw": "0"
+  }
+}

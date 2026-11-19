@@ -31,6 +31,9 @@ for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
 // 0.9, not the 0.45 of everything else; with it a whoop pushed into a wall sticks from about a third throttle. Physics
 // (Node) keeps no wallGrip, so its hash is unchanged; the game fills it in for pilots who have none.
 const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_DEF;
+// Battery drain (tune.drain): the motor model alone draws a third of what a real whoop does (Blackbox, 2026-11-19: a real Air65 hovers
+// on 10-14 W, the sim on 5-6 W); fitted on three quads' logs to 3.0-3.3 (4.3 on a cold, windy day). Absent in the physics = 1.
+const DRAIN_DEF = 3.2; if (tune.drain == null) tune.drain = DRAIN_DEF;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

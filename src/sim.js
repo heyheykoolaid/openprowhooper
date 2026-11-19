@@ -93,6 +93,10 @@ const PARTS = {
     b260:   { name: '1S 260mAh LiHV', cap: 260, mass: 6.3, r: 0.075, hv: true },
     b300:   { name: '1S 300mAh LiHV', cap: 300, mass: 7.4, r: 0.065, hv: true },
     b380:   { name: '1S 380mAh LiHV', cap: 380, mass: 9.4, r: 0.058, hv: true },
+    // BETAFPV LAVA II (95C): published weights; resistance from the owner's Blackbox log (2026-11-19: 0.074-0.089 ohm at the FC on a
+    // cold day, connector and leads included), taken back to a mild day (cold raises a LiPo's resistance by about a third)
+    lava280: { name: 'LAVA II 1S 280mAh LiHV', cap: 280, mass: 6.8, r: 0.062, hv: true },
+    lava320: { name: 'LAVA II 1S 320mAh LiHV', cap: 320, mass: 8.2, r: 0.057, hv: true },
     b450:   { name: '1S 450mAh LiPo', cap: 450, mass: 11.6, r: 0.050, hv: false },
     b550:   { name: '1S 550mAh LiHV', cap: 550, mass: 13.8, r: 0.045, hv: true },
     b2s300: { name: '2S 300mAh LiHV', cap: 300, mass: 16.5, r: 0.135, hv: true, cells: 2 },
@@ -722,6 +726,7 @@ class Drone {
     const Vocv = ocv(this.soc, p.bat.hv, p.bat.cells);
     const Vbus = Math.max(2.5 * p.bat.cells, Vocv - this.ibat * Rint);
     let Itot = 0.35; // electronics/VTX
+    const drain = +this.tune.drain || 1;
     const Fb = v3(), Tb = v3();
     let rotorAccelYaw = 0;
     // air relative velocity incl. wake
@@ -745,7 +750,7 @@ class Drone {
       const dw = (tau - Q) / p.rotorJ;
       w = this.fc.reversible ? w + dw * dt : Math.max(0, w + dw * dt);
       this.motorW[i] = w; this.motorI[i] = I;
-      Itot += Math.max(0, I * duty);
+      Itot += Math.max(0, I * duty) * drain;   // tune.drain: what the motor model leaves out (ESC, iron, the props' real torque); absent = 1
       rotorAccelYaw += -m.spin * p.rotorJ * dw; // reaction of spinning-up rotor on frame (about body Y)
       // prop velocity (body) at motor location
       const vp = add(vRelB, cross(this.w, m.pos));

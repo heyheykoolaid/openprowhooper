@@ -73,6 +73,10 @@ Matrix 2 AIO; 35 logs, the long ones 0 and 27-34): hover 25-28 % motor, motor co
 answers in ~23 ms), hover gyro noise unfiltered sd 10-43 °/s with peaks at 320-350 Hz and a broad wobble under 20 Hz (the
 sim had none: the "lofty, shuddery" feel the pilot missed). Fitted the same day with the Feel Lab tools (below).
 
+Third log (2026-11-19, `blackbox/2026-11-19-choppoop/`, the owner's Air65 Racing (choppoop: stock Betaflight 2026.6 tune, the diff
+in diff-all.txt; LAVA II 320 then 280 mAh packs; the checklist test plus a little freestyle; cold, a little wind; 4 packs of 37-69 s,
+`notes.md`). bum-darts' `diff all` is now in its folder too. Feel Lab on it: hover 30-34 % vs sim 34-38 % (Air65 builds), lag
+2-9 ms vs 7-12, wobble 3.7-4.6 vs 2.3-2.9 °/s; the throttle steps were not clean enough to time. Its battery data fitted `tune.drain`.
 Second log (2026-11-18, `blackbox/2026-11-18-choppoop/`, another pilot's similar whoop with 30000KV motors, BETAFPV G473
 board, Betaflight 2026.6 alpha, a near-stock tune: PIDs 45/80/30, stock 4.5 filters, master 100, no thrust linear; 9 logs):
 against the Air65 Champion build (0702 II 30000KV) roll / pitch lag 6-9.5 ms real vs 7.5-9 sim with no delay (the owner's quad,
@@ -446,7 +450,14 @@ drains from the real current, the OCV curve and the internal resistance (×1.9 n
 loaded voltage stays under `BROWNOUT` (2.9 V a cell) for 0.25 s the AIO browns out: `drone.brownout`, disarmed, no
 arming until B (`freshPack` in input.js; R keeps the pack). The game warns at 15% (`batWarn` in play.js); the OSD shows
 mAh and % left (∞ when off). test/battery.js: an Air65 on 300 mAh, flown hard, lasts about 5 minutes then browns out.
-Fit the drain to a Blackbox log when one arrives (testers' real packs last about 3 minutes of freestyle).
+**Battery drain fitted (2026-11-19, `tune.drain`, `DRAIN_DEF` 3.2 in game.js; Advanced physics → Feel → Battery drain):** the motor
+model alone draws a third of what a real whoop does: a real Air65 hovers on 10-14 W (3-4 A, ~29-31k rpm), the sim on 5-6 W (~1.4 A,
+37-41k rpm), so its packs lasted ~20 minutes. A factor on the motors' battery current (absent = 1: the physics and its hash
+unchanged; the game fills in 3.2) fitted by flying each log's sticks through the sim and matching mAh used: 3.0 (choppoop
+2026-11-18), 3.2 (bum-darts), 4.3 (choppoop 2026-11-19, cold and windy). With it a 300 mAh pack lasts ~3.9 minutes of real
+freestyle sticks. Not fixed, only measured: the sim's props hover ~25 % faster than the real ones (31k vs 39k rpm) on a third of
+the power (the props' ct / cq are too efficient; fitting them changes yaw and motor response, so it waits for the owner).
+**LAVA II packs** (`lava280` 6.8 g, `lava320` 8.2 g, published weights; resistance from the 2026-11-19 log: 0.074-0.089 ohm cold).
 
 ## Whoop feel calibration (2026-11-18; tools/feelcheck.js, test/feel.js)
 `node tools/feelcheck.js [preset…]` flies every preset through the target-feel tests of a whoop-sim spec the owner
@@ -900,6 +911,7 @@ in world space so windows sit on a floor grid (`NYC_DENS`, `boxGeo(h, d, off)`),
 in the haze, on a 480 m ground), `nycTick` (tired neon). Zone paint must never be `transparent` (zones skip the depth test; a
 transparent material is drawn after everything and showed through roofs). test/maps.js flies the bot on the Bakery Low Gate, the
 Water Tower and a Laundry Line; `tools/map_thumbs.py --extra --only=sv` shoots the check views.
+The start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`, white paint; their mark, at the owner's request, credited on the main menu and in the README), the centre line broken under it.
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
 
