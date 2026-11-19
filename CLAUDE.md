@@ -293,7 +293,7 @@ counts it as a tap, wall ride, over/under or pole. `w.edges` is where the walls 
   quad drawn by WebGL after the frame (`fxRender` in play.js; Options → Screen effects, `store 'screenFx'`); the filter is
   gone. Keep CSS filters, blend modes and backdrop-filter off anything that covers the game view.
 
-## The Map Editor (src/mapedit.js; the edit layer in maps.js) — for every pilot, main menu → Map Editor
+## The Map Editor (src/mapedit.js; the edit layer in maps.js) — the owner only for now (2026-11-19: main menu → Map Editor shows for heyheykoolaid, like Tools & labs; `ownerMenus`)
 A layout is a layer over the generated map (`pro-whooper-mapedit/1`: `moved` { key: { dx, dy, dz, ry°, s } }, `removed`
 [key], `added` [{ asset, x, y, z, ry, s }]), kept per map in `store 'mapEdits'` and applied at start-up (`MAP_EDITS` in
 game.js → `S.setMapEdits` → every `S.MAPS[id].build()` runs `applyMapEdits` before the Surveyor and `closeIn`). A piece

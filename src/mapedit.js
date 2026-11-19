@@ -371,7 +371,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { if (ME.keys) ME.keys[e.code] = false; });
 document.addEventListener('click', e => {
-  if (mode !== 'mapedit') { const b = e.target.closest('[data-act="mapedit"]'); if (b) { const job = mode === 'paused' ? telCapture('mapedit') : null; if (job) procFlight(job, openMapEditor); else openMapEditor(); } return; }
+  if (mode !== 'mapedit') { const b = e.target.closest('[data-act="mapedit"]'); if (b && (ghMenus() || b.id === 'pauseMapEdit')) {   // the Map Editor is the owner's for now (2026-11-19)
+    const job = mode === 'paused' ? telCapture('mapedit') : null; if (job) procFlight(job, openMapEditor); else openMapEditor(); } return; }
   const a = e.target.closest('[data-measset]'); if (a && ME.locked) { meLockedHint(); return; } if (a) { ME.place = ME.place === a.dataset.measset ? null : a.dataset.measset; ME.sel.clear(); meSelBox(); meLibrary(); mePanels(); return; }
   const t = e.target.closest('[data-metool]'); if (t) { ME.tool = t.dataset.metool; ME.place = null; meLibrary(); meToolbar(); return; }
   const b = e.target.closest('[data-me]'); if (!b) return; const k = b.dataset.me;
