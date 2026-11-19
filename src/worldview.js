@@ -334,7 +334,7 @@ function mats() {
       g.fillStyle = '#e2bf66'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 50px Georgia, serif'; g.fillText('MOOSE KNUCKLE', 256, 70); g.font = 'bold 42px Georgia, serif'; g.fillText('PARK', 256, 118);
       g.beginPath(); g.arc(256, 200, 46, 0, Math.PI * 2); g.fill(); g.fillStyle = '#6a262a';   // the emblem: a plain moose silhouette in a gold disc
       g.fillRect(222, 196, 62, 22); g.fillRect(226, 216, 7, 22); g.fillRect(272, 216, 7, 22); g.fillRect(278, 178, 14, 26); g.fillRect(286, 190, 18, 12); g.fillRect(266, 168, 30, 7); g.fillRect(266, 160, 6, 10); g.fillRect(288, 160, 6, 10);
-      g.fillStyle = '#e2bf66'; g.font = '24px Georgia, serif'; g.fillText('1625 Arrow Dr', 256, 284); const t2 = tex(c); t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping; return t2; })();
+      const t2 = tex(c); t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping; return t2; })();
     const P = (hex, o = {}) => std(T(hex, ['#ffffff', '#000000', '#5a4a3a'], 2500, 1, 2, 0.12, 'rgba(70,60,50,A)'), { roughness: 0.75, metalness: 0.1, ...o });
     for (const k of ['grass', 'duff', 'woodchip', 'path', 'gravel', 'dryGrass', 'leafLitter']) MAT[k] = std(TX[k], { roughness: 0.95 });
     MAT.cedarBark = std(TX.cedarBark, { roughness: 0.95 }); MAT.birchBark = std(TX.birchBark, { roughness: 0.8 }); MAT.oldWood = std(TX.oldWood, { roughness: 0.9 });
