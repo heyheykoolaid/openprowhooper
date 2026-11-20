@@ -795,7 +795,12 @@ const WHOOP_LOOK = {
     whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, fractal65: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0012, carbon: true }, fractal75: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0014, carbon: true }, fractal75pro: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0015, carbon: true }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
   motors: { m0702se_23k: 0x3b82f6, m0702se_27k: 0xe11d48, m0702ii_30k: 0xf5b301, m0702ii_36k: 0x9333ea, evo_31k: 0x111111, evo_33k: 0xc9a227, m0802_19k: 0x10b981, m1002_19k: 0xf97316, m0802_16k: 0x64748b, m1102_13k: 0x0ea5e9, m1103_11k: 0xef4444 },
   props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5, p45_2b: 0xeef1f4, p45_3b: 0xeef1f4 },
-  batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, lava280: 0x3aa84a, lava320: 0x3aa84a, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
+  // batteries from their published sizes (L x W x H mm, the 1S plug housing included; 2S packs are two cells stacked with an XT30 on
+  // leads): c = the wrap, s = the label band, plug = 'bt2' | 'xt30'. Look only: the physics uses PARTS.batteries' mass.
+  batteries: { b260: { d: [54.5, 10, 6], c: 0x1b1c1f, s: 0xff5a1f, plug: 'bt2' }, b300: { d: [67.3, 11.8, 6.1], c: 0x1e2024, s: 0xd9e021, plug: 'bt2' },
+    b380: { d: [62, 12, 7], c: 0x1e2024, s: 0x22c3e6, plug: 'bt2' }, lava280: { d: [54, 10, 6], c: 0x2f9e44, s: 0xf2d21b, plug: 'bt2' }, lava320: { d: [64, 10, 6], c: 0x2f9e44, s: 0xf2d21b, plug: 'bt2' },
+    b450: { d: [62, 15.5, 6.7], c: 0x1e2024, s: 0x8b5cf6, plug: 'bt2' }, b550: { d: [70, 15, 6.5], c: 0x2f9e44, s: 0xf2d21b, plug: 'bt2' },
+    b2s300: { d: [45, 17, 12], c: 0x1e2024, s: 0xdc2626, plug: 'xt30' }, b2s450: { d: [63, 15.5, 13.5], c: 0x1b1c1f, s: 0xff5a1f, plug: 'xt30' }, b2s550: { d: [66, 16, 15], c: 0x0f766e, s: 0xe5e7eb, plug: 'xt30' } },
   canopies: { air: { c: 0xf1f3f5, h: 0.0125, w: 0.0125, bridge: true }, std: { c: 0x22c55e, h: 0.0145, w: 0.014 }, aio2s: { c: 0xfacc15, h: 0.016, w: 0.0155 } },
 };
 // a part mesh from src/meshes.js (int16 hundredths of a millimetre) as geometry in metres, built once
@@ -925,16 +930,27 @@ function makeWhoopMesh(p, sp, tn) {
   const az = fr ? 0.013 : ring && CL.bridge ? post * 0.8 : CL.w * 0.55, a0 = { x: 0, y: fr ? 0.004 : 0.0045 + CL.h * 0.5, z: az }, a1 = { x: 0, y: 0.0045 + CL.h * 1.3, z: az + 0.011 }, a2 = { x: 0, y: 0.0045 + CL.h * 1.95, z: az + 0.021 };
   g.add(pipeMesh(a0, a1, 0.0013, std(0x0c0c0e))); g.add(pipeMesh(a1, a2, 0.0004, std(0x0c0c0e)));
   for (const [c, x] of [[0xcc2222, -0.003], [0xe8c21a, 0], [0x111111, 0.003]]) g.add(pipeMesh({ x, y: 0.0045, z: -0.004 }, { x: x * 0.4, y: camY - 0.002, z: camZ + 0.005 }, 0.00035, new THREE.MeshBasicMaterial({ color: c })));   // camera wires
-  // battery: one stick for 1S, two cells stacked for 2S, sized by capacity, with its lead and plug
-  const B = S.PARTS.batteries[sp.battery] || { cap: 300 }, cells = B.cells || 1, bl = 0.036 + B.cap * 0.00006, bw = cells > 1 ? 0.016 : 0.0118, bh = (cells > 1 ? 0.0064 : 0.0068) * cells;
-  const batC = WHOOP_LOOK.batteries[sp.battery] ?? 0x2b6ad6, by = FM ? FT - 0.0133 + bh / 2 : -0.0035 - bh / 2;
-  add(new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bl), std(batC, { roughness: 0.45 })), 0, by, 0.002);
-  add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.0003, bh + 0.0003, bl * 0.2), std(0x111214, { roughness: 0.6 })), 0, by, 0.002 - bl * 0.26);     // label blocks
-  add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.0003, bh * 0.45, bl * 0.3), std(0x111214, { roughness: 0.6 })), 0, by, 0.002 + bl * 0.12);
-  if (cells > 1) add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.0004, 0.0004, bl), std(0x0b0b0c)), 0, by, 0.002);                                // the seam between the two cells
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0035, 0.006), std(0xf4f4f5, { roughness: 0.6 })), 0, by, 0.002 + bl / 2 + 0.005);                // plug
-  g.add(pipeMesh({ x: 0.001, y: by, z: 0.002 + bl / 2 }, { x: 0.001, y: by, z: 0.002 + bl / 2 + 0.004 }, 0.0007, new THREE.MeshBasicMaterial({ color: 0xcc2222 })));
-  g.add(pipeMesh({ x: -0.001, y: by, z: 0.002 + bl / 2 }, { x: -0.001, y: by, z: 0.002 + bl / 2 + 0.004 }, 0.0007, new THREE.MeshBasicMaterial({ color: 0x111111 })));
+  // battery: a soft-cornered pouch at its published size (two cells stacked for 2S), its wrap and label band, and its plug: a 1S
+  // BT2.0 housing with two 1 mm pins at the back, or a 2S pack's red and black leads to a yellow XT30 and a white balance plug
+  const B = S.PARTS.batteries[sp.battery] || { cap: 300 }, cells = B.cells || 1, BL = WHOOP_LOOK.batteries[sp.battery] || { d: [40 + B.cap * 0.06, cells > 1 ? 16 : 11.8, 6.4 * cells], c: 0x2b6ad6, s: 0xe5e7eb, plug: cells > 1 ? 'xt30' : 'bt2' };
+  const shell = BL.plug === 'bt2' ? 0.0055 : 0, bl = BL.d[0] / 1000 - shell, bw = BL.d[1] / 1000, bh = BL.d[2] / 1000;
+  const by = FM ? FT - 0.0133 + bh / 2 : -0.0035 - bh / 2, bz = -0.025 + bl / 2;   // the front end under the front of the frame, the rest out the back
+  const pouch = (w, h, l, c, o = {}) => { const r = Math.min(w, h) * 0.32, sh = new THREE.Shape(); sh.moveTo(-w / 2 + r, -h / 2); sh.lineTo(w / 2 - r, -h / 2); sh.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); sh.lineTo(w / 2, h / 2 - r); sh.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); sh.lineTo(-w / 2 + r, h / 2); sh.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); sh.lineTo(-w / 2, -h / 2 + r); sh.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: l, bevelEnabled: false, curveSegments: 4 }); geo.translate(0, 0, -l / 2); return new THREE.Mesh(geo, std(c, { roughness: 0.42, ...o })); };
+  const ch = bh / cells;
+  for (let k = 0; k < cells; k++) add(pouch(bw, ch * 0.97, bl, BL.c), 0, by - bh / 2 + ch * (k + 0.5), bz);   // the cell(s)
+  add(pouch(bw + 0.0003, bh + 0.0003, bl * 0.46, BL.s, { roughness: 0.35 }), 0, by, bz - bl * 0.06);                 // the label band round the middle
+  add(new THREE.Mesh(new THREE.BoxGeometry(bw * 0.5, 0.0002, bl * 0.22), std(0xf4f4f5, { roughness: 0.5 })), 0, by + bh / 2 + 0.0002, bz - bl * 0.06);   // the capacity print on top
+  if (BL.plug === 'bt2') {
+    const pz = bz + bl / 2 + shell / 2; add(new THREE.Mesh(new THREE.BoxGeometry(Math.min(bw, 0.0085), Math.min(bh, 0.0052), shell), std(0xe9e5dc, { roughness: 0.6 })), 0, by, pz);
+    for (const x of [-0.0019, 0.0019]) { const pin = add(new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, 0.0035, 8), std(0xd4af37, { metalness: 0.9, roughness: 0.25 })), x, by, pz + shell / 2 + 0.0016); pin.rotation.x = Math.PI / 2; }
+  } else {
+    const z0 = bz + bl / 2, lead = (x, c, z1, y1) => g.add(pipeMesh({ x, y: by + bh * 0.2, z: z0 }, { x: x * 0.6, y: y1, z: z1 }, 0.0009, new THREE.MeshBasicMaterial({ color: c })));
+    lead(0.0022, 0xcc2222, z0 + 0.024, by - 0.002); lead(-0.0022, 0x111111, z0 + 0.024, by - 0.002);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.0102, 0.0052, 0.0155), std(0xf2c40f, { roughness: 0.45 })), 0, by - 0.002, z0 + 0.024 + 0.0077);   // XT30
+    g.add(pipeMesh({ x: -bw * 0.3, y: by + bh * 0.3, z: z0 }, { x: -bw * 0.45, y: by + bh * 0.1, z: z0 + 0.016 }, 0.0005, new THREE.MeshBasicMaterial({ color: 0xe5e7eb })));   // balance lead
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.0075, 0.003, 0.0045), std(0xf4f4f5, { roughness: 0.6 })), -bw * 0.45, by + bh * 0.1, z0 + 0.018);
+  }
   if (!FM) for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0012, bh + 0.002, 0.004), frameMat), sx * (bw / 2 + 0.0008), by + 0.0008, 0.002);   // battery holder rails
   if (ring && !FM) for (const z of [-0.008, 0.012]) { add(new THREE.Mesh(new THREE.BoxGeometry(bw + 0.003, 0.0009, 0.0022), frameMat), 0, by - bh / 2 - 0.0006, z); for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.0011, bh + 0.0035, 0.0022), frameMat), sx * (bw / 2 + 0.0009), by + 0.0012, z); }   // the cage the pack slides into
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });

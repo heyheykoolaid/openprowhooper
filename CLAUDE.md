@@ -510,7 +510,10 @@ from the maker's description: `buildDrone` places the motors from it, absent = t
 a narrow 1.5 mm carbon plate and slim arms, the AIO bare on red standoffs, a separate thin ring round each prop on four spokes to the
 motor, and the camera low at the front between the two front ducts in a purple TPU mount (no canopy; `duct` colour, `carbon`). Estimates until the owner's Blackbox logs: feelcheck has the 65
 at TWR 5.2 / hover 33 %, the 75 at 4.2 / 36 % (no stronger 1S 0802 in the catalog), the Pro 4.7 / 33 %.
-**LAVA II packs** (`lava280` 6.8 g, `lava320` 8.2 g, published weights; resistance from the 2026-11-19 log: 0.074-0.089 ohm cold).
+**Battery looks** (owner, 2026-11-20; `WHOOP_LOOK.batteries` in worldview.js, look only): each pack drawn at its published size (BT2.0 300
+67.3 x 11.8 x 6.1 mm, LAVA II 280 / 320 54 / 64 x 10 x 6, 450 62 x 15.5 x 6.7, 2S 300 45 x 17 x 12, LAVA 2S 450 63 x 15.5 x 13.5; the rest estimated) as a
+soft-cornered pouch with its wrap and label band (LAVA green and yellow), a 1S BT2.0 housing with two pins, or a 2S pack's leads to an XT30
+and a balance plug. **LAVA II packs** (`lava280` 6.8 g, `lava320` 8.2 g, published weights; resistance from the 2026-11-19 log: 0.074-0.089 ohm cold).
 
 ## Whoop feel calibration (2026-11-18; tools/feelcheck.js, test/feel.js)
 `node tools/feelcheck.js [preset…]` flies every preset through the target-feel tests of a whoop-sim spec the owner
