@@ -792,9 +792,9 @@ const WHOOP_LOOK = {
   // Air frames (from the pilot's reference photos): a thin coloured ring round each prop, standing on three slim legs that
   // run down to the motor mount; slightly see-through plastic. Meteor and 2S frames keep a full duct wall.
   frames: { air65: { c: 0x7fd0f2, lip: 0.0008, ring: true, clear: 0.9, braces: 4, mesh: 'air65' }, air65champ: { c: 0x5a5d63, lip: 0.0007, ring: true, clear: 0.72, braces: 3 }, meteor65: { c: 0x1f4fd6, lip: 0.0015 }, air75: { c: 0xe6e8ea, lip: 0.0009, ring: true, clear: 0.6, braces: 4 }, meteor75: { c: 0xd62828, lip: 0.0015 },
-    whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, fractal65: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0012, carbon: true }, fractal75: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0014, carbon: true }, fractal75pro: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0015, carbon: true }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
+    whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, fractal65: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0012, carbon: true }, fractal75: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0014, carbon: true }, fractal75pro: { c: 0x1c1d20, duct: 0x2e3238, fractal: true, lip: 0.0015, carbon: true }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
   motors: { m0702se_23k: 0x3b82f6, m0702se_27k: 0xe11d48, m0702ii_30k: 0xf5b301, m0702ii_36k: 0x9333ea, evo_31k: 0x111111, evo_33k: 0xc9a227, m0802_19k: 0x10b981, m1002_19k: 0xf97316, m0802_16k: 0x64748b, m1102_13k: 0x0ea5e9, m1103_11k: 0xef4444 },
-  props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5 },
+  props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5, p45_2b: 0xeef1f4, p45_3b: 0xeef1f4 },
   batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, lava280: 0x3aa84a, lava320: 0x3aa84a, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
   canopies: { air: { c: 0xf1f3f5, h: 0.0125, w: 0.0125, bridge: true }, std: { c: 0x22c55e, h: 0.0145, w: 0.014 }, aio2s: { c: 0xfacc15, h: 0.016, w: 0.0155 } },
 };
@@ -837,6 +837,12 @@ function makeWhoopMesh(p, sp, tn) {
       for (let k = 0; k < nb; k++) { const a = a0 + k / nb * Math.PI * 2, sx = Math.sin(a), cz = Math.cos(a), top = { x: m.pos.x + sx * ringR * 0.99, y: ringY - 0.0019, z: m.pos.z + cz * ringR * 0.99 }, knee = { x: m.pos.x + sx * ringR * 0.8, y: yM + 0.0012, z: m.pos.z + cz * ringR * 0.8 }, bot = { x: m.pos.x + sx * (bellR + 0.0012), y: yM - 0.0012, z: m.pos.z + cz * (bellR + 0.0012) };
         g.add(pipeMesh(top, knee, 0.00065, frameMat)); g.add(pipeMesh(knee, bot, 0.0007, frameMat)); }
       for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; at(new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, 0.0006, 6), steel), yM - 0.0023).position.set(m.pos.x + Math.sin(a) * 0.0033, yM - 0.0023, m.pos.z + Math.cos(a) * 0.0033); }   // the three motor screws
+    } else if (FL.fractal) {   // Fractal (the owner's photos, 2026-11-20): a separate thin nylon ring round each prop on four slim spokes down to the motor mount
+      const pY = 0.0018 + bellH * 1.22, dH = 0.0068, dY = pY - 0.0012, rr = p.rDuct;
+      at(new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, dH, 36, 1, true), ductMat), dY);
+      for (const dy of [dH / 2, -dH / 2]) { const lip = at(new THREE.Mesh(new THREE.TorusGeometry(rr, 0.0006, 6, 36), ductMat), dY + dy); lip.rotation.x = Math.PI / 2; }
+      const a0 = Math.atan2(m.pos.x, m.pos.z) + Math.PI / 4;
+      for (let k = 0; k < 4; k++) { const a = a0 + k / 4 * Math.PI * 2, sx = Math.sin(a), cz = Math.cos(a); g.add(pipeMesh({ x: m.pos.x + sx * rr * 0.98, y: dY - dH / 2 + 0.0008, z: m.pos.z + cz * rr * 0.98 }, { x: m.pos.x + sx * (bellR + 0.0012), y: -0.0012, z: m.pos.z + cz * (bellR + 0.0012) }, 0.0006, ductMat)); }
     } else {
       at(new THREE.Mesh(new THREE.CylinderGeometry(p.rDuct, p.rDuct * 0.955, ductH, 28, 1, true), ductMat), 0.0025);                         // duct wall
       const lip = at(new THREE.Mesh(new THREE.TorusGeometry(p.rDuct, wall, 8, 28), frameMat), 0.0025 + ductH / 2); lip.rotation.x = Math.PI / 2;   // rolled top lip
@@ -856,7 +862,8 @@ function makeWhoopMesh(p, sp, tn) {
     g.add(pg); pgs.push(pg);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(R, 24), new THREE.MeshBasicMaterial({ color: propC, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
     disc.rotation.x = -Math.PI / 2; disc.position.copy(pg.position); g.add(disc); discs.push(disc);
-    if (!ring) { const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0042, 0.0026, Math.hypot(m.pos.x, m.pos.z) * 2 - p.rDuct * 1.7), frameMat); arm.position.set(m.pos.x / 2, -0.0012, m.pos.z / 2); arm.rotation.y = Math.atan2(m.pos.x, m.pos.z); g.add(arm); }
+    if (FL.fractal) { const L0 = Math.hypot(m.pos.x, m.pos.z), arm = new THREE.Mesh(new THREE.BoxGeometry(0.0028, 0.0015, L0 - 0.006), frameMat); arm.position.set(m.pos.x * (0.5 + 0.003 / L0), -0.0015, m.pos.z * (0.5 + 0.003 / L0)); arm.rotation.y = Math.atan2(m.pos.x, m.pos.z); g.add(arm); }   // a slim 1.5 mm carbon arm out to the motor
+    else if (!ring) { const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0042, 0.0026, Math.hypot(m.pos.x, m.pos.z) * 2 - p.rDuct * 1.7), frameMat); arm.position.set(m.pos.x / 2, -0.0012, m.pos.z / 2); arm.rotation.y = Math.atan2(m.pos.x, m.pos.z); g.add(arm); }
   }
   // centre: frame plate, flight controller with its plug and components, canopy with the camera, antenna
   const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); g.add(mesh); return mesh; };
@@ -876,6 +883,12 @@ function makeWhoopMesh(p, sp, tn) {
     chip(0, 0.002, 0.0062, 0.0062); chip(-0.0062, -0.0018, 0.0034, 0.0044, 0x23262c); chip(0.006, -0.002, 0.0036, 0.003, 0x8a8f98, 0.0013); chip(0.0005, -0.0075, 0.0042, 0.0026, 0x23262c);
     chip(0.0, 0.0095, 0.0052, 0.003, 0xe9e3d2, 0.0022); chip(-0.0088, 0.0052, 0.002, 0.002, 0xb87333); chip(0.0086, 0.0058, 0.002, 0.002, 0xb87333);   // battery plug socket, pads
     for (const m of p.motors) { const sx = Math.sign(m.pos.x), sz = Math.sign(m.pos.z); for (const [c, o] of [[0x111111, -0.0006], [0x111111, 0], [0x111111, 0.0006]]) g.add(pipeMesh({ x: sx * 0.0085 + o, y: FM ? FT + 0.001 : 0.0052, z: sz * 0.0085 }, { x: m.pos.x - sx * 0.003 + o, y: yM + 0.0005, z: m.pos.z - sz * 0.003 }, 0.0003, new THREE.MeshBasicMaterial({ color: c }))); }   // motor wires
+  } else if (FL.fractal) {   // a narrow 1.5 mm carbon plate under the board (the arms run out from it), the AIO bare on red standoffs
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.0015, 0.03), frameMat), 0, -0.0015, 0.001);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.0015, 0.012), frameMat), 0, -0.0015, -0.018);   // the nose the camera mount sits on
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.001, 0.026), pcb), 0, 0.0032, 0.001);
+    for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { add(new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 0.0038, 10), std(0xd93a2b, { roughness: 0.6 })), x * 0.0115, 0.0011, 0.001 + z * 0.0115); add(new THREE.Mesh(new THREE.CylinderGeometry(0.0009, 0.0009, 0.0008, 8), steel), x * 0.0115, 0.0041, 0.001 + z * 0.0115); }
+    for (const [x, z, w, d, c] of [[0, 0.002, 0.007, 0.007, 0x16181c], [-0.0075, -0.004, 0.003, 0.004, 0x16181c], [0.007, -0.004, 0.0035, 0.003, 0x8a8f98], [0, 0.0105, 0.005, 0.003, 0xe9e3d2], [0.008, 0.007, 0.0025, 0.0025, 0xb87333]]) add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.0011, d), std(c, { metalness: 0.4 })), x, 0.0042, z);
   } else {
     add(new THREE.Mesh(new THREE.BoxGeometry(0.029, 0.0024, 0.029), frameMat), 0, -0.0012, 0);
     add(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.0012, 0.026), pcb), 0, 0.003, 0);
@@ -887,9 +900,14 @@ function makeWhoopMesh(p, sp, tn) {
   // the side and front posts, and a hood the camera looks out of. The plain bridge is still there as a choice.
   const printed = ring && CL.bridge && (sp.canopy || 'beastbrain') === 'beastbrain' ? meshGeometry('beastbrain') : null, baseY = FM ? FT + 0.001 : 0.0062;
   let tiltR = tn.camTilt * Math.PI / 180, camY = (ring && CL.bridge ? 0.0066 : 0.0045) + CL.h * 0.62, camZ = ring && CL.bridge ? -0.0128 : -CL.w * 0.82;
+  const fr = !!FL.fractal, frontZ = fr ? Math.min(...p.motors.map(m => m.pos.z)) : 0;
+  if (fr) { camY = 0.0042; camZ = Math.max(frontZ * 0.92, -0.026); }   // Fractal: the camera sits low at the front between the two front ducts, ahead of the board
   if (printed) { tiltR = 0; camY = baseY + 0.014 * post / 0.0178; camZ = -0.0112 * post / 0.0178; }   // the hood holds the camera level, its lens 14 mm above the tabs
   if (printed) { const pm = std(canC, { roughness: 0.55, side: THREE.DoubleSide }); add(new THREE.Mesh(printed, pm), 0, baseY, 0).scale.setScalar(post / 0.0178);
     for (const [x, z] of [[post, 0], [-post, 0], [0, -post]]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 0.0009, 8), steel), x, baseY + 0.0015, z);   // the three screws through its tabs
+  } else if (fr) {   // a purple TPU camera mount: two side cheeks and a base on the frame's nose, the camera held between them
+    const tpu = std(0x7b2fbf, { roughness: 0.7 }); add(new THREE.Mesh(new THREE.BoxGeometry(0.0108, 0.0012, 0.009), tpu), 0, -0.0002, camZ + 0.001);
+    for (const sx of [-1, 1]) { const ch = add(new THREE.Mesh(new THREE.BoxGeometry(0.0013, 0.0078, 0.0085), tpu), sx * 0.0052, camY - 0.0002, camZ + 0.001); ch.rotation.x = tiltR * 0.5; }
   } else if (CL.bridge) {   // the Air canopy: a see-through hoop from side post to side post, a spine from the tail post over the top to the camera cradle
     const pr0 = ring ? post : CL.w * 0.95, base = ring ? 0.0066 : 0.0042, top = base + CL.h;
     const arch = add(new THREE.Mesh(new THREE.TorusGeometry(pr0, 0.0012, 8, 24, Math.PI), canMat), 0, base, 0); arch.scale.y = CL.h / pr0;
@@ -904,7 +922,7 @@ function makeWhoopMesh(p, sp, tn) {
   const lens = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), new THREE.MeshStandardMaterial({ color: 0x16284f, metalness: 0.95, roughness: 0.04 })); lens.position.y = 0.0028; cam.add(lens);
   const cb = new THREE.Mesh(new THREE.BoxGeometry(0.0095, 0.0009, 0.0095), std(0x101114)); cb.position.y = -0.004; if (!printed) cam.add(cb);   // (the printed canopy has its own camera plate)
   // antenna: a thick black base rising at the back with a thin whip
-  const az = ring && CL.bridge ? post * 0.8 : CL.w * 0.55, a0 = { x: 0, y: 0.0045 + CL.h * 0.5, z: az }, a1 = { x: 0, y: 0.0045 + CL.h * 1.3, z: az + 0.011 }, a2 = { x: 0, y: 0.0045 + CL.h * 1.95, z: az + 0.021 };
+  const az = fr ? 0.013 : ring && CL.bridge ? post * 0.8 : CL.w * 0.55, a0 = { x: 0, y: fr ? 0.004 : 0.0045 + CL.h * 0.5, z: az }, a1 = { x: 0, y: 0.0045 + CL.h * 1.3, z: az + 0.011 }, a2 = { x: 0, y: 0.0045 + CL.h * 1.95, z: az + 0.021 };
   g.add(pipeMesh(a0, a1, 0.0013, std(0x0c0c0e))); g.add(pipeMesh(a1, a2, 0.0004, std(0x0c0c0e)));
   for (const [c, x] of [[0xcc2222, -0.003], [0xe8c21a, 0], [0x111111, 0.003]]) g.add(pipeMesh({ x, y: 0.0045, z: -0.004 }, { x: x * 0.4, y: camY - 0.002, z: camZ + 0.005 }, 0.00035, new THREE.MeshBasicMaterial({ color: c })));   // camera wires
   // battery: one stick for 1S, two cells stacked for 2S, sized by capacity, with its lead and plug
