@@ -260,7 +260,7 @@ function frame(now) {
   if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;
-    const cts = coachTimeScale(dt); if (coachFrozen()) acc = 0; else acc += dt * cts; let n = 0;   // Train's pauses between steps ease in and out; stopped, nothing moves, nothing is judged or recorded
+    const cts = coachTimeScale(dt); if (coachFrozen() || coachHeld(rc)) acc = 0; else acc += dt * cts; let n = 0;   // Train's pauses between steps ease in and out; stopped, nothing moves, nothing is judged or recorded
     while (acc >= DT && n < 120) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
       if (pf) { const a = performance.now(); drone.step(rc, DT); tPh += performance.now() - a; }

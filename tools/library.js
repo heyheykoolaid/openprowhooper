@@ -96,7 +96,7 @@ function flightExamples(runs) {
   // motion travels for at most MO_KEEP examples per trick (the heaviest, one pilot at a time round-robin): the knowledge bot
   // needs variety, not every rep, and the shipped library stays small
   { const MO_KEEP = 6, by = {}; for (const e of examples) if (e.mo) (by[e.t] || (by[e.t] = [])).push(e);
-    for (const L of Object.values(by)) { L.sort((a, b) => b.w - a.w); const per = {}, keep = new Set(); for (let round = 0; keep.size < MO_KEEP && round < L.length; round++) for (const e of L) { if (keep.size >= MO_KEEP) break; if (keep.has(e) || (per[e.p] || 0) > round) continue; per[e.p] = (per[e.p] || 0) + 1; keep.add(e); }
+    for (const L of Object.values(by)) { L.sort((a, b) => (b.mo.hit || 0) - (a.mo.hit || 0) || b.w - a.w);   /* motion for the bot goes to examples the detector calls on their own flight first (2026-11-20: missed ones made Judge the Bot and Show me fly moves the game does not read) */ const per = {}, keep = new Set(); for (let round = 0; keep.size < MO_KEEP && round < L.length; round++) for (const e of L) { if (keep.size >= MO_KEEP) break; if (keep.has(e) || (per[e.p] || 0) > round) continue; per[e.p] = (per[e.p] || 0) + 1; keep.add(e); }
       for (const e of L) if (!keep.has(e)) e.mo = null; } }
   const lib = { format: 'pro-whooper-library/1', updated: new Date().toISOString().slice(0, 10), n: S.libSig ? 24 : 24, hz: 25, examples: examples.map(e => { const o = { t: e.t, d: e.d, c: e.c, u: e.u, w: e.w, s: e.s }; if (typeof e.ps === 'string') o.ps = e.ps; if (e.k) o.k = e.k; if (e.neg) o.neg = 1; if (e.p) o.p = e.p; if (e.x) o.x = 1; if (e.mo) o.mo = e.mo; return o; }) };
   const L = S.setLibrary(lib);

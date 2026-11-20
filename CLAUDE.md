@@ -681,6 +681,12 @@ axis, pauses under `COACH_JOIN` joined, triggered when done + rate × 0.15 s ≥
 step ends), not when the detector has closed the rotation and the 150 ms check has judged it (a quick Snapback was already rolling).
 The judge still decides the step afterwards (`preFroze`: no second pause there). The hold counts once it has stopped; the throttle
 needs to be within 0.35 of the bot's, and is not checked on the keyboard.
+**Start in the air, held** (owner, 2026-11-20: "always start in the air armed, and moving the sticks takes control"; `coachHoldStart`,
+`coachHeld`): every start in the Training Room (Train, R, back from Show me) puts the quad 1.5 m up at its station, armed (whatever the
+throttle), and play.js skips the physics while it is held; it is released (YOUR CONTROL) once armed and a stick moves over 20 % or
+the throttle moves 12 %. **The pause card** is a centred rounded card (next step, the axes as ✓ / ○ chips, a hold bar that counts
+down), and in the pauses the arrows are outlines that fill from the crosshair as far as the pilot's own stick pushes (green when
+there; `drawStickArrows(…, live)`), kept clear of the card and the stick view; no throttle gauge when the throttle is not asked for.
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
 re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
 menu's device note (`updateMenuDevice`, every 2 s).
