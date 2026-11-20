@@ -169,6 +169,26 @@ function lightsAuto(dt) {
   if (PERF.lightsAuto === 'few') { mapLightsBuild(); flash(`<b>LIGHTING REDUCED</b><small>${Math.round(fps)} fps here · Options → Graphics → Map lights</small>`, 'warn'); }
 }
 const buzzE = new THREE.Euler(), buzzQ = new THREE.Quaternion(), buzzS = { x: 0, y: 0 };
+// Input lag on low-end machines (2026-11-19: "fps looked fine, the controls felt sluggish"): the trick detector used to run
+// inside the physics loop, before the frame was drawn, so every millisecond it took (4 ms a frame on Moose on a fast PC,
+// several times that on a slow one) came between reading the sticks and the picture. Now the physics runs first, the frame
+// is drawn and handed to the GPU, and only then does the detector judge the same physics steps, one by one, from a
+// snapshot of each (the Drone replaces pos / vel / q / w every step, so a snapshot holds them by reference). The calls are
+// identical; trick pop-ups come one frame later. Arming while steps wait (`detArm`) is queued in its place too.
+const detQ = [];
+function detSnap(d, rc) { const s = Object.create(S.Drone.prototype);
+  s.pos = d.pos; s.vel = d.vel; s.q = d.q; s.w = d.w; s.time = d.time; s.soc = d.soc; s.armed = d.armed; s.crashed = d.crashed;
+  s.contactThisStep = d.contactThisStep; s.contactNormal = d.contactNormal && { x: d.contactNormal.x, y: d.contactNormal.y, z: d.contactNormal.z }; s.contactOwner = d.contactOwner; s.contactGround = d.contactGround; s.lastImpact = d.lastImpact;
+  s.rc = rc; return s; }
+function detArm(on) { if (detQ.length) detQ.push({ arm: on, s: detSnap(drone, lastRC) }); else detector.onArmChange(drone, on); }
+function detFlush(now) {
+  if (detQ.length) { for (const s of detQ) { if (s.arm !== undefined) { detector.onArmChange(s.s, s.arm); continue; } detector.update(s, DT, s.rc); detector.postStep(s); } detQ.length = 0; }
+  if (mode !== 'fly' || race.on) return;
+  for (const ev of detector.drain()) onTrick(ev);
+  if (detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in SKITTLES mode</small>`, 'near'); }
+  comboLink(now / 1000);
+  if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
+}
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; lightsAuto(dt); gfxOffer(); resAutoTick(); const pf = PERF.on, fT0 = pf ? performance.now() : 0; let tPh = 0, tDe = 0, tR = 0;
@@ -178,17 +198,14 @@ function frame(now) {
     acc += dt; let n = 0;
     while (acc >= DT && n < 120) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
-      if (pf) { const a = performance.now(); drone.step(rc, DT); const b = performance.now(); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } tPh += b - a; tDe += performance.now() - b; }
-      else { drone.step(rc, DT); if (!race.on) { detector.update(drone, DT, rc); detector.postStep(drone); recordTrace(rc); } }
+      if (pf) { const a = performance.now(); drone.step(rc, DT); tPh += performance.now() - a; }
+      else drone.step(rc, DT);
+      if (!race.on) { detQ.push(detSnap(drone, rc)); recordTrace(rc); }   // judged after the frame is drawn (detFlush)
       if (drone.contactThisStep && CAT.ids.has(drone.contactOwner)) catHit();   // Slackvegan's bodega cat
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
     }
     if (n >= 120) { acc = 0; if (pf) PERF.acc.drop = (PERF.acc.drop || 0) + 1; } if (pf) PERF.acc.steps += n;
-    if (!race.on) for (const ev of detector.drain()) onTrick(ev);
-    if (!race.on && detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (mode === 'fly' && store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in SKITTLES mode</small>`, 'near'); }
-    if (!race.on) comboLink(now / 1000);
-    if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
     // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).
@@ -196,10 +213,11 @@ function frame(now) {
     else { crashAt = null; wasArmed = drone.armed; }
     autoArmTick();
     if (drone.armed) flightTime += dt;
-    if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) endSession(); }
+    if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) { detFlush(now); endSession(); } }
     updateAudio(); hud(); passFeed(); stickHud(rc); if (race.on) raceHud();
   } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
+  if (mode !== 'fly') detFlush(now);
   if (mode === 'editor') { editorFrame(dt); return; }
   if (mode === 'mapedit') { mapEditFrame(dt); return; }
   if (mode === 'bbreplay') brStep(dt);
@@ -247,7 +265,9 @@ function frame(now) {
   renderer.render(scene, cam);
   if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk' || world.theme === 'nyc')) bloomRender(cam);   // racing: the gates' LEDs glow
   if (PERF.fx) fxRender();
-  if (pf) { tR = performance.now() - rT0; perfFrame(now, fT0, tPh, tDe, tR); }
+  if (pf) tR = performance.now() - rT0;
+  if (detQ.length) { const a = pf ? performance.now() : 0; detFlush(now); if (pf) tDe += performance.now() - a; }
+  if (pf) perfFrame(now, fT0, tPh, tDe, tR);
   if (mode === 'recap' && recap.rec) recapRecFrame();
   frames++; fpsT += dt; if (fpsT > 0.5) { $('#fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 }

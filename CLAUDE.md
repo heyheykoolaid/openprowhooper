@@ -341,6 +341,14 @@ counts it as a tap, wall ride, over/under or pole. `w.edges` is where the walls 
 - **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,
   glow and a 32 m patch are merged into one mesh (draw calls 800–2000 → 180–400). `store 'mergeStatic'` false turns it off
   for comparison. Never add a `//` comment mid-line in these one-line statements: it swallowed `playRoot.add` once.
+- **Input lag** (2026-11-19, low-end testers: "fps looked fine, the controls felt sluggish"): the detector ran inside the physics
+  loop, before the frame was drawn (Moose: 4.2 ms of detector a frame on a fast PC vs 1.3 ms of physics; several times that on a
+  slow one), so it sat between reading the sticks and the picture. Now play.js runs the physics, draws, and only then judges the
+  same steps (`detQ`, `detSnap`, `detFlush`; arming while steps wait is queued in place: `detArm`): identical calls (the Drone
+  replaces pos / vel / q / w each step, so a snapshot holds them by reference; `lastD` is the only stored drone), pop-ups a
+  frame later. The pole loop skips poles out of reach of a pass or orbit with nothing tracked (Moose 253 → 203 µs a step), and
+  the round-obstacle crossLog scan only runs when a re-aim is due. Options → Graphics → **Low-latency display** (`store
+  'lowLatency'`, off, after a reload): the WebGL context's `desynchronized` hint.
 - **Detector culling**: `trackCrossings` only looks at objects within 30 m (`nearObjs`, rebuilt every 0.1 s, side state
   forgotten when an object leaves the list) and the pole loop at poles within 40 m (`nearP`); crossLog / contacts are
   trimmed only when something expired. Calls are identical (tests, bench, stress, the shared flights re-flown).

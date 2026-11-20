@@ -182,9 +182,9 @@ function setArmed(on, byThrottle) {
   if (on) {
     if (!byThrottle && !thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
     if (drone.crashed) { flipOver(); }
-    drone.crashed = false; drone.armed = true; detector.onArmChange(drone, true);
+    drone.crashed = false; drone.armed = true; detArm(true);
     if (session && !session.started) session.started = true;
-  } else { drone.armed = false; detector.onArmChange(drone, false); }
+  } else { drone.armed = false; detArm(false); }
 }
 function flipOver() { // "turtle mode" simplified: right the quad where it lies
   const f = drone.fwd(); const yaw = Math.atan2(-f.x, -f.z);

@@ -75,7 +75,9 @@ let camMode = 'fpv';
 
 // ============================================================ renderer / scene
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// Low-latency display (Options → Graphics, after a reload; off by default): asks the browser to show the canvas without
+// waiting on the page compositor (`desynchronized`): about a frame less lag where the browser supports it, maybe tearing
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', desynchronized: !!store.get('lowLatency', false) });
 // Performance (2026-11-17, testers reported heavy CPU): the diagnostic overlay (Options → Graphics, or F3) and two graphics
 // settings: render resolution (a share of the screen's pixels) and shadows. PERF collects the timings play.js measures.
 const PERF = { fx: store.get('screenFx', true), on: store.get('perfHud', false), res: store.get('renderScale', 1), shadows: store.get('shadows', true), lights: store.get('mapLights', 'auto'), acc: { phys: 0, det: 0, rend: 0, frame: 0, ui: 0, steps: 0, n: 0, worst: 0 }, shown: 0, staticPieces: 0, staticMeshes: 0 };

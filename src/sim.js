@@ -1245,10 +1245,10 @@ class TrickDetector {
       if (o.round) {   // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
         const R = o.round, st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
         const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
-        const recent = this.crossLog.some(c => c.obj === o.id && t - c.t < 5);   // never re-aim mid-trick (big Split-Back: ~3 s over→under)
         const closing = vh > 1.0 && dh > 0.8 && ((R.c.x - d.pos.x) * d.vel.x + (R.c.z - d.pos.z) * d.vel.z) / (dh * vh) > 0.6;
         if (dh < (R.box ? Math.max(R.box.hx, R.box.hz) : R.r) + 3) st.tNear = t;
-        if (vh > 0.5 && !recent && (t - (st.tNear ?? -9) > 2.5 || closing)) {   // far away, or heading in at it: aim across the approach
+        // never re-aim mid-trick (big Split-Back: ~3 s over→under); the log is only scanned when a re-aim is otherwise due
+        if (vh > 0.5 && (t - (st.tNear ?? -9) > 2.5 || closing) && !this.crossLog.some(c => c.obj === o.id && t - c.t < 5)) {   // far away, or heading in at it: aim across the approach
           const ax = d.vel.x / vh, az = d.vel.z / vh;
           if (!st.ax || ax * st.ax + az * st.az < 0.97) {
             st.ax = ax; st.az = az; delete this.prevSide[o.id];
@@ -1834,6 +1834,10 @@ class StreamDetector extends TrickDetector {
     if (this.nearPT == null || t < this.nearPT || t - this.nearPT >= 0.1 || this.nearPA !== this.poles) { this.nearPT = t; this.nearPA = this.poles;
       this.nearP = this.poles.filter(P => { const a = P.point(P.y0), b = P.point(P.y1); return Math.min(Math.hypot(d.pos.x - a.x, d.pos.z - a.z), Math.hypot(d.pos.x - b.x, d.pos.z - b.z)) < 40; }); }
     for (const P of (this.airPole ? [...this.nearP, this.airPole] : this.nearP)) {
+      // fast path (input lag on low-end machines, 2026-11-19): a pole well out of reach of a pass (6 m) and of an orbit (9 m)
+      // with nothing tracked on it does exactly nothing below, so skip the work (the same calls, checked on every flight)
+      if (!P.air) { if (P.sp == null) { const a = P.point(P.y0), b = P.point(P.y1); P.sp = Math.hypot(a.x - b.x, a.z - b.z) / 2 + 0.01; }
+        if (Math.hypot(d.pos.x - P.x, d.pos.z - P.z) - P.sp > 9.5 && !this.orb[P.id]) { const q = this.passTr[P.id]; if (!q || (q.dmin === 99 && !q.lock && !q.far)) continue; } }
       const at = P.point(d.pos.y), dx = d.pos.x - at.x, dz = d.pos.z - at.z, dist = Math.hypot(dx, dz);
       const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
       const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
