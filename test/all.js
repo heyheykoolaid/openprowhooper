@@ -26,6 +26,7 @@ const checks = [
   ['learning from review labels (looser only, never against a label)', () => { const o = run('learn.js'); const m = o.match(/(\d+)\/(\d+) learning checks/); return m && m[1] === m[2] ? null : o; }],
   ['Ship Drugs: every gap is really open (5 cm clear of every collider)', () => { const o = run('../tools/gapcheck.js', ['ship']); const m = o.match(/(\d+)\/(\d+) gaps clear/); return m && m[1] === m[2] ? null : o; }],
   ['Orbits vs trippies round real trees (fast nose-down orbits, thick trunks)', () => { const o = run('orbits.js'); const m = o.match(/(\d+)\/(\d+) orbit checks/); return m && m[1] === m[2] ? null : o; }],
+  ['Slackvegan City\'s subway: down the stairs, platforms, through the train', () => { const o = run('subway.js'); const m = o.match(/(\d+)\/(\d+) subway checks/); return m && m[1] === m[2] ? null : o; }],
   ['Battery life, brown-out and which packs fit which whoop', () => { const o = run('battery.js'); const m = o.match(/(\d+)\/(\d+) battery checks/); return m && m[1] === m[2] ? null : o; }],
   ['Map Editor layer: move, turn, scale, remove, add; tags and colliders follow', () => { const o = run('mapedit.js'); const m = o.match(/(\d+)\/(\d+) map edit checks/); return m && m[1] === m[2] ? null : o; }],
   ['Barani as pilots fly it (front half loop, inverted half yaw, sloppy Matty out)', () => { const o = run('barani.js'); const m = o.match(/(\d+)\/(\d+) barani checks/); return m && m[1] === m[2] ? null : o; }],

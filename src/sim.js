@@ -209,6 +209,8 @@ function fitParts(spec) {
   return out;
 }
 function ocv(soc, hv, cells = 1) { return cells === 1 ? ocv1(soc, hv) : ocv1(soc, hv) * cells; }
+// world.groundHoles [{ x0, x1, z0, z1 }]: places with no ground plane (an underground station's footprint; its floors are boxes)
+function inGroundHole(H, x, z) { for (const h of H) if (x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1) return true; return false; }
 const BROWNOUT = 2.9;   // V a cell, under load (see Drone.step)
 function ocv1(soc, hv) {
   const tbl = [3.30, 3.50, 3.62, 3.68, 3.72, 3.76, 3.80, 3.85, 3.92, 4.02, 4.20];
@@ -857,7 +859,7 @@ class Drone {
   heightAbove() {
     // only boxes whose footprint is within NEAR_M2 of the quad (rebuilt after NEAR_M of travel): this runs every physics step,
     // and a map with solid foliage has thousands of shapes (Moose: 4000; the full loop tripled its physics time)
-    let h = this.pos.y; const WP = this.world.prims, H = this._hb;
+    let h = this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z) ? 60 : this.pos.y; const WP = this.world.prims, H = this._hb;
     if (!H || H.w !== WP || H.n !== WP.length || Math.max(Math.abs(this.pos.x - H.x), Math.abs(this.pos.z - H.z)) > NEAR_M) {
       const list = []; for (const pr of WP) { if (pr.type !== 'box') continue; const a = pr.aabb; if (this.pos.x + NEAR_M2 < a.min.x || this.pos.x - NEAR_M2 > a.max.x || this.pos.z + NEAR_M2 < a.min.z || this.pos.z - NEAR_M2 > a.max.z) continue; list.push(pr); }
       this._hb = { w: WP, n: WP.length, x: this.pos.x, z: this.pos.z, list };
@@ -870,12 +872,13 @@ class Drone {
   }
 
   collide(dt) {
+    const GH = this.world.groundHoles;   // Slackvegan's subway: no ground plane over these (the map has its own floors there); absent elsewhere
     const p = this.p; let hit = false; let maxImpact = 0; let hitOwner = -1, hitNormal = null, hitSurf = null;
     for (let iter = 0; iter < 2; iter++) {
       for (const c of p.colliders) {
         const cw = add(this.pos, qrot(this.q, c.c));
         const contacts = [];
-        if (cw.y < c.r) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true, surf: this.world.groundSurf });
+        if (cw.y < c.r && !(GH && inGroundHole(GH, cw.x, cw.z))) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true, surf: this.world.groundSurf });
         // Broad phase: the world has a few hundred shapes and this runs 1000 times a second, but the quad is only ever
         // near a handful. Keep the list of shapes within NEAR_M of where it was last built (same order as the world's
         // list, so results are identical) and rebuild it once the quad has moved far enough that one could be missed.
@@ -942,7 +945,7 @@ class Drone {
       else if (hit && speed < 0.25 && Math.abs(up.y) < 0.6 && !(this.tune.wallGrip != null && this.thrust.reduce((a, b) => a + Math.abs(b), 0) > 0.5 * p.mass * G)) { this.restOnGround += dt; if (this.restOnGround > 0.9) this.crash('stuck'); }
       else this.restOnGround = Math.max(0, this.restOnGround - dt);
     }
-    if (this.pos.y < -1) { this.pos.y = 0.05; this.vel = v3(); }
+    if (this.pos.y < -1 && !(this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z)) || this.pos.y < -40) { this.pos.y = 0.05; this.vel = v3(); }
   }
   crash(reason) { this.crashed = true; this.crashReason = reason; this.armed = false; }
 }

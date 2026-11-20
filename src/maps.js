@@ -1469,16 +1469,19 @@
       const fz = face < 0 ? z0 : z1, cap = O(name + ' Parapet', 'deco');
       for (const [a, b, c, d] of [[x0, x1, z0, z0 + 0.3], [x0, x1, z1 - 0.3, z1], [x0, x0 + 0.3, z0 + 0.3, z1 - 0.3], [x1 - 0.3, x1, z0 + 0.3, z1 - 0.3]]) box(cap, v3((a + b) / 2, h + 0.45, (c + d) / 2), v3((b - a) / 2, 0.45, (d - c) / 2), 'nycTrim', 0, 0, 0, NS);
       if (!opts.noShops) { const sh = O(name + ' Shutters', 'deco');
-        for (let x = x0 + 2.4; x < x1 - 1.4; x += 4.2) { box(sh, v3(x, 1.5, fz + face * 0.04), v3(1.7, 1.5, 0.04), rnd() < 0.5 ? 'shutter' : 'shutterTag', 0, 0, 0, NS);
+        for (let x = x0 + 2.4; x < x1 - 1.4; x += 4.2) { const art = [], k = rnd() < 0.2 ? 0 : rnd() < 0.7 ? 1 : 2;   // the pilots' logos sprayed on the shutters: none, one or two, big or small, turned
+          for (let i = 0; i < k; i++) art.push({ name: LOGOS[Math.floor(rnd() * LOGOS.length)], x: k === 1 ? 0.3 + rnd() * 0.4 : 0.22 + i * 0.56 + (rnd() - 0.5) * 0.1, y: 0.9 + rnd() * 1.3, h: k === 1 ? 0.9 + rnd() * 1.5 : 0.6 + rnd() * 0.8, rot: (rnd() - 0.5) * 0.7 });
+          box(sh, v3(x, 1.5, fz + face * 0.04), v3(1.7, 1.5, 0.04), 'shutter', 0, 0, 0, { noSurvey: true, graffiti: face < 0 ? 'north' : 'south', art });
           if (rnd() < 0.45) { const aw = O('Awning', 'deco'); box(aw, v3(x, 3.25, fz + face * 0.75), v3(1.9, 0.04, 0.78), ['awnRed', 'awnGreen', 'awnBlue'][Math.floor(rnd() * 3)], 0, face * 0.32, 0); surf(aw, SOFT); } } }
       const roof = O(name + ' Roof Gear', 'deco');
       for (let i = 0; i < 2 + Math.floor(rnd() * 3); i++) { const x = x0 + 2 + rnd() * (x1 - x0 - 4), z = z0 + 2 + rnd() * (z1 - z0 - 4); box(roof, v3(x, h + 0.55, z), v3(0.7, 0.55, 0.55), 'galv'); }
       return o; };
 
-    const AV0 = 0, AV1 = 12, XW = 50;
+    const AV0 = 0, AV1 = 12, XW = 50, LOGOS = ['heyhey', 'mopenguinz', 'roguemonkey', 'clappy', 'fpvyourworld', 'byteme', 'ridgeripper', 'rwdc'];
 
     // ---- the ground: sidewalks, curbs, lane lines, crosswalks, the plaza, the painted start box
-    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(0, 0.005, -2), h: v3(XW, 0, 2) });
+    zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3((-XW - 9.5) / 2, 0.005, -2), h: v3((XW - 9.5) / 2, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3((XW - 5.6) / 2, 0.005, -2), h: v3((XW + 5.6) / 2, 0, 2) },
+      { shape: 'zone', mat: 'nycSidewalk', c: v3(-7.55, 0.005, -3.75), h: v3(1.95, 0, 0.25) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(-7.55, 0.005, -0.95), h: v3(1.95, 0, 0.95) });   // open over the subway stair
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(-15.2, 0.005, 14), h: v3(34.8, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(38, 0.005, 14), h: v3(12, 0, 2) });
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(35, 0.006, 18), h: v3(9, 0, 2) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(47, 0.006, 28), h: v3(3, 0, 12) });
     zones.push({ shape: 'zone', mat: 'nycSidewalk', c: v3(19.2, 0.006, 29), h: v3(0.8, 0, 13) }, { shape: 'zone', mat: 'nycSidewalk', c: v3(25.4, 0.006, 29), h: v3(0.6, 0, 13) });
@@ -1534,7 +1537,7 @@
     { const se = O('Subway Entrance', 'deco'); for (const z of [-3.6, -1.8]) pipe(se, v3(-9.5, 1.0, z), v3(-5.6, 1.0, z), 0.04, 'elGreen', NS); pipe(se, v3(-9.5, 1.0, -3.6), v3(-9.5, 1.0, -1.8), 0.04, 'elGreen', NS);
       for (const [x, z] of [[-9.5, -3.6], [-9.5, -1.8], [-5.6, -3.6], [-5.6, -1.8], [-7.5, -3.6], [-7.5, -1.8]]) pipe(se, v3(x, 0, z), v3(x, 1.0, z), 0.04, 'elGreen', NS);
       for (const z of [-3.6, -1.8]) { pipe(se, v3(-5.6, 1.0, z), v3(-5.6, 2.2, z), 0.04, 'elGreen', NS); ball(se, v3(-5.6, 2.38, z), 0.17, 'globeGreen', { glow: true }); }
-      pic(se, v3(-7.6, 0.012, -2.7), 3.6, 1.6, 0, 'stairDown', { rx: -Math.PI / 2, solid: false, glow: false }); }
+      pic(se, v3(-5.65, 1.55, -2.7), 1.5, 0.5, -Math.PI / 2, 'signSubway', { solid: false }); }
 
     // ---- the blocks: the north side of the avenue (the walk-up with the water tower is the roof drop) and the south side
     block('Corner Tower', -XW, -30.4, -24, -4, 24, 'nycBrickTan', 1);
@@ -1645,6 +1648,51 @@
       const cl = O('Laundry', 'deco'); for (let x = 20.4; x < 25; x += 0.75 + rnd() * 0.5) { const w = 0.25 + rnd() * 0.25, h = 0.35 + rnd() * 0.4; box(cl, v3(x, y - h / 2 + 0.05 * (x - 19.6) / 6, z), v3(w, h / 2, 0.01), ['cloth1', 'cloth2', 'cloth3', 'cloth4'][Math.floor(rnd() * 4)], 0, 0, 0, NS); } surf(cl, SOFT); }
     { const pc = O('Parked Car', 'deco'); for (const z of [28, 33.6, 39]) { box(pc, v3(20.9, 0.62, z), v3(0.9, 0.36, 2.3), 'carSilver'); box(pc, v3(20.9, 1.2, z + 0.2), v3(0.82, 0.25, 1.25), 'carGlass'); for (const dz of [-1.45, 1.45]) pipe(pc, v3(20.0, 0.33, z + dz), v3(21.8, 0.33, z + dz), 0.32, 'rubberBlack', NS); } surf(pc, HARD); }
 
+    // ---- the subway station under the avenue (owner, 2026-11-19): down the stairs on the north sidewalk, a tiled hall with two
+    // platforms, columns (poles), turnstiles, and a parked two-car train with every door open, end doors too: fly through it.
+    // The ground plane is skipped over its footprint (world.groundHoles, the physics hook in sim.js; absent on other maps) and
+    // the street is a slab over it, open only at the stair (world.groundCuts: where worldview.js cuts the ground mesh).
+    const SUB = { y: -6, pit: -7.2, ceil: -0.45, top: -0.02, x0: -31, x1: 5.2, z0: -1.65, z1: 13 }, OPEN = { x0: -9.5, x1: -5.6, z0: -3.5, z1: -1.9 }, CORR = { x0: -16.2, x1: -5.4, z0: -3.75, z1: -1.65 };
+    const groundHoles = [{ x0: CORR.x0 - 0.3, x1: CORR.x1 + 0.1, z0: CORR.z0 - 0.1, z1: CORR.z1 + 0.05 }, { x0: SUB.x0 - 0.3, x1: SUB.x1 + 0.3, z0: SUB.z0 - 0.3, z1: SUB.z1 + 0.3 }], groundCuts = [OPEN];
+    together(() => { const st = O('Subway Station', 'building', { wallNormal: v3(0, 0, 1), tall: 6 }), B = (x0, x1, y0, y1, z0, z1, mat, opt = NS) => { if (x1 - x0 > 0.005 && y1 - y0 > 0.005 && z1 - z0 > 0.005) box(st, v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), v3((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2), mat, 0, 0, 0, opt); };
+      // the street over it: a slab 2 cm under the ground's paint, open at the stair
+      B(CORR.x0 - 0.2, OPEN.x0, SUB.ceil, SUB.top, CORR.z0, CORR.z1, 'stationCeil'); B(OPEN.x1, CORR.x1 + 0.1, SUB.ceil, SUB.top, CORR.z0, CORR.z1, 'stationCeil');
+      B(OPEN.x0, OPEN.x1, SUB.ceil, SUB.top, CORR.z0, OPEN.z0, 'stationCeil'); B(OPEN.x0, OPEN.x1, SUB.ceil, SUB.top, OPEN.z1, CORR.z1, 'stationCeil');
+      B(SUB.x0 - 0.2, SUB.x1 + 0.2, SUB.ceil, SUB.top, SUB.z0, SUB.z1 + 0.2, 'stationCeil');
+      // the stairs: down west from the sidewalk to a landing, walls either side, then into the hall
+      const N = 24, run = 0.39, rise = 0.25; for (let i = 0; i < N; i++) { const xa = OPEN.x1 - (i + 1) * run, xb = OPEN.x1 - i * run; B(xa, xb, SUB.y - 0.5, -rise * (i + 1), CORR.z0 + 0.15, CORR.z1 - 0.15, 'stairStone'); }
+      B(CORR.x0, OPEN.x1 - N * run, SUB.y - 0.5, SUB.y, CORR.z0, CORR.z1, 'stationFloor');
+      B(CORR.x0, CORR.x1, SUB.y - 0.5, SUB.top, CORR.z0 - 0.15, CORR.z0, 'subwayTile'); B(CORR.x0 - 0.2, CORR.x0, SUB.y - 0.5, SUB.top, CORR.z0, CORR.z1, 'subwayTile');
+      B(-13, CORR.x1, SUB.y - 0.5, SUB.top, CORR.z1, CORR.z1 + 0.15, 'subwayTile'); B(OPEN.x1, CORR.x1 + 0.1, SUB.y - 0.5, -0.02, CORR.z0, CORR.z1, 'subwayTile');
+      // the hall: platforms either side of the track pit, tiled walls, dark tunnel mouths at both ends
+      B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, SUB.z0, 4.2, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, 8.8, SUB.z1, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.pit - 0.4, SUB.pit, 4.2, 8.8, 'ballast');
+      for (const z of [4.2, 8.8]) B(SUB.x0, SUB.x1, SUB.y - 0.06, SUB.y + 0.005, z - (z < 6 ? 0.45 : 0), z + (z < 6 ? 0 : 0.45), 'platformEdge', { noSurvey: true, noCollide: true });
+      B(SUB.x0, -16.2, SUB.pit, SUB.top, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(-13, SUB.x1, SUB.pit, SUB.top, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(SUB.x0, SUB.x1, SUB.pit, SUB.top, SUB.z1, SUB.z1 + 0.2, 'subwayTile');
+      for (const [xa, xb] of [[SUB.x0 - 0.2, SUB.x0], [SUB.x1, SUB.x1 + 0.2]]) { B(xa, xb, SUB.pit, SUB.top, SUB.z0, 4.2, 'subwayTile'); B(xa, xb, SUB.pit, SUB.top, 8.8, SUB.z1, 'subwayTile'); B(xa, xb, SUB.pit, SUB.top, 4.2, 8.8, 'tunnelBlack'); }
+      for (const z of [SUB.z0 + 0.03, SUB.z1 - 0.03]) for (const x of [-26, -2]) pic(st, v3(x, -2.6, z), 4.4, 0.7, z < 0 ? 0 : Math.PI, 'signStation', { solid: false, glow: false });
+      pic(st, v3(-14.6, -2.2, CORR.z0 + 0.03), 3.2, 0.6, 0, 'signStation', { solid: false, glow: false });
+      // fluorescent tubes along the ceiling, and three real lights
+      for (const z of [1.2, 6.5, 11]) for (let x = SUB.x0 + 2; x < SUB.x1 - 1; x += 4) neon(st, v3(x, SUB.ceil - 0.05, z), v3(1.2, 0.04, 0.06), 'fluoro');
+      for (let x = OPEN.x1 - 1; x > CORR.x0 + 0.5; x -= 3) neon(st, v3(x, SUB.ceil - 0.05, (CORR.z0 + CORR.z1) / 2), v3(0.06, 0.04, 0.6), 'fluoro');
+      surf(st, HARD); });
+    lamp('Station Light', v3(-23, -0.9, 6.5), 0xe4f0ff, 7, 16); lamp('Station Light', v3(-6, -0.9, 6.5), 0xe4f0ff, 7, 16); lamp('Stair Light', v3(-12, -0.9, -2.7), 0xe4f0ff, 4, 8);
+    for (let x = -28; x <= 3; x += 5) for (const z of [3.7, 9.3]) { const c = O('Station Column', 'pole'); pipe(c, v3(x, SUB.y, z), v3(x, SUB.ceil, z), 0.14, 'columnBlue'); surf(c, HARD); }
+    { const tg = O('Turnstiles', 'deco'); for (const z of [-3.3, -2.4]) { box(tg, v3(-15.6, SUB.y + 0.5, z), v3(0.35, 0.5, 0.12), 'galv'); pipe(tg, v3(-15.6, SUB.y + 0.9, z + 0.12), v3(-15.6, SUB.y + 0.9, z + 0.55), 0.025, 'galv', NS); } surf(tg, HARD); }
+    // the parked train: two cars, both sides' doors open and the end doors too; seats, poles, lights inside
+    for (const [x0, x1, n] of [[-27, -12.6, 1], [-12, 2.4, 2]]) together(() => { const car = O(`Subway Car ${n + 2}`, 'deco'), zc = 6.5, zA = zc - 1.75, zB = zc + 1.75, yF = SUB.y - 0.05, yR = SUB.y + 2.7, L = x1 - x0;
+      box(car, v3((x0 + x1) / 2, yF - 0.1, zc), v3(L / 2, 0.1, 1.75), 'darkMetal', 0, 0, 0, NS); box(car, v3((x0 + x1) / 2, yR + 0.08, zc), v3(L / 2, 0.08, 1.75), 'carSteel', 0, 0, 0, NS);
+      const doors = [0.14, 0.38, 0.62, 0.86].map(f => x0 + f * L), dh = [];
+      for (const dx of doors) dh.push({ a: dx - 0.7, b: dx + 0.7, y0: yF, y1: yF + 2.0 });
+      for (const z of [zA, zB]) { wall(car, 'x', z, x0, x1, yF, yR, 0.08, dh, 'carSteel'); for (const dx of doors) gapO(`Subway Car ${n + 2} Door`, v3(dx, yF + 1.0, z), v3(0, 0, 1), v3(1, 0, 0), 0.62, 0.94);
+        box(car, v3((x0 + x1) / 2, yF + 2.25, z + (z < zc ? -0.045 : 0.045)), v3(L / 2, 0.06, 0.005), 'paintPurple', 0, 0, 0, { noCollide: true }); }
+      for (const x of [x0, x1]) { wall(car, 'z', x, zA - 0.04, zB + 0.04, yF, yR, 0.1, [{ a: zc - 0.55, b: zc + 0.55, y0: yF, y1: yF + 2.0 }], 'carSteel'); gapO(`Subway Car ${n + 2} End Door`, v3(x, yF + 1.0, zc), v3(1, 0, 0), v3(0, 0, 1), 0.48, 0.94); }
+      for (let k = 0; k + 1 < doors.length; k++) for (const z of [zA + 0.3, zB - 0.3]) box(car, v3((doors[k] + doors[k + 1]) / 2, yF + 0.45, z), v3((doors[k + 1] - doors[k]) / 2 - 0.85, 0.06, 0.22), 'carSeat', 0, 0, 0, NS);
+      for (const dx of doors) pipe(car, v3(dx, yF, zc), v3(dx, yR, zc), 0.022, 'galv', NS);
+      for (const z of [zA + 0.6, zB - 0.6]) pipe(car, v3(x0 + 0.3, yR - 0.35, z), v3(x1 - 0.3, yR - 0.35, z), 0.015, 'galv', { noCollide: true });
+      for (let x = x0 + 1.5; x < x1 - 1; x += 3) neon(car, v3(x, yR - 0.03, zc), v3(0.8, 0.02, 0.08), 'fluoro');
+      for (const xb of [x0 + 2.2, x1 - 2.2]) box(car, v3(xb, (SUB.pit + yF - 0.2) / 2, zc), v3(1.1, (yF - 0.2 - SUB.pit) / 2, 1.0), 'rubberBlack', 0, 0, 0, NS);
+      surf(car, HARD); });
+    { const tr = O('Subway Tracks', 'deco'); for (const z of [5.78, 7.22]) pipe(tr, v3(SUB.x0, SUB.pit + 0.08, z), v3(SUB.x1, SUB.pit + 0.08, z), 0.04, 'galv', { noCollide: true }); for (let x = SUB.x0 + 0.4; x < SUB.x1; x += 0.8) box(tr, v3(x, SUB.pit + 0.03, 6.5), v3(0.11, 0.03, 1.2), 'oldWood', 0, 0, 0, { noCollide: true }); }
     // ---- 7 the walk-up roof: the water tower on its stilts, AC units, a stair hut; a roof gate, then the drop gates to the finish
     { const RY = 16, wx = -15.5, wz = -13, wt = O('Water Tower', 'overunder', { obstacle: { a: v3(wx - 1.3, 0, wz), b: v3(wx + 1.3, 0, wz), under: RY + 3.4, over: RY + 8.6 } });
       for (const [dx, dz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) pipe(wt, v3(wx + dx, RY, wz + dz), v3(wx + dx * 0.85, RY + 3.4, wz + dz * 0.85), 0.1, 'iron');
@@ -1673,7 +1721,7 @@
       for (const dz of [-1.16, 1.16]) hang(g, v3(x - 0.5, 5.62, z + dz), v3(x - 0.2, 5.72, z + dz)); });
     { const g = gate('Deck Gate', v3(-13, 8.15, 6), 2.6, 2.2, 'x', 'gateOrange', 'neonCyan'); for (const dz of [-1.36, 1.36]) pipe(g, v3(-13, 6.66, 6 + dz), v3(-13, 6.99, 6 + dz), 0.06, 'gateOrange', NS); }
 
-    return K.done({ id: 'slackvegan', title: 'Slackvegan City', theme: 'nyc', zones, spawn: { pos: v3(-41, 0.03, 6), yaw: -Math.PI / 2 }, bounds: { x: [-XW - 1, XW + 1], z: [-25, 43] } });
+    return K.done({ id: 'slackvegan', title: 'Slackvegan City', theme: 'nyc', zones, groundHoles, groundCuts, spawn: { pos: v3(-41, 0.03, 6), yaw: -Math.PI / 2 }, bounds: { x: [-XW - 1, XW + 1], z: [-25, 43] } });
   }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet Revelstoke park: tall cedars to weave through, swings, a tire tunnel and mountain views.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },

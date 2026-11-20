@@ -557,7 +557,7 @@ function duskTick(dt) {
 // Brick and brutalist facades with their windows on a floor grid (the texture is laid in world space: NYC_DENS), the El's green
 // steel, taxis, shop windows, neon, the bodega cat. Its own random stream, so the other maps' looks are unchanged.
 const NYC = { t: 0, flick: [] };
-const NYC_DENS = { nycBrick: 1 / 7.2, nycBrickTan: 1 / 7.2, brutal: 1 / 7.2, trainSide: 1 / 3.75, shaftWall: 1 / 7.2 };   // texture tile = this many metres⁻¹, aligned to the ground
+const NYC_DENS = { subwayTile: 1 / 8, nycBrick: 1 / 7.2, nycBrickTan: 1 / 7.2, brutal: 1 / 7.2, trainSide: 1 / 3.75, shaftWall: 1 / 7.2 };   // texture tile = this many metres⁻¹, aligned to the ground
 function nycMats() {
   const R = (() => { let s = 4242; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const dots = (g, w, h, n, cols, s0 = 1, s1 = 3, a = 0.3) => { for (let i = 0; i < n; i++) { g.globalAlpha = a * R(); g.fillStyle = cols[(R() * cols.length) | 0]; const s = s0 + R() * (s1 - s0); g.fillRect(R() * w, R() * h, s, s); } g.globalAlpha = 1; };
@@ -631,7 +631,16 @@ function nycMats() {
   neonSign('signBakery', ['BAKERY'], '#ffd7a0', '#ff9a40'); neonSign('signDeli', ['DELI'], '#ff6a5a', '#ff2a1a'); neonSign('signBodega', ['BODEGA · 24 HR'], '#5af0ff', '#00b8ff', 768, 80);
   neonSign('signOpen', ['OPEN'], '#ff4a5a', '#ff1a2a', 256, 200); neonSign('signFresh', ['FRESH'], '#f6e2a8', '#d89a40', 256, 96); neonSign('signDiner', ['D', 'I', 'N', 'E', 'R'], '#ff5ad2', '#ff1aa8', 160, 260);
   neonSign('signFinish', ['FINISH'], '#ff5ad2', '#ff1aa8', 384, 96); neonSign('signSpine', ['THE SPINE'], '#5af0ff', '#00b8ff', 512, 104); neonSign('signPawn', ['PAWN & LOAN'], '#ffd23a', '#ff9a00', 512, 120);
-  neonSign('signSlackvegan', ['SLACKVEGAN CITY', 'IT IS NOT CLEAN · NOW SEND IT'], '#ffd23a', '#ff5a1a', 1024, 372);
+  neonSign('signSlackvegan', ['SLACKVEGAN', 'CITY'], '#ffd23a', '#ff5a1a', 1024, 372);
+  // the subway station: white tile with a maroon band, terrazzo, the yellow platform edge, blue columns, the train's steel
+  MAT.subwayTile = S2({ map: T(256, 256, (g, w, h) => { g.fillStyle = '#e8e4d8'; g.fillRect(0, 0, w, h); g.strokeStyle = '#b8b2a4'; g.lineWidth = 2; for (let y = 0; y <= h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } for (let y = 0; y < h; y += 16) for (let x = ((y / 16) % 2) * 16; x <= w; x += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 16); g.stroke(); } g.fillStyle = '#7a2a2a'; g.fillRect(0, 96, w, 10); dots(g, w, h, 900, ['#00000022', '#6a5a3a33'], 1, 3, 0.4); }), roughness: 0.35 });
+  MAT.stationFloor = S2({ map: T(128, 128, (g, w, h) => { g.fillStyle = '#8a8478'; g.fillRect(0, 0, w, h); dots(g, w, h, 2500, ['#5a564e', '#a8a294', '#2a2a2a'], 1, 3, 0.5); }), roughness: 0.6 });
+  MAT.stationCeil = S2({ color: 0x8e8a84, roughness: 0.95, emissive: 0x2a2a2c, emissiveIntensity: 0.6 }); MAT.stairStone = S2({ map: TX.concrete, color: 0x9a9488, roughness: 0.9 }); MAT.ballast = S2({ map: T(64, 64, (g, w, h) => { g.fillStyle = '#3a3632'; g.fillRect(0, 0, w, h); dots(g, w, h, 900, ['#5a5650', '#222', '#6a5a48'], 1, 4, 0.7); }), roughness: 1 });
+  MAT.platformEdge = S2({ color: 0xe8c020, roughness: 0.6 }); MAT.tunnelBlack = S2({ color: 0x0c0c0e, roughness: 1 }); MAT.columnBlue = S2({ color: 0x2f5a8a, roughness: 0.5, metalness: 0.4 });
+  MAT.carSteel = S2({ map: T(64, 64, (g, w, h) => { for (let x = 0; x < w; x += 8) { g.fillStyle = x % 16 ? '#b8bcc0' : '#d4d8dc'; g.fillRect(x, 0, 8, h); } }), roughness: 0.45, metalness: 0.3 });
+  MAT.carSeat = S2({ color: 0xd8742a, roughness: 0.5 }); MAT.paintPurple = S2({ color: 0x7a3aa8, roughness: 0.5 });
+  MAT.signStation = S2({ map: T(512, 80, (g, w, h) => { g.fillStyle = '#141414'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4f4f0'; g.font = "700 44px Helvetica, Arial, sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Slackvegan Av', w / 2 - 30, h / 2 + 2); g.fillStyle = '#ffcc1a'; g.beginPath(); g.arc(w - 50, h / 2, 26, 0, 7); g.fill(); g.fillStyle = '#141414'; g.font = "700 36px Helvetica, Arial, sans-serif"; g.fillText('Q', w - 50, h / 2 + 2); }), roughness: 0.6 });
+  neonSign('signSubway', ['SUBWAY'], '#ffffff', '#7affb0', 384, 128);
   MAT.gateOrange = S2({ color: 0xff6a1a, roughness: 0.45, metalness: 0.2, emissive: 0x401400, emissiveIntensity: 0.6 });
   MAT.catFur = S2({ color: 0x18181a, roughness: 0.95 }); MAT.catWhite = S2({ color: 0xeeeae2, roughness: 0.95 }); MAT.catEye = B(0x9cff3a);
   MAT.terracotta = S2({ color: 0xb5562e, roughness: 0.9 }); MAT.cardboard = S2({ map: T(64, 64, (g, w, h) => { g.fillStyle = '#b48a5a'; g.fillRect(0, 0, w, h); dots(g, w, h, 300, ['#8a6640', '#c8a070'], 1, 2, 0.5); g.fillStyle = '#c8b48a'; g.fillRect(0, 28, w, 8); }), roughness: 0.95 });
@@ -659,6 +668,13 @@ function nycTick(dt) {
   NYC.t += dt; const t = NYC.t;
   for (const s of NYC.flick) { const k = Math.sin(t * 0.6 + s.p * 3) > 0.96 ? (Math.random() < 0.5 ? 0.2 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a tired neon tube now and then
 }
+// the ground with holes in it (world.groundCuts [{ x0, x1, z0, z1 }]: Slackvegan's subway stair), laid in the x-y plane and turned
+// flat like the plain ground; one texture tile per 4 m
+function groundWithCuts(GS, cuts) {
+  const sh = new THREE.Shape(); sh.moveTo(-GS / 2, -GS / 2); sh.lineTo(GS / 2, -GS / 2); sh.lineTo(GS / 2, GS / 2); sh.lineTo(-GS / 2, GS / 2); sh.closePath();
+  for (const c of cuts) { const p = new THREE.Path(); p.moveTo(c.x0, -c.z1); p.lineTo(c.x1, -c.z1); p.lineTo(c.x1, -c.z0); p.lineTo(c.x0, -c.z0); p.closePath(); sh.holes.push(p); }   // y = -z once it is turned flat
+  const g = new THREE.ShapeGeometry(sh), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 4, uv.getY(i) / 4); return g;
+}
 function buildScene() {
   const VAPOR = world.theme === 'vapor';
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
@@ -681,8 +697,8 @@ function buildScene() {
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(new THREE.PlaneGeometry(GS, GS), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
-  TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * GS / 4, guv.getY(i) * GS / 4);
+  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(world.groundCuts ? groundWithCuts(GS, world.groundCuts) : new THREE.PlaneGeometry(GS, GS), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
+  TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; if (!world.groundCuts) for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * GS / 4, guv.getY(i) * GS / 4);
   playRoot.add(gnd);
   }
   for (const z of world.zones) {
@@ -721,6 +737,7 @@ function addGraffiti(v) {
   const h = v.h; let w, hh, pos, rotY = 0, rotX = 0, opts = {};
   const e = 0.012;
   if (v.graffiti === 'south') { w = h.x * 2; hh = h.y * 2; pos = new THREE.Vector3(v.c.x, v.c.y, v.c.z + h.z + e); }
+  else if (v.graffiti === 'north') { w = h.x * 2; hh = h.y * 2; pos = new THREE.Vector3(v.c.x, v.c.y, v.c.z - h.z - e); rotY = Math.PI; }
   else if (v.graffiti === 'east') { w = h.z * 2; hh = h.y * 2; pos = new THREE.Vector3(v.c.x + h.x + e, v.c.y, v.c.z); rotY = Math.PI / 2; }
   else if (v.graffiti === 'top') { w = h.x * 2; hh = h.z * 2; pos = new THREE.Vector3(v.c.x, v.c.y + h.y + e, v.c.z); rotX = -Math.PI / 2; opts = { top: true, big: 0.4 }; }
   if (hh > 10) opts = { heaven: true, stencil: 'NO WHOOPS', ppm: 64 };
@@ -756,7 +773,7 @@ const WHOOP_LOOK = {
     whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
   motors: { m0702se_23k: 0x3b82f6, m0702se_27k: 0xe11d48, m0702ii_30k: 0xf5b301, m0702ii_36k: 0x9333ea, evo_31k: 0x111111, evo_33k: 0xc9a227, m0802_19k: 0x10b981, m1002_19k: 0xf97316, m0802_16k: 0x64748b, m1102_13k: 0x0ea5e9, m1103_11k: 0xef4444 },
   props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5 },
-  batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
+  batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, lava280: 0x3aa84a, lava320: 0x3aa84a, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
   canopies: { air: { c: 0xf1f3f5, h: 0.0125, w: 0.0125, bridge: true }, std: { c: 0x22c55e, h: 0.0145, w: 0.014 }, aio2s: { c: 0xfacc15, h: 0.016, w: 0.0155 } },
 };
 // a part mesh from src/meshes.js (int16 hundredths of a millimetre) as geometry in metres, built once

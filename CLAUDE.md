@@ -911,6 +911,15 @@ in world space so windows sit on a floor grid (`NYC_DENS`, `boxGeo(h, d, off)`),
 in the haze, on a 480 m ground), `nycTick` (tired neon). Zone paint must never be `transparent` (zones skip the depth test; a
 transparent material is drawn after everything and showed through roofs). test/maps.js flies the bot on the Bakery Low Gate, the
 Water Tower and a Laundry Line; `tools/map_thumbs.py --extra --only=sv` shoots the check views.
+**The subway** (owner, 2026-11-19): the north-sidewalk entrance (x -9.5..-5.6) goes down 24 real steps west to a landing with
+turnstiles and a tiled hall under the avenue (x -31..5, floor 6 m down): two platforms with yellow edges, blue columns (poles),
+"Slackvegan Av" signs, tunnel mouths, and a parked two-car train on the tracks with all 16 side doors and the end doors open
+(each a gap; seats, poles and lights inside). **Physics hook `world.groundHoles`** [{ x0, x1, z0, z1 }] (sim.js `inGroundHole`;
+absent on every other map, so the physics is unchanged): no ground plane over the station's footprint (the street over it is a
+slab 2 cm under the paint), the ground-effect height and the "fell through the ground" reset skip it too. **`world.groundCuts`**:
+where worldview.js cuts the ground mesh (`groundWithCuts`); zones must not cover a cut (they skip the depth test). test/subway.js.
+The shop shutters carry the pilots' logos (none, one or two each, sizes 0.6-2.4 m, turned up to ±20°; `graffiti: 'north'` is new
+in `addGraffiti`); the billboard reads SLACKVEGAN / CITY.
 The start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`, white paint; their mark, at the owner's request, credited on the main menu and in the README), the centre line broken under it.
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
