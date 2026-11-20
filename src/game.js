@@ -39,6 +39,9 @@ const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_
 const PROP_FIT = { ct: 1.31, cq: 1.8 }, DRAIN_DEF = 2.4;
 if (tune.propCt == null) { tune.propCt = PROP_FIT.ct; tune.propCq = PROP_FIT.cq; if (tune.drain === 3.2) tune.drain = DRAIN_DEF; }   // the 3.2 of the first fit went with the old props
 if (tune.drain == null) tune.drain = DRAIN_DEF;
+// Battery life off by default (owner, 2026-11-20: "not necessary in our sim"): the pack never runs down unless the pilot ticks
+// Garage → Battery life. Everyone is switched off once (`store 'batOff'`); the physics (Node) keeps it on when absent.
+if (!store.get('batOff', false)) { tune.batteryLife = false; store.set('batOff', true); store.set('tune', tune); } else if (tune.batteryLife == null) tune.batteryLife = false;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

@@ -171,7 +171,7 @@ function renderGarage() {
       <label class="chk"><input type=checkbox data-tb="airmode" ${tune.airmode ? 'checked' : ''}> Airmode</label>
       <label class="chk"><input type=checkbox data-tb="itermRelax" ${tune.itermRelax ? 'checked' : ''}> I-term relax</label>
       <label class="chk" title="Draw the whoop's own frame, ducts and props in the FPV view (H while flying). Off: a clean picture with nothing of the quad in it. The chase view always shows it."><input type=checkbox id="gShowFrame" ${showFrame ? 'checked' : ''}> Show the frame in FPV</label>
-      <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife !== false ? 'checked' : ''}> Battery life</label>
+      <label class="chk" title="On: the pack runs down as you fly, the voltage sags more near the end, and when it browns out the quad drops (B for a fresh pack). Off: it never runs down."><input type=checkbox data-tb="batteryLife" ${tune.batteryLife === true ? 'checked' : ''}> Battery life</label>
       <label class="chk" title="Betaflight's 3D mode: throttle stick in the middle is zero thrust, below the middle the motors spin backward so the quad can fly upside-down. Same as the 3 key while flying (1 acro, 2 angle)."><input type=checkbox data-t3d ${tune.flightMode === '3d' ? 'checked' : ''}> 3D mode (reversible motors)</label>
     </div>
     <details><summary>Import Betaflight <code>diff all</code></summary><textarea id="gDiff" placeholder="Paste the output of 'diff all' from the Betaflight CLI"></textarea><button id="gDiffBtn">Apply</button><span id="gDiffMsg"></span></details>
@@ -360,7 +360,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'gDiffBtn') { const r = S.importDiff($('#gDiff').value, tune); tune = Object.assign(tune, r.tune); saveTune(); renderGarage(); $('#gDiffMsg').textContent = r.found.length ? `Imported ${r.found.length} settings` : 'No Betaflight settings found'; }
-  if (e.target.id === 'gReset') { tune = Object.assign(S.defaultTune(), FEEL_DEF, { weightFeel: WEIGHT_DEF }); saveTune(); renderGarage(); }   // the game's feel defaults too (the physics' own defaults have no wobble)
+  if (e.target.id === 'gReset') { tune = Object.assign(S.defaultTune(), FEEL_DEF, { weightFeel: WEIGHT_DEF, batteryLife: false }); saveTune(); renderGarage(); }   // the game's feel defaults too (the physics' own defaults have no wobble)
 });
 
 // ---------------- controls
