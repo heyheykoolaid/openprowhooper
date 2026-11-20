@@ -348,6 +348,10 @@ ghosts and downloaded community maps). A classic script in index.template.html u
 (`window.PW_MOVING` stops the module), keeps keys already there unless the new address has no pilot name yet, notes `pw.movedIn`
 and reloads clean. The relay's `ALLOW_ORIGINS` must list the new origins (its default now does). Tested end to end between two
 local hosts (name, builds, tune moved; owner key and token not).
+**Caching** (2026-11-20): build.py moves the rarely changing pictures out of dist/index.html (graffiti `PW_ART`, club flags
+`PW_FLAGS`, map thumbnails `PW_MAPTHUMBS`: 1.3 MB of the 3.4 MB page) into `dist/data/<name>.<sha256:10>.js`, and writes
+`dist/_headers` (Cloudflare Pages): `/data/*` and three.js immutable for a year, music 30 days, the page itself `no-cache` (a
+304 when unchanged). The standalone build stays one file.
 
 ## Performance (2026-11-17, testers reported heavy CPU) — the overlay is Options → Graphics or F3
 - **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,

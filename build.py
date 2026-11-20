@@ -58,11 +58,37 @@ for f in sorted((root / 'maps' / 'official').glob('*.json')) if (root / 'maps' /
     except Exception: pass
 t = t.replace('<script>/*OFFICIAL*/</script>', '<script>window.PW_OFFICIAL=' + json.dumps(official) + ';</script>')
 t = t.replace('<script>/*ART*/</script>', '<script>window.PW_ART=' + json.dumps(art) + ';</script>')
-(out / 'index.html').write_text(t.replace('<!--THREE-->', CDN).replace('<script>/*TRACKS*/</script>', '<script>window.PW_TRACKS=' + json.dumps(tracks) + ';</script>'))
+# dist/index.html (the hosted game: openprowhooper.com, 2026-11-20): the pictures (graffiti, club flags, map thumbnails, ~1.3 MB
+# of the 3.4 MB page) change rarely, so they go in their own files named by their content (data/<name>.<hash>.js); pilots'
+# browsers keep them for a year (dist/_headers, read by Cloudflare) and only fetch the page itself again after an update.
+# The standalone build keeps everything inline.
+import hashlib
+shutil.rmtree(out / 'data', ignore_errors=True); (out / 'data').mkdir()
+ti = t
+for name, js in [('art', 'window.PW_ART=' + json.dumps(art) + ';'), ('pics', 'window.PW_FLAGS=' + json.dumps(flags) + ';window.PW_MAPTHUMBS=' + json.dumps(thumbs) + ';')]:
+    block = '<script>' + js + '</script>'
+    assert ti.count(block) == 1, name
+    fn = f'{name}.{hashlib.sha256(js.encode()).hexdigest()[:10]}.js'
+    (out / 'data' / fn).write_text(js)
+    ti = ti.replace(block, f'<script src="data/{fn}"></script>')
+(out / '_headers').write_text('''# Cloudflare Pages response headers (build.py). Content-named files never change: keep them a year.
+/data/*
+  Cache-Control: public, max-age=31536000, immutable
+/three-r160.min.js
+  Cache-Control: public, max-age=31536000, immutable
+/music/*
+  Cache-Control: public, max-age=2592000
+# the page itself: always ask whether there is a newer one (a quick "not modified" when there is not)
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+''')
+(out / 'index.html').write_text(ti.replace('<!--THREE-->', CDN).replace('<script>/*TRACKS*/</script>', '<script>window.PW_TRACKS=' + json.dumps(tracks) + ';</script>'))
 # standalone single-file build with the music embedded
 emb = [dict(x) for x in tracks]
 for x in emb:
     x['src'] = 'data:audio/mpeg;base64,' + base64.b64encode((out / x['src']).read_bytes()).decode()
     x['art'] = 'data:image/jpeg;base64,' + base64.b64encode((out / x['art']).read_bytes()).decode()
 (out / 'standalone.html').write_text(t.replace('<!--THREE-->', EMB).replace('<script>/*TRACKS*/</script>', '<script>window.PW_TRACKS=' + json.dumps(emb) + ';</script>'))
-print('built', len(t) // 1024, 'KB + standalone', (out / 'standalone.html').stat().st_size // 1024, 'KB')
+print('built', (out / 'index.html').stat().st_size // 1024, 'KB (+ data/', sum(f.stat().st_size for f in (out / 'data').iterdir()) // 1024, 'KB) + standalone', (out / 'standalone.html').stat().st_size // 1024, 'KB')
