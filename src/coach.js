@@ -81,7 +81,7 @@ function coachJudge(steps, t0, strictObj) {
     if (s.pass) {
       const c = coach.passes.find(c => c.kind === s.pass && c.t >= since - 0.3 && (obj == null || !strictObj || c.obj === obj));
       if (!c) { const other = obj != null && coach.passes.find(c => c.kind === s.pass && c.t >= since - 0.3 && c.obj !== obj); if (other) out[i].msg = `that was ${other.kind === 'U' ? 'under' : 'over'} the ${esc(other.name)}: use the same object`; break; }
-      if (obj == null) obj = c.obj; out[i] = { ok: true, msg: esc(c.name), t: c.t }; since = Math.max(since, c.t - 0.2); continue;
+      if (obj == null) obj = c.obj; out[i] = { ok: true, msg: esc(c.name), t: c.t, t0: c.t - 0.35 }; since = Math.max(since, c.t - 0.2); continue;
     }
     const p = s.rot, tol = COACH_TOL(p);
     let hit = null, last = null, other = null;
@@ -102,7 +102,7 @@ function coachJudge(steps, t0, strictObj) {
     if (miss.length) { out[i].msg = `the ${coachDeg(p.deg)} ${{ R: 'roll', P: 'flip', Y: 'yaw spin' }[p.ax]} was good (${Math.round(hit.raw)}°) but it didn't go ${miss[0] === 'O' ? 'over' : 'under'} the object`; break; }
     if (obj == null) { const c = coach.passes.find(c => (s.during || []).includes(c.kind) && c.t >= hit.t0 - 1.0 && c.t <= hit.t1 + 1.5); if (c) obj = c.obj; }
     const off = Math.abs(hit.raw - p.deg), grade = off <= 30 && !hit.pieces ? 'clean' : off <= tol * 0.6 && !hit.pieces ? 'a bit off' : 'sloppy, still counts';
-    out[i] = { ok: true, msg: `${Math.round(hit.raw)}° · ${grade}${hit.pieces ? ' (in ' + hit.pieces + ' pieces: try it in one go next)' : ''}`, t: hit.t1 }; since = hit.t0 + Math.min(0.5, (hit.t1 - hit.t0) * 0.5);
+    out[i] = { ok: true, msg: `${Math.round(hit.raw)}° · ${grade}${hit.pieces ? ' (in ' + hit.pieces + ' pieces: try it in one go next)' : ''}`, t: hit.t1, t0: hit.t0 }; since = hit.t0 + Math.min(0.5, (hit.t1 - hit.t0) * 0.5);
   }
   return { out, done: i, objName: obj != null ? (coach.passes.find(c => c.obj === obj) || {}).name : null };
 }
@@ -187,12 +187,12 @@ function renderCoach() {
         <div class="trBtns"><button data-co="again">Go again <kbd>N</kbd></button><button data-co="mine" class="ghost" title="It was a ${esc(coach.name)}: the game got it wrong">It was a ${esc(coach.name)} <kbd>Y</kbd></button></div>` : ''}
       ${!A ? `<div class="trBtns"><button data-co="missed" class="ghost" title="You flew it and the game said nothing">I did it, the game missed it <kbd>Q</kbd></button></div>` : ''}`;
   }
-  const show = window.Maneuvers && window.Maneuvers.LIB[coach.name];
+  const show = !!(window.Maneuvers && window.Maneuvers.LIB[coach.name]);
   box.innerHTML = `<div class="trHead"><small>🎓 TRAIN</small><span class="coDots">${dots}</span></div><div class="trTarget">${esc(coach.name)}</div>
     <div class="trObs">${coach.obj ? `on <b>${esc(coach.obj)}</b>` : `fly it on: <b>${esc((coach.spots || []).join(', '))}</b>`}${coach.end === 'back' ? ' · ends flying backward' : ''}</div>
     ${coach.result && !coach.done ? `<div class="coRes ${coach.result.ok ? 'ok' : 'no'}">${coach.result.ok ? '✓ Try ' + (coach.tryN - 1) + ' done' : '✗'} <small>${esc(coach.result.how)}</small></div>` : ''}
     ${coach.msg ? `<div class="trMsg">${esc(coach.msg)}</div>` : ''}${body}
-    <div class="trFoot">${show && !coach.done ? '<button data-co="ghost" class="ghost">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="stop" class="ghost">Stop</button></div>`;
+    <div class="trFoot">${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="stop" class="ghost">Stop</button></div>`;
 }
 const esc0 = s => s;   // judge messages are the game's own words (object names already escaped)
 document.addEventListener('click', e => {
@@ -202,7 +202,7 @@ document.addEventListener('click', e => {
   if (a === 'again') { if (coach.done) coachStart(coach.name); else coachAnswer('again'); }
   if (a === 'missed') coachMissed();
   if (a === 'skip') { coach.ask = null; coachTryDone(false, 'skipped'); }
-  if (a === 'ghost') startGhost(coach.name, coach.obj || '');
+  if (a === 'ghost') coachDemo();
   if (a === 'stop') { coachStop(); renderCoach(); }
   if (a === 'tricks') { coachStop(); pause(); openTricks(); }
 });
@@ -214,3 +214,131 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyQ' && !A) coachMissed();
   if (e.code === 'KeyK' && !coach.done) { coach.ask = null; coachTryDone(false, 'skipped'); }
 });
+
+// ---- Show me (owner, 2026-11-20: "it should go first person in the demo drone, so you can see the stick overlay, the game
+// then breaks down the stick movement, as well as the setup and motions required"). The bot flies the trick (MV.make, on
+// an over/under near the pilot on this map, or in open air above them) through Judge the Bot's player in its FPV view with
+// the stick overlay (the sticks a pilot would need: MV.detect's rows), and a panel follows the flight: the setup (speed,
+// height, what to fly at), then each step as it happens with what the sticks and throttle do there. Loops; Space pauses,
+// S slows it down, C changes the camera, Esc / Back returns to the training (at the start, disarmed).
+const demo = { steps: [], setup: '', cur: -1 };
+function demoObjects() {
+  const P = drone.pos, out = [];
+  for (const o of world.objs) { const b = o.obstacle; if (!b || o.round || o.kind === 'pilot' || o.kind === 'edge' || !b.a || !b.b) continue;
+    const L = Math.hypot(b.b.x - b.a.x, b.b.z - b.a.z); if (b.under < 0.9 || b.under > 3.2 || b.over - b.under > 1.5 || L < 1.2) continue;
+    const mx = (b.a.x + b.b.x) / 2, mz = (b.a.z + b.b.z) / 2; out.push({ name: o.name, d: Math.hypot(mx - P.x, mz - P.z) }); }
+  const seen = new Set(); return out.sort((a, b) => a.d - b.d).filter(x => !seen.has(x.name) && seen.add(x.name)).slice(0, 8);
+}
+function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
+  const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0);
+  const tries = open ? [null, null, null] : demoObjects().map(o => o.name);
+  for (let k = 0; k < tries.length; k++) {
+    let m = null; try { m = MV.make(name, world, seed0 + k * 977, tries[k] ? { object: tries[k], wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
+    if (open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5, 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
+    const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map() }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass }, orig = S.TrickDetector.prototype.update, D0 = detector;
+    let got; Object.assign(coach, st);
+    try { S.TrickDetector.prototype.update = function (...a) { const r = orig.apply(this, a); const D = this; for (const kk of D.toks || []) { const id = kk.ax + kk.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: kk.ax, dir: kk.dir, raw: kk.raw, t0: kk.t0, t1: kk.t1, inv: kk.inv > (kk.n || 1) * 0.5 }); } }
+        for (const c of D.crossLog || []) { if (c.kind !== 'U' && c.kind !== 'O') continue; const id = c.kind + c.obj + c.t.toFixed(3); if (!coach.seenPass.has(id)) { coach.seenPass.set(id, 1); coach.passes.push({ kind: c.kind, t: c.t, obj: c.obj, name: c.name }); } } return r; };
+      got = MV.detect(m, world, tune.camTilt, { rows: true }); }
+    finally { S.TrickDetector.prototype.update = orig; }
+    const j = coachJudgeAny(coach.alts, 0, true), ok = got.some(e => e.name === name) || j.done >= j.steps.length;
+    Object.assign(coach, keep); void D0;
+    if (ok || k === tries.length - 1) return { m, got, j, object: tries[k] || 'open air' };
+  }
+  return null;
+}
+const pct = v => Math.round(Math.abs(v) * 100);
+function stickWords(rows, a, b) {   // what the sticks did between a and b (rows: t … thr 11 … roll 24, pitch 25, yaw 26)
+  const R = rows.filter(r => r[0] >= a && r[0] <= b); if (!R.length) return '';
+  const avg = k => R.reduce((s, r) => s + r[k], 0) / R.length, peak = k => R.reduce((m, r) => Math.abs(r[k]) > Math.abs(m) ? r[k] : m, 0);
+  const out = [], P = peak(25), Ro = peak(24), Y = peak(26), t0 = R[0][11], t1 = R[R.length - 1][11], tl = Math.min(...R.map(r => r[11])), th = Math.max(...R.map(r => r[11]));
+  if (Math.abs(P) > 0.15) out.push(`right stick <b>${P < 0 ? 'back' : 'forward'}</b> ${pct(P)}%`);
+  if (Math.abs(Ro) > 0.15) out.push(`right stick <b>${Ro > 0 ? 'right' : 'left'}</b> ${pct(Ro)}%`);
+  if (Math.abs(Y) > 0.15) out.push(`left stick <b>${Y > 0 ? 'right' : 'left'}</b> (yaw) ${pct(Y)}%`);
+  out.push(th - tl > 0.2 ? `throttle <b>${pct(t0)}% → ${pct(tl === t1 || t1 < t0 ? tl : th)}%${t1 !== tl && t1 !== th ? ' → ' + pct(t1) + '%' : ''}</b>` : `throttle about <b>${pct(avg(11))}%</b>`);
+  return out.join(' · ');
+}
+function demoBuild(f) {
+  const rows = f.got.rows || [], j = f.j, st = j.steps;
+  demo.steps = st.map((s, k) => { const o = j.out[k] || {}; return { s, ok: o.ok, t0: o.t0 ?? null, t1: o.t ?? null }; });
+  // fill in times the judge could not place (the next / previous known ones)
+  for (let k = 0; k < demo.steps.length; k++) { const d = demo.steps[k]; if (d.t0 == null) { const prev = demo.steps.slice(0, k).reverse().find(x => x.t1 != null); d.t0 = prev ? prev.t1 : 0.5; } if (d.t1 == null || d.t1 < d.t0) d.t1 = d.t0 + 0.6; }
+  for (const d of demo.steps) { d.sticks = stickWords(rows, d.t0, d.t1); }
+  const first = demo.steps.length ? demo.steps[0].t0 : 1, pre = rows.filter(r => r[0] >= first - 1 && r[0] < first);
+  const v = pre.length ? pre.reduce((s, r) => s + Math.hypot(r[21], r[23]), 0) / pre.length : 0, h = pre.length ? pre.reduce((s, r) => s + r[2], 0) / pre.length : 0, th = pre.length ? pre.reduce((s, r) => s + r[11], 0) / pre.length : 0;
+  demo.setup = `${f.object === 'open air' ? 'Open air, with room all round' : `Line up on the <b>${esc(f.object)}</b>`}: come in at about <b>${v.toFixed(1)} m/s</b>${f.object === 'open air' ? '' : `, <b>${h.toFixed(1)} m</b> up`}, throttle about <b>${pct(th)}%</b>, level.`;
+  demo.called = f.got.map(e => e.name); demo.cur = -1;
+}
+function coachDemo() {
+  const MV = window.Maneuvers; if (!MV || !MV.LIB[coach.name]) { flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
+  const f = demoFly(coach.name); if (!f) { flash(`<b>NO SPOT FOR THE DEMO HERE</b><small>no bar the bot can use on this map: try the playground</small>`, 'near'); return; }
+  demoBuild(f); ghostOff(); drone.armed = false;
+  Object.assign(judge, { demo: coach.name, m: f.m, name: coach.name, events: f.got, rows: f.got.rows || null, t: 0, hold: 0, speed: 1, phase: 'demo', cam: 'fpv', source: 'script', ex: null, from: null, orb: null, keepOrb: false });
+  const pts = []; for (let t = 0; t < f.m.T; t += 0.05) pts.push(f.m.at(t).pos); const C = S.mul(pts.reduce((a, p) => S.add(a, p), S.v3()), 1 / pts.length);
+  judge.look = C; judge.camPos = S.add(C, S.v3(4, 1.2, 4)); judge.lookS = null;
+  mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#coachBox').classList.add('hide'); $('#judgeBox').classList.remove('hide'); trailClear(); demoRender();
+}
+function demoBack() {
+  judge.demo = null; demoArrows(); stopJudge(); mode = 'fly'; show(null); $('#hud').classList.remove('hide');
+  drone.reset(activeWorld.spawn, true); detector.reset(); coachClock(); renderCoach();
+  flash('<b>YOUR TURN</b><small>back at the start · arm and go</small>');
+}
+function demoTick() {
+  demoArrows();
+  const k = demo.steps.findIndex(d => judge.t >= d.t0 - 0.15 && judge.t <= d.t1 + 0.25), cur = k >= 0 ? k : (judge.t < (demo.steps[0] || {}).t0 ? -1 : demo.cur);
+  if (cur !== demo.cur) { demo.cur = cur; demoRender(); }
+}
+function demoRender() {
+  const box = $('#judgeBox'); if (!box || !judge.demo) return; const vars = new Set();
+  const cams = Object.entries(JCAMS).map(([k, v]) => `<button data-jcam="${k}" class="${judge.cam === k ? 'on' : 'ghost'}">${v}</button>`).join('');
+  box.innerHTML = `<div class="trHead"><small>👻 SHOW ME · ${esc(judge.demo)}</small><span class="jStat">${judge.speed === 0 ? 'paused' : 'speed ×' + judge.speed}</span></div>
+    <div class="trRow jCam">${cams}</div>
+    <div class="trLast ${demo.cur < 0 ? 'demoOn' : ''}"><b>Setup</b> · ${demo.setup}</div>
+    <ol class="coSteps demoSteps">${demo.steps.map((d, k) => `<li class="${k === demo.cur ? 'on' : k < demo.cur ? 'ok' : ''}">${coachStepText(d.s, vars)}${d.sticks ? `<div class="demoStk">${d.sticks}</div>` : ''}</li>`).join('')}</ol>
+    ${demo.called.length && !demo.called.includes(judge.demo) ? `<p class="note">(the game read this flight as ${esc(demo.called.join(' + '))}: the bot's version is rough)</p>` : ''}
+    <div class="trLast"><kbd>Space</kbd> pause · <kbd>S</kbd> slow-mo · <kbd>C</kbd> camera · <kbd>Esc</kbd> back</div>
+    <div class="trFoot"><button data-demo="again">⟲ Another flight</button><button data-demo="slow" class="ghost">${judge.speed === 1 ? 'Slow-mo' : 'Full speed'}</button><button data-demo="back" class="primary">◂ My turn</button></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-demo]'); if (!b) return; e.stopPropagation(); b.blur(); const a = b.dataset.demo;
+  if (a === 'back') demoBack();
+  if (a === 'slow') { judge.speed = judge.speed === 1 ? 0.35 : 1; demoRender(); }
+  if (a === 'again') { const nm = judge.demo; judge.demo = null; demoArrows(); stopJudge(); mode = 'fly'; coach.name = nm; coachDemo(); }
+});
+
+// GoldenEye-style stick arrows (owner, 2026-11-20: "show the stick movements as big arrows around the center of the screen"):
+// while Show me plays, the sticks the bot needs right now are drawn as big arrows round the crosshair: the right stick as
+// arrows up / down (pitch forward / back) and left / right (roll), the left stick's yaw as a curved arrow over the top, and
+// the throttle as a gauge on the left with an arrow while it is moving. Bigger and brighter the further the stick goes.
+function demoArrows() {
+  const cv = $('#demoArrows'), rows = judge.rows; if (!cv) return;
+  const on = !!(judge.demo && mode === 'judge' && rows && rows.length > 1); cv.classList.toggle('hide', !on); if (!on) return;
+  const W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const g = cv.getContext('2d'); g.clearRect(0, 0, W, H);
+  const dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1), at = t => rows[Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / dtR)))];
+  const r = at(judge.t), r0 = at(judge.t - 0.15), P = r[25], R = r[24], Y = r[26], T = r[11], dT = (r[11] - r0[11]) / 0.15;
+  const cx = W / 2, cy = H / 2, u = Math.min(W, H) / 720, TH = 0.12, blink = 0.88 + 0.12 * Math.sin(performance.now() / 90);
+  const col = v => `rgba(255,${Math.round(225 - 110 * Math.min(1, Math.abs(v)))},30,${(0.8 + 0.2 * Math.min(1, Math.abs(v))) * blink})`;
+  const label = (txt, x, y, v) => { g.font = `bold ${Math.round(18 * u)}px ui-monospace, monospace`; g.textAlign = 'center'; g.lineWidth = 4 * u; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(txt, x, y); g.fillStyle = col(v); g.fillText(txt, x, y); };
+  // a chunky arrow from the crosshair outward: ang 0 = up
+  const arrow = (ang, v, txt) => { const a = Math.abs(v); if (a < TH) return; const L = (55 + 150 * Math.min(1, a)) * u, w = (16 + 14 * a) * u, r0 = 70 * u, s = Math.sin(ang), c = -Math.cos(ang), px = -c, py = s;
+    const x0 = cx + s * r0, y0 = cy + c * r0, x1 = cx + s * (r0 + L), y1 = cy + c * (r0 + L), hx = cx + s * (r0 + L - w * 1.6), hy = cy + c * (r0 + L - w * 1.6);
+    g.beginPath(); g.moveTo(x0 + px * w * 0.45, y0 + py * w * 0.45); g.lineTo(hx + px * w * 0.45, hy + py * w * 0.45); g.lineTo(hx + px * w, hy + py * w); g.lineTo(x1, y1); g.lineTo(hx - px * w, hy - py * w); g.lineTo(hx - px * w * 0.45, hy - py * w * 0.45); g.lineTo(x0 - px * w * 0.45, y0 - py * w * 0.45); g.closePath();
+    g.lineWidth = 5 * u; g.strokeStyle = 'rgba(0,0,0,.8)'; g.stroke(); g.fillStyle = col(v); g.fill();
+    label(`${txt} ${Math.round(a * 100)}%`, cx + s * (r0 + L + 22 * u), cy + c * (r0 + L + 22 * u) + 6 * u, v); };
+  arrow(0, P > 0 ? P : 0, 'PITCH FWD'); arrow(Math.PI, P < 0 ? P : 0, 'PITCH BACK'); arrow(Math.PI / 2, R > 0 ? R : 0, 'ROLL R'); arrow(-Math.PI / 2, R < 0 ? R : 0, 'ROLL L');
+  if (Math.abs(Y) >= TH) {   // yaw: a curved arrow over the crosshair, turning the way the nose goes
+    const a = Math.abs(Y), rad = 120 * u, sp = (0.35 + 0.9 * a), dir = Y > 0 ? 1 : -1, a0 = -Math.PI / 2 - dir * sp, a1 = -Math.PI / 2 + dir * sp;
+    g.lineCap = 'round'; g.lineWidth = (14 + 10 * a) * u + 6 * u; g.strokeStyle = 'rgba(0,0,0,.8)'; g.beginPath(); g.arc(cx, cy, rad, Math.min(a0, a1), Math.max(a0, a1)); g.stroke();
+    g.lineWidth = (14 + 10 * a) * u; g.strokeStyle = col(Y); g.beginPath(); g.arc(cx, cy, rad, Math.min(a0, a1), Math.max(a0, a1)); g.stroke();
+    const ex = cx + Math.cos(a1) * rad, ey = cy + Math.sin(a1) * rad, tx = -Math.sin(a1) * dir, ty = Math.cos(a1) * dir, hw = (20 + 12 * a) * u;
+    g.beginPath(); g.moveTo(ex + tx * hw * 1.4, ey + ty * hw * 1.4); g.lineTo(ex - ty * hw, ey + tx * hw); g.lineTo(ex + ty * hw, ey - tx * hw); g.closePath(); g.lineWidth = 5 * u; g.strokeStyle = 'rgba(0,0,0,.8)'; g.stroke(); g.fillStyle = col(Y); g.fill(); g.lineCap = 'butt';
+    label(`YAW ${Y > 0 ? 'RIGHT' : 'LEFT'} ${Math.round(a * 100)}%`, cx, cy - rad - 28 * u, Y);
+  }
+  // throttle gauge, left of the crosshair
+  const gx = cx - 300 * u, gh = 220 * u, gw = 26 * u, gy = cy - gh / 2;
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(gx - 3 * u, gy - 3 * u, gw + 6 * u, gh + 6 * u); g.fillStyle = col(T); g.fillRect(gx, gy + gh * (1 - T), gw, gh * T);
+  label(`THR ${Math.round(T * 100)}%`, gx + gw / 2, gy + gh + 26 * u, T);
+  if (Math.abs(dT) > 0.6) { const up = dT > 0, ay = up ? gy - 18 * u : gy + gh + 44 * u, s = 18 * u; g.beginPath(); g.moveTo(gx + gw / 2, ay + (up ? -s : s)); g.lineTo(gx + gw / 2 - s, ay); g.lineTo(gx + gw / 2 + s, ay); g.closePath(); g.lineWidth = 4 * u; g.strokeStyle = 'rgba(0,0,0,.8)'; g.stroke(); g.fillStyle = col(1); g.fill();
+    label(up ? 'PUNCH IT' : 'CUT', gx + gw / 2, up ? ay - s - 8 * u : ay + s + 22 * u, 1); }
+}

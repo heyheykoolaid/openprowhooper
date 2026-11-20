@@ -24,7 +24,7 @@ function startJudge(trick) {
   train.on = false; renderTrain(); drone.armed = false; ghostOff();
   mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#judgeBox').classList.remove('hide'); judgeNext();
 }
-function stopJudge() { judgeUpload(); $('#judgeBox').classList.add('hide'); $('#judgeSticks').classList.add('hide'); trailClear(); droneMesh.scale.setScalar(1); }
+function stopJudge() { judgeUpload(); judge.demo = null; $('#judgeBox').classList.add('hide'); $('#judgeSticks').classList.add('hide'); $('#demoArrows').classList.add('hide'); trailClear(); droneMesh.scale.setScalar(1); }
 // Where the bot's flight comes from (owner, 2026-11-19: the bot should be the game's current knowledge of each trick): mostly
 // the knowledge bot (MV.knowledge: a confirmed example from the trick library re-flown with small variations, or the script
 // retimed to the library's pace), sometimes the hand-written script, so verdicts on both keep coming. Each flight is tagged.
@@ -53,7 +53,8 @@ function judgeNext() {
 function judgeStep(dt) {
   const m = judge.m; if (!m) return;
   judge.t = Math.min(m.T, judge.t + dt * judge.speed);
-  if (judge.t >= m.T && judge.phase === 'watch') { judge.phase = 'ask'; renderJudge(); }
+  if (judge.demo) { if (judge.t >= m.T) { judge.hold = (judge.hold || 0) + dt; if (judge.hold > 1.4) { judge.hold = 0; judge.t = 0; trailClear(); } } demoTick(); }   // Train → Show me: loops, no verdicts
+  else if (judge.t >= m.T && judge.phase === 'watch') { judge.phase = 'ask'; renderJudge(); }
   const s = m.at(judge.t); drone.pos = s.pos; drone.q = s.q; for (let i = 0; i < 4; i++) drone.motorW[i] = 2600;
   if (judge.t < m.T) trailPush(s.pos);
   judgeSticksDraw();
@@ -62,7 +63,7 @@ function judgeStep(dt) {
 // sticks a pilot would have needed for this flight, the same ones the detector's Watcher saw (MV.detect's rows: throttle col 11,
 // roll / pitch / yaw 24-26), drawn like the flying HUD's overlay; V turns it on and off with the HUD's own setting.
 function judgeSticksDraw() {
-  const cv = $('#judgeSticks'), rows = judge.rows, on = stickUI.on && mode === 'judge' && rows && rows.length > 1;
+  const cv = $('#judgeSticks'), rows = judge.rows, on = (stickUI.on || judge.demo) && mode === 'judge' && rows && rows.length > 1;
   cv.classList.toggle('hide', !on); if (!on) return;
   const at = t => { const i = Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / ((rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1))))), r = rows[i]; return { thr: r[11], roll: r[24], pitch: r[25], yaw: r[26] }; };
   const trail = []; for (let k = 15; k >= 1; k--) if (judge.t - k * 0.033 >= 0) trail.push(at(judge.t - k * 0.033));
@@ -111,6 +112,7 @@ async function judgeExport() {
 }
 const VERDICT = { clean: '✓ clean', sloppy: '≈ sloppy, but it is the trick', wrong: '✗ not this trick' };
 function renderJudge() {
+  if (judge.demo) { demoRender(); return; }
   const box = $('#judgeBox'); if (!box || !judge.m) return;
   const n = judge.session.length, ag = judge.session.filter(x => x.agree).length, last = judge.session[n - 1];
   const det = judge.events.length ? judge.events.map(e => `${e.name} <small>${e.exec}${e.clean != null ? ' ' + e.clean : ''}</small>`).join(' + ') : 'nothing';
@@ -140,11 +142,12 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => { if (e.target.id === 'jWant') { judge.want = e.target.value; judgeNext(); e.target.blur(); } });
 addEventListener('keydown', e => {
   if (mode !== 'judge' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
-  if (e.code === 'Escape') { stopJudge(); mode = 'menu'; show('#mainMenu'); }
+  if (e.code === 'Escape') { if (judge.demo) { demoBack(); return; } stopJudge(); mode = 'menu'; show('#mainMenu'); }
   if (e.code === 'KeyR') judgeReplay();
   if (e.code === 'KeyS') { judge.speed = judge.speed === 1 ? 0.5 : judge.speed === 0.5 ? 0.25 : 1; renderJudge(); }
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); renderJudge(); judgeSticksDraw(); }
   if (e.code === 'KeyC') { judge.cam = judge.cam === 'spectator' ? 'fpv' : judge.cam === 'fpv' ? 'chase' : 'spectator'; renderJudge(); }
+  if (judge.demo) { if (e.code === 'Space') { e.preventDefault(); judge.speed = judge.speed ? 0 : 1; demoRender(); } return; }
   if (judge.phase === 'ask') { if (e.code === 'Digit1') judgeVerdict('clean'); if (e.code === 'Digit2') judgeVerdict('sloppy'); if (e.code === 'Digit3') judgeVerdict('wrong'); }
   if (judge.phase === 'reveal' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); judgeNext(); }
 });

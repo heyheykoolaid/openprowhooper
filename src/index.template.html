@@ -110,6 +110,8 @@ code { color: var(--acid); }
 #coachBox { position: fixed; left: 16px; top: 112px; width: min(360px, 44vw); max-height: calc(100vh - 230px); overflow-y: auto; z-index: 60; background: rgba(14,13,12,.88); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
 #coachBox .coDots i { display: inline-block; width: 11px; height: 11px; margin-left: 4px; border: 1px solid #777; border-radius: 50%; } #coachBox .coDots i.on { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(80,220,255,.35) inset; } #coachBox .coDots i.ok { background: #7dff9a; border-color: #7dff9a; } #coachBox .coDots i.no { background: #ff6a5a; border-color: #ff6a5a; }
 #coachBox .coSteps { margin: 6px 0; padding-left: 20px; } #coachBox .coSteps li { margin: 3px 0; color: #cfc6b4; } #coachBox .coSteps li.on { color: #fff; font-weight: bold; } #coachBox .coSteps li.ok { color: #7dff9a; } #coachBox .coSteps li.bad { color: #ffb0a6; } #coachBox .coSteps.dim li { color: #a9a090; }
+#demoArrows { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 55; pointer-events: none; }
+#judgeBox .demoSteps li { margin: 5px 0; } #judgeBox .demoSteps li.on { color: #fff; font-weight: bold; background: rgba(80,220,255,.12); } #judgeBox .demoSteps li.ok { color: #9fe3b0; } #judgeBox .demoStk { font-weight: normal; color: #ffd34d; font-size: 11px; margin-top: 2px; } #judgeBox .demoOn { border-left: 3px solid var(--cyan); }
 #coachBox .coWhy { color: #ffb0a6; font-weight: normal; margin-top: 2px; } #coachBox .coGot { color: #9fe3b0; } #coachBox .coRes { margin: 6px 0; padding: 5px 8px; border-left: 3px solid #888; } #coachBox .coRes.ok { border-color: #7dff9a; } #coachBox .coRes.no { border-color: #ff6a5a; }
 .tt a.train { margin-left: 6px; }
 #train { position: fixed; left: 16px; top: 112px; width: min(340px, 44vw); z-index: 60; background: rgba(14,13,12,.86); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
@@ -411,7 +413,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="fps"></div><div id="perfHud" class="hide"></div>
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
-<div id="train" class="hide"></div><div id="coachBox" class="hide"></div>
+<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoArrows" class="hide"></canvas>
 <div id="judgeBox" class="hide"></div><canvas id="judgeSticks" class="hide" width="260" height="120" title="The bot's sticks (V)"></canvas>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">
