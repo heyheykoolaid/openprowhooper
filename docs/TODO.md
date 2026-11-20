@@ -18,6 +18,23 @@ Kept in order of priority and feasibility. When one is done, move it to CLAUDE.m
 5. **3D mode scoring**: decide with 3D pilots which tricks count and what they are worth, and whether 3D gets its own
    board. After gap points exist.
 
+## Train in the Tricktionary (owner, 2026-11-20)
+A **Train** button on each trick's page: four tries. Tries 1-2 are the trick broken into its parts, one at a time, each judged
+as it is flown ("fly over the bar" ✓, "front flip about 270°" — yours was 190°, "come back under flying backward" ✓). Tries 3-4
+are the whole trick, judged live, with what was missing said in plain words. Builds on Trick Calibration, the ghost "Show me",
+the Watcher's checks and each trick's pattern (rotations, passes): the parts can be generated for the open-air, powerloop,
+Matty, Split-S, maverick and jump-rope families (~45 tricks); pole, wall and gap tricks need their parts written by hand. The
+game knows what the pilot meant to fly, so a passed try is a strong label; a failed try is not a "no" for the detector.
+
+## Trick challenges and the trick board (owner, 2026-11-20)
+A pilot names a trick (new, or one the game doesn't call well), flies it, and posts it: the replay goes to a **trick board**
+on the relay. Other pilots watch it and try it; a try passes when its motion matches the original closely enough (the trick
+library's signature match: rotation per axis, the up/down curve, the over/under passes in order, with a tolerance). When 3
+different pilots pass, the trick is confirmed: their examples go into the trick library (a custom trick with examples from
+several pilots already shows up as a "maybe"), and the owner names its points and turns it into a real rule. The replays are
+the video reference. Needs: a new relay kind (`challenge`), a board screen, the guest replay viewer, a "this looks like
+<existing trick>" check before posting, and the owner's say before anything is scored.
+
 ## Review hub (owner, 2026-11-20: "a more unified way of reviewing all of the flights and labelled tricks under one hub")
 Today the same work is spread over the Flight desk (shared flights, Labels, Review queue, Feedback), Judge the community
 (board runs), Judge the Bot, Quick check and SKITTLES mode (one's own runs). One screen with sections instead:
