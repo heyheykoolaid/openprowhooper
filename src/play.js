@@ -260,7 +260,7 @@ function frame(now) {
   if (pf) renderer.info.autoReset = false, renderer.info.reset();
   if (mode === 'fly') {
     const rc = getRC(dt); lastRC = rc;
-    if (coachFrozen()) acc = 0; else acc += dt; let n = 0;   // Train's pauses between steps: nothing moves, nothing is judged or recorded
+    const cts = coachTimeScale(dt); if (coachFrozen()) acc = 0; else acc += dt * cts; let n = 0;   // Train's pauses between steps ease in and out; stopped, nothing moves, nothing is judged or recorded
     while (acc >= DT && n < 120) {
       const p0 = race.on ? { x: drone.pos.x, y: drone.pos.y, z: drone.pos.z } : null;
       if (pf) { const a = performance.now(); drone.step(rc, DT); tPh += performance.now() - a; }
@@ -270,7 +270,7 @@ function frame(now) {
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
     }
-    if (n >= 120) { acc = 0; if (pf) PERF.acc.drop = (PERF.acc.drop || 0) + 1; } if (pf) PERF.acc.steps += n;
+    if (n >= 120) { acc = 0; if (pf) PERF.acc.drop = (PERF.acc.drop || 0) + 1; } if (pf) PERF.acc.steps += n; if (coach.on) coachLive(n * DT);   // Train: pause as a step's rotation comes round
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
     // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).

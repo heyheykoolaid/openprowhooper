@@ -198,8 +198,8 @@
   // starting before the flick is done (blend), at anything from demo speed down to the pilot's 300-500°/s
   function juicyFlick(world, r, o = {}) {
     const a0 = range(r, 0, 2 * P), h = v3(Math.sin(a0), 0, Math.cos(a0)), face = faceQ(h), v = range(r, 1.5, 4), wob = wobble(r, o.wobble ?? range(r, 0, 25));
-    const pd = range(r, 155, 205), rd = range(r, 160, 200) * (r() < 0.5 ? 1 : -1), rp = range(r, 320, 650), rr = range(r, 320, 650), blend = range(r, 0, o.blend ?? 0.45);
-    const Tp = pd / rp, Tr = Math.abs(rd) / rr, tr0 = Tp * (1 - blend), lead = 0.8, Tm = Math.max(Tp, tr0 + Tr), T = lead + Tm + 1.6, p0 = add(OPEN, mul(h, -v * lead));
+    const pd = range(r, 155, 205), rd = (range(r, 160, 200) + (o.extraRoll || 0)) * (r() < 0.5 ? 1 : -1), rp = range(r, 320, 650), rr = range(r, 320, 650), blend = range(r, 0, o.blend ?? 0.45);
+    const Tp = pd / rp, Tr = Math.abs(rd) / rr, tr0 = Tp * (1 - blend), lead = 0.8, Tm = Math.max(Tp, tr0 + Tr), T = lead + Tm + (o.extraRoll ? 3.4 : 1.6), p0 = add(OPEN, mul(h, -v * lead));
     return { T, object: 'open air', params: { pitch: Math.round(pd), roll: Math.round(rd), blend: +blend.toFixed(2), pitchRate: Math.round(rp), rollRate: Math.round(rr) }, at: t => {
       const u = t - lead, th = pd * ease(u / Tp), ph = rd * ease((u - tr0) / Tr);
       const surge = 0.9 * clamp(u / 0.35, 0, 1) * (u > 0 ? 1 : 0), x = v * t + surge * Math.max(0, u) * 0.5;   // punch: speeds up through the flick
@@ -326,6 +326,7 @@
     'Whiplash': whiplash,
     'Pole Dance': poleDance,
     'Side-Lock Rewind': sideLock,
+    'Juicy Tornado': (w, r, o = {}) => juicyFlick(w, r, { ...o, extraRoll: 720 }),   // last, so the other tricks keep their stress seeds
   };
   // near-miss flights: only the listed reading (or nothing) is acceptable
   const CONFUSERS = {

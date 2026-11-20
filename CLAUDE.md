@@ -671,6 +671,13 @@ the same momentum) and shows the next part with GoldenEye arrows; it goes on onl
 1.5 s** (`COACH_HOLD`; owner: "not by key press"; a slip drains the bar at double speed): only the axis the part is about, the right
 way, 30 % or more (owner: as relaxed as the steps), and the throttle within a quarter of the bot's (not with the keyboard's height
 hold). The bot's flight of the trick on this map (`coachStepSticks` → `demoFly`) gives the throttle and the arrows' size.
+**Dampening** (owner, 2026-11-20: "very rigid … a snapback, looking back, the game should've just hung there for a moment"): the pause
+eases in (game time slows to a stop over 0.3 s) and out (back to full speed over 0.5 s; `coachTimeScale`, play.js runs its physics at
+that speed), and starts as a step's rotation comes round, from the drone's own rates every frame (`coachLive`: a live rotation per
+axis, pauses under `COACH_JOIN` joined, triggered when done + rate × 0.15 s ≥ 95 % of the step, so it comes to rest about where the
+step ends), not when the detector has closed the rotation and the 150 ms check has judged it (a quick Snapback was already rolling).
+The judge still decides the step afterwards (`preFroze`: no second pause there). The hold counts once it has stopped; the throttle
+needs to be within 0.35 of the bot's, and is not checked on the keyboard.
 **Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on
 the "what counted" list and the combo timer's pass resets went quiet after the first reset; they are re-pointed at the mirror.
 
@@ -945,6 +952,12 @@ confirmed Side Loop lost; bench unchanged; test/maps.js. (A board replay that lo
 **Half Matty Pendulum** (owner: "chain 3 half mattys together"; `pendulumStep`, `PENDULUM_GAP` 1.6 s): the third Half Matty in
 a row on the same object, nothing else in between, is called Half Matty Pendulum (draft). Not in the TPW book: `EXTRA_TRICKS`
 in sim.js adds it to the trick list with 1050 points (three Half Mattys at full value) until the owner sets them. test/pendulum.js.
+
+## Juicy Tornado (owner, 2026-11-20; `OPEN_TRICKS`, `EXTRA_TRICKS` 350 pts = Juicy Flick + Double Roll until the owner sets them, draft)
+A Juicy Flick followed by a forward double roll: `P-180 R*~900` (the flick's 180 roll runs on two more turns, one way),
+`P-180 Ra~180 Ra~720` (the double roll after a breath, the same way) and `P-~135 R*~900 P-~45` (the flick blended into the roll).
+A flick then a roll the other way stays Juicy Flick + Roll. The bot flies it (`juicyFlick` with `extraRoll` 720: 19/20 called,
+no Juicy Flick read as one); test/combo.js (15 combos). Train and Show me pick it up from the rule.
 
 ## Burrito Roll vs Trippy Spin (2026-11-18, owner: "a burrito roll is not done while the whoop is looking up at a pole")
 The orbit tracker records when the quad holds the trippy pose while circling a pole (`this.circled`: rolled to knife-edge or

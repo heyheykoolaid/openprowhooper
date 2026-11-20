@@ -116,11 +116,11 @@ function coachStart(name) {
   flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, judged live</small>`);
 }
 function coachNewTry() {
-  coach.phase = coach.tryN <= COACH_PARTS ? 'parts' : 'live'; coach.since = detector.time; coach.steps = coach.alts[0]; coach.doneN = 0; if (coach.freeze) coachFreezeEnd(); coach.result = null; coach.last = null;
+  coach.phase = coach.tryN <= COACH_PARTS ? 'parts' : 'live'; coach.since = detector.time; coach.steps = coach.alts[0]; coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.result = null; coach.last = null;
   coachCollect(); coach.since = detector.time;
 }
 // the detector's clock restarts with a reset (R, a new flight): start the try's window again and forget what was measured
-function coachClock() { coach.doneN = 0; if (coach.freeze) coachFreezeEnd(); coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; if (coach.ask) coach.ask = null; }
+function coachClock() { coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; if (coach.ask) coach.ask = null; }
 function coachStop(save = true) {
   if (!coach.on) return; coach.on = false; if (coach.freeze) coachFreezeEnd(); $('#coachBox').classList.add('hide');
   if (save && recap.dirty && !recap.guest) recapSave();
@@ -164,7 +164,7 @@ setInterval(() => {
     if (coach.freeze) return;
     const j = coachJudgeAny(coach.alts, coach.since, true); coach.last = j; if (j.objName) coach.obj = j.objName; coach.steps = j.steps;
     if (j.done >= j.steps.length) { coach.doneN = 0; coachTryDone(true, 'every part'); return; }
-    if (j.done > (coach.doneN || 0)) { coach.doneN = j.done; coachFreezeStart(j.done); }
+    if (j.done > (coach.doneN || 0)) { coach.doneN = j.done; if (coach.preFroze !== j.done) coachFreezeStart(j.done); coach.preFroze = null; }   // already paused there as the rotation came round (coachLive)
   }
   renderCoach();
 }, 150);
@@ -358,7 +358,35 @@ function drawStickArrows(P, R, Y, T, dT) {
 // as arrows; it goes on when the pilot has held the sticks there for 1.5 s (owner: not a key press), so the move starts
 // from exactly where it was with the sticks already set. Your own sticks show on the overlay as usual. ⏸ Pauses: on / off in the panel.
 const COACH_HOLD = 1.5;   // s the sticks must be held where the next part needs them (owner: "holding your sticks in the correct position for a second and a half")
-function coachFrozen() { return !!(coach.on && coach.freeze && mode === 'fly'); }
+function coachFrozen() { return !!(coach.on && coach.freeze && mode === 'fly' && coach.scale < 0.02); }
+// owner, 2026-11-20: "very rigid … can we add some dampening? when doing a snapback and looking back, the game should've just
+// hung there for a moment". Two things: (1) the pause eases in and out (game time slows to a stop over ~0.3 s and comes back
+// over ~0.5 s: `coachTimeScale`, play.js runs its physics at that speed), and (2) it starts as the rotation comes round,
+// from the drone's own rates (`coachLive`, every frame), not when the detector has closed the rotation and the 150 ms check
+// has judged it: by then a quick Snapback was already rolling. The live trigger allows for the slow-down, so the quad comes
+// to rest about where the step ends (~95 % of it); the judge still decides the step from the measured rotation afterwards.
+coach.scale = 1;
+function coachTimeScale(dt) {
+  if (!coach.on || mode !== 'fly') return (coach.scale = 1);
+  const want = coach.freeze ? 0 : 1;
+  coach.scale = want ? Math.min(1, coach.scale + dt / 0.5) : Math.max(0, coach.scale - dt / 0.3);
+  const x = coach.scale; return x * x * (3 - 2 * x);   // smoothstep: no jolt at either end
+}
+const COACH_LIVE_ON = 95, COACH_LIVE_OFF = 60, COACH_EASE = 0.15;   // °/s to start / keep a live rotation; s of game time the ease-in still turns
+function coachLive(simDt) {
+  if (!coach.on || mode !== 'fly' || coach.phase !== 'parts' || coach.result || coach.freeze || !simDt || !store.get('coachPauses', true) || !drone.armed || drone.crashed) return;
+  const r = drone.pilotRates(), L = coach.live || (coach.live = { R: null, P: null, Y: null });
+  ['R', 'P', 'Y'].forEach((ax, i) => { const v = r[i], a = Math.abs(v), c = L[ax];
+    if (c && (a < COACH_LIVE_OFF || Math.sign(v) !== c.sg)) { c.off += simDt; if (c.off > COACH_JOIN) L[ax] = null; else c.rate = a < COACH_LIVE_OFF ? 0 : c.rate; return; }   // a beginner's pause in the middle still counts as one rotation
+    if (c) { c.acc += a * simDt; c.off = 0; c.rate = a; } else if (a >= COACH_LIVE_ON) L[ax] = { sg: Math.sign(v), acc: a * simDt, off: 0, rate: a }; });
+  const k = coach.doneN || 0;
+  for (const st of coach.alts) {
+    const s0 = st[k]; if (!s0 || !s0.rot || k + 1 >= st.length) continue;   // the last step needs no pause: the trick is done
+    const p = s0.rot, c = L[p.ax]; if (!c) continue;
+    if ((p.dir === '+' && c.sg < 0) || (p.dir === '-' && c.sg > 0)) continue;   // P+ = pitch back, R+ = roll right (the detector's own signs)
+    if (c.acc + c.rate * COACH_EASE >= p.deg * 0.95) { coach.steps = st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); return; }
+  }
+}
 function coachStepSticks() {   // the bot's sticks for each step, from one flight of the trick on this map (for the pause arrows)
   try { const f = demoFly(coach.name); if (!f || !f.got.rows) return null; const rows = f.got.rows, j = f.j;
     return { steps: j.steps, at: j.steps.map((st, k) => { const o = j.out[k] || {}; if (o.t0 == null) return null;
@@ -380,11 +408,11 @@ function coachTarget(k) {
   return t;
 }
 // does the pilot hold them there? As forgiving as the steps (owner: "sloppy counts"): the right way at 30 % or more, whatever the bot pushed; the throttle
-// within a quarter of the bot's (not with the keyboard's height hold, which has no throttle position)
+// within 0.35 of the bot's (not with the keyboard: keys have no throttle position to hold)
 function coachStickCheck(T, rc) {
   const ax = (k, have) => { if (!T.chk.includes(k)) return true; const want = T[k]; if (T.any === k) return Math.abs(have) >= 0.3; return Math.sign(have) === Math.sign(want) && Math.abs(have) >= 0.3; };   // owner: as relaxed as the steps: the right way, 30 % or more
-  const kb = inputCfg.mode === 'keyboard' && kbAssistOn();
-  const out = { P: ax('P', rc.pitch || 0), R: ax('R', rc.roll || 0), Y: ax('Y', rc.yaw || 0), T: T.T == null || kb || Math.abs((rc.thr || 0) - T.T) <= 0.25 };
+  const kb = inputCfg.mode === 'keyboard';   // keys have no throttle position to hold (height hold, or all-or-nothing W)
+  const out = { P: ax('P', rc.pitch || 0), R: ax('R', rc.roll || 0), Y: ax('Y', rc.yaw || 0), T: T.T == null || kb || Math.abs((rc.thr || 0) - T.T) <= 0.35 };
   out.ok = out.P && out.R && out.Y && out.T; return out;
 }
 function coachFreezeStart(k) {
@@ -408,6 +436,6 @@ function coachFreezeDraw() {
 }
 setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' || coach.phase !== 'parts') { coachFreezeEnd(); return; }
   const F = coach.freeze, now = performance.now(), dt = Math.min(0.5, (now - F.last) / 1000); F.last = now; F.waited += dt;   // a long hitch counts at most half a second
-  F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? F.held + dt : Math.max(0, F.held - 2 * dt);
+  F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
   if (F.held >= COACH_HOLD) coachFreezeEnd(); else coachFreezeDraw(); }, 100);
-window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), state: () => JSON.stringify({ t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), state: () => JSON.stringify({ sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)

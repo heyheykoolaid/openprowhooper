@@ -963,6 +963,8 @@ const WALL_STICK_MIN = 1.0;   // s held on the wall (owner, 2026-11-19: "1 secon
 const EXTRA_TRICKS = [
   { cat: 'Matty Flips', name: 'Half Matty Pendulum', diff: 'Advanced', pts: 1050, extra: true,
     desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' },
+  { cat: 'Open Air Tricks', name: 'Juicy Tornado', diff: 'Intermediate', pts: 350, extra: true,
+    desc: 'A Juicy Flick followed straight away by a forward double roll: flick forward to inverted with a punch of throttle, roll back upright, and keep rolling the same way for two more full rolls while flying forward (owner, 2026-11-20). Points: a Juicy Flick plus a Double Roll, until the owner sets them.' },
   { cat: 'Wall Tricks', name: 'Wall Stick', diff: 'Novice', pts: 200, extra: true,
     desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' }];
 for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
@@ -1169,6 +1171,9 @@ const OPEN_TRICKS = [
   { name: 'Double Flip', pats: ['P*720'] },
   { name: 'Double Roll', pats: ['R*720'] },
   // pilot: needs better detection. The roll often blends into the end of the flick (the roll splits the pitch token)
+  // owner, 2026-11-20: a Juicy Flick followed by a forward double roll: the flick's 180 roll runs on two more turns (2½ rolls in
+  // all, one way), or the double roll comes after a breath; the flick may still blend into the roll
+  { name: 'Juicy Tornado', pats: ['P-180 R*~900', 'P-180 Ra~180 Ra~720', 'P-~135 R*~900 P-~45'] },
   { name: 'Juicy Flick', pats: ['P-180 R*180', 'P-~135 R*180 P-~45'] },
   { name: 'Invert Rewind', pats: ['Ra180 R-a180', 'Pa180 P-a180'] },
   { name: 'Flip', pats: ['P*360'] },
@@ -2904,7 +2909,7 @@ function importDiff(text, tune) {
   return { tune: t, found };
 }
 
-const EVENT_TRICKS_DRAFT = ['Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
+const EVENT_TRICKS_DRAFT = ['Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
 // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
 const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];
