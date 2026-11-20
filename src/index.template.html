@@ -246,7 +246,7 @@ details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExp
 #mainMenu .menuBtnPanel #menuDevice { margin: 10px 0 0; }
 #mainMenu .logo { font-size: clamp(30px, min(6vw, 8.5vh), 70px); -webkit-text-stroke: 2px #111; text-shadow: 4px 4px 0 #e2312b, 7px 7px 0 #111; } #mainMenu .logoSub { font-size: 13px; letter-spacing: 7px; margin: 8px 0 26px 8px; }
 #menuNews { margin: 0 0 10px; padding: 7px 10px; border: 1px solid #ffd34d55; border-left: 4px solid #ffd34d; background: #ffd34d12; font: 12.5px/1.45 system-ui, sans-serif; color: #e8dfcc; text-align: left; } #menuNews b { font-family: 'Bungee', sans-serif; color: #ffd34d; font-weight: normal; letter-spacing: 1px; margin-right: 8px; }
-#mainMenu .menuBtns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
+#mainMenu .menuBtns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; } #menuSettings { grid-template-columns: 1fr !important; } #menuSettings > button small { display: block; font-size: 11px; opacity: .75; white-space: normal; font-weight: normal; }
 .rpRow { margin: 4px 0; } .rpRow input { flex: 1; min-width: 0; }
 #telAsk { margin: 0 0 12px; padding: 10px 12px; background: #0e0d0c; border: 1px solid #2c2925; border-left: 4px solid var(--cyan); font: 13px/1.5 var(--mono); color: #cfc6b4; } #telAsk p { margin: 0 0 8px; } #telAsk b { color: #fff; }
 #menuThanks { margin: 0 0 10px; padding: 3px 0; border-top: 1px solid #fff2; border-bottom: 1px solid #fff2; font: 12px/1.4 var(--mono); color: #cfc6b4; overflow: hidden; white-space: nowrap; -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); } #menuThanks b { color: #ffd34d; font-weight: 600; }
@@ -433,13 +433,11 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="race" class="hide" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
     <button data-act="judge" id="judgeBtn" class="hide" title="Watch moments from other pilots' runs and say what the trick really was">Judge the community</button>
     <button data-act="map">Maps</button><button data-act="mapedit" class="hide" title="Move, add or remove anything on this map">Map Editor</button>
-    <button data-act="garage">Garage &amp; Tune</button>
-    <button data-act="controls">Controls / Radio</button>
     <button data-act="tricks">Tricktionary</button>
-    <button data-act="options">Options</button>
+    <button data-act="settings" title="Garage, controls and options">Settings ▸</button>
     <button data-act="tools" class="hide">Tools &amp; labs ▸</button>
   </div>
-  <input id="vol" type="hidden">
+  <div class="menuBtns hide" id="menuSettings"><button data-act="settingsBack" class="ghost">◂ Back</button><button data-act="garage">Garage &amp; Tune<small>your whoop, parts, rates and physics</small></button><button data-act="controls">Controls / Radio<small>radio, keyboard, gamepad, switches</small></button><button data-act="options">Options<small>pilot name, sharing, sound, graphics</small></button></div><input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
 </div></div></div>
 
