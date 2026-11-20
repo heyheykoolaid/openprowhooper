@@ -1458,7 +1458,10 @@
       B(x0, x1, z0, hole.z0); B(x0, x1, hole.z1, z1); B(x0, hole.x0, hole.z0, hole.z1); B(hole.x1, x1, hole.z0, hole.z1); };
     // a race gate: an open frame w × h round its centre c, flown along dir 'x' / 'z' (standing) or 'y' (lying flat, flown down
     // through); its bars never count as over/unders of their own, its opening is a gap
-    const gate = (name, c, w, h, dir, mat = 'gateOrange', glow = 'neonMagenta') => { const o = O(name, 'deco'), t = 0.06, hw = w / 2 + t, hh = h / 2 + t;
+    // A standing gate is an over/under too, like a frame on the other maps (owner, 2026-11-19: Split-S over the city's gates did not
+    // count): through it = under, over its top bar = over
+    const gate = (name, c, w, h, dir, mat = 'gateOrange', glow = 'neonMagenta') => { const t = 0.06, hw = w / 2 + t, hh = h / 2 + t, top = c.y + h / 2,
+        o = dir === 'y' ? O(name, 'deco') : O(name, 'overunder', { obstacle: dir === 'x' ? { a: v3(c.x, 0, c.z - w / 2), b: v3(c.x, 0, c.z + w / 2), under: top, over: top + 2 * t } : { a: v3(c.x - w / 2, 0, c.z), b: v3(c.x + w / 2, 0, c.z), under: top, over: top + 2 * t } });
       const B = (dx, dy, dz, hx, hy, hz) => box(o, v3(c.x + dx, c.y + dy, c.z + dz), v3(hx, hy, hz), mat, 0, 0, 0, NS);
       if (dir === 'x') { B(0, hh, 0, t, t, hw + t); B(0, -hh, 0, t, t, hw + t); B(0, 0, hw, t, hh, t); B(0, 0, -hw, t, hh, t); }
       else if (dir === 'z') { B(0, hh, 0, hw + t, t, t); B(0, -hh, 0, hw + t, t, t); B(hw, 0, 0, t, hh, t); B(-hw, 0, 0, t, hh, t); }
@@ -1534,9 +1537,9 @@
         if (taxi) box(c, v3(x - 0.2, 1.62, z), v3(0.3, 0.12, 0.12), 'taxiSign', ry);
         surf(c, HARD); } }
     for (const [x, gz, n] of [[-27, 4.4, 1], [-15, 8.0, 2]]) { const sg = O('Traffic Signal', 'pole'); pipe(sg, v3(x, 0, 13.3), v3(x, 5.5, 13.3), 0.12, 'darkMetal'); surf(sg, HARD);
-      const arm = O('Signal Arm', 'deco'); pipe(arm, v3(x, 5.35, 13.3), v3(x, 5.35, 2.2), 0.08, 'darkMetal', NS); for (const z of [9.5, 5.5]) { box(arm, v3(x, 4.9, z), v3(0.2, 0.45, 0.2), 'plasticYellow', 0, 0, 0, NS); box(arm, v3(x - 0.21, 4.9, z), v3(0.01, 0.38, 0.12), 'signalLit', 0, 0, 0, { noCollide: true, glow: true }); }
+      const arm = O('Signal Arm', 'overunder', { obstacle: { a: v3(x, 0, 13.2), b: v3(x, 0, 2.2), under: 5.27, over: 5.43 } }); pipe(arm, v3(x, 5.35, 13.3), v3(x, 5.35, 2.2), 0.08, 'darkMetal', NS); for (const z of [9.5, 5.5]) { box(arm, v3(x, 4.9, z), v3(0.2, 0.45, 0.2), 'plasticYellow', 0, 0, 0, NS); box(arm, v3(x - 0.21, 4.9, z), v3(0.01, 0.38, 0.12), 'signalLit', 0, 0, 0, { noCollide: true, glow: true }); }
       const g = gate(`Yellow Fever Gate ${n}`, v3(x + 0.6, 4.05, gz), 2.4, 1.8, 'x'); for (const s of [-1, 1]) hang(g, v3(x + 0.6, 5.0, gz + s * 1.2), v3(x, 5.3, gz + s * 1.2)); }
-    { const sl = O('Streetlight', 'pole'); pipe(sl, v3(-3, 0, -1.2), v3(-3, 5.6, -1.2), 0.1, 'darkMetal'); pipe(sl, v3(-3, 5.5, -1.2), v3(-3, 5.5, 4.6), 0.06, 'darkMetal', NS); box(sl, v3(-3, 5.4, 4.8), v3(0.25, 0.08, 0.4), 'lampHead', 0, 0, 0, NS); surf(sl, HARD);
+    { const sl = O('Streetlight', 'pole'); pipe(sl, v3(-3, 0, -1.2), v3(-3, 5.6, -1.2), 0.1, 'darkMetal'); const sa = O('Streetlight Arm', 'overunder', { obstacle: { a: v3(-3, 0, -1.0), b: v3(-3, 0, 4.6), under: 5.44, over: 5.56 } }); pipe(sa, v3(-3, 5.5, -1.1), v3(-3, 5.5, 4.6), 0.06, 'darkMetal', NS); box(sl, v3(-3, 5.4, 4.8), v3(0.25, 0.08, 0.4), 'lampHead', 0, 0, 0, NS); surf(sl, HARD);
       const g = gate('Yellow Fever Gate 3', v3(-2.4, 4.15, 3.2), 2.2, 1.7, 'x'); for (const s of [-1, 1]) hang(g, v3(-2.4, 5.06, 3.2 + s * 1.1), v3(-3, 5.48, 3.2 + s * 1.1)); }
     for (const x of [-44, -33, -21, 30, 40]) { const sl = O('Streetlight', 'pole'); pipe(sl, v3(x, 0, 15.2), v3(x, 5.6, 15.2), 0.1, 'darkMetal'); pipe(sl, v3(x, 5.5, 15.2), v3(x, 5.5, 13), 0.06, 'darkMetal', NS); box(sl, v3(x, 5.42, 12.9), v3(0.25, 0.08, 0.35), 'lampHead', 0, 0, 0, NS); surf(sl, HARD); }
     for (const [x, z] of [[-41, -1.2], [-12, 13.4], [5.5, -1.3], [27, 13.4], [36, -1.2]]) { const h = O('Hydrant', 'deco'); pipe(h, v3(x, 0, z), v3(x, 0.62, z), 0.13, 'paintRed'); ball(h, v3(x, 0.66, z), 0.12, 'paintRed'); pipe(h, v3(x - 0.2, 0.42, z), v3(x + 0.2, 0.42, z), 0.06, 'paintRed', NS); }
@@ -1560,7 +1563,7 @@
     block('Rowhouse', 4, 19.6, 26, 42, 18, 'nycBrick', -1, { noShops: true });
     block('East Walk-up', 44.4, XW, 20, 42, 16, 'nycBrickTan', -1, { noShops: true });
     // the billboard on its roof, facing the avenue
-    { const bb = O('Slackvegan Billboard', 'deco'); for (const x of [13.5, 21.8]) pipe(bb, v3(x, 20, -8), v3(x, 24.2, -8), 0.12, 'darkMetal'); box(bb, v3(17.65, 26.2, -8), v3(5.3, 2.0, 0.12), 'darkMetal', 0, 0, 0, NS);
+    { const bb = O('Slackvegan Billboard', 'overunder', { obstacle: { a: v3(12.4, 0, -8), b: v3(22.9, 0, -8), under: 24.2, over: 28.2 } }); for (const x of [13.5, 21.8]) pipe(bb, v3(x, 20, -8), v3(x, 24.2, -8), 0.12, 'darkMetal'); box(bb, v3(17.65, 26.2, -8), v3(5.3, 2.0, 0.12), 'darkMetal', 0, 0, 0, NS);
       pic(bb, v3(17.65, 26.2, -7.85), 10.4, 3.8, 0, 'signSlackvegan', { solid: false }); surf(bb, HARD); }
     // the deck-side neon on the Pawn & Loan, a diner's blade sign on the walk-up (the first of the drop gates hangs from it)
     { const pn = O('Pawn Sign', 'deco'); pic(pn, v3(34, 7.6, -3.94), 6, 1.4, 0, 'signPawn', { solid: false }); }
@@ -1723,7 +1726,7 @@
       const d1 = gate('Drop Gate 1', v3(-29.4, 12.6, -0.6), 2.0, 1.8, 'z'); for (const dx of [-1.06, 1.06]) hang(d1, v3(-29.4 + dx, 13.56, -0.6), v3(-28.6, 14.3, -0.6));
       const d2 = gate('Drop Gate 2', v3(-33.2, 4.9, 3.6), 2.0, 1.8, 'x'); for (const dz of [-1.06, 1.06]) hang(d2, v3(-33.2, 5.86, 3.6 + dz), v3(-33.2, 6.54, 3.6 + dz)); }
     // the finish: a glowing neon frame hung under the tracks, right over the start box
-    { const FX = -38.5, fo = O('Finish Gate', 'deco'), zc = 6, w = 4.0, h = 2.3, yc = 4.9;
+    { const FX = -38.5, zc = 6, w = 4.0, h = 2.3, yc = 4.9, fo = O('Finish Gate', 'overunder', { obstacle: { a: v3(FX, 0, zc - w / 2), b: v3(FX, 0, zc + w / 2), under: yc + h / 2, over: yc + h / 2 + 0.1 } });
       for (const [c, hh] of [[v3(FX, yc + h / 2 + 0.05, zc), v3(0.05, 0.05, w / 2 + 0.1)], [v3(FX, yc - h / 2 - 0.05, zc), v3(0.05, 0.05, w / 2 + 0.1)], [v3(FX, yc, zc - w / 2 - 0.05), v3(0.05, h / 2 + 0.1, 0.05)], [v3(FX, yc, zc + w / 2 + 0.05), v3(0.05, h / 2 + 0.1, 0.05)]]) box(fo, c, hh, 'neonMagenta', 0, 0, 0, { noSurvey: true, glow: true });
       for (const dz of [-w / 2, w / 2]) hang(fo, v3(FX, yc + h / 2 + 0.1, zc + dz), v3(FX, 6.54, zc + dz));
       pic(fo, v3(FX - 0.08, yc + h / 2 + 0.45, zc), 2.2, 0.55, -Math.PI / 2, 'signFinish', { solid: false }); pic(fo, v3(FX + 0.08, yc + h / 2 + 0.45, zc), 2.2, 0.55, Math.PI / 2, 'signFinish', { solid: false });

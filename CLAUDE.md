@@ -932,6 +932,9 @@ smooth ring (vis `torus`); the 16 slices and 24 trim capsules there collide but 
 Walls built of many pieces share one texture origin (`tex0` on the box vis), so their windows line up. **The street over the
 subway** collides up to 2 cm under the ground but is drawn only up to 14 cm down, with a thin rim round the stair opening:
 its top flickered through the street at a distance.
+**Split-S on the city** (owner, 2026-11-19: "trouble detecting split-s's on a lot of its objects"): only 8 kinds of object were
+over/unders; the hung race gates (`gate()`: through = under, over the top bar = over), the signal and streetlight arms, the
+billboard and the finish frame are now too (28 kinds); the bot's Split-S is called 3/3 on each.
 The start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`, white paint; their mark, at the owner's request, credited on the main menu and in the README), the centre line broken under it.
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
