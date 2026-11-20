@@ -295,6 +295,8 @@ the Tire Tunnel (four half-buried tractor tires, a gap) among birch and bracken 
 bear-resistant bins, the routed park sign and a carved cedar moose; steep-roofed houses (`house`: a diamond gable plus two
 45° roof panels), back fences, power poles and pickups round the edges. `pnwBackdrop` in worldview.js draws forested
 ridges, Mt Begbie (SW) and Mt Mackenzie (E), unfogged and pre-hazed; cool sky, softer high sun, grass ground plane.
+A heart carved in the pilot's big cedar by the playground, facing the picnic tables, with CS + AS in it (owner, 2026-11-19;
+vis `bark`: a patch of the trunk's own curve with the picture once across it, `heartCarving`; added last, drawn only).
 Muted materials only (no bright primary plastic). No Trick Park on this map (the pilot's brief: a compact park).
 
 **Power lines are over/unders** (owner, 2026-11-19): every span between two poles is a shape-less `overunder` object along
@@ -455,8 +457,12 @@ model alone draws a third of what a real whoop does: a real Air65 hovers on 10-1
 37-41k rpm), so its packs lasted ~20 minutes. A factor on the motors' battery current (absent = 1: the physics and its hash
 unchanged; the game fills in 3.2) fitted by flying each log's sticks through the sim and matching mAh used: 3.0 (choppoop
 2026-11-18), 3.2 (bum-darts), 4.3 (choppoop 2026-11-19, cold and windy). With it a 300 mAh pack lasts ~3.9 minutes of real
-freestyle sticks. Not fixed, only measured: the sim's props hover ~25 % faster than the real ones (31k vs 39k rpm) on a third of
-the power (the props' ct / cq are too efficient; fitting them changes yaw and motor response, so it waits for the owner).
+freestyle sticks. **Props fitted halfway (owner, 2026-11-19: "about 34,000 rpm, just to try"; `tune.propCt` / `propCq`, absent = 1; `PROP_FIT`
+{ ct 1.31, cq 1.8 } in game.js; Advanced physics → Feel → Prop grip / Prop load):** the sim's props hovered ~25 % faster than
+real ones (38k vs 31k rpm) on a third of the power; thrust ×1.31 and torque ×1.8 hover the Air65 build at ~34k rpm on 33 %
+throttle (38 % before; real 30-34 %) with the same top thrust (×0.996), roll / pitch lag and yaw unchanged within a ms. With
+them the drain refits to **2.4** (`DRAIN_DEF`; the 2026-11-18 log and bum-darts); a pilot still on the first fit's 3.2 gets 2.4 once.
+test/battery.js checks both.
 **LAVA II packs** (`lava280` 6.8 g, `lava320` 8.2 g, published weights; resistance from the 2026-11-19 log: 0.074-0.089 ohm cold).
 
 ## Whoop feel calibration (2026-11-18; tools/feelcheck.js, test/feel.js)
@@ -920,6 +926,12 @@ slab 2 cm under the paint), the ground-effect height and the "fell through the g
 where worldview.js cuts the ground mesh (`groundWithCuts`); zones must not cover a cut (they skip the depth test). test/subway.js.
 The shop shutters carry the pilots' logos (none, one or two each, sizes 0.6-2.4 m, turned up to ±20°; `graffiti: 'north'` is new
 in `addGraffiti`); the billboard reads SLACKVEGAN / CITY.
+**Round voids are smooth** (owner, 2026-11-19): `wall()` builds the facade round each circle's square, draws the square as one
+panel with a true round hole (vis `holeplate`: an extruded shape, world-space texture from the wall's own start `tex0`) and a
+smooth ring (vis `torus`); the 16 slices and 24 trim capsules there collide but are not drawn (`noDraw`, now on `pipe` too).
+Walls built of many pieces share one texture origin (`tex0` on the box vis), so their windows line up. **The street over the
+subway** collides up to 2 cm under the ground but is drawn only up to 14 cm down, with a thin rim round the stair opening:
+its top flickered through the street at a distance.
 The start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`, white paint; their mark, at the owner's request, credited on the main menu and in the README), the centre line broken under it.
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.

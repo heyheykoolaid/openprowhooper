@@ -33,7 +33,12 @@ for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
 const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_DEF;
 // Battery drain (tune.drain): the motor model alone draws a third of what a real whoop does (Blackbox, 2026-11-19: a real Air65 hovers
 // on 10-14 W, the sim on 5-6 W); fitted on three quads' logs to 3.0-3.3 (4.3 on a cold, windy day). Absent in the physics = 1.
-const DRAIN_DEF = 3.2; if (tune.drain == null) tune.drain = DRAIN_DEF;
+// Props fitted to a real whoop's hover rpm (owner, 2026-11-19: "about 34,000 rpm, just to try"): thrust ×1.31, torque ×1.8
+// (tune.propCt / propCq; absent in the physics = 1): an Air65 hovers at ~34k rpm (real 31k, the parts alone 38k) on 33 % throttle
+// with the same top thrust; the drain was refitted with them (2.4 on the 2026-11-18 log and bum-darts; it was 3.2 without them)
+const PROP_FIT = { ct: 1.31, cq: 1.8 }, DRAIN_DEF = 2.4;
+if (tune.propCt == null) { tune.propCt = PROP_FIT.ct; tune.propCq = PROP_FIT.cq; if (tune.drain === 3.2) tune.drain = DRAIN_DEF; }   // the 3.2 of the first fit went with the old props
+if (tune.drain == null) tune.drain = DRAIN_DEF;
 // rates v2 (150/680/0.5): saved tunes still on the old defaults get the new ones; rates the pilot changed are kept
 (() => { const OLD = { roll: [200, 900, 0.4], pitch: [200, 900, 0.4], yaw: [180, 700, 0.3] }, d = S.defaultTune().rates;
   if (tune.ratesV2) return; for (const ax of ['roll', 'pitch', 'yaw']) { const r = tune.rates && tune.rates[ax], o = OLD[ax];

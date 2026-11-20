@@ -10,7 +10,7 @@ function recapReset() { recap.guest = false; recap.trace = []; recap.events = []
 // the game-feel settings a run was flown with (Garage → Advanced sliders, battery, flight mode, radio link, camera): shared
 // flights carry them in summary.feel so the defaults can be tuned from what pilots really choose (tools/feel.js)
 function feelSnap() { const f = {}; for (const k in S.FEEL_KEYS) f[k] = Number.isFinite(+tune[k]) ? +tune[k] : 1;
-  for (const k of ['batteryLife', 'flightMode', 'rcLinkHz', 'rcDelayMs', 'rcSmooth', 'rcSmoothFactor', 'camTilt', 'camFov', 'ratesType', 'rateProfile', 'wallGrip', 'drain']) if (tune[k] !== undefined) f[k] = tune[k];
+  for (const k of ['batteryLife', 'flightMode', 'rcLinkHz', 'rcDelayMs', 'rcSmooth', 'rcSmoothFactor', 'camTilt', 'camFov', 'ratesType', 'rateProfile', 'wallGrip', 'drain', 'propCt', 'propCq']) if (tune[k] !== undefined) f[k] = tune[k];
   if (f.batteryLife === undefined) f.batteryLife = true; return f; }
 function recapRow(row) { if (mode !== 'fly' || race.on) return; if (!recap.id) recapReset(); recap.trace.push(row); if (!recap.mode && recap.trace.length > 100) recap.mode = train.on ? 'calibration' : session ? 'session' : 'free'; if (recap.trace.length > RECAP_MAX) telSpill(recap.trace.shift()); if (recap.pieces && recap.pieces.length && (!row[13] || row[14] || recap.pieces.length > 1)) telPieceGo(); }
 function recapEvent(ev) {

@@ -25,6 +25,14 @@ check('Battery life off: the pack never runs down', !c.brown && c.soc === 1 && c
 { const g = flyPack('Air65 Racing', true, 900, { drain: 3.2 });
   check('with the game\'s battery drain the same pack lasts about a third as long', g.brown && g.t < a.t * 0.45 && g.t > a.t * 0.2, `${(g.t / 60).toFixed(1)} min vs ${(a.t / 60).toFixed(1)} min`); }
 check('the LAVA II 280 / 320 mAh packs fit a 65 mm 1S frame', S.batteryFits('air65', 'lava280') && S.batteryFits('air65', 'lava320') && S.PARTS.batteries.lava320.mass === 8.2);
+// the game's prop fit (tune.propCt 1.31 / propCq 1.8; absent = 1): the owner's Air65 build hovers near 34k rpm (the parts alone
+// ~38k, a real one 31k) on less throttle, with the same top-end thrust
+{ const hov = (ct, cq) => { const P = S.buildDrone({ frame: 'air65', motor: 'm0702ii_30k', prop: 'hq31ul', battery: 'b300', electronics: 'air' }), tune = Object.assign(S.defaultTune(), { batteryLife: false, weightFeel: 0.9, propCt: ct, propCq: cq }), d = new S.Drone(P, tune, W);
+    d.reset({ pos: S.v3(0, 50, 0), yaw: 0 }); d.armed = true; d.soc = 0.6; let thr = 0.35, w = 0, n = 0; for (let k = 0; k < 5000; k++) { d.step({ thr, roll: 0, pitch: 0, yaw: 0 }, 0.001); thr = Math.min(1, Math.max(0, thr - d.vel.y * 0.0004)); if (k > 2500) { w += d.motorW.reduce((a, x) => a + Math.abs(x), 0) / 4; n++; } }
+    const e = new S.Drone(P, tune, W); e.reset({ pos: S.v3(0, 50, 0), yaw: 0 }); e.armed = true; e.soc = 0.6; let T = 0; for (let k = 0; k < 1200; k++) { e.step({ thr: 1, roll: 0, pitch: 0, yaw: 0 }, 0.001); e.pos = S.v3(0, 50, 0); e.vel = S.v3(); if (k > 1000) T += e.thrust.reduce((a, x) => a + x, 0); }
+    return { rpm: w / n * 60 / 2 / Math.PI, thr, T: T / 200 }; };
+  const a0 = hov(1, 1), a1 = hov(1.31, 1.8);
+  check('the fitted props hover near 34k rpm on less throttle, with the same top thrust', a1.rpm > 32500 && a1.rpm < 35500 && a0.rpm > 36500 && a1.thr < a0.thr && Math.abs(a1.T / a0.T - 1) < 0.04, `${Math.round(a0.rpm)} → ${Math.round(a1.rpm)} rpm, throttle ${a0.thr.toFixed(2)} → ${a1.thr.toFixed(2)}, top thrust ×${(a1.T / a0.T).toFixed(3)}`); }
 // what fits
 check('a 65 mm 1S frame takes 1S 250-380 mAh, not a 450 or a 2S pack', S.batteryFits('air65', 'b300') && S.batteryFits('air65', 'b380') && !S.batteryFits('air65', 'b450') && !S.batteryFits('air65', 'b2s300'));
 check('a 75 mm 1S frame takes up to 550 mAh 1S', S.batteryFits('meteor75', 'b550') && S.batteryFits('air75', 'b450') && !S.batteryFits('air75', 'b260'));

@@ -258,7 +258,7 @@ const advSlider = d => `<label class="advS" title="${d[7]}"><span>${d[1]} <b id=
 const advSeg = (key, opts, cur, title = '') => `<div class="advSeg" title="${title}">${opts.map(([v, l]) => `<button data-advset="${key}" data-v="${v}" class="${String(cur) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 function advSummary() {
   const n = [];
-  if (FEEL.some(([k]) => (tune[k] ?? 1) !== (k === 'weightFeel' ? WEIGHT_DEF : 1)) || (tune.wallGrip ?? WALL_GRIP_DEF) !== WALL_GRIP_DEF || (tune.drain ?? DRAIN_DEF) !== DRAIN_DEF) n.push('feel');
+  if (FEEL.some(([k]) => (tune[k] ?? 1) !== (k === 'weightFeel' ? WEIGHT_DEF : 1)) || (tune.wallGrip ?? WALL_GRIP_DEF) !== WALL_GRIP_DEF || (tune.drain ?? DRAIN_DEF) !== DRAIN_DEF || (tune.propCt ?? PROP_FIT.ct) !== PROP_FIT.ct || (tune.propCq ?? PROP_FIT.cq) !== PROP_FIT.cq) n.push('feel');
   if (ADV_SL.wobble.some(d => advVal(d) !== d[8])) n.push('wobble');
   if ([...ADV_SL.filters, ...ADV_SL.extras].some(d => advVal(d) !== d[8]) || ['gyroLpfType', 'dtermLpfType', 'gyroLpf2Type', 'dtermLpf2Type'].some(k => tune[k] && tune[k] !== 'PT1')) n.push('Betaflight');
   if (tune.rcLinkHz || tune.rcDelayMs || (tune.rcSmooth && tune.rcSmooth !== 'sim')) n.push('radio link');
@@ -273,7 +273,9 @@ function renderAdv() {
   if (ADV.tab === 'feel') h = `<p class="note">How the whoop behaves in the air, on top of your parts. 100% is the sim as built from the parts (Weight defaults to 90%: real whoops hover like that in their Blackbox logs); these change only how the physics feels, not the parts or the Garage figures.</p>
     ${FEEL.map(([k, name, help]) => { const v = Math.round((+tune[k] || (tune[k] === 0 ? 0 : 1)) * 100), [lo, hi] = S.FEEL_KEYS[k]; return `<label class="advS" title="${help}"><span>${name} <b id="gFeelV-${k}">${v}%</b></span><input type=range data-feel="${k}" min=${lo * 100} max=${hi * 100} step=5 value="${v}"></label>`; }).join('')}
     ${advSlider(['wallGrip', 'Wall grip', 0.2, 1.4, 0.05, 100, '%', 'How hard the ducts grip a wall or the side of anything: push into a wall and the whoop sticks there. 45% is the ground\'s grip (the old sim slid down walls); the default 90% is TPU ducts on a wall', WALL_GRIP_DEF])}
-    ${advSlider(['drain', 'Battery drain', 1, 5, 0.1, 1, '×', 'How hard the motors pull on the pack (with Battery life on): the default 3.2× is what real whoops draw in their Blackbox logs (a 300 mAh pack lasts about 4 minutes of freestyle); 1× is the motor model alone (about 20 minutes); a cold day is about 4.3×', DRAIN_DEF])}
+    ${advSlider(['drain', 'Battery drain', 1, 5, 0.1, 1, '×', 'How hard the motors pull on the pack (with Battery life on): the default 2.4× (with the fitted props) is what real whoops draw in their Blackbox logs (a 300 mAh pack lasts about 4 minutes of freestyle); 1× is the motor model alone; a cold day is about a third more', DRAIN_DEF])}
+    ${advSlider(['propCt', 'Prop grip', 0.8, 2, 0.01, 100, '%', 'How much thrust the props make per turn: more grip, lower rpm at hover. The default 131% (with Prop load 180%) hovers an Air65 at about 34,000 rpm (a real one: 31,000; the parts alone: 38,000) with the same top thrust', PROP_FIT.ct])}
+    ${advSlider(['propCq', 'Prop load', 0.8, 3, 0.05, 100, '%', 'How hard the props are to turn: more load, lower top rpm and more current. Raise it with Prop grip to keep the same top thrust', PROP_FIT.cq])}
     <div class="row"><button data-advreset="feel" class="ghost">Feel back to the defaults</button></div>`;
   if (ADV.tab === 'wobble') h = `<p class="note">The life a real whoop has in the air, fitted from real Blackbox logs (Tools &amp; labs → Feel Lab). The defaults are the owner\'s own tuning. "Real 30000KV whoop" is what a real whoop\'s Blackbox logs measured: its wobble when moving, its lag (no extra delay needed).</p>
     ${ADV_SL.wobble.map(advSlider).join('')}<div class="row"><button data-advreset="wobble" class="ghost">Back to the defaults</button><button data-advpreset="fit30k" class="ghost" title="Fitted to a real 30000KV whoop's Blackbox logs: wobble 225 % at 100 ms, on movement">Real 30000KV whoop</button><button data-advpreset="logfit" class="ghost" title="The owner's Air2 build answered about 4 ms later than the 30000KV whoop: the same wobble with 3 ms of motor / ESC delay">Laggier whoop (+3 ms)</button><button data-advpreset="calm" class="ghost" title="The old smooth sim with a hint of wobble">Calm</button></div>`;
@@ -309,7 +311,7 @@ document.addEventListener('click', e => {
   if (t.id === 'advClose' || t.id === 'advModal') { closeAdv(); return; }
   if (t.dataset.advtab) { ADV.tab = t.dataset.advtab; const b = $('#advModal .advBody'); if (b) b.scrollTop = 0; renderAdv(); }
   if (t.dataset.advset) { const k = t.dataset.advset, v = t.dataset.v; tune[k] = /^-?\d+(\.\d+)?$/.test(v) ? +v : v; saveTune(); renderAdv(); }
-  if (t.dataset.advreset === 'feel') { for (const [k] of FEEL) tune[k] = 1; tune.weightFeel = WEIGHT_DEF; tune.wallGrip = WALL_GRIP_DEF; tune.drain = DRAIN_DEF; saveTune(); renderAdv(); }
+  if (t.dataset.advreset === 'feel') { for (const [k] of FEEL) tune[k] = 1; tune.weightFeel = WEIGHT_DEF; tune.wallGrip = WALL_GRIP_DEF; tune.drain = DRAIN_DEF; tune.propCt = PROP_FIT.ct; tune.propCq = PROP_FIT.cq; saveTune(); renderAdv(); }
   if (t.dataset.advreset === 'wobble') { Object.assign(tune, FEEL_DEF); saveTune(); renderAdv(); }
   if (t.dataset.advpreset) { const p = t.dataset.advpreset; Object.assign(tune, p === 'bfstock' ? S.BF_STOCK : p === 'sim' ? S.BF_SIM : p === 'calm' ? FEEL3 : p === 'fit30k' ? FEEL_FIT : { ...FEEL_FIT, loopDelayMs: 3 }); saveTune(); renderAdv(); }
 });

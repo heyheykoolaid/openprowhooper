@@ -10,7 +10,7 @@
     const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; if (grp != null) o.grp = grp; objs.push(o); return o; };
     const together = fn => { const was = grp; grp = nid; try { return fn(); } finally { grp = was; } };
     const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (opts.noSurvey) b.leaf = true; if (!opts.noCollide) o.prims.push(b); if (!opts.noDraw) o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };   // noDraw: a collider nothing is drawn for (a smooth skin is drawn over it)
-    const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) { const c = makeCapsule(a, b, r); if (opts.leafSolid || opts.noSurvey) c.leaf = true; o.prims.push(c); }   /* leaf: solid, but never a pole or an over/under of its own */ o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
+    const pipe = (o, a, b, r, mat, opts = {}) => { if (!opts.noCollide) { const c = makeCapsule(a, b, r); if (opts.leafSolid || opts.noSurvey) c.leaf = true; o.prims.push(c); }   /* leaf: solid, but never a pole or an over/under of its own */ if (!opts.noDraw) o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
     // a drawn cone's collision (conifer tiers): capsules stacked up the axis, each as wide as fits inside the cone at its
     // top (k: share of the drawn radius, the bough tips give), the lowest resting on the base; leaf: not a pole, not surveyed
     // Each band also gets three level spokes (60° apart) out to the boughs' edge: a vertical stack alone leaves the wide rim
@@ -759,6 +759,9 @@
           for (let k = 0; k < N; k++) { const am = (k + 0.5) / N * Math.PI; box(o, L(0, Math.sin(am) * Rm - 0.12, Math.cos(am) * Rm), v3(0.27, Math.PI * Rm / N / 2 + 0.02, t / 2), 'tireTread', ry, -am); }
           O('Tire opening', 'gap', { gap: { c: v3(x, 0.18, z), n: v3(tx, 0, tz), hu: 0.25, hv: 0.15, u: v3(-Math.cos(ph), 0, -Math.sin(ph)) } }); }   // inside the arch (its inner edge is 0.58 m round a centre 0.12 m underground)
         const sp = O('Sign Post', 'pole'); pipe(sp, v3(35.2, 0, 13.6), v3(35.2, 1.6, 13.6), 0.04, 'galv'); box(sp, v3(35.2, 1.55, 13.6), v3(0.16, 0.16, 0.01), 'signWhite', 0, 0, 0, { noCollide: true }); }); }
+    // a heart carved in the pilot's big cedar by the playground, facing the picnic tables: CS + AS (owner, 2026-11-19); drawn only,
+    // a patch of the trunk's own curve (vis 'bark')
+    { const hc = O('Carved Heart', 'deco'), tx = -30.5, tz = -3.2, a = Math.atan2(-24 - tx, 8 - tz); hc.vis.push({ shape: 'bark', c: v3(tx, 1.55, tz), r: 0.555, h: 0.46, ang: a, span: 0.9, mat: 'heartCarving' }); }
     return K.done({ id: 'moose', title: 'Moose Knuckle Park', theme: 'pnw', zones, spawn: { pos: v3(-24, 0.03, 8), yaw: -1.4 }, bounds: { x: [-75, 75], z: [-55, 50] } });
   }
 
@@ -1429,16 +1432,22 @@
       o.vis.push({ shape: 'sign', c, w, h, ry, rx: opt.rx || 0, mat, glow: opt.glow !== false });
       if (opt.both) o.vis.push({ shape: 'sign', c: v3(c.x - Math.sin(ry) * 0.02, c.y, c.z - Math.cos(ry) * 0.02), w, h, ry: ry + Math.PI, mat, glow: opt.glow !== false }); };
     // a wall along x (axis 'x', at z = fixed) or along z (axis 'z', at x = fixed) from u0 to u1, y0 to y1, thickness t, with
-    // holes: rectangles { a, b, y0, y1 } or circles { u, y, r } (cut in 16 slices inside the circle, a round trim drawn over the steps)
+    // holes: rectangles { a, b, y0, y1 } or circles { u, y, r }. A round hole is drawn smooth (owner, 2026-11-19: the stepped
+    // slices and the 18-piece trim looked odd): the wall is built round the circle's square, the square is drawn as one panel
+    // with a truly round hole (vis 'holeplate') and a smooth ring (vis 'torus'); what collides there is undrawn: 16 slices
+    // filling the square's corners to the circle, and a ring of capsules under the drawn one
     const wall = (o, axis, fixed, u0, u1, y0, y1, t, holes, mat, trim = 'nycTrim') => {
-      const rect = [];
+      const rect = [], ND = { noSurvey: true, noDraw: true }, tex0 = axis === 'x' ? v3(u0, 0, 0) : v3(0, 0, u0), WO = { noSurvey: true, tex0 };   // tex0: the wall's windows start at its own end
       for (const h of holes) { if (h.r == null) { rect.push(h); continue; }
-        const N = 16; for (let i = 0; i < N; i++) { const ya = -h.r + 2 * h.r * i / N, yb = ya + 2 * h.r / N, ym = Math.max(Math.abs(ya), Math.abs(yb)), w = Math.sqrt(Math.max(0, h.r * h.r - ym * ym));
-          rect.push({ a: h.u - w, b: h.u + w, y0: h.y + ya, y1: h.y + yb }); }
-        const M = 18, P = a => axis === 'x' ? v3(h.u + Math.cos(a) * h.r, h.y + Math.sin(a) * h.r, fixed) : v3(fixed, h.y + Math.sin(a) * h.r, h.u + Math.cos(a) * h.r);
-        for (let i = 0; i < M; i++) pipe(o, P(i / M * Math.PI * 2), P((i + 1) / M * Math.PI * 2), Math.min(0.26, t * 0.6), trim, NS); }
+        rect.push({ a: h.u - h.r, b: h.u + h.r, y0: h.y - h.r, y1: h.y + h.r });
+        const N = 16, at = (u, y) => axis === 'x' ? v3(u, y, fixed) : v3(fixed, y, u), hb = (hu, hy) => axis === 'x' ? v3(hu, hy, t / 2) : v3(t / 2, hy, hu);
+        for (let i = 0; i < N; i++) { const ya = -h.r + 2 * h.r * i / N, yb = ya + 2 * h.r / N, ym = (ya + yb) / 2, w = Math.sqrt(Math.max(0, h.r * h.r - ym * ym)), hu = (h.r - w) / 2;
+          if (hu > 0.003) for (const s of [-1, 1]) box(o, at(h.u + s * (w + hu), h.y + ym), hb(hu, (yb - ya) / 2 - 0.002), mat, 0, 0, 0, ND); }
+        const tr = Math.min(0.2, t * 0.5), M = 24, P = a => at(h.u + Math.cos(a) * h.r, h.y + Math.sin(a) * h.r);
+        for (let i = 0; i < M; i++) pipe(o, P(i / M * Math.PI * 2), P((i + 1) / M * Math.PI * 2), tr, trim, ND);
+        o.vis.push({ shape: 'holeplate', c: at(h.u, h.y), r: h.r, t, axis, mat, tex0 }, { shape: 'torus', c: at(h.u, h.y), r: h.r, tube: tr, axis, mat: trim }); }
       const seg = (a, b, ya, yb) => { ya += 0.004; yb -= 0.004; if (b - a < 0.01 || yb - ya < 0.01) return; const cu = (a + b) / 2, cy = (ya + yb) / 2, hu = (b - a) / 2, hy = (yb - ya) / 2;
-        if (axis === 'x') box(o, v3(cu, cy, fixed), v3(hu, hy, t / 2), mat, 0, 0, 0, NS); else box(o, v3(fixed, cy, cu), v3(t / 2, hy, hu), mat, 0, 0, 0, NS); };
+        if (axis === 'x') box(o, v3(cu, cy, fixed), v3(hu, hy, t / 2), mat, 0, 0, 0, WO); else box(o, v3(fixed, cy, cu), v3(t / 2, hy, hu), mat, 0, 0, 0, WO); };
       const cuts = [...new Set([u0, u1, ...rect.flatMap(h => [h.a, h.b])])].filter(x => x >= u0 && x <= u1).sort((p, q) => p - q);
       for (let i = 0; i + 1 < cuts.length; i++) { const a = cuts[i], b = cuts[i + 1], m = (a + b) / 2, hs = rect.filter(h => h.a <= m && h.b >= m).sort((p, q) => p.y0 - q.y0);
         let y = y0; for (const h of hs) { seg(a, b, y, h.y0); y = Math.max(y, h.y1); } seg(a, b, y, y1); } };
@@ -1652,23 +1661,27 @@
     // platforms, columns (poles), turnstiles, and a parked two-car train with every door open, end doors too: fly through it.
     // The ground plane is skipped over its footprint (world.groundHoles, the physics hook in sim.js; absent on other maps) and
     // the street is a slab over it, open only at the stair (world.groundCuts: where worldview.js cuts the ground mesh).
+    const HID = -0.14;   // what is drawn under the street stops this far down (nothing near the ground's own plane)
     const SUB = { y: -6, pit: -7.2, ceil: -0.45, top: -0.02, x0: -31, x1: 5.2, z0: -1.65, z1: 13 }, OPEN = { x0: -9.5, x1: -5.6, z0: -3.5, z1: -1.9 }, CORR = { x0: -16.2, x1: -5.4, z0: -3.75, z1: -1.65 };
     const groundHoles = [{ x0: CORR.x0 - 0.3, x1: CORR.x1 + 0.1, z0: CORR.z0 - 0.1, z1: CORR.z1 + 0.05 }, { x0: SUB.x0 - 0.3, x1: SUB.x1 + 0.3, z0: SUB.z0 - 0.3, z1: SUB.z1 + 0.3 }], groundCuts = [OPEN];
     together(() => { const st = O('Subway Station', 'building', { wallNormal: v3(0, 0, 1), tall: 6 }), B = (x0, x1, y0, y1, z0, z1, mat, opt = NS) => { if (x1 - x0 > 0.005 && y1 - y0 > 0.005 && z1 - z0 > 0.005) box(st, v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), v3((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2), mat, 0, 0, 0, opt); };
-      // the street over it: a slab 2 cm under the ground's paint, open at the stair
-      B(CORR.x0 - 0.2, OPEN.x0, SUB.ceil, SUB.top, CORR.z0, CORR.z1, 'stationCeil'); B(OPEN.x1, CORR.x1 + 0.1, SUB.ceil, SUB.top, CORR.z0, CORR.z1, 'stationCeil');
-      B(OPEN.x0, OPEN.x1, SUB.ceil, SUB.top, CORR.z0, OPEN.z0, 'stationCeil'); B(OPEN.x0, OPEN.x1, SUB.ceil, SUB.top, OPEN.z1, CORR.z1, 'stationCeil');
-      B(SUB.x0 - 0.2, SUB.x1 + 0.2, SUB.ceil, SUB.top, SUB.z0, SUB.z1 + 0.2, 'stationCeil');
+      // the street over it: a slab 2 cm under the ground's paint, open at the stair. It collides up to there but is drawn only
+      // up to 14 cm down (owner: "the subway glitches through the street": its top flickered against the ground far away), and a
+      // thin rim lines the opening from the street down to the slab
+      const CL = (x0, x1, z0, z1) => { B(x0, x1, SUB.ceil, SUB.top, z0, z1, 'stationCeil', { noSurvey: true, noDraw: true }); B(x0, x1, SUB.ceil, HID, z0, z1, 'stationCeil', { noSurvey: true, noCollide: true }); };
+      CL(CORR.x0 - 0.2, OPEN.x0, CORR.z0, CORR.z1); CL(OPEN.x1, CORR.x1 + 0.1, CORR.z0, CORR.z1); CL(OPEN.x0, OPEN.x1, CORR.z0, OPEN.z0); CL(OPEN.x0, OPEN.x1, OPEN.z1, CORR.z1); CL(SUB.x0 - 0.2, SUB.x1 + 0.2, SUB.z0, SUB.z1 + 0.2);
+      for (const [x0, x1, z0, z1] of [[OPEN.x0, OPEN.x1, OPEN.z0, OPEN.z0 + 0.012], [OPEN.x0, OPEN.x1, OPEN.z1 - 0.012, OPEN.z1], [OPEN.x0, OPEN.x0 + 0.012, OPEN.z0, OPEN.z1]]) B(x0, x1, SUB.ceil, -0.004, z0, z1, 'nycConcrete', { noSurvey: true, noCollide: true });
       // the stairs: down west from the sidewalk to a landing, walls either side, then into the hall
       const N = 24, run = 0.39, rise = 0.25; for (let i = 0; i < N; i++) { const xa = OPEN.x1 - (i + 1) * run, xb = OPEN.x1 - i * run; B(xa, xb, SUB.y - 0.5, -rise * (i + 1), CORR.z0 + 0.15, CORR.z1 - 0.15, 'stairStone'); }
       B(CORR.x0, OPEN.x1 - N * run, SUB.y - 0.5, SUB.y, CORR.z0, CORR.z1, 'stationFloor');
-      B(CORR.x0, CORR.x1, SUB.y - 0.5, SUB.top, CORR.z0 - 0.15, CORR.z0, 'subwayTile'); B(CORR.x0 - 0.2, CORR.x0, SUB.y - 0.5, SUB.top, CORR.z0, CORR.z1, 'subwayTile');
-      B(-13, CORR.x1, SUB.y - 0.5, SUB.top, CORR.z1, CORR.z1 + 0.15, 'subwayTile'); B(OPEN.x1, CORR.x1 + 0.1, SUB.y - 0.5, -0.02, CORR.z0, CORR.z1, 'subwayTile');
+      B(CORR.x0, CORR.x1, SUB.y - 0.5, HID, CORR.z0 - 0.15, CORR.z0, 'subwayTile'); B(CORR.x0 - 0.2, CORR.x0, SUB.y - 0.5, HID, CORR.z0, CORR.z1, 'subwayTile');
+      B(-13, CORR.x1, SUB.y - 0.5, HID, CORR.z1, CORR.z1 + 0.15, 'subwayTile'); B(OPEN.x1, CORR.x1 + 0.1, SUB.y - 0.5, HID, CORR.z0, CORR.z1, 'subwayTile');
+      B(OPEN.x1 - 0.012, OPEN.x1, SUB.ceil, -0.004, OPEN.z0, OPEN.z1, 'subwayTile', { noSurvey: true, noCollide: true });
       // the hall: platforms either side of the track pit, tiled walls, dark tunnel mouths at both ends
       B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, SUB.z0, 4.2, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, 8.8, SUB.z1, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.pit - 0.4, SUB.pit, 4.2, 8.8, 'ballast');
       for (const z of [4.2, 8.8]) B(SUB.x0, SUB.x1, SUB.y - 0.06, SUB.y + 0.005, z - (z < 6 ? 0.45 : 0), z + (z < 6 ? 0 : 0.45), 'platformEdge', { noSurvey: true, noCollide: true });
-      B(SUB.x0, -16.2, SUB.pit, SUB.top, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(-13, SUB.x1, SUB.pit, SUB.top, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(SUB.x0, SUB.x1, SUB.pit, SUB.top, SUB.z1, SUB.z1 + 0.2, 'subwayTile');
-      for (const [xa, xb] of [[SUB.x0 - 0.2, SUB.x0], [SUB.x1, SUB.x1 + 0.2]]) { B(xa, xb, SUB.pit, SUB.top, SUB.z0, 4.2, 'subwayTile'); B(xa, xb, SUB.pit, SUB.top, 8.8, SUB.z1, 'subwayTile'); B(xa, xb, SUB.pit, SUB.top, 4.2, 8.8, 'tunnelBlack'); }
+      B(SUB.x0, -16.2, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(-13, SUB.x1, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(SUB.x0, SUB.x1, SUB.pit, HID, SUB.z1, SUB.z1 + 0.2, 'subwayTile');
+      for (const [xa, xb] of [[SUB.x0 - 0.2, SUB.x0], [SUB.x1, SUB.x1 + 0.2]]) { B(xa, xb, SUB.pit, HID, SUB.z0, 4.2, 'subwayTile'); B(xa, xb, SUB.pit, HID, 8.8, SUB.z1, 'subwayTile'); B(xa, xb, SUB.pit, HID, 4.2, 8.8, 'tunnelBlack'); }
       for (const z of [SUB.z0 + 0.03, SUB.z1 - 0.03]) for (const x of [-26, -2]) pic(st, v3(x, -2.6, z), 4.4, 0.7, z < 0 ? 0 : Math.PI, 'signStation', { solid: false, glow: false });
       pic(st, v3(-14.6, -2.2, CORR.z0 + 0.03), 3.2, 0.6, 0, 'signStation', { solid: false, glow: false });
       // fluorescent tubes along the ceiling, and three real lights

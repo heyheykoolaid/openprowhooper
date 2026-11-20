@@ -339,6 +339,12 @@ function mats() {
     for (const k of ['grass', 'duff', 'woodchip', 'path', 'gravel', 'dryGrass', 'leafLitter']) MAT[k] = std(TX[k], { roughness: 0.95 });
     MAT.cedarBark = std(TX.cedarBark, { roughness: 0.95 }); MAT.birchBark = std(TX.birchBark, { roughness: 0.8 }); MAT.oldWood = std(TX.oldWood, { roughness: 0.9 });
     MAT.fenceWood = std(TX.oldWood, { roughness: 0.9, color: 0xb59a7a }); MAT.polewood = std(TX.cedarBark, { color: 0x9a8a78 }); MAT.carvedCedar = std(TX.wood, { color: 0xc89a70, roughness: 0.9 }); MAT.mossLog = std(TX.cedarBark, { color: 0x8a9a62 });
+    // the carved heart on Moose's big cedar: cut through the bark to pale wood, CS + AS inside
+    { const [c, g] = cnv(256, 256); g.clearRect(0, 0, 256, 256); const heart = () => { g.beginPath(); g.moveTo(128, 222); g.bezierCurveTo(30, 160, 6, 96, 40, 56); g.bezierCurveTo(70, 22, 116, 34, 128, 74); g.bezierCurveTo(140, 34, 186, 22, 216, 56); g.bezierCurveTo(250, 96, 226, 160, 128, 222); g.closePath(); };
+      g.lineJoin = 'round'; heart(); g.lineWidth = 22; g.strokeStyle = '#3a2416'; g.stroke(); heart(); g.lineWidth = 11; g.strokeStyle = '#d6aa7c'; g.stroke();
+      g.font = "700 46px Georgia, serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 9; g.strokeStyle = '#3a2416'; g.strokeText('CS + AS', 128, 124); g.fillStyle = '#d6aa7c'; g.fillText('CS + AS', 128, 124);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      MAT.heartCarving = new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.35, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 }); }
     MAT.tireTread = std(TX.tireTread, { roughness: 0.95 }); MAT.mooseSign = std(TX.mooseSign, { roughness: 0.8 });
     const leaf = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.95, flatShading: true, emissive: col, emissiveIntensity: 0.28 });   // a little light through the needles: the undersides were black (owner, 2026-11-19)
     MAT.cedarLeaf = leaf(0x2c4630); MAT.hemlockLeaf = leaf(0x34503a); MAT.mapleLeaf = leaf(0x6c9434); MAT.snagWood = new THREE.MeshStandardMaterial({ color: 0x8c8780, roughness: 0.95 }); MAT.birchLeaf = leaf(0x7a8a3c); MAT.shrub = leaf(0x3b5430); MAT.bracken = leaf(0x8a5a30);
@@ -348,11 +354,11 @@ function mats() {
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
   vaporMats(); viceMats(); duskMats(); nycMats();
 }
-function boxGeo(h, density = 0.5, off = null) {   // off: the box's centre, to lay the texture in world space (facades: windows on a floor grid)
+function boxGeo(h, density = 0.5, off = null, t0 = null) {   // off: the box's centre, to lay the texture in world space (facades: windows on a floor grid)
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) {
     const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
-    const X = p.getX(i) + (off ? h.x : 0), Y = p.getY(i) + (off ? off.y : 0), Z = p.getZ(i) + (off ? h.z : 0);   // off: along a face from its corner, up it from the ground
+    const X = p.getX(i) + (off ? (t0 ? off.x - t0.x : h.x) : 0), Y = p.getY(i) + (off ? off.y : 0), Z = p.getZ(i) + (off ? (t0 ? off.z - t0.z : h.z) : 0);   // off: along a face from its corner (or from t0, a wall's own start, so its pieces line up), up it from the ground
     let u, v; if (nx > 0.5) { u = Z; v = Y; } else if (ny > 0.5) { u = X; v = Z; } else { u = X; v = Y; }
     uv.setXY(i, u * density, v * density);
   }
@@ -410,12 +416,21 @@ function staticFlush() {
 function visMesh(v, art) {
   let m;
   if (v.shape === 'box') {
-    m = new THREE.Mesh(v.mat === 'backboard' || v.mat === 'mooseSign' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : NYC_DENS[v.mat] ? boxGeo(v.h, NYC_DENS[v.mat], v.c) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
+    m = new THREE.Mesh(v.mat === 'backboard' || v.mat === 'mooseSign' ? new THREE.BoxGeometry(v.h.x * 2, v.h.y * 2, v.h.z * 2) : NYC_DENS[v.mat] ? boxGeo(v.h, NYC_DENS[v.mat], v.c, v.tex0) : boxGeo(v.h, v.mat === 'brick' ? 0.35 : v.mat === 'concrete' ? 0.3 : 1), MAT[v.mat] || MAT.concrete);   // a backboard's picture spans its face once
     m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.euler[0], v.euler[1], v.euler[2], 'YXZ');
     if (v.graffiti && art) addGraffiti(v);
   } else if (v.shape === 'pipe') m = pipeMesh(v.a, v.b, v.r, MAT[v.mat] || MAT.galv, v.cone);
   else if (v.shape === 'disc') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.th * 2, 48), MAT[v.mat] || MAT.chrome); m.position.set(v.c.x, v.c.y, v.c.z); }
   else if (v.shape === 'sphere') { m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r, 1), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }
+  else if (v.shape === 'bark') { m = new THREE.Mesh(new THREE.CylinderGeometry(v.r, v.r, v.h, 24, 1, true, v.ang - v.span / 2, v.span), MAT[v.mat]); m.position.set(v.c.x, v.c.y, v.c.z); }   // a decal on a round trunk: a patch of its curve, the picture once across it
+  else if (v.shape === 'holeplate' || v.shape === 'torus') { let g;   // a square panel with a round hole in its middle, and a smooth ring (Slackvegan's round voids)
+    if (v.shape === 'torus') g = new THREE.TorusGeometry(v.r, v.tube, 10, 72);
+    else { const sh = new THREE.Shape(); sh.moveTo(-v.r, -v.r); sh.lineTo(v.r, -v.r); sh.lineTo(v.r, v.r); sh.lineTo(-v.r, v.r); sh.closePath(); const hp = new THREE.Path(); hp.absarc(0, 0, v.r, 0, Math.PI * 2, true); sh.holes.push(hp);
+      g = new THREE.ExtrudeGeometry(sh, { depth: v.t, bevelEnabled: false, curveSegments: 72 }); g.translate(0, 0, -v.t / 2); }
+    if (v.axis === 'z') g.rotateY(Math.PI / 2);
+    if (v.shape === 'holeplate') { const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv, d = NYC_DENS[v.mat] || 0.5;   // world-space texture, like the wall round it
+      for (let i = 0; i < p.count; i++) { const T0 = v.tex0 || { x: 0, z: 0 }, X = p.getX(i) + v.c.x - T0.x, Y = p.getY(i) + v.c.y, Z = p.getZ(i) + v.c.z - T0.z, nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i)); uv.setXY(i, (nx > 0.5 ? Z : X) * d, (ny > 0.5 ? Z : Y) * d); } }
+    m = new THREE.Mesh(g, MAT[v.mat] || MAT.concrete); m.position.set(v.c.x, v.c.y, v.c.z); }
   else if (v.shape === 'sign') { m = new THREE.Mesh(new THREE.PlaneGeometry(v.w, v.h), MAT[v.mat] || MAT.concrete); m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.rx || 0, v.ry || 0, 0, 'YXZ'); }   // a flat picture (a neon sign, a flag): its texture once across it
   return m || null;
 }

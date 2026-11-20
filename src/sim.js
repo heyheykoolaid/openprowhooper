@@ -688,8 +688,12 @@ class Drone {
     //   sagFeel     battery voltage sag under load (0 = a perfect battery)
     //   groundFeel  ground effect: the cushion close above the floor (0 = none)
     const f = k => Number.isFinite(+tune[k]) ? clamp(+tune[k], FEEL_KEYS[k][0], FEEL_KEYS[k][1]) : 1, F = {}; for (const k in FEEL_KEYS) F[k] = f(k);
-    this.feel = F; const all1 = Object.values(F).every(v => v === 1);
-    this.p = all1 ? params : { ...params, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel, params.I.y * F.weightFeel, params.I.z * F.weightFeel),
+    // tune.propCt / tune.propCq (absent = 1, the physics as it was): the props' thrust and torque coefficients. The game sets
+    // them so a whoop hovers at the rpm a real one does (Blackbox, 2026-11-19: the sim's props were too efficient), keeping its
+    // top-end thrust (PROP_FIT in game.js)
+    const pct = Number.isFinite(+tune.propCt) ? clamp(+tune.propCt, 0.5, 3) : 1, pcq = Number.isFinite(+tune.propCq) ? clamp(+tune.propCq, 0.5, 4) : 1;
+    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1;
+    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel, params.I.y * F.weightFeel, params.I.z * F.weightFeel),
       cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel), rotorDrag: params.rotorDrag * F.dragFeel,
       rotorJ: params.rotorJ / F.motorFeel, bat: { ...params.bat, r: params.bat.r * F.sagFeel } };
     this.tune = tune;
