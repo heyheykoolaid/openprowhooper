@@ -343,7 +343,8 @@ document.addEventListener('click', e => {
     if (a === 'ungroup' || a === 'thenrow') { const it = recapItems().find(x => x.kind === b.dataset.k && x.i === i); if (a === 'ungroup') recapUngroup(it); else recapAddAfter(it); }
     if (a === 'go') recapPlay(b.dataset.k === 'miss' ? { kind: 'miss', i, t: recap.flags[i].t, f: recap.flags[i] } : { kind: 'call', i, t: recap.events[i].t, e: recap.events[i] });
     if (a === 'yes') { const ev = recap.events[i]; recapSetCall(i, ev.name); renderRecap(); recapAutoScroll('call' + i); return; }
-    if (a === 'exec') { const ev = recap.events[i]; ev.execActual = ev.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true; }
+    if (a === 'exec') { const ev = recap.events[i]; ev.execActual = ev.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true;
+      if (ev.execActual && !ev.verdict) recapSetCall(i, ev.name); }   // owner, 2026-11-20: grading how it was flown confirms the call (the dropdown can still change it); a correction or "not a trick" stays as it is
     if (a === 'execm') { const f = recap.flags[i]; if (f) { f.execActual = f.execActual === b.dataset.x ? null : b.dataset.x; recap.dirty = true; } }
     if (a === 'delmiss') { recapRemove({ kind: 'miss', i, f: recap.flags[i] }); }
     if (a === 'allyes') { for (const ev of recap.events) if (!ev.verdict) ev.verdict = 'yes'; recap.dirty = true; }
