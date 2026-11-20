@@ -2787,6 +2787,10 @@ const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the sa
 const SWITCH_BONUS = [[21, 2.0], [18, 1.7], [15, 1.5], [12, 1.35], [9, 1.2], [6, 1.1], [3, 1.05]];
 const TOTW_MULT = [2, 1.5, 1];
 const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
+// Owner's chain bonuses (2026-11-20, not in the TPW calculator; kept apart from the trick score like K.W.A.D.): every 5th of the
+// same trick in a row in one combo is a set: INFINITY LOOPS for Powerloops, BIG BEN for Matty Flips, worth 2000 × the set's
+// number (5 → 2000, 10 → 4000 more, 15 → 6000 more…). Another trick, a crash, a miss or the combo banking starts over.
+const CHAIN_BONUS = { Powerloop: 'INFINITY LOOPS', 'Matty Flip': 'BIG BEN' }, CHAIN_SET = 5, CHAIN_PTS = 2000;
 const SWEEP_LOOK = 3.0;   // s either side of a slow flip / roll the sweep witness looks for upright
 const PENDULUM_GAP = 1.6;   // s from one Half Matty's end to the next one's start, for the Pendulum
 function pendulumStep(chain, p) {
@@ -2798,11 +2802,11 @@ class ScoreKeeper {
   constructor(totw) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.reset(); }
   reset() {
     this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
-    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.log = []; this.totwCounts = {}; this.biggest = null;
+    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.log = []; this.totwCounts = {}; this.biggest = null;
   }
   add(ev) {
     const base = ev.basePts ?? trickPoints(ev.name);
-    if (ev.exec === 'CRASH') { this.streak = 1; this.streakCount = 0; this.prev = null; this.log.push({ ...ev, net: 0 }); return { ...ev, net: 0, base: 0, streak: this.streak }; }
+    if (ev.exec === 'CRASH') { this.streak = 1; this.streakCount = 0; this.prev = null; this.chain = null; this.log.push({ ...ev, net: 0 }); return { ...ev, net: 0, base: 0, streak: this.streak }; }
     if (!base) return null;
     const execM = EXEC_MULT[ev.exec] ?? 1;
     const n = this.counts[ev.name] || 0;
@@ -2824,13 +2828,19 @@ class ScoreKeeper {
     this.prev = ev.name;
     let kwadHit = null;
     for (const L in KWAD) if (KWAD[L] === ev.name && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; }
+    let chainHit = null;
+    if (CHAIN_BONUS[ev.name] && ev.exec !== 'MISSED') {
+      this.chain = this.chain && this.chain.name === ev.name ? { name: ev.name, n: this.chain.n + 1 } : { name: ev.name, n: 1 };
+      if (this.chain.n % CHAIN_SET === 0) { const k = this.chain.n / CHAIN_SET, pts = CHAIN_PTS * k; this.chainBonus += pts; chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts }; this.chains.push(chainHit); }
+    } else this.chain = null;
     this.trickScore += net;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus);
-    const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit };
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus);
+    const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
     if (!this.biggest || net > this.biggest.net) this.biggest = rec;
     this.log.push(rec);
     return rec;
   }
+  chainBreak() { this.chain = null; }   // the combo banked: a new set starts from one
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
 }
 

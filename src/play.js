@@ -85,7 +85,7 @@ function comboEnd(bailed) {
   const el = $('#comboBank'); const n = combo.names.length;
   el.innerHTML = bailed ? `<b>BAILED</b><small>${n} trick${n > 1 ? 's' : ''} · ${combo.pts.toLocaleString()} pts kept · streak lost</small>` : `<b>+${combo.pts.toLocaleString()}</b><small>${n > 1 ? n + ' TRICK COMBO' : 'LANDED'}</small>`;
   el.className = bailed ? 'bail show' : 'show'; void el.offsetWidth;
-  combo.names = []; combo.pts = 0; combo.active = false; renderCombo();
+  combo.names = []; combo.pts = 0; combo.active = false; renderCombo(); if (score && score.chainBreak) score.chainBreak();
 }
 function renderCombo() {
   const el = $('#combo'); const prov = mode === 'fly' ? detector.provisional() : [], live = mode === 'fly' && detector.liveState ? detector.liveState() : [];
@@ -105,6 +105,7 @@ function onTrick(ev) {
   comboAdd(r);
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
+  if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); combo.pts += c.pts; renderCombo(); }
   updateBreakdown();
 }
 function updateBreakdown() {

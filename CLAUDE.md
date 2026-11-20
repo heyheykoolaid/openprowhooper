@@ -635,6 +635,13 @@ Arming is required to fly. Take-off without arming is an option in Controls, off
 `store 'autoArm'`; when on: disarmed + throttle seen at rest, then raised = armed, and the arm switch disarms on its falling edge only). The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
 now lives under Tools & labs. The 3D mode call-out reads METALCRAFT MODE (`.popup.metal`).
 
+## INFINITY LOOPS and BIG BEN (owner, 2026-11-20; `CHAIN_BONUS` in sim.js, test/chains.js)
+Not in the TPW calculator; kept apart from the trick score like K.W.A.D. (`ScoreKeeper.chainBonus`, added to `total`; the
+results line and the posted sheet's `totals.chain` show it): every 5th Powerloop in a row in one combo is **INFINITY LOOPS**,
+every 5th Matty Flip **BIG BEN**, worth 2000 × the set's number (5 → +2000, 10 → +4000 more, 15 → +6000 more). Another trick, a
+miss, a crash or the combo banking (`chainBreak` from `comboEnd`) starts the count over. A big chrome call-out (`.popup.metal
+.chainBonus`) and the bonus goes into the combo's points.
+
 ## Train a trick (src/coach.js; Tricktionary → 🎓 train; owner, 2026-11-20)
 Four tries in Free Fly on the current map. Tries 1-2 **step by step**: the trick as a list of steps made from its own rule
 (`coachPlan`: OBSTACLE_TRICKS / OPEN_TRICKS patterns, every alternative pattern as one of `alts`, the over/under order placed
@@ -647,7 +654,14 @@ pieces under `COACH_JOIN` 0.9 s apart counts as one, passes a second either side
 a bit off / sloppy. Tries 3-4 **live**: the game's own calls; a call of the trick asks "was it really one?" (Y / N), another
 call lists the steps against what was measured ("It was a <trick>" Y corrects it, N goes again), Q = "I did it, the game missed
 it". Those answers are ordinary decided review labels (recap events / flags, saved by `recapSave` when training stops); failed
-or skipped tries send nothing. 👻 Show me (the ghost) where the bot has a script. The detector worker sends tokens while it is
+or skipped tries send nothing. **👻 Show me** (owner: "go first person in the demo drone… break down the stick movement, the setup
+and motions"; `coachDemo`, `demoFly`, `demoBuild`): the bot flies the trick on this map (an over/under bar near the pilot, or
+open air 3.5 m above them; a flight its own detector calls) through Judge the Bot's player (`judge.demo`: FPV camera, sticks
+always shown, loops, no verdicts; Space pause, S slow-mo, C camera, Esc / ◂ My turn back to training at the start), and the panel
+gives the setup (speed, height, throttle, the object) and each step with the sticks and throttle the bot used there
+(`stickWords`), lighting up as it is flown. **GoldenEye arrows** (`demoArrows`, `#demoArrows`, owner: "big arrows around the
+center of the screen"): the right stick as arrows out from the crosshair (pitch up / down, roll left / right), yaw as a curved
+arrow over it, the throttle as a gauge on the left with PUNCH IT / CUT while it moves; size and colour follow how far the stick goes. The detector worker sends tokens while it is
 on (`DW.wantDbg`); a reset (R, a new flight) restarts the window (`coachClock`). test/coach.js: the bot's flight of each of its
 29 tricks passes its own steps (87/87), five other tricks do not, and six sloppy flips / rolls are judged as a beginner's would be.
 **Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on

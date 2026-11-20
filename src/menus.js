@@ -99,7 +99,7 @@ function endSession() {
   mode = 'paused'; drone.armed = false; const r = score;
   const best = store.get('best', 0); if (r.total > best) store.set('best', r.total);
   $('#results').innerHTML = `<h2>SESSION OVER</h2><div class="big">${r.total.toLocaleString()}</div>
-    <p>Trick score ${r.trickScore.toLocaleString()} × switch ${r.switchMult()} + K.W.A.D. ${r.kwadBonus}</p>
+    <p>Trick score ${r.trickScore.toLocaleString()} × switch ${r.switchMult()} + K.W.A.D. ${r.kwadBonus}${r.chainBonus ? ` + ${r.chains.map(c => c.title + ' ×' + c.n).join(', ')} ${r.chainBonus.toLocaleString()}` : ''}</p>
     <p>Biggest trick: <b>${r.biggest ? r.biggest.name + ' (' + r.biggest.net + ')' : '—'}</b> · Max streak ×${r.maxStreak.toFixed(2)} · Obstacles ${r.uniqueObs.size}</p>
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>
