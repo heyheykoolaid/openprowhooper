@@ -565,6 +565,10 @@ Lint before shipping: `tools/lint.eslintrc.json` (concatenate the game files in 
 "never used" variable still needs a grep for assignments.
 
 ## Review list: picking, combos, deleting
+**Combos are friendlier** (owner, 2026-11-19; play.js `COMBO_IDLE` 3 s, was 2, `comboLink`): a combo banks after 3 s with no
+trick and nothing rotating, and every pass over, under or through anything (or past a pole) starts the timer again, like a
+manual; a bar under the combo's points shows the time left. Scoring (the TPW streak) is unchanged; review labels group combos by
+the same 3 s.
 Quick check stays on a call after it is answered (owner, 2026-11-19: Next → or K moves on, so a combo or a change can be added). Quick check takes combos too (owner, 2026-11-18): "＋ then…" adds the other tricks of the combo to the call (`extra`, as SKITTLES
 mode's tiles), then the answer is given for the first. Judge the community has Hide / Show judged (`store 'jgHideDone'`).
 The main menu's title is smaller and a News box shows `news.txt` (build.py → `window.PW_NEWS`, plain text; empty = no box).

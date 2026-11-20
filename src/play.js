@@ -67,7 +67,10 @@ const popups = $('#popups');
 function flash(text, cls = '') { const el = document.createElement('div'); el.className = 'popup ' + cls; el.innerHTML = text; popups.prepend(el); setTimeout(() => el.classList.add('out'), 1900); setTimeout(() => el.remove(), 2600); while (popups.children.length > 2) popups.lastChild.remove(); /* two at a time: the column stays short */ }
 // ---- combo (Tony Hawk style presentation; points follow the TPW calculator exactly)
 // A combo runs while you keep doing tricks; it banks after COMBO_IDLE s with no trick or rotation; a crash bails it.
-const COMBO_IDLE = 2.0;
+// Friendlier (owner, 2026-11-19): 3 s, not 2, and every pass over, under or through something (or past a pole) links the
+// chain like a manual: the timer starts again (`comboLink`). A bar under the points shows the time left.
+const COMBO_IDLE = 3.0, comboSeen = new WeakSet();
+function comboLink(now) { let hit = false; for (const c of detector.crossLog) if (!comboSeen.has(c)) { comboSeen.add(c); hit = true; } for (const p of detector.passes || []) if (!comboSeen.has(p)) { comboSeen.add(p); hit = true; } if (hit && combo.active) combo.lastT = now; }
 const combo = { names: [], pts: 0, lastT: 0, active: false };
 // loops chain like combo trippies: the same loop on the same object again and again shows as one entry, ×N (each one still
 // scores by the TPW calculator, repeats included)
@@ -91,7 +94,7 @@ function renderCombo() {
   const liveTxt = l => l.laps !== undefined ? `<span class="live">${l.name.replace(' x2', '')} ×${l.laps}${l.counts ? ` <b>+${l.pts}</b>` : ''}</span>` : `<span class="live">${l.name} ${l.meters.toFixed(1)}m</span>`;
   const list = [...combo.names.map(n => `<span>${n}</span>`), ...prov.map(n => `<span class="prov">${n}…</span>`), ...live.map(liveTxt)];
   const livePts = live.reduce((a, l) => a + (l.counts ? l.pts : 0), 0);
-  el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}`;
+  el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}${combo.active ? `<div class="cTimer"><i style="width:${detector.busy() ? 100 : Math.max(0, Math.round(100 - (performance.now() / 1000 - combo.lastT) / COMBO_IDLE * 100))}%"></i></div>` : ''}`;
 }
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev);
@@ -184,6 +187,7 @@ function frame(now) {
     if (n >= 120) { acc = 0; if (pf) PERF.acc.drop = (PERF.acc.drop || 0) + 1; } if (pf) PERF.acc.steps += n;
     if (!race.on) for (const ev of detector.drain()) onTrick(ev);
     if (!race.on && detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (mode === 'fly' && store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in SKITTLES mode</small>`, 'near'); }
+    if (!race.on) comboLink(now / 1000);
     if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
