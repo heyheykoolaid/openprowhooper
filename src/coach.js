@@ -447,12 +447,19 @@ function coachLive(simDt) {
     if (c && (a < COACH_LIVE_OFF || Math.sign(v) !== c.sg)) { c.off += simDt; if (c.off > COACH_JOIN) L[ax] = null; else c.rate = a < COACH_LIVE_OFF ? 0 : c.rate; return; }   // a beginner's pause in the middle still counts as one rotation
     if (c) { c.acc += a * simDt; c.off = 0; c.rate = a; } else if (a >= COACH_LIVE_ON) L[ax] = { sg: Math.sign(v), acc: a * simDt, off: 0, rate: a }; });
   const k = coach.doneN || 0;
+  // owner, 2026-11-20: "the lock for the juicy flick stopped a bit early": the rule's blended pattern (a ~135° flick) won the race
+  // against the plain one. Of the patterns whose next step is this rotation, the pause waits for the fullest, and a half flip
+  // pauses where the CAMERA is level with the horizon, upside-down: 180° plus the camera's uptilt on a forward flip (the camera
+  // still looks down at 180°), minus it on a back flip (Snapback: level before 180°).
+  let pick = null;
   for (const st of coach.alts) {
     const s0 = st[k]; if (!s0 || !s0.rot || k + 1 >= st.length) continue;   // the last step needs no pause: the trick is done
     const p = s0.rot, c = L[p.ax]; if (!c) continue;
     if ((p.dir === '+' && c.sg < 0) || (p.dir === '-' && c.sg > 0)) continue;   // P+ = pitch back, R+ = roll right (the detector's own signs)
-    if (c.acc + c.rate * COACH_EASE >= p.deg * 0.95) { coach.steps = st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); return; }
+    const tilt = Math.max(0, Math.min(60, +tune.camTilt || 0)), target = p.ax === 'P' && Math.abs(p.deg - 180) < 60 ? 180 + (c.sg < 0 ? tilt : -tilt) : p.deg;
+    if (!pick || target > pick.target) pick = { st, c, target };
   }
+  if (pick && pick.c.acc + pick.c.rate * COACH_EASE >= pick.target * 0.97) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }
 }
 function coachStepSticks() {   // the bot's sticks for each step, from one flight of the trick on this map (for the pause arrows)
   try { const f = demoFly(coach.name); if (!f || !f.got.rows) return null; const rows = f.got.rows, j = f.j;

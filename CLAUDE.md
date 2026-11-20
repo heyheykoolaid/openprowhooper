@@ -679,7 +679,7 @@ eases in (game time slows to a stop over 0.3 s) and out (back to full speed over
 that speed), and starts as a step's rotation comes round, from the drone's own rates every frame (`coachLive`: a live rotation per
 axis, pauses under `COACH_JOIN` joined, triggered when done + rate × 0.15 s ≥ 95 % of the step, so it comes to rest about where the
 step ends), not when the detector has closed the rotation and the 150 ms check has judged it (a quick Snapback was already rolling).
-The judge still decides the step afterwards (`preFroze`: no second pause there). The hold counts once it has stopped; the throttle
+The judge still decides the step afterwards (`preFroze`: no second pause there). Of the rule's patterns whose next step is that rotation, the pause waits for the fullest (a blended ~135° Juicy Flick pattern used to win and stop it early), and a **half flip pauses where the camera is level with the horizon, upside-down**: 180° + the camera uptilt on a forward flip, − it on a back flip (owner, 2026-11-20). The hold counts once it has stopped; the throttle
 needs to be within 0.35 of the bot's, and is not checked on the keyboard.
 **Start in the air, held** (owner, 2026-11-20: "always start in the air armed, and moving the sticks takes control"; `coachHoldStart`,
 `coachHeld`): every start in the Training Room (Train, R, back from Show me) puts the quad 1.5 m up at its station, armed (whatever the
