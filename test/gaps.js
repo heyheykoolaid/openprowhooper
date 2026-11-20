@@ -12,4 +12,13 @@ k.chainBreak(); const d = k.gap({ obj: 1, name: 'Knife Slot 0.2 m opening', narr
 check('after the combo banks it is fresh again', d.pts === S.GAP_MAX, `+${d.pts}`);
 check('kept off the trick score, added to the total', k.trickScore === 0 && k.total === k.gapBonus && k.gapBonus === a.pts + b.pts + c.pts + d.pts, `trick ${k.trickScore} total ${k.total}`);
 check('names read as gaps', S.gapLabel('Trunk Gap 2') === 'Trunk Gap' && S.gapLabel('Rebar Gate 3 opening') === 'Rebar Gate Gap' && S.gapLabel('Bodega Door') === 'Bodega Door Gap', [S.gapLabel('Trunk Gap 2'), S.gapLabel('Rebar Gate 3 opening'), S.gapLabel('Bodega Door')].join(' / '));
+// low openings found by the Surveyor (owner, 2026-11-20: "under the bench / through the picnic table / under the moose don't count
+// as gaps"): Moose's furniture gets gaps, flown flat through one the detector logs a gap pass (and the Drone never touches it)
+require('../src/maps.js'); const M = S.MAPS.moose.build(), lows = M.objs.filter(o => o.low);
+for (const nm of ['Bench', 'Picnic Table', 'Carved Moose']) check(`Moose: a gap under the ${nm}`, lows.some(o => o.name === nm), lows.filter(o => o.name === nm).length + ' found');
+{ const g = lows.find(o => o.name === 'Carved Moose'), det = new S.TrickDetector(M), d = Object.create(S.Drone.prototype), v3 = S.v3, dt = 0.002;
+  Object.assign(d, { armed: true, crashed: false, contactThisStep: false, w: v3() }); const n0 = S.norm(g.gap.n), face = S.qaxis(v3(0, 1, 0), Math.atan2(n0.x, n0.z));
+  for (let t = 0; t < 2; t += dt) { d.pos = S.add(g.gap.c, S.mul(n0, -2 + t * 2)); d.vel = S.mul(n0, 2); d.q = face; det.update(d, dt); det.drain(); }
+  const hit = det.crossLog.find(c => c.kind === 'G' && c.obj === g.id); check('flown under the carved moose: a gap pass', !!hit, hit ? S.gapLabel(g.name) : 'none'); }
+check('nothing found on the Training Room floor or under a lamp', !S.MAPS.training.build().objs.some(o => o.low) && !S.MAPS.warehouse.build().objs.some(o => o.low && /Light/.test(o.name)), '');
 console.log(`\n${ok}/${n} gap checks`);

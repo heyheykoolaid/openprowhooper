@@ -673,10 +673,55 @@ function surveyObstacles(world, opts = {}) {
     for (const A of autos.slice(0, 6)) { const v = { id: nid++, name: o.name, kind: 'overunder', prims: [], vis: [], obstacle: A.ob, auto: true, parent: o.id }; if (A.round) v.round = A.round; made.push(v); report.found++; }
   }
   world.objs.push(...made);
+  if (opts.lowGaps !== false) report.lowGaps = surveyLowGaps(world, nid + made.length);
   report.overUnders = world.objs.filter(o => o.obstacle).length; report.gaps = world.objs.filter(o => o.gap).length;
   report.poles = world.objs.reduce((n, o) => n + (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall' ? 0 : o.kind === 'pilot' ? 1 : o.prims.filter(q => q.type === 'capsule' && !q.leaf && q.r <= (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) && q.r >= 0.012 && len(sub(q.b, q.a)) >= 1.2 && Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8).length), 0);
   report.walls = world.objs.filter(o => o.kind === 'wall' || o.kind === 'building').length;
   world.survey = report; return world;
+}
+
+// Job 4 (owner, 2026-11-20: "under the bench / through the picnic table / under the moose don't count as gaps"): every low flat
+// slab (a box no higher than LOWGAP_MAX over what is under it) gets a gap of its own across each way it can be flown through:
+// the opening is the clear stretch under it that stays clear (5 cm, like tools/gapcheck.js) all the way through the slab's depth,
+// from the floor to its underside; at least LOWGAP_W wide and LOWGAP_H high. Not where a gap already is (same place, same way).
+const LOWGAP_MAX = 1.3, LOWGAP_W = 0.2, LOWGAP_H = 0.15, LOWGAP_CLEAR = 0.05;
+function primDist(P, p) {
+  if (P.type === 'sphere') return len(sub(p, P.c)) - P.r;
+  if (P.type === 'capsule') { const ab = sub(P.b, P.a), L = dot(ab, ab); let t = L ? dot(sub(p, P.a), ab) / L : 0; t = Math.max(0, Math.min(1, t)); return len(sub(p, add(P.a, mul(ab, t)))) - P.r; }
+  const m = P.m, d = sub(p, P.c), q = [Math.abs(m[0] * d.x + m[3] * d.y + m[6] * d.z) - P.h.x, Math.abs(m[1] * d.x + m[4] * d.y + m[7] * d.z) - P.h.y, Math.abs(m[2] * d.x + m[5] * d.y + m[8] * d.z) - P.h.z];
+  return Math.hypot(Math.max(q[0], 0), Math.max(q[1], 0), Math.max(q[2], 0)) + Math.min(Math.max(q[0], q[1], q[2]), 0);
+}
+function surveyLowGaps(world, nid) {
+  const have = world.objs.filter(o => o.gap), made = [];
+  const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
+  for (const o of world.objs.slice()) {
+    if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.kind === 'wall' || o.kind === 'building' || o.auto || !o.prims || !o.prims.length) continue;
+    const mine = [];
+    for (const p of o.prims) {
+      if (p.leaf || p.type !== 'box' || Math.abs(p.m[4]) < 0.94) continue;
+      const a = p.aabb, bot = a.min.y; if (a.max.y - bot > 1.6) continue;
+      const ax = [v3(p.m[0], 0, p.m[6]), v3(p.m[2], 0, p.m[8])].map(norm), hh = [p.h.x, p.h.z]; if (Math.min(...hh) < 0.15 || Math.max(...hh) > 3) continue;
+      const floor = supportUnder(p.c.x, p.c.z, bot, p), H = bot - floor, fp = floor > 0 && world.prims.find(q => q !== p && Math.abs(q.aabb.max.y - floor) < 1e-6 && p.c.x > q.aabb.min.x && p.c.x < q.aabb.max.x && p.c.z > q.aabb.min.z && p.c.z < q.aabb.max.z);
+      if (fp && Math.min(fp.aabb.max.x - fp.aabb.min.x, fp.aabb.max.z - fp.aabb.min.z) < 0.4) continue;   /* over a beam or a lamp, not a floor */ if (H < LOWGAP_H + 2 * LOWGAP_CLEAR || H > LOWGAP_MAX) continue;
+      const R = Math.max(...hh) + 0.3, near = world.prims.filter(q => q.aabb.max.x > p.c.x - R && q.aabb.min.x < p.c.x + R && q.aabb.max.z > p.c.z - R && q.aabb.min.z < p.c.z + R && q.aabb.min.y < bot + 0.1 && q.aabb.max.y > floor - 0.1);
+      const free = pt => { for (const q of near) if (primDist(q, pt) < LOWGAP_CLEAR) return false; return true; };
+      for (const k of [0, 1]) {
+        const n = ax[k], u = ax[1 - k], hn = hh[k], hu = hh[1 - k], ys = [], ns = [];
+        for (let y = floor + LOWGAP_CLEAR + 0.01; y <= bot - LOWGAP_CLEAR - 0.01 + 1e-6; y += Math.max(0.04, (H - 0.12) / 6)) ys.push(y);
+        for (let t = -hn; t <= hn + 1e-6; t += 0.05) ns.push(t);   /* every 5 cm through its depth: a 6 cm leg is never stepped over */
+        const col = w => { for (const y of ys) for (const t of ns) if (!free(v3(p.c.x + u.x * w + n.x * t, y, p.c.z + u.z * w + n.z * t))) return false; return true; };
+        if (!col(0)) continue;
+        let w0 = 0, w1 = 0; const st = 0.04; while (w1 + st <= hu && col(w1 + st)) w1 += st; while (w0 - st >= -hu && col(w0 - st)) w0 -= st;
+        if (w1 - w0 < LOWGAP_W) continue;
+        const wc = (w0 + w1) / 2, c = v3(p.c.x + u.x * wc, (floor + bot) / 2, p.c.z + u.z * wc);
+        if (have.concat(made, mine.map(m => m.o)).some(g => { const r = sub(g.gap.c, c); return Math.abs(dot(norm(g.gap.n), n)) > 0.7 && Math.abs(r.y) < 0.6 + H / 2 && Math.abs(dot(r, n)) < hn + 0.6 && Math.abs(dot(r, u)) < hu + 0.3; })) continue;   // a gap already there: in or near this slab, the same way
+        mine.push({ size: (w1 - w0) * H, o: { id: 0, name: o.name, kind: 'gap', prims: [], vis: [], auto: true, low: true, parent: o.id, gap: { c, n, u, hu: (w1 - w0) / 2 - 0.02, hv: H / 2 - LOWGAP_CLEAR - 0.015 } } });   // a little inside the sampled clear air (tools/gapcheck.js tests the edges too)
+      }
+    }
+    mine.sort((x, y) => y.size - x.size); const kept = [];   // one gap per way through an object (a picnic table's top and its seats are one pass)
+    for (const m of mine) { if (kept.length >= 2 || kept.some(k => Math.abs(dot(k.gap.n, m.o.gap.n)) > 0.7)) continue; kept.push(m.o); m.o.id = nid++; made.push(m.o); }
+  }
+  world.objs.push(...made); return made.length;
 }
 
 // ================================================================= DRONE PHYSICS

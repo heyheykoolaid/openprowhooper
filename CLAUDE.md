@@ -329,7 +329,7 @@ the north-west corner (Arrow Dr along the long north side, Park Dr along the sho
 tunnel moved to the far south-east corner**, four half-buried tires standing in a ring 2.2 m round, each arch across the ring so a lap threads them all (each `Tire` with its own `Tire opening` gap, inside
 the arch) on a bare dirt mound; a Split Birch by the park sign. Grove trees standing where these go are emptied (removed, as a
 layout removal does), so the rest of the grove keeps its place. The sign is a maroon and gold panel with a moose emblem on two
-metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `playYellow`, `slideBlue`); the lanes are dry
+metal posts; the Play Unit is red and yellow with two blue slides (`playRed`, `playYellow`, `slideBlue`), its steps on the open south side (owner, 2026-11-20: on the west they blocked a slide for powerloops); the lanes are dry
 winter grass (`dryGrass`), leaf litter at the birch corners (`leafLitter`); houses have shallow 22° gable roofs (the gable filled by two boxes laid along the slopes; a hip roof of boxes overlapped; `natureKit` style
 `lowRoof`); bench backrests have uprights; the carved moose stays (the owner loves it). Light: a clear winter afternoon (blue
 sky, low warm sun from the south-west, long shadows). `tools/map_thumbs.py --extra --only=moose` shoots the four corners.
@@ -423,6 +423,12 @@ way; (2) untagged flat boxes and level capsules with at least 0.35 m of air bene
 than 5 m, become over/unders of their own (virtual objects with `auto: true`, `parent`, no shapes). New maps need no
 `obstacle` tags for ordinary things; tag by hand only what the rules skip (sloped things, very thick or very wide ones).
 (3) untagged slabs wider than that (roofs, big decks) get an over/under along each edge (`edge: true`, named "<object> edge").
+(4) **low gaps** (owner, 2026-11-20: "under the bench / through the picnic table / under the moose don't count"; `surveyLowGaps`,
+`LOWGAP_MAX` 1.3 m): every flat box with 0.25-1.3 m of air under it (over the ground or a floor at least 0.4 m across, not a beam
+or a lamp; not walls or buildings) gets a gap (`low: true`, `auto`, `parent`) each way it can be flown through: the stretch under it
+that stays 5 cm clear all the way through its depth (sampled every 5 cm), at least 0.2 m wide; one per direction per object (a
+picnic table's top and seats are one pass), at most two, none where a gap already is. Moose: 24 (benches, picnic tables, the carved
+moose, pickups); Slackvegan's cars, the school's tables, the Murderdome's pool and crawl tables, luggage carts. test/gaps.js.
 The base `buildPlayground()` used by the tests is not surveyed. `world.survey` reports the counts (shown on the Maps
 screen). While flying, the "what counted" list (`passFeed` in play.js, Z or Options) shows each over / under / gap /
 pole pass as the detector logs it: the first place to look when a pilot says an object did not count.
@@ -685,7 +691,7 @@ eases in (game time slows to a stop over 0.3 s) and out (back to full speed over
 that speed), and starts as a step's rotation comes round, from the drone's own rates every frame (`coachLive`: a live rotation per
 axis, pauses under `COACH_JOIN` joined, triggered when done + rate × 0.15 s ≥ 95 % of the step, so it comes to rest about where the
 step ends), not when the detector has closed the rotation and the 150 ms check has judged it (a quick Snapback was already rolling).
-The judge still decides the step afterwards (`preFroze`: no second pause there). Of the rule's patterns whose next step is that rotation, the pause waits for the fullest (a blended ~135° Juicy Flick pattern used to win and stop it early), and a **half flip pauses where the camera is level with the horizon, upside-down**: 180° + the camera uptilt on a forward flip, − it on a back flip; **rolls pause where the wings are level** with the horizon (upside-down after a half roll, upright after a full one), from the attitude, not the degree count (once 60 % of it is done and the wings are closing on level; well past it, it pauses anyway); yaw spins stay on degrees (owner, 2026-11-20). The hold counts once it has stopped; the throttle
+The judge still decides the step afterwards (`preFroze`: no second pause there). Of the rule's patterns whose next step is that rotation, the pause waits for the fullest (a blended ~135° Juicy Flick pattern used to win and stop it early), and a **half flip pauses where the camera is level with the horizon, upside-down** (from the camera's own elevation, not the degree count: the live count misses a rotation's slow start and end, so a Juicy Flick stopped by eye at the horizon never paused); a rotation the pilot stops on the right side once half done pauses there too; **rolls pause where the wings are level** with the horizon (upside-down after a half roll, upright after a full one), from the attitude, not the degree count (once 60 % of it is done and the wings are closing on level; well past it, it pauses anyway); yaw spins stay on degrees (owner, 2026-11-20). The hold counts once it has stopped; the throttle
 needs to be within 0.35 of the bot's, and is not checked on the keyboard.
 **Start in the air, held** (owner, 2026-11-20: "always start in the air armed, and moving the sticks takes control"; `coachHoldStart`,
 `coachHeld`): every start in the Training Room (Train, R, back from Show me) puts the quad 1.5 m up at its station, armed (whatever the

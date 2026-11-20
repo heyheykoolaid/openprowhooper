@@ -6,7 +6,7 @@ const checks = [
   ['single tricks', () => { const o = run('t3.js'); const want = ['Flip', 'Flip', 'Roll', 'Double Roll', "Cubik's Rube", 'Yaw Spin', 'Invert Rewind', 'Inverted Yaw Spin', 'Segmented Flips/Rolls', 'Juicy Flick', 'Flip', 'Powerloop', 'Power Roll', 'Split-S', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Flip', 'Flip', 'Roll', 'Double Flip', 'Double Roll', 'Yaw Spin', 'Invert Rewind', 'Invert Rewind', 'Vanny Roll', "Rubik's Cube", "Cubik's Rube", 'Juicy Flick', 'Inverted Yaw Spin'];
       const got = o.trim().split('\n').map(l => (l.split('-> ')[1] || '').split(' [')[0]); return want.every((w, i) => got[i] === w) ? null : 'got: ' + got.join(', '); }],
   ['obstacle timing', () => { const o = run('t4.js'); return /fake matty[^\n]*Flip \[/.test(o) && (o.match(/Powerloop \[CLEAN/g) || []).length === 3 && /matty flip \(forward[^\n]*Matty Flip/.test(o) ? null : o; }],
-  ['gap points (25-75 by tightness, repeats halved, own line)', () => { const o = run('gaps.js'); return /6\/6 gap checks/.test(o) ? null : o; }],
+  ['gap points (25-75 by tightness, repeats halved, own line) and low gaps under furniture', () => { const o = run('gaps.js'); return /11\/11 gap checks/.test(o) ? null : o; }],
   ['knife edge only through narrow gaps', () => { const o = run('knife.js'); return /4\/4 knife edge checks/.test(o) ? null : o; }],
   ['fast combos', () => { const o = run('combo.js'); return /15\/15 combos correct/.test(o) ? null : o; }],
   ['powerloop vs maverick', () => { const o = run('loops.js'); return /\n5\/5/.test(o) ? null : o; }],

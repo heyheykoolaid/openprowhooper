@@ -459,18 +459,30 @@ function coachLive(simDt) {
     const tilt = Math.max(0, Math.min(60, +tune.camTilt || 0)), target = p.ax === 'P' && Math.abs(p.deg - 180) < 60 ? 180 + (c.sg < 0 ? tilt : -tilt) : p.deg;
     if (!pick || target > pick.target) pick = { st, c, target };
   }
-  // owner, 2026-11-20: rolls pause where the WINGS are level with the horizon (upside-down after a half roll, upright after a
-  // full one), from the quad's own attitude, not the degree count: a sloppy roll that wobbles the pitch or sits off-axis still
-  // pauses flat. Yaw spins stay on degrees (the quad is level the whole time).
-  if (pick && pick.st[k].rot.ax === 'R' && (Math.abs(pick.st[k].rot.deg - 180) < 60 || Math.abs(pick.st[k].rot.deg - 360) < 90)) {
-    const half = Math.abs(pick.st[k].rot.deg - 180) < 60, c = pick.c, ry = Math.abs(drone.right().y), up = drone.up().y;
-    const closing = c.ry != null && ry < c.ry; c.ry = ry;
-    const remaining = Math.asin(Math.min(1, ry)) * 180 / Math.PI, side = half ? up < -0.2 : up > 0.2;
-    if (c.acc >= pick.st[k].rot.deg * 0.6 && side && closing && remaining <= c.rate * COACH_EASE + 3) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }
-    else if (c.acc >= pick.st[k].rot.deg * 1.3 + 40) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }   // never level (a very sloppy roll): pause anyway once well past it
+  // Where each pause lands, from the quad's own attitude (owner, 2026-11-20), not the degree count (the live count misses the slow
+  // start and end of a rotation, so a flick stopped by eye at the horizon never "reached" its degrees and never paused):
+  // - a half flip pauses when the CAMERA is level with the horizon, upside-down (180° plus the uptilt forward, minus it back);
+  // - a roll pauses when the WINGS are level (upside-down after a half roll, upright after a full one);
+  // - anything else (yaw spins: level all the way) by degrees;
+  // and whenever the pilot stops the rotation on the right side of it (they lined it up by eye), it pauses there.
+  if (!pick) return;
+  const p = pick.st[k].rot, c = pick.c, up = drone.up().y, deg = p.deg, go = () => { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); };
+  const stopped = c.off > 0.08, near = c.rate * COACH_EASE + 3;
+  if (p.ax === 'P' && Math.abs(deg - 180) < 60) {
+    const t = Math.max(0, Math.min(60, +tune.camTilt || 0)) * Math.PI / 180, cam = S.qrot(drone.q, S.v3(0, Math.sin(t), -Math.cos(t))), rem = Math.abs(Math.asin(Math.max(-1, Math.min(1, cam.y)))) * 180 / Math.PI;
+    const closing = c.cy != null && rem < c.cy; c.cy = rem;
+    if (c.acc >= deg * 0.5 && up < -0.2 && ((closing && rem <= near) || stopped)) go();
+    else if (c.acc >= deg * 1.3 + 40) go();   // never level: pause anyway once well past it
     return;
   }
-  if (pick && pick.c.acc + pick.c.rate * COACH_EASE >= pick.target * 0.97) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }
+  if (p.ax === 'R' && (Math.abs(deg - 180) < 60 || Math.abs(deg - 360) < 90)) {
+    const half = Math.abs(deg - 180) < 60, ry = Math.abs(drone.right().y), rem = Math.asin(Math.min(1, ry)) * 180 / Math.PI;
+    const closing = c.ry != null && rem < c.ry, side = half ? up < -0.2 : up > 0.2; c.ry = rem;
+    if (c.acc >= deg * 0.6 && side && ((closing && rem <= near) || stopped)) go();
+    else if (c.acc >= deg * 1.3 + 40) go();
+    return;
+  }
+  if (c.acc + c.rate * COACH_EASE >= pick.target * 0.97 || (stopped && c.acc >= pick.target * 0.8)) go();
 }
 function coachStepSticks() {   // the bot's sticks for each step, from one flight of the trick on this map (for the pause arrows)
   try { const f = demoFly(coach.name); if (!f || !f.got.rows) return null; const rows = f.got.rows, j = f.j;

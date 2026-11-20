@@ -697,7 +697,7 @@
       for (const x of [x0 + 1.2, x1 - 1.2]) { for (const s of [-0.22, 0.22]) pipe(sw, v3(x + s, H, z), v3(x + s, 0.5, z), 0.008, 'chain', { noCollide: true }); box(sw, v3(x, 0.47, z), v3(0.17, 0.025, 0.14), 'rubberBlack', 0, 0, 0, { noCollide: true });   /* black bucket seats, as at the real park */
         for (const s of [-1, 1]) { box(sw, v3(x, 0.56, z + s * 0.14), v3(0.17, 0.09, 0.02), 'rubberBlack', 0, 0, 0, { noCollide: true }); box(sw, v3(x + s * 0.17, 0.56, z), v3(0.02, 0.09, 0.14), 'rubberBlack', 0, 0, 0, { noCollide: true }); } }
       O('Swing Set opening', 'gap', { gap: { c: v3((x0 + x1) / 2, H / 2, z), n: v3(0, 0, 1), hu: (x1 - x0) / 2 - 0.1, hv: H / 2 - 0.05, u: v3(1, 0, 0) } }); });
-    // the small multi-play unit: tan posts, a deck 1.2 m up under a faded red roof, steps on the west, a faded blue slide
+    // the small multi-play unit: tan posts, a deck 1.2 m up under a faded red roof, steps on the south, a faded blue slide
     // east, and a short run of climbing bars on the north side
     together(() => { const cx = -31.6, cz = 3.4, D = 1.2, o = O('Play Unit', 'deco');
       for (const [a, b] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) box(o, v3(cx + a, 1.3, cz + b), v3(0.055, 1.3, 0.055), 'playRed');
@@ -706,7 +706,7 @@
       const roof = O('Play Unit Roof', 'overunder', { obstacle: { a: v3(cx - 0.95, 0, cz), b: v3(cx + 0.95, 0, cz), under: 2.5, over: 2.85 } });
       box(roof, v3(cx, 2.62, cz - 0.42), v3(0.95, 0.03, 0.5), 'playRed', 0, -0.35); box(roof, v3(cx, 2.62, cz + 0.42), v3(0.95, 0.03, 0.5), 'playRed', 0, 0.35);   // peaked (the tilts were the wrong way round: a V)
       for (const s of [-1, 1]) box(o, v3(cx + s * 0.8, D + 0.45, cz), v3(0.03, 0.4, 0.75), 'playYellow');   // side panels
-      for (let i = 0; i < 4; i++) box(o, v3(cx - 1.0 - i * 0.28, D - (i + 1) * 0.28 + 0.1, cz + 0.3), v3(0.14, 0.03, 0.42), 'playYellow');   // steps down to the west
+      for (let i = 0; i < 4; i++) box(o, v3(cx - 0.3, D - (i + 1) * 0.28 + 0.1, cz + 1.0 + i * 0.28), v3(0.42, 0.03, 0.14), 'playYellow');   // steps down to the south, the open side (owner, 2026-11-20: on the west they blocked the slide for powerloops)
       const ang = 0.55, L = D / Math.sin(ang), sl = O('Slide', 'deco');
       box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.04, cz + 0.3), v3(L / 2, 0.03, 0.26), 'slideBlue', 0, 0, -ang);
       for (const s of [-1, 1]) box(sl, v3(cx + 0.8 + Math.cos(ang) * L / 2, D / 2 + 0.16, cz + 0.3 + s * 0.27), v3(L / 2, 0.1, 0.02), 'slideBlue', 0, 0, -ang);
