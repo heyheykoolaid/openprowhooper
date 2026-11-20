@@ -238,6 +238,12 @@ body.editing #music { right: auto !important; left: 6px !important; bottom: 6px 
 #mainMenu .panel, #toolsScreen .panel, #mapScreen .panel, #pause .panel { overflow-x: hidden; }
 details.optExplain > summary { cursor: pointer; color: #cfc6b4; } details.optExplain[open] > summary { margin-bottom: 6px; }
 #mainMenu .menuBtns > button { overflow: hidden; text-overflow: ellipsis; }
+/* the main menu in two boxes (owner, 2026-11-20): the title and what's new on top, the buttons below */
+#mainMenu .menuCol { display: flex; flex-direction: row; align-items: flex-start; gap: 16px; width: 100%; max-width: 1060px; max-height: 100%; overflow-y: auto; overflow-x: hidden; }
+#mainMenu .menuInfo { flex: 1 1 0; min-width: 0; } #mainMenu .menuBtnPanel { flex: 0 0 440px; min-width: 0; }
+@media (max-width: 960px) { #mainMenu .menuCol { flex-direction: column; align-items: stretch; max-width: 560px; } #mainMenu .menuInfo, #mainMenu .menuBtnPanel { flex: none; } }
+#mainMenu .menuCol > .panel { max-height: none; overflow: visible; width: auto; } #mainMenu .menuInfo { padding-bottom: 14px; } #mainMenu .menuBtnPanel { padding-top: 16px; padding-bottom: 12px; }
+#mainMenu .menuBtnPanel #menuDevice { margin: 10px 0 0; }
 #mainMenu .logo { font-size: clamp(30px, min(6vw, 8.5vh), 70px); -webkit-text-stroke: 2px #111; text-shadow: 4px 4px 0 #e2312b, 7px 7px 0 #111; } #mainMenu .logoSub { font-size: 13px; letter-spacing: 7px; margin: 8px 0 26px 8px; }
 #menuNews { margin: 0 0 10px; padding: 7px 10px; border: 1px solid #ffd34d55; border-left: 4px solid #ffd34d; background: #ffd34d12; font: 12.5px/1.45 system-ui, sans-serif; color: #e8dfcc; text-align: left; } #menuNews b { font-family: 'Bungee', sans-serif; color: #ffd34d; font-weight: normal; letter-spacing: 1px; margin-right: 8px; }
 #mainMenu .menuBtns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: none; } #mainMenu .menuBtns > button { padding-top: 9px; padding-bottom: 9px; white-space: nowrap; } #mainMenu .menuBtns > .primary { grid-column: 1 / -1; } #mainMenu .menuBtns > button { margin: 0; width: 100%; }
@@ -357,7 +363,7 @@ body.rcWide #recapBar { right: 12px; }
 #mapList .commMaps { margin-top: 10px; text-align: left; max-height: 150px; overflow-y: auto; } #mapList .commMaps h5 { margin: 0 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--acid); } #mapList .commMaps ul { list-style: none; margin: 0; padding: 0; } #mapList .commMaps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.08); } #mapList .commMaps li b { flex: 0 1 auto; } #mapList .commMaps li small { flex: 1; opacity: .7; } #mapList .commMaps li button { padding: 2px 10px; font-size: 12px; } #mapList .commMaps li.cur { color: var(--acid); }
 #gfxOffer { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 40; max-width: 520px; background: rgba(12,14,20,.92); color: #e8ecf2; border: 1px solid #3a4250; border-radius: 10px; padding: 10px 14px; font-size: 14px; line-height: 1.4; }
 #gfxOffer .row { display: flex; gap: 8px; margin-top: 8px; }
-.browserNote { margin: 4px 0 12px 4px; max-width: 360px; font: 12px/1.35 system-ui, sans-serif; color: #cfd6e2; background: rgba(10,12,18,.55); border: 1px solid #3a4250; border-radius: 6px; padding: 5px 9px; } .browserNote.warn { color: #ffd34d; border-color: #ffd34d; }
+.browserNote { margin: 14px 0 12px 4px; max-width: 360px; font: 12px/1.35 system-ui, sans-serif; color: #cfd6e2; background: rgba(10,12,18,.55); border: 1px solid #3a4250; border-radius: 6px; padding: 5px 9px; } .browserNote.warn { color: #ffd34d; border-color: #ffd34d; }
 #moveBox { position: fixed; inset: 0; z-index: 3500; display: flex; align-items: center; justify-content: center; background: rgba(5,6,10,.72); } #moveBox .panel { max-width: 520px; } #moveBox .row { display: flex; gap: 8px; margin-top: 10px; }
 </style>
 <!--THREE-->
@@ -412,13 +418,14 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="loading" class="screen">Spraying the walls…</div>
 
-<div id="mainMenu" class="screen hide"><p id="menuNiche">Open Pro Whooper doesn't want to take away from many of the great sims out there like Velocidrone, Liftoff, Uncrashed, WebFPV, but we felt like there was still a niche for Open Pro Whooper!</p><div class="panel" style="max-width:560px">
+<div id="mainMenu" class="screen hide"><p id="menuNiche">Open Pro Whooper doesn't want to take away from many of the great sims out there like Velocidrone, Liftoff, Uncrashed, WebFPV, but we felt like there was still a niche for Open Pro Whooper!</p><div class="menuCol"><div class="panel menuInfo">
   <h1 class="logo">Open Pro<br>Whooper</h1><div class="logoSub">PROJECT</div><div id="browserNote" class="browserNote" title="Radios (EdgeTX / OpenTX in USB joystick mode) show up through the browser's gamepad support, which works properly in Chrome and Edge">📡 Flying with a radio? Use <b>Chrome</b> or <b>Edge</b>: other browsers may not detect it.</div>
   <p class="sub">tiny whoop freestyle · <span id="menuMap">the playground</span> · v0.1 · best <b id="best">0</b></p>
   <div id="menuThanks" title="Credits: hover to pause"><div class="tkTrack"><span class="tkItem">Thanks and credit to <b>Tyrantt</b> · <b>Pro Whooper</b> · <b>IGOW</b> · <b>RaceGOW</b> · <b>Skittles</b> · <b>Infinity Loops</b> · and <b>the Whoop Community!</b> ✦ Music: <b>8BiT_</b> · Air65 frame: <b>BetaFPV</b> · Beast Brain canopy: <b>_tcmore</b> · The Murderdome: <b>Dirtbag FPV</b> (their logo on the start flag) and <b>Spider Sugar FPV</b> · Slackvegan City's start box: <b>Static Massive</b> (their logo) · the Playground's sign: <b>Metal Craft FPV</b> · wall art: <b>MoPenguinz FPV</b>, <b>ByTe_Me</b>, <b>Rogue Monkey FPV</b>, <b>FPV Your World</b>, <b>RidgeRipper FPV</b> ✦ </span></div></div>
   <div id="menuNews" class="hide"><b>NEWS</b><span id="menuNewsText"></span></div>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
-  <p id="quickGoal" class="note" style="margin:-4px 0 8px"></p>
+  <p id="quickGoal" class="note" style="margin:-4px 0 0"></p>
+  </div><div class="panel menuBtnPanel">
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
@@ -434,7 +441,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   </div>
   <input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
-</div></div>
+</div></div></div>
 
 <div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
   <button class="primary" data-act="resume">Resume</button><button data-act="mapedit" id="pauseMapEdit" class="hide">Back to Map Editor</button><button data-act="quick" class="hide" title="Say whether the game got its least sure calls right">Quick check</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>

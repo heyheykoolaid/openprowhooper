@@ -3,7 +3,7 @@
   try { await Promise.all(['80px "Sedgwick Ave Display"', '40px "Permanent Marker"', '30px "Bungee"'].map(f => document.fonts.load(f))); } catch {}
   await loadArt(); detector.camTilt = tune.camTilt; makeTextures(); mats(); buildScene(); buildDroneMesh(); resize();
   $('#best').textContent = store.get('best', 0).toLocaleString();
-  $('#vol').value = store.get('vol', 0.35); updateMenuDevice(); setInterval(updateMenuDevice, 2000);
+  $('#vol').value = store.get('vol', 0.25); updateMenuDevice(); setInterval(updateMenuDevice, 2000);
   $('#loading').classList.add('hide'); show('#mainMenu');
   requestAnimationFrame(frame);
 })();
@@ -14,7 +14,7 @@ const music = (() => {
   const el = new Audio(); el.preload = 'auto';
   const tracks = (window.PW_TRACKS || []).map(t => ({ ...t }));
   let idx = 0, started = false, wantPlay = store.get('musicOn', true);
-  el.volume = store.get('musicVol', 0.55);
+  el.volume = store.get('musicVol', 0.25);
   const ui = $('#music');
   // byTe_me Radio, the game's default music: the Infinity Loops community's free-to-use collection, streamed straight from
   // archive.org (nothing is copied into the game). If it can't be reached the built-in track plays instead. Track names come from the file names there: Artist__id__Title.mp3. Shuffled.

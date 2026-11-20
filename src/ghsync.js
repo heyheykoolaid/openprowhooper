@@ -63,7 +63,7 @@ function openOptions() {
   show('#optionsScreen'); if (mode === 'fly') { mode = 'paused'; train.pausedForList = true; }
   $('#optBody').innerHTML = `
     <h3>Sound</h3>
-    <label>Motor sound<input id="optVol" type="range" min="0" max="1" step="0.01" value="${store.get('vol', 0.35)}"></label>
+    <label>Motor sound<input id="optVol" type="range" min="0" max="1" step="0.01" value="${store.get('vol', 0.25)}"></label>
     <label>Music<input id="optMusic" type="range" min="0" max="1" step="0.01" value="${music.el.volume}"></label>
     <h3>Graphics</h3>
     <div class="row"><button data-gfx="low" title="Shadows, glow and screen effects off, 4 map lights, render resolution 70%">Low graphics (slower computers)</button><button data-gfx="normal" class="ghost" title="Shadows, glow and screen effects on, map lights Auto, resolution Auto">Normal graphics</button></div>

@@ -605,7 +605,7 @@ manual; a bar under the combo's points shows the time left. Scoring (the TPW str
 the same 3 s.
 Quick check stays on a call after it is answered (owner, 2026-11-19: Next → or K moves on, so a combo or a change can be added). Quick check takes combos too (owner, 2026-11-18): "＋ then…" adds the other tricks of the combo to the call (`extra`, as SKITTLES
 mode's tiles), then the answer is given for the first. Judge the community has Hide / Show judged (`store 'jgHideDone'`).
-The main menu's title is smaller and a News box shows `news.txt` (build.py → `window.PW_NEWS`, plain text; empty = no box).
+The main menu is two boxes (owner, 2026-11-20: `.menuCol`: `.menuInfo` with the title, radio note, credits, News, pilot and quick-check goal; `.menuBtnPanel` with the buttons and the device note), side by side, stacked under 960 px. Default volumes are 25 % (`vol`, `musicVol`). The main menu's title is smaller and a News box shows `news.txt` (build.py → `window.PW_NEWS`, plain text; empty = no box).
 The main menu's credits are one scrolling line (`#menuThanks .tkTrack`, `creditsTicker` in menus.js: text doubled for a seamless
 loop, ~40 px/s whatever its length, pauses on hover, still for prefers-reduced-motion). Add credits inside `.tkItem`.
 Every list of trick names a pilot picks from while labelling (SKITTLES review, Quick check, Video Review, Blackbox Replay,

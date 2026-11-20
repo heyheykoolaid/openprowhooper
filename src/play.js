@@ -2,7 +2,7 @@
 let actx = null, osc = [], gains = [], noiseG = null, airG = null, airBp = null, crashAt = null, wasArmed = false;
 function initAudio() {
   if (actx) return; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-  const master = actx.createGain(); master.gain.value = store.get('vol', 0.35); master.connect(actx.destination); window._master = master;
+  const master = actx.createGain(); master.gain.value = store.get('vol', 0.25); master.connect(actx.destination); window._master = master;
   // Prop sound: a soft-harmonic tone an octave-and-a-bit under the blade-pass whine, plus rushing air that follows
   // the rpm. (The first version was four raw sawtooths at the blade frequency: thin and whiny.)
   const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1900; lp.Q.value = 0.4; lp.connect(master);
