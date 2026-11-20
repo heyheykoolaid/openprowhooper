@@ -1449,7 +1449,11 @@ class TrickDetector {
             return noOver && lat.some(c => c.t < rb.t0) && (R.some(x => x !== rb && x.dir !== rb.dir && x.raw >= 60) || rb.raw >= 200);
           })()) pick('Burrito Roll', 2, lat.slice(-2));
           else if (fast || R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230)) pick('Double Dutch', 2, lat.slice(-2));   // the flick at the peak is fast; a slow roll all the way round is a side loop
-          else if (Y.some(x => Math.abs(x.raw - 360) < 80)) pick('Cinnamon Roll', 2, lat.slice(-2));
+          else if (Y.some(x => Math.abs(x.raw - 360) < 80) && (() => {   // (owner, 2026-11-20: "a cinnamon roll is not an inverted trick") a jump rope with a slow yaw: upright over the top and all the way through, like a Cradle
+            const p2 = lat.slice(-2), ov = p2.find(c => c.kind === 'O');
+            if (ov && ov.upY != null && ov.upY < -0.15) return false;
+            return !this.minUpBetween || this.minUpBetween(p2[0].t - 0.5, p2[1].t) > -0.15;
+          })()) pick('Cinnamon Roll', 2, lat.slice(-2));
           // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
           // roll or pitch (a Split-S has a 180 roll and a half loop) and both passes really are sideways
           else if (/^(OU|UO)$/.test(lk.slice(-2)) && lat[lat.length - 1].t - lat[lat.length - 2].t < 3 && lat[lat.length - 1].dir !== lat[lat.length - 2].dir && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6) && lat.slice(-2).every(c => c.kind !== 'O' || c.upY > 0.2)) pick('Jump Rope', 2, lat.slice(-2));   // upright over the top   // one over + one under, there and back

@@ -760,7 +760,7 @@ sent even with sharing off. tools/evidence.js gives verdicts on bot flights weig
 they feed tools/community.js and tools/library.js like any labels. The bot's detector, like every detector, starts from
 the community profile and the trick library. The FPV camera sits just in front of the lens of the camera drawn on the
 model (`makeWhoopMesh` returns `lens`, `droneLens` in worldview.js; `params.camPos` only as a fallback), and the model's
-camera barrel now points forward and up by the tilt. The model is drawn 2.5x only in Judge the Bot's spectator view
+camera barrel now points forward and up by the tilt. Judge the Bot's panel has camera buttons (Spectator / FPV / Chase, also C) and 🕹 Sticks (also V, the HUD's own `ui.sticks` setting): `#judgeSticks` draws the sticks a pilot would have needed for the bot's flight (the same ones its detector's Watcher saw: `MV.detect` rows, throttle col 11, roll / pitch / yaw 24-26) with `drawSticks` (owner, 2026-11-20). The model is drawn 2.5x only in Judge the Bot's spectator view
 (set every frame in play.js); starting a flight closes Judge the Bot whatever way it was left.
 
 ## The knowledge bot (2026-11-19, owner: "Judge the Bot should be the game's current cumulative knowledge of the trick")
@@ -877,6 +877,10 @@ change, each upside-down over the top (Rod's own two "Jump Ropes", one Jump Rope
 Alligator Man33's run): by the owner's rule those are Side Loops. 12 new Burrito Rolls where Jump Rope / Double Dutch
 used to be: unreviewed, watch them. test/jumprope.js (synthetic: guards the behaviour; it does not reproduce the old
 failure, which needs real roll timing; the private flights are the evidence).
+
+**Cinnamon Roll is never inverted** (owner, 2026-11-20: "a cinnamon roll is not an inverted trick"): the jump rope with a slow 360
+yaw is only called when the over pass is not upside-down (upY ≥ -0.15) and the body stays upright (min up.y > -0.15, like Cradle /
+Whiplash) from 0.5 s before the first pass to the last; flown upside-down it reads as an Inverted Yaw Spin. test/jumprope.js.
 
 ## Big sweeping moves (2026-11-18, owner: open-air Mattys "didn't count"; "accommodate bigger / sweeping movements")
 The owner's sweeping open-air Mattys climb ~12 m while flipping forward over 3-4 s at 100-160 °/s: the slow parts fall under

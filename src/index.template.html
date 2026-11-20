@@ -150,6 +150,8 @@ label.chk.big { font-size: 16px; font-family: 'Bungee'; color: #fff; margin: 10p
 .chmon { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 14px; font: 12px var(--mono); } .chmon div { display: flex; gap: 6px; align-items: center; } .chmon .bar { width: 90px; }
   .tt .spot { margin-top: 4px; font-size: 12px; opacity: .8; } .tt .spot b { color: #ffd23f; font-weight: 600; }
   #judgeBox { position: fixed; right: 16px; top: 16px; width: min(380px, 46vw); z-index: 60; background: rgba(14,13,12,.88); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
+  #judgeSticks { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; width: 208px; height: 96px; z-index: 59; pointer-events: none; }
+  #judgeBox .jCam { display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap; } #judgeBox .jCam button { flex: 1 1 0; width: auto; margin: 0; padding: 3px 6px; font-size: 11px; white-space: nowrap; } #judgeBox .jCam button.on { background: var(--cyan); color: #111; }
   #judgeBox .jStat { color: #cfc6b4; } #judgeBox .jOk { color: #7dff9a; } #judgeBox .trDesc { max-height: 4.8em; }
   .tt a.watch { font: 11px var(--mono); color: #7dff9a; margin-left: 6px; text-decoration: none; }
   #reviewScreen { padding: 12px; align-items: stretch; } .rvWrap { display: flex; gap: 12px; width: 100%; max-width: 1500px; margin: auto; height: 100%; }
@@ -405,7 +407,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
 <div id="train" class="hide"></div>
-<div id="judgeBox" class="hide"></div>
+<div id="judgeBox" class="hide"></div><canvas id="judgeSticks" class="hide" width="260" height="120" title="The bot's sticks (V)"></canvas>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">
   <div id="mArt"></div>

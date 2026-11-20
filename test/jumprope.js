@@ -42,4 +42,14 @@ const sl = fly(W, sideLoop(), 6), jr = fly(W, jumpRope(false), 6), dd = fly(W, j
 check('side loop (upside-down over the top) is a Side Loop, not a Jump Rope or Double Dutch', sl.includes('Side Loop') && !sl.includes('Jump Rope') && !sl.includes('Double Dutch'), sl.join(', ') || 'nothing');
 check('jump rope (upright over the top) is not a Side Loop', !jr.includes('Side Loop'), jr.join(', ') || 'nothing');
 check('jump rope with a quick 360 flick at the peak is a Double Dutch, not a Jump Rope too', dd.includes('Double Dutch') && !dd.includes('Jump Rope') && !dd.includes('Side Loop'), dd.join(', ') || 'nothing');
+// Cinnamon Roll: a jump rope with a slow 360 yaw spin over the whole jump. Owner, 2026-11-20: "a cinnamon roll is not an
+// inverted trick": the same yaw with the quad flipped upside-down over the top must not be one
+function cinnamon(inv) { const g = jumpRope(false); return t => { const s = g(t), k = Math.min(1, Math.max(0, (t - 1.75) / 1.2)), yaw = k * 2 * Math.PI;
+  let f = v3(Math.cos(yaw), 0, -Math.sin(yaw)), up = v3(0, 1, 0);
+  if (inv) { const ph = Math.max(0, Math.min(1, (t - 1.2) / 0.3, (3.2 - t) / 0.3)) * Math.PI;   // pitched upside-down (a half flip, no roll) before the top and back after
+    up = norm(S.add(mul(v3(0, 1, 0), Math.cos(ph)), mul(f, Math.sin(ph)))); f = norm(S.add(mul(f, Math.cos(ph)), mul(v3(0, -1, 0), Math.sin(ph)))); }
+  return { pos: s.pos, q: basisQ(f, up) }; }; }
+const cu = fly(W, cinnamon(false), 6), ci = fly(W, cinnamon(true), 6);
+check('a jump rope with a slow 360 yaw, upright the whole way, is a Cinnamon Roll', cu.includes('Cinnamon Roll'), cu.join(', ') || 'nothing');
+check('a cinnamon roll flown upside-down over the top is not a Cinnamon Roll', !ci.includes('Cinnamon Roll'), ci.join(', ') || 'nothing');
 console.log(`\n${ok}/${n} jump-rope checks`); if (ok !== n) process.exit(1);
