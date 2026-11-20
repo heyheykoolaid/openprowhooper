@@ -16,6 +16,10 @@ const music = (() => {
   let idx = 0, started = false, wantPlay = store.get('musicOn', true);
   el.volume = store.get('musicVol', 0.25);
   const ui = $('#music');
+  // the small player (owner, 2026-11-20: "a way to further collapse the music player, it gets in the way"): only play and the
+  // expand button, down in the corner; remembered
+  function miniSet(m) { ui.classList.toggle('mini', m); ui.classList.remove('open'); const b = $('#mMini'); if (b) { b.textContent = m ? '♪' : '–'; b.title = m ? 'Show the music player' : 'Shrink the player to a small button'; } }
+  miniSet(store.get('musicMini', false));
   // byTe_me Radio, the game's default music: the Infinity Loops community's free-to-use collection, streamed straight from
   // archive.org (nothing is copied into the game). If it can't be reached the built-in track plays instead. Track names come from the file names there: Artist__id__Title.mp3. Shuffled.
   const RADIO = { ids: ['infinityloops-free-to-use-music-1', 'infinityloops-free-to-use-music-2', 'infinityloops-free-to-use-music-3'], on: (() => { if (!store.get('radioIsDefault', false)) { store.set('radioIsDefault', true); store.set('radio', true); } return store.get('radio', true); })(), cur: null, list: null,   /* the radio is THE default: an old 'off' from before it was the default is cleared once */ loading: false, hist: [], fails: 0 };
@@ -55,7 +59,7 @@ const music = (() => {
   function play() { wantPlay = true; store.set('musicOn', true); const p = el.play(); if (p && p.catch) p.catch(() => { ui.classList.add('needsTap'); }); render(); }
   function pause() { wantPlay = false; store.set('musicOn', false); el.pause(); render(); }
   function render() { $('#mPlay').textContent = el.paused ? '▶' : '❚❚'; ui.classList.toggle('playing', !el.paused); $('#mVol').value = el.volume; }
-  function nowPlaying(t) { const n = $('#nowPlaying'); n.innerHTML = `<small>NOW PLAYING</small><b>${hesc(t.title)}</b><span>${hesc(t.artist || '')}</span>`; /* remote / file-name text: always escaped */ n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
+  function nowPlaying(t) { if (ui.classList.contains('mini')) return; const n = $('#nowPlaying'); n.innerHTML = `<small>NOW PLAYING</small><b>${hesc(t.title)}</b><span>${hesc(t.artist || '')}</span>`; /* remote / file-name text: always escaped */ n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
   el.addEventListener('play', () => { ui.classList.remove('needsTap'); render(); });
   el.addEventListener('pause', render);
   el.addEventListener('ended', () => { if (RADIO.on) radioNext(); else load(idx + 1, true); });
@@ -73,6 +77,7 @@ const music = (() => {
     if (a === 'next') load(idx + 1, !el.paused || wantPlay);
     if (a === 'prev') { if (el.currentTime > 3) el.currentTime = 0; else load(idx - 1, !el.paused || wantPlay); }
     if (a === 'list') ui.classList.toggle('open');
+    if (a === 'mini') { const m = !ui.classList.contains('mini'); miniSet(m); store.set('musicMini', m); }
     if (a === 'add') $('#mFile').click();
   });
   $('#mVol').addEventListener('input', e => { el.volume = +e.target.value; store.set('musicVol', el.volume); });

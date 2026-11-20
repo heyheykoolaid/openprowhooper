@@ -19,6 +19,7 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #hud { position: fixed; inset: 0; pointer-events: none; }
 #scoreRow { display: flex; align-items: center; gap: 14px; }
 #hudPause { position: relative; transform: skew(6deg); width: 46px; height: 46px; padding: 0 !important; font-size: 18px; line-height: 46px; text-align: center; border-radius: 10px; background: #000a; color: #fff; border: 1px solid #fff4; pointer-events: auto; touch-action: manipulation; flex: none; }
+#hudFull { position: relative; transform: skew(6deg); width: 46px; height: 46px; padding: 0 !important; font-size: 22px; line-height: 46px; text-align: center; border-radius: 10px; background: #000a; color: #fff; border: 1px solid #fff4; pointer-events: auto; touch-action: manipulation; flex: none; margin-left: 2px; } #hudFull:active { background: #ffd34d; color: #111; } #hudFull.hide { display: none; }
 #hudPause:active { background: #ffd34d; color: #111; }
 #scoreBox { position: absolute; left: 22px; top: 16px; transform: skew(-6deg); }
 #score { font-family: 'Bungee', Impact, sans-serif; font-size: 44px; line-height: 1; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 3px 3px 0 #111; }
@@ -98,6 +99,7 @@ code { color: var(--acid); }
 #mTitle { font-family: 'Bungee'; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #mArtist { color: #a89f8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mProgT { height: 3px; background: #333; margin-top: 5px; } #mProg { display: block; height: 100%; width: 0; background: var(--acid); }
 .mBtns { display: flex; gap: 4px; } .mBtns button { font-size: 13px; padding: 4px 7px; box-shadow: 2px 2px 0 #111; border-width: 2px; transform: none; font-family: system-ui; }
+#music.mini { grid-template-columns: auto; padding: 4px 6px; right: 12px; bottom: auto; top: 66px; gap: 4px; } #music.mini #mArt, #music.mini .mInfo, #music.mini .mMore, #music.mini .tap, #music.mini [data-m=prev], #music.mini [data-m=next], #music.mini [data-m=list] { display: none !important; } #music.mini .mBtns button { padding: 3px 6px; font-size: 12px; }
 .mMore { display: none; grid-column: 1 / -1; } #music.open .mMore { display: block; } #music.open { grid-template-columns: 46px 190px auto; }
 #mList { margin: 6px 0; padding-left: 18px; max-height: 160px; overflow: auto; } #mList li { cursor: pointer; padding: 2px 0; } #mList li.on { color: var(--acid); } #mList li span { color: #776f62; margin-left: 6px; }
 #music .tap { display: none; grid-column: 1 / -1; color: var(--acid); } #music.needsTap .tap { display: block; }
@@ -401,7 +403,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="gfxOffer" class="hide"></div>
 <div id="hud" class="hide"><div id="passFeed"></div>
-  <div id="scoreBox"><div id="scoreRow"><div id="score">0</div><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button></div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
+  <div id="scoreBox"><div id="scoreRow"><div id="score">0</div><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button><button id="hudFull" title="Fullscreen (F11)" aria-label="Fullscreen">⛶</button></div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
   <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
   <div id="hudStack"><div id="popups"></div><div id="combo" class="hide"></div></div><div id="comboBank"></div>
@@ -420,7 +422,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="music">
   <div id="mArt"></div>
   <div class="mInfo"><div id="mTitle">—</div><div id="mArtist"></div><div class="mProgT"><i id="mProg"></i></div></div>
-  <div class="mBtns"><button data-m="prev" title="Previous">⏮</button><button data-m="play" id="mPlay" title="Play / pause (M)">▶</button><button data-m="next" title="Next (N)">⏭</button><button data-m="list" title="Playlist">☰</button></div>
+  <div class="mBtns"><button data-m="prev" title="Previous">⏮</button><button data-m="play" id="mPlay" title="Play / pause (M)">▶</button><button data-m="next" title="Next (N)">⏭</button><button data-m="list" title="Playlist">☰</button><button data-m="mini" id="mMini" title="Shrink the player to a small button (expand it again from there)">–</button></div>
   <div class="mMore"><label>Music<input id="mVol" type="range" min="0" max="1" step="0.01"></label><ol id="mList"></ol><button data-m="radio" id="mRadio" class="ghost">📻 byTe_me Radio: off</button><p class="note" id="mRadioNote"></p><button data-m="add" class="ghost">+ Add your own tracks</button><p class="note">Added tracks last until you reload. M play/pause · N next</p></div>
   <span class="tap">tap anywhere for music</span>
   <input type="file" id="mFile" accept="audio/*" multiple hidden>

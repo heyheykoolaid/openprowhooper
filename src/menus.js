@@ -482,4 +482,12 @@ function openTricks() {
 
 
 // the on-screen pause button (phones and tablets have no Esc key)
+// fullscreen next to pause (owner, 2026-11-20); hidden where the browser has no fullscreen (iPhone Safari)
+{ const fb = $('#hudFull'), de = document.documentElement, can = !!(de.requestFullscreen || de.webkitRequestFullscreen);
+  if (!can) fb.classList.add('hide');
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const sync = () => { fb.textContent = isFull() ? '🗗' : '⛶'; fb.title = isFull() ? 'Leave fullscreen (Esc)' : 'Fullscreen'; };
+  fb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fb.blur();
+    try { if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document); else { const p = (de.requestFullscreen || de.webkitRequestFullscreen).call(de); if (p && p.catch) p.catch(() => {}); } } catch { /* refused */ } });
+  document.addEventListener('fullscreenchange', sync); document.addEventListener('webkitfullscreenchange', sync); sync(); }
 $('#hudPause').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (mode === 'fly') pause(); });

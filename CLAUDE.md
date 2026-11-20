@@ -519,7 +519,7 @@ Keyboard is Mode 2 (owner, 2026-11-18, settled after one swap): W A S D the left
 the right stick (pitch, roll), full stick range; Space arms / disarms (a focused button is blurred so it never gets the press). Keyboard flying (no radio profile) is assisted by default (`store 'kbAssist'`, Controls →
 Keyboard): `fc.modeOverride = 'angle'` (self-level without touching the pilot's tune; null whenever a radio is used) and
 height hold (W / S climb and sink, released = hover; a PI on vertical speed in input.js). Disarmed, W still raises the
-throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`, right of the score in `#scoreRow`, clear of the "what counted" list).
+throttle (so take-off-without-arming works; it used to be stuck at 0). The HUD has a pause button for touch screens (`#hudPause`, right of the score in `#scoreRow`, clear of the "what counted" list). A fullscreen button sits right of it (`#hudFull`, owner 2026-11-20; hidden where the browser has no fullscreen). The music player shrinks to a small ▶ ♪ button under the K.W.A.D. letters (– in its buttons, ♪ to expand; `store 'musicMini'`; no NOW PLAYING toasts while small).
 The Garage has a 3D mode checkbox (same as the 3 key; unticking goes back to the last non-3D mode, `store 'mode2d'`).
 
 ## Betaflight filters and PID extras (Advanced physics popup; `FlightController.update`, `bfFilters`, 2026-11-18)
