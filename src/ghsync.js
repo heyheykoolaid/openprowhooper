@@ -70,6 +70,7 @@ function openOptions() {
     <label class="chk big"><input type="checkbox" id="optBloom" ${BLOOM.on ? 'checked' : ''}> Neon glow on the Vaporwave School</label>
     <label class="chk big"><input type="checkbox" id="optShadows" ${PERF.shadows ? 'checked' : ''}> Shadows <small>(off is much lighter on slower computers)</small></label>
     <label class="chk big"><input type="checkbox" id="optFx" ${PERF.fx ? 'checked' : ''}> Screen effects <small>(vignette and scanlines)</small></label>
+    <label class="chk big"><input type="checkbox" id="optDetW" ${store.get('detWorker', true) ? 'checked' : ''}> Trick detection on its own core <small>(smoother on slower computers; untick if tricks stop being called, then tell us)</small></label>
     <label class="chk big"><input type="checkbox" id="optLowLat" ${store.get('lowLatency', false) ? 'checked' : ''}> Low-latency display <small>(about a frame less input lag where the browser supports it; may tear; applies after a reload)</small></label>
     <label title="The map's lamps as real lights. Each one costs frame rate everywhere on screen (More Warehouse has 11). Auto drops to Few if the first seconds of flying run under 50 fps.">Map lights <select id="optLights">${[['auto', 'Auto'], ['full', 'Full'], ['few', 'Few (4)'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${PERF.lights === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Render resolution <select id="optRes"><option value="auto" ${PERF.resAuto ? 'selected' : ''}>Auto (drops when the frame rate does)</option>${[[1, '100%'], [0.85, '85%'], [0.7, '70%'], [0.5, '50%']].map(([v, l]) => `<option value="${v}" ${!PERF.resAuto && Math.abs(PERF.res - v) < 0.01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -115,6 +116,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'optRes') { PERF.resAuto = e.target.value === 'auto'; PERF.res = PERF.resAuto ? 1 : (+e.target.value || 1); store.set('renderScale', PERF.resAuto ? 'auto' : PERF.res); perfApply(); }
   if (e.target.id === 'optPerf') perfToggle(e.target.checked);
   if (e.target.id === 'optFx') { PERF.fx = e.target.checked; store.set('screenFx', PERF.fx); }
+  if (e.target.id === 'optDetW') { store.set('detWorker', e.target.checked); if (e.target.checked) { DW.dead = false; dwStart(); } else dwStop(false); flash(`<b>TRICK DETECTION ${DW.on ? 'ON ITS OWN CORE' : 'IN THE PAGE'}</b>`, 'near'); }
   if (e.target.id === 'optLowLat') { store.set('lowLatency', e.target.checked); flash(`<b>LOW-LATENCY DISPLAY ${e.target.checked ? 'ON' : 'OFF'}</b><small>reload the page to apply it</small>`, 'near'); }
   if (e.target.id === 'optMaybe') store.set('maybeFlash', e.target.checked);
   if (e.target.id === 'ghEnabled') { gh.enabled = e.target.checked; saveGh(); $('#ghFields').classList.toggle('hide', !gh.enabled); renderGhStatus(); }

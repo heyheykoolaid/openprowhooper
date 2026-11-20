@@ -232,7 +232,8 @@ the brief progress bar.
 
 **Radio note** (owner, 2026-11-20): under the main-menu logo, `#browserNote`: radios (USB joystick mode) need Chrome or Edge; on
 any other browser (no Chromium brand in `navigator.userAgentData`, or a Firefox / Opera / Safari user agent) it turns yellow.
-**Trick detector on its own core** (`DW` in play.js, 2026-11-20; `store 'detWorker'`, OFF until it is checked in a real browser):
+**Trick detector on its own core** (`DW` in play.js, 2026-11-20; `store 'detWorker'`, on; Options → Graphics → "Trick detection on its own core"; the same calls as the in-page detector on a
+Powerloop, Matty Flip and Split-S fed through both in a browser):
 a Web Worker built from the page's own tricks.js + sim.js text runs the detector on a structured clone of the world; detFlush
 posts each frame's snapshots, the local `detector`'s methods (drain, drainMaybes, busy, provisional, liveState, reset, setPilot,
 onArmChange, camTilt, world) are routed to it and its replies mirror calls, maybes, crossings, passes, the clock and (Warm-up,

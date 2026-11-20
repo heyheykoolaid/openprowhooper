@@ -191,7 +191,7 @@ function detArm(on) { if (detQ.length) detQ.push({ arm: on, s: detSnap(drone, la
 // (`store 'detWorker'` false turns the worker off; F3 shows which is running).
 const DW = { on: false, dead: false, w: null, events: [], maybes: [], busy: false, prov: [], live: [], cross: [], passes: [], sentWorld: null, sentV: -1, pending: 0, wantDbg: false };
 function dwStart() {
-  if (DW.on || DW.dead || !store.get('detWorker', false) || typeof Worker === 'undefined') return;
+  if (DW.on || DW.dead || !store.get('detWorker', true) || typeof Worker === 'undefined') return;
   try {
     const src = k => { for (const sc of document.scripts) { const t = sc.textContent || ''; if (t.startsWith(k)) return t; } return null; };
     const tr = src('// Trick values'), sm = src('// Pro Whooper — simulation core'); if (!tr || !sm) return;
