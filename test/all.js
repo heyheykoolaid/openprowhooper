@@ -43,6 +43,7 @@ const checks = [
   ['long runs in pieces, idle squeezed out (flight telemetry)', () => { const o = run('pieces.js'); const m = o.match(/(\d+)\/(\d+) piece checks/); return m && m[1] === m[2] ? null : o; }],
   ['knowledge bot (Judge the Bot flies the trick library\'s confirmed examples)', () => { const o = run('knowledgebot.js'); const m = o.match(/(\d+)\/(\d+) knowledge bot checks/); return m && m[1] === m[2] ? null : o; }],
   ['half matty pendulum (three chained half mattys = one trick)', () => { const o = run('pendulum.js'); const m = o.match(/(\d+)\/(\d+) pendulum checks/); return m && m[1] === m[2] ? null : o; }],
+  ['Train a trick: the bot\'s flights pass every step of their own trick, other tricks do not', () => { const o = run('coach.js'); return / pass every training step/.test(o) && !/✗ a /.test(o) ? null : o; }],
   ['side loop vs jump rope vs double dutch (upside-down over the top, upright, a flick at the peak)', () => { const o = run('jumprope.js'); const m = o.match(/(\d+)\/(\d+) jump-rope checks/); return m && m[1] === m[2] ? null : o; }],
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],
   ...['session-flips-rolls.json', 'upload-roll-x5.json', 'training-v1-flip.json'].map(f => [`replay fixture ${f}`, () => { const o = run('replay.js', [path.join(__dirname, 'fixtures', f)]); const m = o.match(/(\d+)\/(\d+) labels agree/); return m && m[1] === m[2] ? null : o; }]),

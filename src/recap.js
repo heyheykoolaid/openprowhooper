@@ -31,7 +31,7 @@ function recapFlag(kind) {
   else { recap.flags.push({ t: +drone.time.toFixed(3), actual: null }); recap.dirty = true; flash('<b>MISSED TRICK NOTED</b><small>say what it was in SKITTLES mode after the run</small>', 'near'); }
 }
 addEventListener('keydown', e => {
-  if (mode !== 'fly' || race.on || train.on || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
+  if (mode !== 'fly' || race.on || train.on || coach.on || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
   if (e.code === 'KeyF') recapFlag('wrong'); if (e.code === 'KeyQ') recapFlag('missed');
 });
 // ---- the review screen: game view on the left replaying the moment, the list on the right

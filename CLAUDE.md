@@ -635,6 +635,24 @@ Arming is required to fly. Take-off without arming is an option in Controls, off
 `store 'autoArm'`; when on: disarmed + throttle seen at rest, then raised = armed, and the arm switch disarms on its falling edge only). The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
 now lives under Tools & labs. The 3D mode call-out reads METALCRAFT MODE (`.popup.metal`).
 
+## Train a trick (src/coach.js; Tricktionary → 🎓 train; owner, 2026-11-20)
+Four tries in Free Fly on the current map. Tries 1-2 **step by step**: the trick as a list of steps made from its own rule
+(`coachPlan`: OBSTACLE_TRICKS / OPEN_TRICKS patterns, every alternative pattern as one of `alts`, the over/under order placed
+round the rotations by `coachSteps`; `COACH_HAND` for the families whose rules are code: Maverick Loop, Mavvy Roll, Beginner
+Matty, Jump Rope, Side Loop, Double Dutch, Cinnamon Roll, and Blindflip, whose yaw comes before the over), each judged from what
+the detector measured (`coachCollect` keeps its tokens and U/O passes; `coachJudge` / `coachJudgeAny`): a wrong step says why
+("yours was 250°, aim for 360°", "that was a roll; this part is a flip", "use the same object") and waits for another go.
+**Beginners are sloppy** (owner): `COACH_TOL` takes a half flip from ~95° to ~265°, a full one from ~250° to ~470°, a rotation in
+pieces under `COACH_JOIN` 0.9 s apart counts as one, passes a second either side of their rotation; each step is graded clean /
+a bit off / sloppy. Tries 3-4 **live**: the game's own calls; a call of the trick asks "was it really one?" (Y / N), another
+call lists the steps against what was measured ("It was a <trick>" Y corrects it, N goes again), Q = "I did it, the game missed
+it". Those answers are ordinary decided review labels (recap events / flags, saved by `recapSave` when training stops); failed
+or skipped tries send nothing. 👻 Show me (the ghost) where the bot has a script. The detector worker sends tokens while it is
+on (`DW.wantDbg`); a reset (R, a new flight) restarts the window (`coachClock`). test/coach.js: the bot's flight of each of its
+29 tricks passes its own steps (87/87), five other tricks do not, and six sloppy flips / rolls are judged as a beginner's would be.
+**Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on
+the "what counted" list and the combo timer's pass resets went quiet after the first reset; they are re-pointed at the mirror.
+
 ## Dive, reviewer labels and the Flight desk (2026-11-17)
 **Dive** (was called 41 times in 20 flights, mostly wrongly): one committed descent, nose at least 25° down for 40% of
 it, sinking 7 m/s or more, no hit, no tumble, pulled out upright under 3.5 m; and either beside a wall or building

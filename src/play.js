@@ -97,7 +97,7 @@ function renderCombo() {
   el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}${combo.active ? `<div class="cTimer"><i style="width:${detector.busy() ? 100 : Math.max(0, Math.round(100 - (performance.now() / 1000 - combo.lastT) / COMBO_IDLE * 100))}%"></i></div>` : ''}`;
 }
 function onTrick(ev) {
-  trainOnEvent(ev); recapEvent(ev);
+  trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
   if (ev.name === 'near') { flash(`<b>SO CLOSE</b><small>${ev.near}</small>`, 'near'); return; }
   const r = score.add(ev);
   if (ev.exec === 'CRASH') { comboEnd(true); flash(`<b>CRASH!</b><small>streak lost</small>`, 'crash'); updateBreakdown(); return; }
@@ -225,7 +225,7 @@ function dwStart() {
     DW.w.postMessage({ t: 'init', world: wld, camTilt: tilt, community: S.community || null, library: S.library || null, pilot: store.get('pilot', null) }); DW.sentWorld = wld; DW.sentV = wld.__v || 0;
     Object.defineProperty(D, 'camTilt', { configurable: true, get: () => tilt, set: v => { tilt = v; if (DW.on) DW.w.postMessage({ t: 'camTilt', v }); } });
     Object.defineProperty(D, 'world', { configurable: true, get: () => wld, set: v => { wld = v; } });
-    D.reset = () => { orig.reset(); detQ.length = 0; DW.events.length = 0; DW.maybes.length = 0; DW.busy = false; DW.prov = []; DW.live = [];
+    D.reset = () => { orig.reset(); detQ.length = 0; DW.events.length = 0; DW.maybes.length = 0; DW.busy = false; DW.prov = []; DW.live = []; DW.cross.length = 0; DW.passes.length = 0; D.crossLog = DW.cross; D.passes = DW.passes;   // reset() gives the page copy fresh arrays: point them at the worker's mirror again (the 'what counted' list and combo timer went quiet after the first reset)
       if (DW.on) { if (DW.sentWorld !== wld || DW.sentV !== (wld.__v || 0)) { DW.w.postMessage({ t: 'world', world: wld }); DW.sentWorld = wld; DW.sentV = wld.__v || 0; } else DW.w.postMessage({ t: 'reset' }); } };
     D.setPilot = p => { const r = orig.setPilot(p); if (DW.on) DW.w.postMessage({ t: 'pilot', p }); return r; };
     D.onArmChange = (d, on) => { if (DW.on) DW.w.postMessage({ t: 'steps', items: [{ arm: on, s: detSnap(d, lastRC) }], want: DW.wantDbg }); };
@@ -244,7 +244,7 @@ function dwStop(dead) { if (DW.w) try { DW.w.terminate(); } catch { /* gone alre
   D.crossLog = []; D.passes = []; D.reset(); }
 function detFlush(now) {
   if (detQ.length && DW.on) { const items = detQ.splice(0); for (const s of items) if (s.contactNormal === null) delete s.contactNormal;
-    DW.wantDbg = !!((typeof train !== 'undefined' && train.on) || (typeof warm !== 'undefined' && warm.on)); DW.pending++; DW.w.postMessage({ t: 'steps', items, want: DW.wantDbg });
+    DW.wantDbg = !!((typeof train !== 'undefined' && train.on) || (typeof warm !== 'undefined' && warm.on) || (typeof coach !== 'undefined' && coach.on)); DW.pending++; DW.w.postMessage({ t: 'steps', items, want: DW.wantDbg });
     if (DW.shadow) for (const s of items) { if (s.arm !== undefined) DW.shadow.onArmChange(s.s, s.arm); else { DW.shadow.update(s, DT, s.rc); DW.shadow.postStep(s); } for (const e of DW.shadow.drain()) DW.shadowEv.push(e.name + '@' + e.t.toFixed(3)); } }   // test hook: the same steps in the page too
   if (detQ.length) { for (const s of detQ) { if (s.arm !== undefined) { detector.onArmChange(s.s, s.arm); continue; } detector.update(s, DT, s.rc); detector.postStep(s); } detQ.length = 0; }
   if (mode !== 'fly' || race.on) return;

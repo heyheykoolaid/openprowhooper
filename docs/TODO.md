@@ -2,6 +2,9 @@
 
 Kept in order of priority and feasibility. When one is done, move it to CLAUDE.md (what was built) and drop it here.
 
+## Done
+- Train in the Tricktionary (2026-11-20): see CLAUDE.md "Train a trick". Next for it: pole, wall and gap tricks (steps by hand), and judging "upright" / "flying backward" in the steps.
+
 ## Next, in this order (agreed 2026-11-20)
 1. **Knife Edge only through narrow gaps**: the gap's narrow side about two quad widths or less (measured against the
    pilot's own whoop), the quad rolled to match it. Stricter than the Tricktionary ("2-4 times the size of your whoop").
@@ -17,14 +20,6 @@ Kept in order of priority and feasibility. When one is done, move it to CLAUDE.m
    spin decay first; needs the owner's test flights.
 5. **3D mode scoring**: decide with 3D pilots which tricks count and what they are worth, and whether 3D gets its own
    board. After gap points exist.
-
-## Train in the Tricktionary (owner, 2026-11-20)
-A **Train** button on each trick's page: four tries. Tries 1-2 are the trick broken into its parts, one at a time, each judged
-as it is flown ("fly over the bar" ✓, "front flip about 270°" — yours was 190°, "come back under flying backward" ✓). Tries 3-4
-are the whole trick, judged live, with what was missing said in plain words. Builds on Trick Calibration, the ghost "Show me",
-the Watcher's checks and each trick's pattern (rotations, passes): the parts can be generated for the open-air, powerloop,
-Matty, Split-S, maverick and jump-rope families (~45 tricks); pole, wall and gap tricks need their parts written by hand. The
-game knows what the pilot meant to fly, so a passed try is a strong label; a failed try is not a "no" for the detector.
 
 ## Trick challenges and the trick board (owner, 2026-11-20)
 A pilot names a trick (new, or one the game doesn't call well), flies it, and posts it: the replay goes to a **trick board**

@@ -190,5 +190,5 @@ function flipOver() { // "turtle mode" simplified: right the quad where it lies
   const f = drone.fwd(); const yaw = Math.atan2(-f.x, -f.z);
   drone.q = S.qaxis(S.v3(0, 1, 0), yaw); drone.w = S.v3(); drone.vel = S.v3(); drone.pos.y = Math.max(drone.pos.y, 0.03); drone.crashed = false; drone.fc.reset();
 }
-function respawn() { if (race.on) { raceRespawn(); return; } drone.reset(activeWorld.spawn, true); detector.reset(); crashLock = false; }
+function respawn() { if (race.on) { raceRespawn(); return; } drone.reset(activeWorld.spawn, true); detector.reset(); crashLock = false; if (coach.on) coachClock(); }
 
