@@ -70,8 +70,16 @@ function flash(text, cls = '') { const el = document.createElement('div'); el.cl
 // Friendlier (owner, 2026-11-19): 3 s, not 2, and every pass over, under or through something (or past a pole) links the
 // chain like a manual: the timer starts again (`comboLink`). A bar under the points shows the time left.
 const COMBO_IDLE = 3.0, comboSeen = new WeakSet();
-function comboLink(now) { let hit = false; for (const c of detector.crossLog) if (!comboSeen.has(c)) { comboSeen.add(c); hit = true; } for (const p of detector.passes || []) if (!comboSeen.has(p)) { comboSeen.add(p); hit = true; } if (hit && combo.active) combo.lastT = now; }
+function comboLink(now) { let hit = false; for (const c of detector.crossLog) if (!comboSeen.has(c)) { comboSeen.add(c); hit = true; if (c.kind === 'G') gapScore(c, now); } for (const p of detector.passes || []) if (!comboSeen.has(p)) { comboSeen.add(p); hit = true; } if (hit && combo.active) combo.lastT = now; }
 const combo = { names: [], pts: 0, lastT: 0, active: false };
+// gap points (owner, 2026-11-20): every gap flown through, armed, scores a little (Sim gapPoints: tighter = more, repeats in a combo
+// halve) and keeps the combo alive like a trick; its own line on the sheet. Not while racing, in a review or on a crash.
+function gapScore(c, now) {
+  if (mode !== 'fly' || race.on || !score || !drone.armed || drone.crashed) return;
+  const p = drone.p || params, qW = p && p.arm ? 2 * (p.arm + (p.rDuct || 0.018)) : 0.09, r = score.gap(c, qW);
+  combo.names.push(`${r.label}${r.repeat ? ' ×' + (r.repeat + 1) : ''}`); combo.pts += r.pts; combo.lastT = now; combo.active = true; renderCombo();
+  flash(`<b>${esc(r.label.toUpperCase())}</b><div class="pRow"><em>+${r.pts}</em></div>`, 'gapPop');
+}
 // loops chain like combo trippies: the same loop on the same object again and again shows as one entry, ×N (each one still
 // scores by the TPW calculator, repeats included)
 const CHAIN = new Set(['Powerloop', 'Maverick Loop', 'Matty Flip', 'Beginner Matty', 'Split-S', 'Jump Rope', 'Anti Matty', 'Power Flip', 'Immelmann Turn']);

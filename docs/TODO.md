@@ -6,10 +6,10 @@ Kept in order of priority and feasibility. When one is done, move it to CLAUDE.m
 - Train in the Tricktionary (2026-11-20): see CLAUDE.md "Train a trick". Next for it: pole, wall and gap tricks (steps by hand), and judging "upright" / "flying backward" in the steps.
 
 ## Next, in this order (agreed 2026-11-20)
-1. **Knife Edge only through narrow gaps**: the gap's narrow side about two quad widths or less (measured against the
+1. ~~**Knife Edge only through narrow gaps**~~ (done 2026-11-20): the gap's narrow side about two quad widths or less (measured against the
    pilot's own whoop), the quad rolled to match it. Stricter than the Tricktionary ("2-4 times the size of your whoop").
    Add a narrow slot or two where maps have none (Trick Park). Re-fly the labelled flights; add a test.
-2. **Gap points in combos**: every gap flown through counts as a small trick that keeps the combo alive, worth more the
+2. ~~**Gap points in combos**~~ (done 2026-11-20: 25-75, names from the gap objects; proper names per map still to draft): every gap flown through counts as a small trick that keeps the combo alive, worth more the
    tighter it is (about 25-75 next to a Flip's 50), less each time the same gap repeats in one combo. Kept on its own line
    of the score sheet so TPW totals stay comparable.
 3. **KWAD**: four daily tricks per map (same for everyone, from the date): K and W easy and anywhere, A and D on a named

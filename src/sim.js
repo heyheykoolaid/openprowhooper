@@ -1294,7 +1294,9 @@ class TrickDetector {
           const du = dot(rel, g.u), dv = g.round ? dot(rel, cross(g.n, g.u)) : dot(rel, vAx);
           const inside = g.round ? Math.hypot(du, dv) < g.hu : (Math.abs(du) < g.hu + 0.02 && Math.abs(dv) < g.hv + 0.02);
           const f = d.fwd(), vl = len(d.vel), fwdDot = vl > 0.8 ? dot(f, d.vel) / vl : 0;
-          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up: d.up(), fwdDot });
+          // how narrow the gap is (its short side) and how well the quad's up axis lines up with that side (knife-edged through it)
+          const narrow = g.round ? 2 * g.hu : 2 * Math.min(g.hu, g.hv), nAx = g.round ? null : (g.hu <= g.hv ? g.u : vAx), up = d.up(), nAlign = nAx ? Math.abs(dot(up, nAx)) : 1;
+          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl });
         }
       }
     }
@@ -1491,14 +1493,17 @@ class TrickDetector {
         if (bm && !big.length && p3.every(c => (c.spd ?? 9) >= 1.5) && toks.some(x => x.ax === 'P' && x.raw >= 60)) best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part: p3, ct1: p3[2].t };
       }
     }
-    // knife edge through a gap
-    const g = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8);
+    // knife edge through a gap. Owner, 2026-11-20: a Knife Edge (and the Reverse one) only counts through a NARROW gap: its
+    // short side at most KNIFE_X quad widths (the pilot's own whoop: ducts and all), with the quad rolled so its up axis lies
+    // along that short side. A rolled pass through a wide gate is just a banked pass. Ninja Star keeps any gap.
+    const qW = this.quadWidth(), knifeOK = c => c.narrow == null || (c.narrow <= KNIFE_X * qW + 0.005 && (c.nAlign ?? 1) > 0.5);
+    const g = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8), gk = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8 && knifeOK(c));
     if (!best && g) {
       const rl = toks.filter(x => x.ax === 'R');
-      if (rl.length >= 1 && rl.every(x => x.raw < 160)) best = { name: 'Knife Edge', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
+      if (gk && rl.length >= 1 && rl.every(x => x.raw < 160)) best = { name: 'Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
       const yw = toks.find(x => x.ax === 'Y' && Math.abs(x.raw - 360) < 70);
       if (yw) best = { name: 'Ninja Star', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
-      if (g.fwdDot < -0.4 && toks.some(x => x.ax === 'P' && x.raw > 120)) best = { name: 'Reverse Knife Edge', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
+      if (gk && gk.fwdDot < -0.4 && toks.some(x => x.ax === 'P' && x.raw > 120)) best = { name: 'Reverse Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
     }
     return best;
   }
@@ -1737,6 +1742,7 @@ class TrickDetector {
 // between the two 180s. The written rule says 0.5 s; the demo is how it's actually flown.
 const SEG_GAP = 0.18;
 const SLOW_TH = 30, SLOW_MAX = 2.5;   // slow-pitch continuation inside loops near an obstacle
+const KNIFE_X = 2.75, QUAD_W = 0.09;   // Knife Edge: gaps no wider than ~2.75 quad widths (owner: "about two" — an Air65 is 0.082 m across, so the playground's 0.22 m Wall Slot is one; a 0.7 m gate is not)
 const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
 // "air" between the segments of a trick (pilot feedback): whoop tricks are built from basic segments, and real pilots
 // leave some space between them (to set up for an object, or just float). Up to AIR_OPEN s between two rotations still
@@ -2466,6 +2472,7 @@ class StreamDetector extends TrickDetector {
     }
     return false;
   }
+  quadWidth() { const p = this.lastD && this.lastD.p; return p && p.arm ? 2 * (p.arm + (p.rDuct || 0.018)) : QUAD_W; }   // the whoop across, ducts and all (Air65 ≈ 0.08 m)
   vetoedFor(name, t0) { return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35); }
   commit(p, t) {
     this.pend = this.pend.filter(x => x !== p);
@@ -2803,11 +2810,17 @@ function pendulumStep(chain, p) {
   const ob = p.obstacle || null, H = (chain || []).filter(h => h.obstacle === ob), run = H.length && p.t0 - H[H.length - 1].t <= PENDULUM_GAP ? H : [];
   return run.length >= 2 ? { name: 'Half Matty Pendulum', chain: [] } : { name: p.name, chain: [...run, { t: p.tDone, obstacle: ob }] };
 }
+// Gap points (owner, 2026-11-20; not in the TPW calculator, kept on their own line like K.W.A.D. and the chain bonuses): every gap
+// flown through, armed, is a small trick that keeps the combo alive, worth GAP_MIN..GAP_MAX by how tight it is for the pilot's
+// whoop (its short side in quad widths: ~3 widths or less = 75, 15 or more = 25), halved each time the same gap repeats in one combo.
+const GAP_MIN = 25, GAP_MAX = 75;
+function gapLabel(name) { let n = String(name || 'Gap').replace(/\s+opening$/i, '').replace(/\s+(mouth)$/i, '').replace(/\s+\d+(\.\d+)?( m)?$/, '').trim(); return /gap$/i.test(n) ? n : n + ' Gap'; }
+function gapPoints(narrow, qW) { const w = narrow / Math.max(0.05, qW || 0.09), f = Math.max(0, Math.min(1, (15 - w) / 12)); return Math.round(GAP_MIN + (GAP_MAX - GAP_MIN) * f); }
 class ScoreKeeper {
   constructor(totw) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.reset(); }
   reset() {
     this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
-    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.log = []; this.totwCounts = {}; this.biggest = null;
+    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
   }
   add(ev) {
     const base = ev.basePts ?? trickPoints(ev.name);
@@ -2839,13 +2852,19 @@ class ScoreKeeper {
       if (this.chain.n % CHAIN_SET === 0) { const k = this.chain.n / CHAIN_SET, pts = CHAIN_PTS * k; this.chainBonus += pts; chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts }; this.chains.push(chainHit); }
     } else this.chain = null;
     this.trickScore += net;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus);
     const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
     if (!this.biggest || net > this.biggest.net) this.biggest = rec;
     this.log.push(rec);
     return rec;
   }
-  chainBreak() { this.chain = null; }   // the combo banked: a new set starts from one
+  chainBreak() { this.chain = null; this.gapSeen = {}; }   // the combo banked: a new set starts from one, and every gap is fresh again
+  gap(c, qW) {   // a gap flown through: { label, pts, base, repeat }
+    const k = c.obj, rep = this.gapSeen[k] || 0, base = gapPoints(c.narrow ?? 1, qW), pts = Math.round(base * Math.pow(0.5, rep)); this.gapSeen[k] = rep + 1;
+    this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name), pts, base, repeat: rep };
+    if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus); return r;
+  }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
 }
 
@@ -3082,6 +3101,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

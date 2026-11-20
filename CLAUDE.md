@@ -971,6 +971,19 @@ A Juicy Flick followed by a forward double roll: `P-180 R*~900` (the flick's 180
 A flick then a roll the other way stays Juicy Flick + Roll. The bot flies it (`juicyFlick` with `extraRoll` 720: 19/20 called,
 no Juicy Flick read as one); test/combo.js (15 combos). Train and Show me pick it up from the rule.
 
+## Knife Edge only through narrow gaps, and gap points (owner, 2026-11-20; test/knife.js, test/gaps.js)
+**Knife Edge** (and Reverse Knife Edge) count only through a gap whose short side is at most `KNIFE_X` 2.75 quad widths (the pilot's
+own whoop, ducts and all: `quadWidth()`, Air65 0.082 m → 0.225 m; Node's fake drones use `QUAD_W` 0.09), with the quad's up axis along
+that short side (`nAlign` > 0.5); a rolled pass through a wide gate is just a banked pass. Gap crossings in `crossLog` carry `narrow`
+and `nAlign`. Ninja Star keeps any gap. The playground's 0.22 m Wall Slot is one; every Trick Park (playground, school, Clappy, the
+Training Room) has two new plywood **Knife Slots** (0.2 m and 0.3 m, beyond the gap gates). The two labelled Knife Edge calls in the
+shared data were both rejected by pilots. **Gap points**: every gap flown through, armed (not racing), scores `GAP_MIN`..`GAP_MAX`
+25-75 by tightness (`gapPoints`: its short side in quad widths, ~3 or less = 75, 15 or more = 25), halved each time the same gap
+repeats in one combo (`gapSeen`, cleared when the combo banks or bails), and keeps the combo alive like a trick (`gapScore` in play.js:
+"KNIFE SLOT GAP +75" call-out, `.popup.gapPop`). Its own line like K.W.A.D. and the chain bonuses (`ScoreKeeper.gapBonus`, `gapN`; the
+results line; the posted sheet's `totals.gaps`, `gapN`), so the TPW trick score is unchanged. Names come from the gap objects
+(`gapLabel`: " opening" and trailing numbers dropped, "Gap" added); a list of proper names per map is still to do.
+
 ## Burrito Roll vs Trippy Spin (2026-11-18, owner: "a burrito roll is not done while the whoop is looking up at a pole")
 The orbit tracker records when the quad holds the trippy pose while circling a pole (`this.circled`: rolled to knife-edge or
 past it, the orbit over 90°); a Burrito Roll is not called when at least 40% of its roll falls in such a stretch held for a
@@ -1061,6 +1074,10 @@ its top flickered through the street at a distance.
 over/unders; the hung race gates (`gate()`: through = under, over the top bar = over), the signal and streetlight arms, the
 billboard and the finish frame are now too (28 kinds); the bot's Split-S is called 3/3 on each.
 The start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`, white paint; their mark, at the owner's request, credited on the main menu and in the README), the centre line broken under it.
+**Bodega and subway touch-ups** (owner, 2026-11-20): the bodega's two front windows and its side window are solid clear glass (`carGlass`, leaf
+colliders, like the bakery and deli); its goods stand on the shelves side by side (their own random stream; the map's stream still
+advances 54 draws there, so nothing after it moves); the subway landing runs 5.5 m past the last step and opens 7.5 m into the hall
+(`CORR.x0` -16.2 → -20.5; it was 1.2 m, straight into a wall).
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
 

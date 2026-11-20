@@ -61,6 +61,13 @@
       for (const s of [-1, 1]) box(o, v3(x, hh / 2, z + s * (w / 2 + t)), v3(t, hh / 2, t), M.post); box(o, v3(x, hh + t, z), v3(t, t, w / 2 + 2 * t), M.bar);
       o.obstacle = { a: v3(x, 0, z - w / 2), b: v3(x, 0, z + w / 2), under: hh, over: hh + 2 * t };
       O(`Gap Gate ${w.toFixed(1)} m opening`, 'gap', { gap: { c: v3(x, hh / 2, z), n: v3(1, 0, 0), hu: w / 2, hv: hh / 2, u: v3(0, 0, 1) } }); });
+    // knife slots (owner, 2026-11-20: Knife Edge only through narrow gaps): plywood panels with a tall narrow slot, 0.2 m (an
+    // Air65 knife-edged) and 0.3 m (75-85 mm whoops), across the lane beyond the gap gates
+    [[24, 0.2], [27.5, 0.3]].forEach(([lx, w]) => { const x = X(lx), z = Zw(-19), yc = 1.2, sh = 0.35, PW = 0.8, PH = 1.9, t = 0.04, o = O(`Knife Slot ${w.toFixed(1)} m`, 'deco');
+      box(o, v3(x, PH / 2, z - (w / 2 + (PW - w / 2) / 2)), v3(t, PH / 2, (PW - w / 2) / 2), M.wall); box(o, v3(x, PH / 2, z + (w / 2 + (PW - w / 2) / 2)), v3(t, PH / 2, (PW - w / 2) / 2), M.wall);
+      box(o, v3(x, (yc - sh) / 2, z), v3(t, (yc - sh) / 2, w / 2), M.wall); box(o, v3(x, (yc + sh + PH) / 2, z), v3(t, (PH - yc - sh) / 2, w / 2), M.wall);
+      mark(o, v3(x + 0.045, yc + sh + 0.03, z), v3(0.004, 0.02, w / 2));
+      O(`Knife Slot ${w.toFixed(1)} m opening`, 'gap', { gap: { c: v3(x, yc, z), n: v3(1, 0, 0), hu: w / 2, hv: sh, u: v3(0, 0, 1) } }); });
     // the open-air box: nothing above it, low corner markers only
     { const o = O('Open Air Box', 'deco'); for (const [a, b] of [[2, -4], [20, -4], [2, 8], [20, 8]]) { box(o, v3(X(a), 0.15, Zw(b)), v3(0.12, 0.15, 0.12), M.accent); }
       mark(o, v3(X(11), 0.006, Zw(-4)), v3(9, 0.004, 0.03)); mark(o, v3(X(11), 0.006, Zw(8)), v3(9, 0.004, 0.03)); }
@@ -1593,9 +1600,15 @@
       const bo = O('Bodega', 'deco'); pic(bo, v3(16.9, 3.4, SF - 0.25), 4.6, 0.45, Math.PI, 'signBodega', { solid: false });
       pic(bo, v3(15.0, 1.65, SF + 0.18), 1.1, 0.9, Math.PI, 'signOpen', { solid: false }); pic(bo, v3(18.5, 1.6, SF + 0.18), 1.2, 0.8, Math.PI, 'signSpider', { solid: false });
       for (let i = 0; i < 3; i++) box(bo, v3(17, 0.4 + i * 0.7, 19.6), v3(2.4, 0.04, 0.35), 'oldWood', 0, 0, 0, NS); for (const x of [14.65, 19.35]) box(bo, v3(x, 1.15, 19.6), v3(0.04, 1.15, 0.35), 'oldWood', 0, 0, 0, NS);
-      for (let i = 0; i < 18; i++) box(bo, v3(15 + rnd() * 4, 0.55 + Math.floor(rnd() * 3) * 0.7, 19.55), v3(0.1 + rnd() * 0.1, 0.12 + rnd() * 0.08, 0.1), ['paintRed', 'plasticYellow', 'paintBlue', 'paintGreen', 'paintOrange'][i % 5], 0, 0, 0, { noCollide: true });
+      { let sd = 4471; const r2 = () => (sd = (sd * 16807) % 2147483647) / 2147483647; for (let i = 0; i < 54; i++) rnd();   // the map's own stream advances as it did (18 goods × 3 draws), so nothing after this moves
+        // goods standing ON the shelves, side by side (owner, 2026-11-20: they clipped through the boards and each other)
+        let k = 0; for (let sh = 0; sh < 3; sh++) { const top = 0.44 + sh * 0.7; for (let x = 14.75; ; ) { const hw = 0.07 + r2() * 0.08, hh = 0.07 + r2() * 0.09; if (x + 2 * hw > 19.25) break;
+          box(bo, v3(x + hw, top + hh, 19.5 + (r2() - 0.5) * 0.12), v3(hw, hh, 0.07 + r2() * 0.04), ['paintRed', 'plasticYellow', 'paintBlue', 'paintGreen', 'paintOrange'][k++ % 5], 0, 0, 0, { noCollide: true }); x += 2 * hw + 0.03 + r2() * 0.08; } } }
       box(bo, v3(15.2, 0.5, 18), v3(0.45, 0.5, 1.2), 'oldWood'); box(bo, v3(15.2, 1.02, 17.5), v3(0.2, 0.02, 0.25), 'radio', 0, 0, 0, { noCollide: true });
       gapO('Bodega Door', v3(16.7, 1.525, SF), v3(0, 0, 1), v3(1, 0, 0), 0.7, 0.875);   // above the cat
+      // the bodega's windows are solid, clear glass (owner, 2026-11-20): the two either side of the door and the one round the corner
+      for (const [c, h] of [[v3(15.0, 1.6, SF + 0.05), v3(0.6, 1.0, 0.02)], [v3(18.5, 1.6, SF + 0.05), v3(0.7, 1.0, 0.02)], [v3(19.6 - 0.05, 1.6, 18.15), v3(0.02, 1.0, 1.15)]]) {
+        const g = makeBox(c, h); g.leaf = true; bo.prims.push(g); bo.vis.push({ shape: 'box', c, h, mat: 'carGlass', euler: [0, 0, 0], alpha: true }); }
       lamp('Bodega Light', v3(17, 3.2, 18.2), 0xfff0d0, 4, 7); lamp('Bakery Glow', v3(3.6, 2.6, 15.2), 0xffb060, 5, 9); }
     // the bodega cat: completely static, extremely judgmental. Hitting it costs you spiritually (play.js: a meow and a burst)
     together(() => { const x = 16.7, z = SF + 0.05, cat = O('Bodega Cat', 'deco', { cat: true });
@@ -1670,7 +1683,7 @@
     // The ground plane is skipped over its footprint (world.groundHoles, the physics hook in sim.js; absent on other maps) and
     // the street is a slab over it, open only at the stair (world.groundCuts: where worldview.js cuts the ground mesh).
     const HID = -0.14;   // what is drawn under the street stops this far down (nothing near the ground's own plane)
-    const SUB = { y: -6, pit: -7.2, ceil: -0.45, top: -0.02, x0: -31, x1: 5.2, z0: -1.65, z1: 13 }, OPEN = { x0: -9.5, x1: -5.6, z0: -3.5, z1: -1.9 }, CORR = { x0: -16.2, x1: -5.4, z0: -3.75, z1: -1.65 };
+    const SUB = { y: -6, pit: -7.2, ceil: -0.45, top: -0.02, x0: -31, x1: 5.2, z0: -1.65, z1: 13 }, OPEN = { x0: -9.5, x1: -5.6, z0: -3.5, z1: -1.9 }, CORR = { x0: -20.5, x1: -5.4, z0: -3.75, z1: -1.65 };
     const groundHoles = [{ x0: CORR.x0 - 0.3, x1: CORR.x1 + 0.1, z0: CORR.z0 - 0.1, z1: CORR.z1 + 0.05 }, { x0: SUB.x0 - 0.3, x1: SUB.x1 + 0.3, z0: SUB.z0 - 0.3, z1: SUB.z1 + 0.3 }], groundCuts = [OPEN];
     together(() => { const st = O('Subway Station', 'building', { wallNormal: v3(0, 0, 1), tall: 6 }), B = (x0, x1, y0, y1, z0, z1, mat, opt = NS) => { if (x1 - x0 > 0.005 && y1 - y0 > 0.005 && z1 - z0 > 0.005) box(st, v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), v3((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2), mat, 0, 0, 0, opt); };
       // the street over it: a slab 2 cm under the ground's paint, open at the stair. It collides up to there but is drawn only
@@ -1679,7 +1692,8 @@
       const CL = (x0, x1, z0, z1) => { B(x0, x1, SUB.ceil, SUB.top, z0, z1, 'stationCeil', { noSurvey: true, noDraw: true }); B(x0, x1, SUB.ceil, HID, z0, z1, 'stationCeil', { noSurvey: true, noCollide: true }); };
       CL(CORR.x0 - 0.2, OPEN.x0, CORR.z0, CORR.z1); CL(OPEN.x1, CORR.x1 + 0.1, CORR.z0, CORR.z1); CL(OPEN.x0, OPEN.x1, CORR.z0, OPEN.z0); CL(OPEN.x0, OPEN.x1, OPEN.z1, CORR.z1); CL(SUB.x0 - 0.2, SUB.x1 + 0.2, SUB.z0, SUB.z1 + 0.2);
       for (const [x0, x1, z0, z1] of [[OPEN.x0, OPEN.x1, OPEN.z0, OPEN.z0 + 0.012], [OPEN.x0, OPEN.x1, OPEN.z1 - 0.012, OPEN.z1], [OPEN.x0, OPEN.x0 + 0.012, OPEN.z0, OPEN.z1]]) B(x0, x1, SUB.ceil, -0.004, z0, z1, 'nycConcrete', { noSurvey: true, noCollide: true });
-      // the stairs: down west from the sidewalk to a landing, walls either side, then into the hall
+      // the stairs: down west from the sidewalk to a landing, walls either side, then into the hall. The landing runs 5.5 m on past the
+      // last step and opens 7.5 m wide into the hall (owner, 2026-11-20: it was 1.2 m, straight into a wall: "abrupt")
       const N = 24, run = 0.39, rise = 0.25; for (let i = 0; i < N; i++) { const xa = OPEN.x1 - (i + 1) * run, xb = OPEN.x1 - i * run; B(xa, xb, SUB.y - 0.5, -rise * (i + 1), CORR.z0 + 0.15, CORR.z1 - 0.15, 'stairStone'); }
       B(CORR.x0, OPEN.x1 - N * run, SUB.y - 0.5, SUB.y, CORR.z0, CORR.z1, 'stationFloor');
       B(CORR.x0, CORR.x1, SUB.y - 0.5, HID, CORR.z0 - 0.15, CORR.z0, 'subwayTile'); B(CORR.x0 - 0.2, CORR.x0, SUB.y - 0.5, HID, CORR.z0, CORR.z1, 'subwayTile');
@@ -1688,7 +1702,7 @@
       // the hall: platforms either side of the track pit, tiled walls, dark tunnel mouths at both ends
       B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, SUB.z0, 4.2, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.y - 0.5, SUB.y, 8.8, SUB.z1, 'stationFloor'); B(SUB.x0, SUB.x1, SUB.pit - 0.4, SUB.pit, 4.2, 8.8, 'ballast');
       for (const z of [4.2, 8.8]) B(SUB.x0, SUB.x1, SUB.y - 0.06, SUB.y + 0.005, z - (z < 6 ? 0.45 : 0), z + (z < 6 ? 0 : 0.45), 'platformEdge', { noSurvey: true, noCollide: true });
-      B(SUB.x0, -16.2, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(-13, SUB.x1, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(SUB.x0, SUB.x1, SUB.pit, HID, SUB.z1, SUB.z1 + 0.2, 'subwayTile');
+      B(SUB.x0, CORR.x0, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(-13, SUB.x1, SUB.pit, HID, SUB.z0 - 0.2, SUB.z0, 'subwayTile'); B(SUB.x0, SUB.x1, SUB.pit, HID, SUB.z1, SUB.z1 + 0.2, 'subwayTile');
       for (const [xa, xb] of [[SUB.x0 - 0.2, SUB.x0], [SUB.x1, SUB.x1 + 0.2]]) { B(xa, xb, SUB.pit, HID, SUB.z0, 4.2, 'subwayTile'); B(xa, xb, SUB.pit, HID, 8.8, SUB.z1, 'subwayTile'); B(xa, xb, SUB.pit, HID, 4.2, 8.8, 'tunnelBlack'); }
       for (const z of [SUB.z0 + 0.03, SUB.z1 - 0.03]) for (const x of [-26, -2]) pic(st, v3(x, -2.6, z), 4.4, 0.7, z < 0 ? 0 : Math.PI, 'signStation', { solid: false, glow: false });
       pic(st, v3(-14.6, -2.2, CORR.z0 + 0.03), 3.2, 0.6, 0, 'signStation', { solid: false, glow: false });
