@@ -3,6 +3,7 @@
 Kept in order of priority and feasibility. When one is done, move it to CLAUDE.md (what was built) and drop it here.
 
 ## Done
+- Review Hub (2026-11-20): see CLAUDE.md "The Review Hub". Next for it: retire the old screens once it has been used a week (owner's call), and a "withdraw a sent verdict" note if wanted.
 - Train in the Tricktionary (2026-11-20): see CLAUDE.md "Train a trick". Next for it: pole, wall and gap tricks (steps by hand), and judging "upright" / "flying backward" in the steps.
 
 ## Next, in this order (agreed 2026-11-20)
@@ -30,22 +31,3 @@ several pilots already shows up as a "maybe"), and the owner names its points an
 the video reference. Needs: a new relay kind (`challenge`), a board screen, the guest replay viewer, a "this looks like
 <existing trick>" check before posting, and the owner's say before anything is scored.
 
-## Review hub (owner, 2026-11-20: "a more unified way of reviewing all of the flights and labelled tricks under one hub")
-Today the same work is spread over the Flight desk (shared flights, Labels, Review queue, Feedback), Judge the community
-(board runs), Judge the Bot, Quick check and SKITTLES mode (one's own runs). One screen with sections instead:
-- **Sections** down the side: My runs · Review queue · All shared flights · Board runs (Judge the community) · Bot flights
-  (Judge the Bot) · Labels (what has been said, by whom) · Feedback. Each a list with its own scrollbar, the header and
-  filters staying put while it scrolls.
-- **Filters and search** on every list: map, pilot, trick, date range, state (not reviewed / reviewed by me / disputed /
-  waiting for a second opinion), and a search box.
-- **One player** for everything: open any item in the same review player, with Next / Previous through the list it came
-  from (keyboard too) so a run of moments can be judged without going back to the list each time.
-- **Progress and counts**: how many waiting per section, "you judged 12 today", a badge on the main menu when the queue
-  has something new.
-- **Disagreements view**: moments where pilots' labels disagree with each other or with the game, side by side.
-- **Per-trick view**: every example of a trick (confirmed, rejected, waiting), to watch them one after another, the trick
-  library's demo first.
-- **Undo** for the last verdicts sent in a session, and a clear "sent ✓" on each item.
-- **Remember place**: the section, filters and scroll position come back when the hub is reopened.
-- Works for every pilot for their own runs and reviews; the owner's sections (all shared flights, feedback) only with the
-  owner key.

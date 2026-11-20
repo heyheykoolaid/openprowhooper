@@ -33,7 +33,7 @@ function consensus(votes) {
       const names = new Set(); for (const v of m.items) { if (v.actual && v.actual !== 'not a trick') names.add(v.actual); if (v.verdict === 'no' && v.target && v.target !== v.actual) names.add(v.target); }
       for (const name of names) {
         const say = new Map();   // author → their latest word on this trick here
-        for (const v of m.items) { const yes = v.actual === name, no = v.verdict === 'no' && v.target === name && v.actual !== name; if (yes || no) say.set(v.author, { v, yes }); }
+        for (const v of m.items.slice().sort((x, y) => (x.at || 0) - (y.at || 0))) { const yes = v.actual === name, no = v.verdict === 'no' && v.target === name && v.actual !== name; if (yes || no) say.set(v.author, { v, yes }); }
         const all = [...say.values()]; if (!all.length) continue;
         const pro = all.filter(x => x.yes).reduce((s, x) => s + x.v.wYes, 0), con = all.filter(x => !x.yes).reduce((s, x) => s + x.v.wNo, 0);
         const people = all.filter(x => x.yes || !x.v.inferred).length, ramp = Math.min(1, people / CONFIRM), net = ramp * (pro - con) / all.length;
@@ -80,7 +80,7 @@ async function load(files) {
       const vote = !!l.judge || (rev && l.src === 'board') || (!!l.reviewer && !bot && !trustedRev);
       const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
       if (a < T0 - 5 || b > T1 + 5) continue;
-      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own' };
+      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own', at: lf._relayAt || 0 };   // when it was sent: a person's latest word wins
       labelled.push([a - 1, b + 2]);
       item.wYes = vote ? W.judge : fl.replica || fl.botSrc === 'library' ? W.replica : rev ? W.reviewer : W.own;   // a yes on the knowledge bot re-flying a library example confirms that example: half weight, and it adds no new motion
       item.wNo = vote ? W.judge : l.inferred ? W.inferred : fl.replica ? W.replica : rev ? W.reviewer : W.own; item.inferred = !!l.inferred;

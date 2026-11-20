@@ -390,14 +390,25 @@ function guestOpen(rows, events, of, review) {
   recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: plain(e.name).slice(0, 60), exec: plain(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? plain(e.obstacle).slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null }));
   openRecap(of.source); recap.review = !!review; renderRecap();
 }
-async function reviewerSave() {
-  const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); if (!L.length || !of.flight) { flash('<b>NOTHING TO SEND YET</b><small>give a call ✓, ✗ or "it was…" first</small>', 'near'); return; } recap.dirty = false;
-  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a leaderboard run is a vote (tools/community.js counts it once a second pilot agrees); the owner's Judge-the-community and Flight desk verdicts are reviewer labels
+// build the reviewer labels from the review in hand (null if nothing is decided yet) and send them (quiet: no modal, for the
+// Review Hub, which sends a verdict 10 s after the item closes so Undo can take it back)
+function reviewerBuild() {
+  const of = recap.guestOf || {}, pl = recapPayload(), L = pl.run.labels.filter(l => !l.undone && l.verdict !== 'unlabelled'); if (!L.length || !of.flight) return null; recap.dirty = false;
+  const me = pilotName() || null, labels = L.map(l => ({ ...l, reviewer: true, by: me, byId: telPilot(), runOf: of.name || null, src: of.source, ref: of.ref || null, ...(of.source === 'board' ? { judge: true } : {}) }));   // anyone's review of a leaderboard run is a board vote (pooled with everyone's on that moment); the owner's Judge-the-community and Flight desk verdicts are reviewer labels
+  return { of, me, labels, stamp: `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}` };
+}
+async function reviewerSend(pkg, quiet) {
+  const { of, me, labels, stamp } = pkg;
+  const go = telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued');
+  if (quiet) return go;
   procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
-  const stamp = `${String(of.flight).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)}-by-${telPilot()}-${Date.now().toString(36)}`;
-  const r = await procWait(telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued'), 9000);
+  const r = await procWait(go, 9000);
   procShow(procThanks(), (r === 'sent' ? 'Your reviewer labels were sent to the project.' : 'Your reviewer labels are saved and will be sent as soon as the drop-off can be reached.') + ' A second pair of eyes on a flight is worth a lot.', 1);
-  await new Promise(res => setTimeout(res, 1700)); procHide();
+  await new Promise(res => setTimeout(res, 1700)); procHide(); return r;
+}
+async function reviewerSave() {
+  const pkg = reviewerBuild(); if (!pkg) { flash('<b>NOTHING TO SEND YET</b><small>give a call ✓, ✗ or "it was…" first</small>', 'near'); return; }
+  return reviewerSend(pkg, false);
 }
 // ============================================================ Judge the community
 // Moments from today's posted leaderboard runs (public: each was posted by its pilot's own click, with its replay) where

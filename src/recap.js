@@ -57,8 +57,11 @@ function closeRecap() {
   if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }
     if (src === 'desk' && of0 && of0.clip && (ev0.some(e => e.verdict) || recap.flags.length)) { const dq = store.get('deskQDone', {}); dq[of0.clip] = Date.now(); const ks = Object.keys(dq); if (ks.length > 2000) for (const k of ks.sort((x, y) => dq[x] - dq[y]).slice(0, ks.length - 2000)) delete dq[k]; store.set('deskQDone', dq); }   // a review-queue moment you judged
     recap.guest = false; recap.guestOf = null; if (LB.keep) { Object.assign(recap, LB.keep); LB.keep = null; } else { recapReset(); recap.telDone = recap.id; }
-    if (src === 'judge') { const k = (of0 || {}).clip; if (k && ev0.some(e => e.verdict)) { JG.done[k] = 1; store.set('judgeDone', JG.done); } mode = 'menu'; show('#judgeScreen'); judgeRender(); return; }
+    if (src === 'judge') { const k = (of0 || {}).clip; if (k && ev0.some(e => e.verdict)) { JG.done[k] = 1; store.set('judgeDone', JG.done); } }
+    if (hubBack(ev0.some(e => e.verdict || e.actual))) return;   // opened from the Review Hub: back there, or on to the next item
+    if (src === 'judge') { mode = 'menu'; show('#judgeScreen'); judgeRender(); return; }
     if (src === 'desk') { mode = 'menu'; show('#deskScreen'); deskRender(); } else { mode = LB.from === 'results' ? 'paused' : 'menu'; show('#lbScreen'); lbRender(); } return; }
+  if (recap.back === 'hub') { if (!hubBack(recap.events.some(e => e.verdict) || recap.flags.some(f => f.actual))) hubOpen(); return; }
   if (recap.back === 'results') { mode = 'paused'; show('#resultsScreen'); } else if (recap.back === 'menu') { mode = 'menu'; show('#mainMenu'); } else { mode = 'paused'; show('#pause'); }
 }
 // The player: the whole run on a timeline. Picking a call (or a mark on the timeline) jumps to it and loops that moment;
@@ -239,8 +242,8 @@ function recapPayload() {
     run: { id: recap.id, started: recap.started, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, events: recap.events.map(e => ({ t: e.t, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf })), labels } };
 }
 function recapSave(force) {
-  if (recap.guest) { if (recap.dirty || force) reviewerSave(); return; }   // someone else's run: nothing is kept as yours; your verdicts go out as reviewer labels
-  if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false;
+  if (recap.guest) { if (recap.dirty || force) { if (typeof HUB !== 'undefined' && HUB.nav && HUB.nav.open && !force) hubDefer(); else reviewerSave(); } return; }   // someone else's run: nothing is kept as yours; your verdicts go out as reviewer labels (from the Review Hub after a 10 s undo window)
+  if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false; hubKeepRun();   /* the Review Hub's My runs keeps the run with its verdicts */
   try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
   const jobs = [];
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);

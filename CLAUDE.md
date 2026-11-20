@@ -5,7 +5,7 @@ Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
 `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `raceedit.js`,
-`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`. They share one scope. `python3 build.py` inlines everything into
+`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`, `hub.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
@@ -713,6 +713,24 @@ re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewri
 menu's device note (`updateMenuDevice`, every 2 s).
 **Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on
 the "what counted" list and the combo timer's pass resets went quiet after the first reset; they are re-pointed at the mirror.
+
+## The Review Hub (src/hub.js; owner, 2026-11-20, from the draft he approved)
+Main menu → **Review Hub** (`#hubBtn`, a yellow dot when your last run has undecided calls or the board has runs you have not
+seen): one screen for every kind of reviewing. Sections down the side (`HUB_SECS`): **My runs** (every run of 10 s or more is kept
+in this browser: IndexedDB 'runs', id `mine-<run>`, trace packed, events and flags with their verdicts, the last 12; `hubKeepRun`
+at each flight start, each review save and when the hub opens; older `review-*` runs get their verdicts back from their labels),
+**Quick check** (`quickPick` of the run in hand), **Board runs** (today's posted runs of other pilots: board votes), and with the
+owner key **Review queue**, **All flights**, **Community** (Judge the community's moments), **Disagreements** (moments in the label
+files where pilots' answers differ), **Per trick** (every labelled moment of one trick, the owner's runs too; "▶ the bot flies it"),
+**Bot flights** (opens Judge the Bot) and **Feedback**. Every list has the same sticky filter bar (map, pilot, trick, date, state:
+not reviewed / reviewed by me / disputed / needs more confirmations, i.e. fewer than 3 people at that moment; a search box) and its
+scroll, section and filters come back (`store 'hub'`). Each row opens in the one review player through the section's own opener
+(`deskQOpen`, `deskPick`, `judgeClip`, `guestOpen`, `openRecap`), with `#hubNav` over it: ◂ Previous / Next ▸ through the filtered
+list (Shift+← / Shift+→), Y / N answer the playing call, Esc / ☰ Hub back to the list (`closeRecap` → `hubBack`). An item on another
+map (or needing the official layout) asks, reloads into it (`store 'hubPending'`) and opens there. **A verdict on someone else's
+run waits 10 s** (`hubDefer`: `reviewerBuild` now, `reviewerSend(pkg, quiet)` later; ↶ Undo in the hub takes it back and nothing is
+sent); own runs save as before. "You judged N today" (`store 'hubDay'`), judged items marked (`store 'hubDone'`). The old screens
+(Flight desk, Judge the community, the board's ▶, Quick check, SKITTLES) all still work. `window.__pw.hub` for tests.
 
 ## Dive, reviewer labels and the Flight desk (2026-11-17)
 **Dive** (was called 41 times in 20 flights, mostly wrongly): one committed descent, nose at least 25° down for 40% of

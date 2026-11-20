@@ -292,6 +292,20 @@ body.meOn #music { display: none !important; }
 #recapNow { position: absolute; left: 16px; top: 12px; font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 2px 2px 0 #111; pointer-events: none !important; }
 #recapNow small { display: block; font: 12px var(--mono); -webkit-text-stroke: 0; color: #ffd23f; }
 #recapBar { position: absolute; left: 12px; right: 362px; bottom: 10px; background: #12141aee; border: 1px solid #2c2f3a; padding: 8px 10px; color: #eee; font: 13px system-ui, sans-serif; }
+/* Review Hub (hub.js) */
+.hubPanel { max-width: 1100px; width: 94vw; } .hubTop { display: flex; align-items: center; gap: 12px; } .hubTop h2 { margin: 0; flex: 1; } .hubTop .note { margin: 0; }
+.hubCols { display: grid; grid-template-columns: 190px 1fr; gap: 14px; margin-top: 10px; } .hubSide { display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #ffffff18; padding-right: 12px; }
+.hubSide button { text-align: left; display: flex; justify-content: space-between; align-items: center; } .hubSide button.on { border-color: #7fd0f2; background: #7fd0f222; } .hubSide button b { font: 700 12px var(--mono); color: #ffd34d; }
+.hubKey { font-size: 11px; color: #9aa3b5; margin: 8px 0 2px; } .hubMain { min-width: 0; } .hubMain > .note:first-child { margin-top: 0; }
+.hubFilters { display: flex; flex-wrap: wrap; gap: 6px; position: sticky; top: 0; z-index: 2; background: #161922; padding: 6px 0; } .hubFilters select, .hubFilters input { font-size: 12px; padding: 3px 6px; } .hubFilters input { flex: 1; min-width: 160px; }
+.hubList { max-height: calc(100vh - 330px); overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
+.hubRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid #ffffff1c; border-radius: 8px; cursor: pointer; } .hubRow:hover { background: #ffffff10; border-color: #7fd0f288; }
+.hubRow b { display: block; font-size: 13px; } .hubRow small { color: #9aa3b5; font-size: 11.5px; } .hubRow > span { white-space: nowrap; font: 12px var(--mono); color: #9aa3b5; } .hubRow.done { opacity: 0.55; } .hubRow.done > span { color: #6be08a; }
+.hubFb { border: 1px solid #ffffff1c; border-radius: 8px; padding: 8px 10px; margin: 6px 0; } .hubFb p { margin: 4px 0 0; white-space: pre-wrap; } .hubKeys { margin-top: 10px; }
+#hubBtn.dot::after { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ffd34d; margin-left: 8px; vertical-align: middle; }
+#hubNav { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 8px; align-items: center; background: #12141aee; border: 1px solid #2c2f3a; border-radius: 10px; padding: 6px 10px; color: #eee; font: 13px system-ui, sans-serif; }
+#hubNav span { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) { .hubCols { grid-template-columns: 1fr; } .hubSide { flex-direction: row; flex-wrap: wrap; border-right: 0; } }
 .lbT { width: 100%; border-collapse: collapse; font: 13px var(--mono); } .lbT td, .lbT th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #ffffff18; } .lbT td:nth-child(3) { text-align: right; font-weight: 700; }
 .lbT .lbPlay { padding: 1px 9px; font-size: 12px; min-width: 0; } .lbT td.lbPlayC { width: 30px; text-align: right; } .lbT tr[data-lbrun] { cursor: pointer; } .lbT tr[data-lbrun]:hover { background: #ffffff14; } .lbT tr.me td { color: #ffd34d; }
 .deskList { max-height: 58vh; overflow: auto; margin-top: 8px; } .deskList tr[data-deskfile] { cursor: pointer; } .deskList tr[data-deskfile]:hover { background: #ffffff14; }
@@ -447,6 +461,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="board">Daily leaderboard</button>
+    <button data-act="hub" id="hubBtn" title="Every kind of reviewing in one place: your runs, Quick check, board runs and more">Review Hub</button>
     <button data-act="race" class="hide" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
     <button data-act="judge" id="judgeBtn" class="hide" title="Watch moments from other pilots' runs and say what the trick really was">Judge the community</button>
     <button data-act="map">Maps</button><button data-act="mapedit" class="hide" title="Move, add or remove anything on this map">Map Editor</button>
@@ -464,7 +479,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="procModal" class="hide"></div><div id="fbToast"></div>
 <div id="mapEditUI" class="hide"><button id="meExit" data-me="done" title="Leave the Map Editor (Esc)">✕ Exit</button><div id="meBar"></div><div id="meLib" class="rvSide"></div><div id="meSide" class="rvSide"></div><div id="meHint"></div></div>
-<div id="recapUI" class="hide"><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas><div id="recapBar"></div></div>
+<div id="recapUI" class="hide"><div id="hubNav" class="hide"></div><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas><div id="recapBar"></div></div>
 <div id="warmBox" class="hide"></div>
 
 <div id="bbrUI" class="hide">
@@ -525,6 +540,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 
 <div id="deskScreen" class="screen hide"><div class="panel" style="max-width:1000px" id="deskPanel"></div></div>
 <div id="judgeScreen" class="screen hide"><div class="panel" style="max-width:980px" id="judgePanel"></div></div>
+<div id="hubScreen" class="screen hide"><div class="panel hubPanel" id="hubPanel"></div></div>
 <div id="lbScreen" class="screen hide"><div class="panel" style="max-width:980px" id="lbPanel"></div></div>
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>
 

@@ -78,7 +78,7 @@ document.addEventListener('click', e => { const y = e.target.closest('[data-myma
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); store.set('myMap', null); store.set('commMap', null); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { try { hubBadge(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
 // owner-only buttons (owner, 2026-11-18): shown only when the pilot name is heyheykoolaid
 function ownerMenus() { const own = ghMenus(); for (const sel of ['#judgeBtn', '#mainMenu [data-act="tools"]', '#mainMenu [data-act="race"]', '#mainMenu [data-act="mapedit"]']) { const b = $(sel); if (b) b.classList.toggle('hide', !own); } }
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
@@ -89,7 +89,7 @@ function startFlyGo(withSession) {
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
   if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;
-  recapReset(); if (warm.on) stopWarmup(); if (coach.on) coachClock();
+  hubKeepRun(); recapReset(); if (warm.on) stopWarmup(); if (coach.on) coachClock();
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
   flash(withSession ? `<b>2:00 SESSION</b><small>timer starts when you ${autoArmOn() ? 'take off' : 'arm'}</small>` : `<b>FREE FLY</b><small>${autoArmOn() ? 'throttle up to take off' : 'Space / arm switch to arm'}</small>`);
 }
