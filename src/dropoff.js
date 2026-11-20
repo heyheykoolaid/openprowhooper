@@ -501,7 +501,7 @@ async function lbWatch() {
 // relay, or no owner key confirmed, it falls back to the GitHub token from Options (Contents: Read on the data repo).
 // Tabs: shared flights (with the labels already given on each) and pilots' feedback. Reviewing a flight sends reviewer
 // labels through the drop-off as before.
-const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs2', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
+const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs3', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
 const deskVia = () => lbBase() && store.get('ownerKey', '') && (store.get('ownerOk', null) || {}).k && !desk.oldRelay ? 'relay' : gh.token ? 'github' : null;
 async function deskRelay(body) {
   const r = await fetch(`${lbBase()}/desk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: store.get('ownerKey', ''), ...body }) });
@@ -547,9 +547,9 @@ async function deskLabels() {
     try { got = await deskGetMany(part.map(w => `telemetry/inbox/labels/${w.day}/${w.file}`)); } catch { break; }
     for (const w of part) { const p = got[`telemetry/inbox/labels/${w.day}/${w.file}`]; if (!p || !Array.isArray(p.labels)) { desk.labs[w.file] = { bad: 1 }; continue; }
       const L = p.labels.filter(l => l && !l.undone && l.actual && l.actual !== 'unlabelled');
-      desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), T: L.slice(0, 60).filter(l => Number.isFinite(+l.t)).map(l => [+Math.min(+l.t, Number.isFinite(+l.repStart) ? +l.repStart : +l.t).toFixed(1), +(+l.t).toFixed(1)]), at: +w.file.split('-')[0] }; }
+      desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), T: L.slice(0, 60).filter(l => Number.isFinite(+l.t)).map(l => [+Math.min(+l.t, Number.isFinite(+l.repStart) ? +l.repStart : +l.t).toFixed(1), +(+l.t).toFixed(1), l.judge ? 1 : 0, String(l.actual).slice(0, 40), String(l.by || p.name || '').slice(0, 24)]), at: +w.file.split('-')[0] }; }
     const keys = Object.keys(desk.labs); if (keys.length > 900) for (const k of keys.sort((a, b) => (desk.labs[a].at || 0) - (desk.labs[b].at || 0)).slice(0, keys.length - 900)) delete desk.labs[k];
-    store.set('deskLabs2', desk.labs); deskRender(); } }
+    store.set('deskLabs3', desk.labs); deskRender(); } }
 const deskLabsFor = id => id ? Object.values(desk.labs).filter(x => x && x.f === id) : [];
 // The review queue (owner, 2026-11-19: "list the most pressing things that need reviewing"): moments in the listed flights
 // that nobody has answered yet, most pressing first: a call the pilot flagged with F, a trick the game missed (Q), the trick
@@ -558,21 +558,28 @@ const deskLabsFor = id => id ? Object.values(desk.labs).filter(x => x && x.f ===
 // (the pilot's or a reviewer's) covers it, or once you have judged it here (store 'deskQDone').
 const DESK_Q = 40, deskQKey = (file, t) => `${file}@${(+t).toFixed(1)}`;
 function deskQueue() {
-  const done = store.get('deskQDone', {}), out = [];
+  const done = store.get('deskQDone', {}), out = [], me = pilotName().toLowerCase(), mine = n => String(n || '').toLowerCase() === me;
+  // tricks other pilots have labelled (owner, 2026-11-19: "if tricks require multiple verifications, prioritize tricks that other
+  // pilots have labelled"): a change to the detector needs evidence from 2+ pilots, so a verdict on such a trick can complete it
+  const others = {}; for (const x of Object.values(desk.labs)) for (const T of (x && x.T) || []) if (T[3] && T[3] !== 'not a trick' && !mine(T[4])) (others[T[3]] = others[T[3]] || new Set()).add(String(T[4]).toLowerCase());
   for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
-    const answered = t => spans.some(([a, b]) => t >= a - 1.5 && t <= b + 2.5), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
+    const near = (t, T) => t >= T[0] - 1.5 && t <= T[1] + 2.5, answered = t => spans.some(T => near(t, T) && !(T[2] && !mine(T[4]))), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
+    const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), `; ${k} other pilot${k === 1 ? ' has' : 's have'} labelled ${n}`] : [0, '']; };
     for (const e of Array.isArray(p.events) ? p.events : []) { if (!e || !Number.isFinite(e.t) || typeof e.name !== 'string' || e.name === 'Crash' || e.name === 'near') continue;
       const c = Number.isFinite(e.conf) ? e.conf : 1, pc = `${Math.round(c * 100)} %`;
       const r = e.flagged ? [100, 'the pilot flagged this call as wrong (F)'] : e.maybe ? [60, "the trick library's guess (a maybe)"] : c < 0.5 ? [50 + (0.5 - c) * 40, `the game was very unsure (${pc})`] : c < 0.7 ? [30 + (0.7 - c) * 50, `the game was unsure (${pc})`] : null;
-      if (r) per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] - age * 3, why: r[1] }); }
+      if (r) { const [bs, bw] = boost(e.name); per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] + bs - age * 3, why: r[1] + bw }); } }
     for (const m of Array.isArray(p.missed) ? p.missed : []) if (m && Number.isFinite(m.t)) per.push({ file: it.file, kind: 'missed', t: m.t, name: '(a trick the game missed)', score: 90 - age * 3, why: 'the pilot pressed Q: the game missed a trick just before this' });
-    out.push(...per.filter(q => !answered(q.t) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }
+    // another pilot's vote (a review of a board run): it counts only once a second pilot agrees, so it ranks near the top
+    for (const T of spans) if (T[2] && !mine(T[4]) && !spans.some(U => U !== T && !U[2] && near(T[1], U))) { const e = (p.events || []).find(x => x && Number.isFinite(x.t) && near(x.t, T));
+      const [bs, bw] = boost(T[3]); per.push({ file: it.file, kind: e ? 'call' : 'missed', vote: T[3], e, t: e ? e.t : T[1], name: e ? String(e.name).slice(0, 60) : `(${T[3]})`, score: 95 + bs - age * 3, why: `${T[4] || 'a pilot'} voted "${T[3]}": it counts once a second pilot agrees${bw}` }); }
+    out.push(...per.filter(q => (q.why.includes('voted') || !answered(q.t)) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }
   return out.sort((a, b) => b.score - a.score).slice(0, DESK_Q); }
 async function deskQOpen(q) {
   const it = (desk.list || []).find(x => x.file === q.file), i = desk.info[q.file]; if (!it || !i || i.bad) return; const p = i.p;
   if (p.map !== MAP_ID) { if (!S.MAPS[p.map]) { desk.msg = 'That flight is on a map this version does not have.'; deskRender(); return; } store.set('deskPending', { file: q.file, t: q.t }); store.set('map', p.map); $('#loading').textContent = 'Loading ' + S.MAPS[p.map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); return; }
   try { guestOpen(await FlightLog.unpack(p.trace), q.kind === 'call' ? [q.e] : [], { name: p.name || '(no name)', flight: p.id, started: p.started, source: 'desk', ref: `${it.day}/${it.file}`, clip: deskQKey(q.file, q.t) }, true); desk.openFile = q.file;
-    if (q.kind === 'call') { const x = recapItems()[0]; if (x) recapPlay(x); } else { if (recap.play) recapSeek(Math.max(0, q.t - 4)); flash('<b>THE PILOT PRESSED Q HERE</b><small>the game missed a trick just before: add what they flew at the red line</small>', 'near'); }
+    if (q.kind === 'call') { const x = recapItems()[0]; if (x) recapPlay(x); } else { if (recap.play) recapSeek(Math.max(0, q.t - 4)); flash(q.vote ? `<b>A PILOT VOTED: ${esc(q.vote)}</b><small>the game made no call here: add the trick at the red line if you agree</small>` : '<b>THE PILOT PRESSED Q HERE</b><small>the game missed a trick just before: add what they flew at the red line</small>', 'near'); }
     renderRecap(); }
   catch { desk.msg = 'That flight could not be opened.'; deskRender(); } }
 // pilots' feedback (Options → Send feedback), newest first, the last 7 days
