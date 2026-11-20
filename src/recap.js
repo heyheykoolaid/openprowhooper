@@ -46,6 +46,12 @@ function openRecap(from) {
   renderRecap();
 }
 function closeRecap() {
+  // a reviewer who moved, stretched, graded or grouped a call without saying whether it was right has decided nothing yet (owner,
+  // 2026-11-20: the review queue's Wall Tap was moved, Done sent nothing and showed nothing): ask, rather than drop it silently
+  if (recap.guest && recap.review) { const und = recap.events.filter(e => !e.verdict && !e.hidden && (e.span || e.execActual || e.grp != null || (e.extra && e.extra.length)));
+    if (und.length) { const names = [...new Set(und.map(e => e.name))].slice(0, 3).join(', ');
+      if (!confirm(`You changed ${names} but didn't say whether ${und.length > 1 ? 'they were' : 'it was'} right.\n\nOK: count ${und.length > 1 ? 'them' : 'it'} as right (✓) and send.\nCancel: keep reviewing (✓ or "it was…" on the call).`)) return;
+      for (const e of und) e.verdict = 'yes'; recap.dirty = true; } }
   quickReplicasGo();   // the answers are final now: fly their bot replicas
   recap.quick = null; $('#recapUI').classList.remove('quick'); recapRecStop(true); recapSave(); recap.play = null; $('#recapUI').classList.add('hide'); $('#hud').classList.remove('hide'); document.body.classList.remove('bbr'); drone.reset(activeWorld.spawn); detector.reset();   /* the HUD comes back (owner: after Quick check there was no UI) */
   if (recap.guest) { const src = (recap.guestOf || {}).source, of0 = recap.guestOf, ev0 = recap.events.concat(recap.flags); if (src === 'desk' && desk.openFile && recap.events.some(e => e.verdict) ) { const dn = store.get('deskDone', {}); dn[desk.openFile] = 1; store.set('deskDone', dn); }

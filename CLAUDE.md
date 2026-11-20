@@ -230,6 +230,15 @@ offers Low once (`#gfxOffer`, `store 'gfxAsked'`): shadows, glow and screen effe
 The first-start prompt says what goes into the trick library (motion, where and when, the pilot name) and the owner's note on
 the brief progress bar.
 
+**Radio note** (owner, 2026-11-20): under the main-menu logo, `#browserNote`: radios (USB joystick mode) need Chrome or Edge; on
+any other browser (no Chromium brand in `navigator.userAgentData`, or a Firefox / Opera / Safari user agent) it turns yellow.
+**Trick detector on its own core** (`DW` in play.js, 2026-11-20; `store 'detWorker'`, OFF until it is checked in a real browser):
+a Web Worker built from the page's own tricks.js + sim.js text runs the detector on a structured clone of the world; detFlush
+posts each frame's snapshots, the local `detector`'s methods (drain, drainMaybes, busy, provisional, liveState, reset, setPilot,
+onArmChange, camTilt, world) are routed to it and its replies mirror calls, maybes, crossings, passes, the clock and (Warm-up,
+Trick Calibration) tokens and debug rows; a rebuilt world (Map Editor: `world.__v`) is sent on the next reset; any error falls
+back to the in-page detector (`dwStop`). `window.__pwDW.shadowOn()` / `feed()` compare it with an in-page copy.
+
 ## First start (src/dropoff.js `pilotAsk`, `pilotWarmAsk`)
 Every pilot picks a name before the menu (`store 'pilotName'`, editable in Options) and says yes or no to sharing, or
 presses **Continue without a name** (owner, 2026-11-18: `store 'anon'`, `anonOn()`): no name, sharing off, the waiting queue
@@ -650,7 +659,10 @@ require multiple verifications, prioritize tricks that other pilots have labelle
 there (95: it counts only once a second pilot agrees), and +10 per other pilot (up to +20) who has labelled that trick anywhere
 (the learners need 2+ pilots); label spans carry [a, b, judge, actual, by] (`store 'deskLabs3'`). A moment is answered when any label's span
 covers it (−1.5 / +2.5 s) or you judged it here (`store 'deskQDone'`, set when the review closes with a verdict or an added
-trick). Another map reloads into it (`deskPending` { file, t }) and opens the moment there.
+trick). Another map reloads into it (`deskPending` { file, t }) and opens the moment there. **A reviewer's undecided change** (owner, 2026-11-20: a
+queue moment's Wall Tap was moved later, Done sent nothing and the queue kept it): closing a guest review with calls moved,
+stretched, graded or grouped but given no verdict asks (`closeRecap`): OK counts them ✓ and sends (progress bar, queue marked),
+Cancel stays in the review. Nothing is assumed without the click.
 **Judge the community** with the relay desk re-flies the last `JG_DAYS` (3) UTC days of posted runs (`jgRecent`), not just
 today's: the board resets at UTC midnight, late afternoon on the west coast. Pilots' board stays today-only.
 

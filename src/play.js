@@ -181,7 +181,71 @@ function detSnap(d, rc) { const s = Object.create(S.Drone.prototype);
   s.contactThisStep = d.contactThisStep; s.contactNormal = d.contactNormal && { x: d.contactNormal.x, y: d.contactNormal.y, z: d.contactNormal.z }; s.contactOwner = d.contactOwner; s.contactGround = d.contactGround; s.lastImpact = d.lastImpact;
   s.rc = rc; return s; }
 function detArm(on) { if (detQ.length) detQ.push({ arm: on, s: detSnap(drone, lastRC) }); else detector.onArmChange(drone, on); }
+// The trick detector on its own core (2026-11-20, owner: "where we need to go next"; `DW`): when the browser allows it, the
+// detector runs in a Web Worker built from the page's own sim.js and tricks.js, on a copy of the world. The main thread only
+// posts each frame's step snapshots (and arm changes, resets, the camera tilt, the pilot's profile, a rebuilt world) and
+// reads back what the game shows: calls, maybes, busy, the passes and crossings for the "what counted" list and combo timer,
+// pending and live tricks, the clock, and (for the Warm-up and Trick Calibration) tokens and debug rows. The local detector
+// object stays the one every other file talks to: its methods are routed to the worker. The same code on the same steps
+// makes the same calls; the replies arrive a frame or two later. Any failure falls back to the old in-page detector
+// (`store 'detWorker'` false turns the worker off; F3 shows which is running).
+const DW = { on: false, dead: false, w: null, events: [], maybes: [], busy: false, prov: [], live: [], cross: [], passes: [], sentWorld: null, sentV: -1, pending: 0, wantDbg: false };
+function dwStart() {
+  if (DW.on || DW.dead || !store.get('detWorker', false) || typeof Worker === 'undefined') return;
+  try {
+    const src = k => { for (const sc of document.scripts) { const t = sc.textContent || ''; if (t.startsWith(k)) return t; } return null; };
+    const tr = src('// Trick values'), sm = src('// Pro Whooper — simulation core'); if (!tr || !sm) return;
+    const body = `;(function(){ const S = self.Sim; let det = null; const sent = new WeakSet(); const DTS = ${DT};
+  const fresh = (arr, max) => { const out = []; for (const x of arr || []) if (!sent.has(x)) { sent.add(x); out.push(x); } return out.slice(-max); };
+  const plain = x => { try { return structuredClone(x); } catch (e) { return JSON.parse(JSON.stringify(x, (k, v) => typeof v === 'function' ? undefined : v)); } };
+  const rehydrate = s => Object.setPrototypeOf(s, S.Drone.prototype);
+  self.onmessage = e => { const m = e.data;
+    if (m.t === 'init') { if (m.community) S.setCommunity(m.community); if (m.library) S.setLibrary(m.library); det = new S.TrickDetector(m.world); det.camTilt = m.camTilt; if (m.pilot) det.setPilot(m.pilot); return; }
+    if (!det) return;
+    if (m.t === 'world') { det.world = m.world; det.reset(); return; }
+    if (m.t === 'reset') { det.reset(); return; }
+    if (m.t === 'camTilt') { det.camTilt = m.v; return; }
+    if (m.t === 'pilot') { det.setPilot(m.p); return; }
+    if (m.t === 'debug') { det.debug = m.v; return; }
+    if (m.t === 'steps') { if (m.want && !Array.isArray(det.debug)) det.debug = []; for (const s of m.items) { if (s.arm !== undefined) { det.onArmChange(rehydrate(s.s), s.arm); continue; } rehydrate(s); det.update(s, DTS, s.rc); det.postStep(s); }
+      const r = { t: 'out', events: det.drain(), maybes: det.drainMaybes ? det.drainMaybes() : [], busy: det.busy(), time: det.time, prov: det.provisional(), live: det.liveState ? det.liveState() : [],
+        cross: fresh(det.crossLog, 40), passes: fresh(det.passes, 40) };
+      if (m.want) { r.toks = (det.toks || []).slice(-40); r.cur = (det.cur || []).filter(Boolean); r.debug = (det.debug || []).slice(-8); }
+      self.postMessage(plain(r)); } };
+})();`;
+    const url = URL.createObjectURL(new Blob([tr, '\n', sm, '\n', body], { type: 'text/javascript' }));
+    DW.w = new Worker(url); URL.revokeObjectURL(url);
+    DW.w.onmessage = e => { const r = e.data; if (!r || r.t !== 'out') return; DW.pending = Math.max(0, DW.pending - 1);
+      DW.events.push(...r.events); if (DW.workerEv) for (const x of r.events) DW.workerEv.push(x.name + '@' + x.t.toFixed(3)); DW.maybes.push(...r.maybes); DW.busy = r.busy; DW.prov = r.prov; DW.live = r.live; detector.time = r.time;
+      for (const c of r.cross) DW.cross.push(c); for (const p of r.passes) DW.passes.push(p); if (DW.cross.length > 80) DW.cross.splice(0, DW.cross.length - 60); if (DW.passes.length > 80) DW.passes.splice(0, DW.passes.length - 60);
+      if (r.toks) { detector.toks = r.toks; detector.cur = r.cur; detector.debug = r.debug; } };
+    DW.w.onerror = err => { console.warn('trick detector worker failed, back to the page:', err && err.message); dwStop(true); };
+    const D = detector, orig = { reset: D.reset.bind(D), setPilot: D.setPilot.bind(D) };
+    DW.orig = orig; let tilt = D.camTilt, wld = D.world;
+    DW.w.postMessage({ t: 'init', world: wld, camTilt: tilt, community: S.community || null, library: S.library || null, pilot: store.get('pilot', null) }); DW.sentWorld = wld; DW.sentV = wld.__v || 0;
+    Object.defineProperty(D, 'camTilt', { configurable: true, get: () => tilt, set: v => { tilt = v; if (DW.on) DW.w.postMessage({ t: 'camTilt', v }); } });
+    Object.defineProperty(D, 'world', { configurable: true, get: () => wld, set: v => { wld = v; } });
+    D.reset = () => { orig.reset(); detQ.length = 0; DW.events.length = 0; DW.maybes.length = 0; DW.busy = false; DW.prov = []; DW.live = [];
+      if (DW.on) { if (DW.sentWorld !== wld || DW.sentV !== (wld.__v || 0)) { DW.w.postMessage({ t: 'world', world: wld }); DW.sentWorld = wld; DW.sentV = wld.__v || 0; } else DW.w.postMessage({ t: 'reset' }); } };
+    D.setPilot = p => { const r = orig.setPilot(p); if (DW.on) DW.w.postMessage({ t: 'pilot', p }); return r; };
+    D.onArmChange = (d, on) => { if (DW.on) DW.w.postMessage({ t: 'steps', items: [{ arm: on, s: detSnap(d, lastRC) }], want: DW.wantDbg }); };
+    D.drain = () => DW.events.splice(0); D.drainMaybes = () => DW.maybes.splice(0); D.busy = () => DW.busy; D.provisional = () => DW.prov; D.liveState = () => DW.live;
+    D.crossLog = DW.cross; D.passes = DW.passes; Object.defineProperty(D, 'maybes', { configurable: true, get: () => DW.maybes, set: () => {} });
+    DW.on = true;
+  } catch (err) { console.warn('trick detector worker not available:', err && err.message); dwStop(true); }
+}
+// tests: window.__pwDW.shadowOn() runs an in-page copy alongside to compare the calls
+window.__pwDW = { DW, feed: snaps => { for (const x of snaps) { Object.setPrototypeOf(x, S.Drone.prototype); detQ.push(x); } detFlush(performance.now()); }, shadowOn: () => { DW.shadow = new S.TrickDetector(world); DW.shadow.camTilt = detector.camTilt; DW.shadow.setPilot(store.get('pilot', null)); DW.shadowEv = []; DW.workerEv = []; } };
+setTimeout(dwStart, 0);
+function dwStop(dead) { if (DW.w) try { DW.w.terminate(); } catch { /* gone already */ } DW.w = null; DW.dead = DW.dead || dead; if (!DW.on) return; DW.on = false;
+  // back to the page's own detector: the routed methods go back to the class's own, from a clean start
+  const D = detector; for (const k of ['reset', 'setPilot', 'onArmChange', 'drain', 'drainMaybes', 'busy', 'provisional', 'liveState']) delete D[k];
+  for (const k of ['camTilt', 'world', 'maybes']) { const v = D[k]; delete D[k]; D[k] = k === 'maybes' ? [] : v; }
+  D.crossLog = []; D.passes = []; D.reset(); }
 function detFlush(now) {
+  if (detQ.length && DW.on) { const items = detQ.splice(0); for (const s of items) if (s.contactNormal === null) delete s.contactNormal;
+    DW.wantDbg = !!((typeof train !== 'undefined' && train.on) || (typeof warm !== 'undefined' && warm.on)); DW.pending++; DW.w.postMessage({ t: 'steps', items, want: DW.wantDbg });
+    if (DW.shadow) for (const s of items) { if (s.arm !== undefined) DW.shadow.onArmChange(s.s, s.arm); else { DW.shadow.update(s, DT, s.rc); DW.shadow.postStep(s); } for (const e of DW.shadow.drain()) DW.shadowEv.push(e.name + '@' + e.t.toFixed(3)); } }   // test hook: the same steps in the page too
   if (detQ.length) { for (const s of detQ) { if (s.arm !== undefined) { detector.onArmChange(s.s, s.arm); continue; } detector.update(s, DT, s.rc); detector.postStep(s); } detQ.length = 0; }
   if (mode !== 'fly' || race.on) return;
   for (const ev of detector.drain()) onTrick(ev);
@@ -291,7 +355,7 @@ function perfFrame(now, fT0, tPh, tDe, tR) {
   const el = $('#perfHud'); if (!el) return; const f = x => (x / n).toFixed(2), mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB' : '—', fps = n / secs, busy = A.frame / (secs * 1000) * 100;
   const pr = renderer.getPixelRatio(), cv = renderer.domElement, info = renderer.info.memory;
   el.innerHTML = `<b>${fps.toFixed(0)} fps</b> · frame CPU ${f(A.frame)} ms (worst ${A.worst.toFixed(1)}) · main thread ${busy.toFixed(0)}% busy
-    <br>physics ${f(A.phys)} ms (${(A.steps / n).toFixed(0)} steps)${A.drop ? ` · <span class="bad">${A.drop} catch-up drops</span>` : ''} · tricks ${f(A.det)} ms · draw ${f(A.rend)} ms · other ${f(A.frame - A.phys - A.det - A.rend)} ms
+    <br>physics ${f(A.phys)} ms (${(A.steps / n).toFixed(0)} steps)${A.drop ? ` · <span class="bad">${A.drop} catch-up drops</span>` : ''} · tricks ${f(A.det)} ms${DW.on ? ' (own core)' : ''} · draw ${f(A.rend)} ms · other ${f(A.frame - A.phys - A.det - A.rend)} ms
     <br>${Math.round(A.calls / n)} draw calls · ${(A.tris / n / 1000).toFixed(0)}k triangles · ${info.geometries} geometries · ${info.textures} textures · longest gap ${A.gap.toFixed(0)} ms
     <br>${cv.width}×${cv.height} px (×${pr.toFixed(2)}) · shadows ${renderer.shadowMap.enabled ? 'on' : 'off'} · screen fx ${PERF.fx ? 'on' : 'off'} · ${document.fullscreenElement || (innerWidth === screen.width && innerHeight === screen.height) ? 'fullscreen' : 'windowed'} ${screen.width}×${screen.height} · neon glow ${BLOOM.on && world.theme === 'vapor' ? 'on' : 'off'} · scenery ${PERF.staticPieces} pieces in ${PERF.staticMeshes} meshes
     <br>GPU ${esc(GPU || 'unknown')}${GPU_SOFT ? ' · <span class="bad">SOFTWARE: the browser\'s hardware acceleration is off</span>' : ''} · resolution ${PERF.resAuto ? 'auto ' : ''}${Math.round(PERF.res * 100)}%

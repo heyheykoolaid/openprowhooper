@@ -127,7 +127,7 @@ async function mePublish() {
 function meRebuild(merge) {
   if (ME.official) { S.setOfficialEdits(MAP_ID, meHas(ME.E) ? ME.E : null); S.setMapEdits(MAP_ID, null); } else S.setMapEdits(MAP_ID, meHas(ME.E) ? ME.E : null);
   const nw = S.MAPS[MAP_ID].build();
-  for (const k of Object.keys(world)) delete world[k]; Object.assign(world, nw); world.baseTitle = world.title; if (!ME.official && MY_MAP) world.title = MY_MAP.name; else if (!ME.official && COMM_MAP) world.title = `${COMM_MAP.name} by ${COMM_MAP.by}`; drone.world = world; detector.reset();
+  const v0 = world.__v || 0; for (const k of Object.keys(world)) delete world[k]; Object.assign(world, nw); world.__v = v0 + 1;   /* the trick detector's worker gets the new world on the next reset */ world.baseTitle = world.title; if (!ME.official && MY_MAP) world.title = MY_MAP.name; else if (!ME.official && COMM_MAP) world.title = `${COMM_MAP.name} by ${COMM_MAP.by}`; drone.world = world; detector.reset();
   buildObjects(merge); ME.pieces = S.mapPieces(world); ME.byOid = new Map(); for (const p of ME.pieces) for (const id of p.ids) ME.byOid.set(id, p);
   const keep = new Set(ME.pieces.map(meId)); for (const id of [...ME.sel]) if (!keep.has(id)) ME.sel.delete(id); meSelBox();
 }
