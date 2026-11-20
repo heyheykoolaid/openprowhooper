@@ -107,6 +107,33 @@
     x = await send({ kind: 'labels', name: 'a', payload: { ...lab, ownerVerified: true } }, '8.8.1.3');
     check('a client cannot mark its own labels ownerVerified', x.r.status === 200 && !x.body.ownerVerified); }
 
+  { // the owner's desk (POST /desk): read-only, owner key only, fixed places only, every file cleaned again (2026-11-19)
+    const KEY = 'correct horse battery staple', oenv = () => ({ ...env(), OWNER_KEY: KEY }), seen = [];
+    const files = { 'telemetry/inbox/flight/2026-11-19/1795000000000-0123456789abcdef.json': flight({ id: 'f1', evil: '<x>' }),
+      'telemetry/inbox/labels/2026-11-19/1795000000001-0123456789abcdef.json': { format: 'pro-whooper-flight-labels/1', flight: 'f1', pilot: 'p1', name: 'Rod', ownerVerified: true, labels: [{ t: 1, actual: 'Flip', verdict: 'yes' }] },
+      'telemetry/inbox/feedback/2026-11-18/1795000000002-0123456789abcdef.json': { format: 'pro-whooper-feedback/1', at: 'now', text: 'more trees', name: 'Rod' } };
+    const ghd = async (url, init) => { seen.push({ url, init }); const path = decodeURIComponent(url.split('/contents/')[1].split('?')[0]);
+      if (init && init.method && init.method !== 'GET') return { ok: false, status: 500 };
+      if (files[path]) return { ok: true, status: 200, text: async () => JSON.stringify(files[path]), json: async () => files[path] };
+      if (path === 'telemetry/inbox/flight') return { ok: true, status: 200, json: async () => [{ name: '2026-11-19', type: 'dir', size: 0 }, { name: '../x', type: 'dir' }] };
+      return { ok: false, status: 404 }; };
+    const desk = (body, ip, o = {}) => handle(new Request('https://drop/desk', { method: 'POST', headers: { Origin: o.origin ?? GAME, 'CF-Connecting-IP': ip }, body: JSON.stringify(body) }), o.env || oenv(), ghd);
+    let r = await desk({ key: KEY, op: 'list', path: 'telemetry/inbox/flight' }, '7.7.0.1'); let L = await r.json();
+    check('the owner key lists the shared flights\' days (odd names dropped)', r.status === 200 && L.length === 1 && L[0].name === '2026-11-19' && r.headers.get('Cache-Control') === 'no-store');
+    r = await desk({ key: KEY, op: 'get', path: 'telemetry/inbox/flight/2026-11-19/1795000000000-0123456789abcdef.json' }, '7.7.0.1'); L = await r.json();
+    check('the owner key reads one flight, cleaned again', r.status === 200 && L.id === 'f1' && !('evil' in L));
+    r = await desk({ key: KEY, op: 'getMany', paths: Object.keys(files).concat(['telemetry/inbox/flight/2026-11-19/../../secrets.json']) }, '7.7.0.1'); L = await r.json();
+    check('getMany reads labels (keeping ownerVerified) and feedback, and nothing outside the inbox', r.status === 200 && L[Object.keys(files)[1]].ownerVerified === true && L[Object.keys(files)[2]].text === 'more trees' && L['telemetry/inbox/flight/2026-11-19/../../secrets.json'] === null);
+    for (const path of ['src', 'telemetry/inbox/flight/../../src', 'maps/official', '.github', 'telemetry/inbox/video']) { r = await desk({ key: KEY, op: 'list', path }, '7.7.0.2'); if (r.status !== 400) break; }
+    check('nothing outside the inbox and the leaderboard can be listed', r.status === 400);
+    r = await desk({ key: KEY, op: 'get', path: 'maps/official/moose.json' }, '7.7.0.2'); check('nothing outside them can be read', r.status === 400);
+    r = await desk({ key: KEY, op: 'list', path: 'leaderboard/2026-11-17' }, '7.7.0.2'); check('earlier days of the board can be listed by the owner', r.status === 200);
+    const n0 = seen.length; r = await desk({ key: 'guess', op: 'list', path: 'telemetry/inbox/flight' }, '7.7.0.3'); check('a wrong key reads nothing', r.status === 403 && seen.length === n0);
+    for (let i = 0; i < 5; i++) await desk({ key: 'nope' + i, op: 'list', path: 'leaderboard' }, '7.7.0.4'); r = await desk({ key: KEY, op: 'list', path: 'leaderboard' }, '7.7.0.4'); check('after 5 wrong keys an address waits an hour', r.status === 429);
+    r = await desk({ key: KEY, op: 'list', path: 'leaderboard' }, '7.7.0.5', { origin: 'https://evil.example' }); check('other websites cannot use the desk', r.status === 403);
+    r = await desk({ key: KEY, op: 'list', path: 'leaderboard' }, '7.7.0.6', { env: env() }); check('without OWNER_KEY the desk is closed', r.status === 503);
+    check('the desk never writes', seen.every(c => !c.init || !c.init.method || c.init.method === 'GET')); }
+
   { // RaceGOW: shared tracks, best laps and their ghosts
     require('../src/tricks.js'); require('../src/sim.js'); const RG = require('../src/racegow.js');
     const T = RG.cleanTrack(RG.newTrack({ name: 'Couch Loop', by: 'Tester' })); T.elements.push(RG.newElement('gateSquare', { z: -1 }), RG.newElement('gateCircle', { x: 1, z: -2 }));

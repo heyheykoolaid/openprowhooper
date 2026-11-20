@@ -413,14 +413,26 @@ function judgeOpen() { if (!ghMenus()) return; show('#judgeScreen'); if (!S.MAPS
 function jgWorld(id) {   // the official layout of a map, for re-flying runs posted there
   if (id === MAP_ID && !MAP_EDITS) return activeWorld; if (JG.worlds[id]) return JG.worlds[id];
   const mine = id === MAP_ID ? MAP_EDITS : null; if (mine) S.setMapEdits(id, null); try { JG.worlds[id] = S.MAPS[id].build(); } finally { if (mine) S.setMapEdits(id, mine); } return JG.worlds[id]; }
+// With the owner key and a new relay, the runs come from the last 3 UTC days of the board (POST /desk), not just today's:
+// the board resets at UTC midnight (late afternoon on the west coast), which left nothing to judge for the evening.
+const JG_DAYS = 3;
+const jgB64 = t => { try { return new TextDecoder().decode(Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))); } catch { return ''; } };
+async function jgRecent() {
+  if (JG.pool && Date.now() - JG.pool.at < 120000) return JG.pool.runs; const runs = [];
+  for (let k = 0; k < JG_DAYS; k++) { const day = new Date(Date.now() - k * 86400000).toISOString().slice(0, 10);
+    for (const f of await deskGet('leaderboard/' + day)) { const m = f.type === 'file' && /^(\d{8})-([a-z0-9-]{1,24}?)-([A-Za-z0-9_-]{1,40})-([a-z0-9]{6,40})-(\d{10,16})\.json$/.exec(f.name); if (!m) continue;
+      const name = jgB64(m[3]); if (!/^[A-Za-z0-9_. -]{2,24}$/.test(name)) continue; runs.push({ name, score: +m[1], map: m[2], pilot: m[4], at: +m[5], id: f.name.slice(0, -5), day }); } }
+  runs.sort((a, b) => b.at - a.at); JG.pool = { at: Date.now(), runs }; return runs; }
 async function judgeLoad(id) {
   if (!lbBase()) { JG.msgs[id] = 'Judging needs the online version of the game.'; judgeRender(); return; } if (JG.busy) return; JG.busy = true;
   try {
-  JG.msgs[id] = 'Finding moments to judge…'; judgeRender(); if (!LB.runs || LB.day !== lbToday()) await lbLoad(lbToday());
-  const me = telPilot(), myName = pilotName().toLowerCase(), runs = (LB.runs || []).filter(e => e.map === id && e.id && String(e.name).toLowerCase() !== myName).slice(0, 8), clips = [], W = runs.length ? jgWorld(id) : null;
-  if (runs.length) procShow(`Finding moments to judge on ${lbMapTitle(id)}…`, "Re-flying today's posted runs through the current trick detector", 0.03);
+  JG.msgs[id] = 'Finding moments to judge…'; judgeRender(); let pool = null;
+  if (deskVia() === 'relay') { try { pool = await jgRecent(); JG.recent = true; } catch { pool = null; } }
+  if (!pool) { JG.recent = false; if (!LB.runs || LB.day !== lbToday()) await lbLoad(lbToday()); pool = (LB.runs || []).map(e => ({ ...e, day: LB.day || lbToday() })); }
+  JG.runs = pool; const me = telPilot(), myName = pilotName().toLowerCase(), runs = pool.filter(e => e.map === id && e.id && String(e.name).toLowerCase() !== myName && e.pilot !== me).slice(0, 8), clips = [], W = runs.length ? jgWorld(id) : null;
+  if (runs.length) procShow(`Finding moments to judge on ${lbMapTitle(id)}…`, `Re-flying ${JG.recent ? 'recently' : "today's"} posted runs through the current trick detector`, 0.03);
   for (let i = 0; i < runs.length; i++) { const e = runs[i];
-    try { const r = await fetch(`${lbBase()}/run?day=${LB.day || lbToday()}&id=${encodeURIComponent(e.id)}`); if (!r.ok) continue; const run = await r.json();
+    try { let run; if (JG.recent) run = JSON.parse(await deskGet(`leaderboard/${e.day}/${e.id}.json`, true)); else { const r = await fetch(`${lbBase()}/run?day=${e.day}&id=${encodeURIComponent(e.id)}`); if (!r.ok) continue; run = await r.json(); }
       if (!run || typeof run.name !== 'string' || !run.trace || run.map !== id || run.pilot === me) continue;
       const rows = await FlightLog.unpack(run.trace); if (!Array.isArray(rows) || rows.length < TRACE_HZ || !rows.every(x => Array.isArray(x) && x.length >= 27 && x.every(Number.isFinite))) continue;
       await new Promise(res => setTimeout(res, 40));
@@ -434,21 +446,21 @@ async function judgeLoad(id) {
     procShow(`Finding moments to judge on ${lbMapTitle(id)}…`, `${i + 1} of ${runs.length} runs re-flown`, (i + 1) / runs.length); }
   if (runs.length) procHide();
   JG.byMap[id] = clips.sort((a, b) => b.rank - a.rank || a.t - b.t).slice(0, 30);
-  JG.msgs[id] = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(id)} today yet.`;
+  JG.msgs[id] = runs.length ? '' : `No runs from other pilots posted on ${lbMapTitle(id)} ${JG.recent ? `in the last ${JG_DAYS} days` : 'today yet'}.`;
   } finally { JG.busy = false; } judgeRender();
 }
 function judgeView(d) { const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden); JG.view = ids[(ids.indexOf(JG.view) + d + ids.length) % ids.length]; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); }
 function judgeRender() {
   const el = $('#judgePanel'); if (!el) return; const ids = Object.keys(S.MAPS).filter(k => !S.MAPS[k].hidden), V = S.MAPS[JG.view] ? JG.view : MAP_ID, C = JG.byMap[V] || [], th = (window.PW_MAPTHUMBS || {})[V], myName = pilotName().toLowerCase();
-  const count = id => (LB.runs || []).filter(e => e.map === id && String(e.name).toLowerCase() !== myName).length;
+  const pool = JG.runs || LB.runs, count = id => (pool || []).filter(e => e.map === id && String(e.name).toLowerCase() !== myName).length, when = JG.recent ? `in the last ${JG_DAYS} days` : 'today';
   el.innerHTML = `<h2>JUDGE THE COMMUNITY</h2>
-    <p class="note">Moments from today's posted runs where the game is unsure, or now calls something different from what it called during the run. Pick a map, open a moment, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
-    <div class="lbCar"><button class="mapArrow" data-jg="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${LB.runs ? `${count(V)} run${count(V) === 1 ? '' : 's'} from other pilots today` : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-jg="next" aria-label="next map">›</button></div>
-    <div class="mapDots">${ids.map(id => `<button data-jgmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${LB.runs ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}</div>
+    <p class="note">Moments from ${JG.recent ? `the last ${JG_DAYS} days' posted runs` : "today's posted runs"} where the game is unsure, or now calls something different from what it called during the run. Pick a map, open a moment, watch it, and say what it really was (✓, ✗ or "it was actually…"). Your verdicts count as reviewer labels, which the game learns from every week. Your own runs are not in the list.</p>
+    <div class="lbCar"><button class="mapArrow" data-jg="prev" aria-label="previous map">‹</button><div class="lbHead" ${th ? `style="background-image:url('${th}')"` : ''}><b>${esc(lbMapTitle(V))}</b><small>${pool ? `${count(V)} run${count(V) === 1 ? '' : 's'} from other pilots ${when}` : 'loading…'}${V === MAP_ID ? ' · you are here' : ''}</small></div><button class="mapArrow" data-jg="next" aria-label="next map">›</button></div>
+    <div class="mapDots">${ids.map(id => `<button data-jgmap="${id}" class="${id === V ? 'on' : ''}" title="${esc(lbMapTitle(id))}${pool ? ' · ' + count(id) : ''}" aria-label="${esc(lbMapTitle(id))}"></button>`).join('')}</div>
     ${C.length ? (() => { const hide = store.get('jgHideDone', false), nDone = C.filter(c => JG.done[jgKey(c)]).length, rows = C.map((c, i) => [c, i]).filter(([c]) => !(hide && JG.done[jgKey(c)]));   // owner: a toggle for the judged ones
       return `<div class="row jgTog"><button data-jg="hidedone" class="ghost" ${nDone ? '' : 'disabled'}>${hide ? `Show judged (${nDone})` : `Hide judged (${nDone})`}</button><span class="note">${C.length - nDone} still to judge</span></div>`
         + (rows.length ? `<table class="lbT"><tr><th>Pilot</th><th>Call</th><th>Why it needs a judge</th><th></th></tr>${rows.map(([c, i]) => `<tr data-judge="${i}" title="Open this moment"><td>${esc(c.of)}</td><td>${esc(c.name)}</td><td>${esc(c.why)}</td><td>${JG.done[jgKey(c)] ? '✓ judged' : '▶'}</td></tr>`).join('')}</table>` : '<p class="note">All of these are judged. Thanks!</p>'); })()
-      : `<p class="note">${esc(JG.msgs[V] || (JG.byMap[V] ? "Nothing to judge right now: every call in today's runs here still agrees, and the game is sure of each." : 'Loading…'))}</p>`}
+      : `<p class="note">${esc(JG.msgs[V] || (JG.byMap[V] ? "Nothing to judge right now: every call in the runs here still agrees, and the game is sure of each." : 'Loading…'))}</p>`}
     ${V !== MAP_ID && C.length ? `<p class="note">These were flown on ${esc(lbMapTitle(V))}: opening one switches your map there.</p>` : ''}
     <div class="row"><button data-jg="refresh">↻ Look again</button><button data-jg="close" class="primary">Back</button></div>`;
 }
@@ -484,34 +496,87 @@ async function lbWatch() {
 }
 
 // ============================================================ Flight desk (the project owner's view of shared flights)
-// Shown only when the pilot name is heyheykoolaid, and it only WORKS with a GitHub token (Options) that can read the
-// project's private data repo: the name opens the door, the token is the key. Flights are read straight from GitHub
-// with that token; nothing here goes through the public relay. Reviewing one sends reviewer labels through the drop-off.
-const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {} };
-const deskGet = async (path, raw) => { const r = await fetch(`https://api.github.com/repos/${desk.repo}/contents/${path}`, { headers: { 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28' } }); if (!r.ok) throw new Error(String(r.status)); return raw ? r.text() : r.json(); };
-function deskOpen() { if (!ghMenus()) return; show('#deskScreen'); deskRender(); if (!desk.list && gh.token) deskLoad(); }
+// Shown only on the owner's menus. Since 2026-11-19 it reads through the relay with the owner key (POST /desk: read-only,
+// the inbox and the board only, every file cleaned again), so no GitHub token is needed in the browser. With an older
+// relay, or no owner key confirmed, it falls back to the GitHub token from Options (Contents: Read on the data repo).
+// Tabs: shared flights (with the labels already given on each) and pilots' feedback. Reviewing a flight sends reviewer
+// labels through the drop-off as before.
+const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
+const deskVia = () => lbBase() && store.get('ownerKey', '') && (store.get('ownerOk', null) || {}).k && !desk.oldRelay ? 'relay' : gh.token ? 'github' : null;
+async function deskRelay(body) {
+  const r = await fetch(`${lbBase()}/desk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: store.get('ownerKey', ''), ...body }) });
+  if (r.status === 400) { const t = await r.text(); if (/not a Pro Whooper upload/.test(t)) { desk.oldRelay = true; throw new Error('old'); } throw new Error('400'); }
+  if (!r.ok) throw new Error(String(r.status)); return r.json(); }
+async function deskGh(path, raw) { const r = await fetch(`https://api.github.com/repos/${desk.repo}/contents/${path}`, { headers: { 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28' } }); if (!r.ok) throw new Error(String(r.status)); return raw ? r.text() : r.json(); }
+// a folder's entries ([{ name, type, size }]) or one file (raw: its text)
+const deskGet = async (path, raw) => {
+  if (deskVia() === 'relay') { try { const j = await deskRelay(raw ? { op: 'get', path } : { op: 'list', path }); return raw ? JSON.stringify(j) : j; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
+  if (!gh.token) throw new Error('none'); return deskGh(path, raw); };
+// many files at once: { path: parsed file or null }
+async function deskGetMany(paths) { const out = {};
+  if (deskVia() === 'relay') { try { for (let i = 0; i < paths.length; i += 40) Object.assign(out, await deskRelay({ op: 'getMany', paths: paths.slice(i, i + 40) })); return out; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
+  for (const p of paths) { try { out[p] = JSON.parse(await deskGh(p, true)); } catch { out[p] = null; } } return out; }
+const deskErr = err => err.message === 'old' ? 'The drop-off relay is an older version: redeploy it in Cloudflare (docs/DROPOFF-SETUP.md) to read this with your owner key.' : err.message === 'none' ? 'Save your owner key in Options → Owner (or a GitHub token that can read the data repo).'
+  : err.message === '403' && deskVia() !== 'github' ? 'The relay did not accept your owner key.' : err.message === '429' ? 'Too many requests (or wrong keys) from here: wait a little.' : err.message === '401' ? 'GitHub rejected the token (expired or mistyped).' : err.message === '404' && deskVia() === 'github' ? `That token cannot see ${desk.repo}. It needs "Contents: Read" on that repository.` : 'Could not read the shared data just now.';
+function deskOpen() { if (!ghMenus()) return; show('#deskScreen'); deskRender(); if (desk.tab === 'feedback') { if (!desk.fb && deskVia()) deskFeedback(); } else if (!desk.list && deskVia()) deskLoad(); }
 async function deskLoad() {
-  if (desk.busy) return; desk.busy = true; desk.msg = 'Reading the data repo…'; deskRender();
+  if (desk.busy) return; desk.busy = true; desk.msg = 'Reading the shared flights…'; deskRender();
   try { const days = (await deskGet('telemetry/inbox/flight')).filter(x => x.type === 'dir' && /^\d{4}-\d\d-\d\d$/.test(x.name)).map(x => x.name).sort().reverse().slice(0, 5), list = [];
     for (const day of days) for (const f of await deskGet('telemetry/inbox/flight/' + day)) if (f.type === 'file' && /^\d+-[0-9a-f]+\.json$/.test(f.name)) list.push({ day, file: f.name, size: f.size, at: +f.name.split('-')[0] });
     list.sort((a, b) => b.at - a.at); desk.list = list.slice(0, 120); desk.msg = ''; }
-  catch (err) { desk.list = null; desk.msg = err.message === '401' ? 'GitHub rejected the token (expired or mistyped).' : err.message === '404' ? `That token cannot see ${desk.repo}. It needs "Contents: Read" on that repository.` : 'Could not read the data repo just now.'; }
-  desk.busy = false; deskRender(); deskDetails();
+  catch (err) { desk.list = null; desk.msg = deskErr(err); }
+  desk.busy = false; deskRender(); await deskDetails(); deskLabels();
 }
-// fill in who flew what, a few files at a time (each flight file is read once and remembered while the page is open)
-async function deskDetails() { for (const it of (desk.list || []).slice(0, 40)) { if (desk.info[it.file] || $('#deskScreen').classList.contains('hide')) continue;
-    try { const p = JSON.parse(await deskGet(`telemetry/inbox/flight/${it.day}/${it.file}`, true)); if (!p || p.format !== 'pro-whooper-flight/1') throw 0;
-      desk.info[it.file] = { p, name: typeof p.name === 'string' ? p.name.slice(0, 24) : '', map: String(p.map || '').slice(0, 24), calls: Array.isArray(p.events) ? p.events.filter(e => e && e.name !== 'Crash').length : 0, secs: p.summary && Number.isFinite(p.summary.seconds) ? p.summary.seconds : null, craft: p.craft && p.craft.names && typeof p.craft.names.frame === 'string' ? p.craft.names.frame.slice(0, 40) : '', flagged: Array.isArray(p.events) ? p.events.filter(e => e && e.flagged).length : 0 }; }
-    catch { desk.info[it.file] = { bad: true }; } deskRender(); } }
+// fill in who flew what, 40 files at a time (each flight file is read once and remembered while the page is open)
+async function deskDetails() { const todo = (desk.list || []).slice(0, 60).filter(it => !desk.info[it.file]);
+  for (let i = 0; i < todo.length; i += 20) { if ($('#deskScreen').classList.contains('hide')) return; const part = todo.slice(i, i + 20);
+    let got = {}; try { got = await deskGetMany(part.map(it => `telemetry/inbox/flight/${it.day}/${it.file}`)); } catch { /* shown as unreadable */ }
+    for (const it of part) { const p = got[`telemetry/inbox/flight/${it.day}/${it.file}`];
+      desk.info[it.file] = p && p.format === 'pro-whooper-flight/1' ? { p, id: typeof p.id === 'string' ? p.id : '', name: typeof p.name === 'string' ? p.name.slice(0, 24) : '', map: String(p.map || '').slice(0, 24), calls: Array.isArray(p.events) ? p.events.filter(e => e && e.name !== 'Crash').length : 0, secs: p.summary && Number.isFinite(p.summary.seconds) ? p.summary.seconds : null, craft: p.craft && p.craft.names && typeof p.craft.names.frame === 'string' ? p.craft.names.frame.slice(0, 40) : '', flagged: Array.isArray(p.events) ? p.events.filter(e => e && e.flagged).length : 0 } : { bad: true }; }
+    deskRender(); } }
+// the labels already given on each listed flight (the pilot's own and reviewers'), from the label files of the same days
+// and the day after; a label file never changes, so its summary is kept between visits (store 'deskLabs')
+const deskLabOne = l => { const a = String(l.actual || '').slice(0, 40), t = String(l.target || '').slice(0, 40);
+  return a === 'not a trick' ? `✗ ${t}` : t && a && t !== a ? `${t} → ${a}` : `✓ ${a || t}`; };
+async function deskLabels() {
+  const days = new Set(); for (const it of desk.list || []) { days.add(it.day); const d = new Date(it.day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); days.add(d.toISOString().slice(0, 10)); }
+  const want = [];
+  for (const day of [...days].sort().reverse()) { if (desk.labDays[day]) continue;
+    try { const L = await deskGet('telemetry/inbox/labels/' + day); desk.labDays[day] = true; for (const f of L) if (f.type === 'file' && /^\d+-[0-9a-f]+\.json$/.test(f.name) && !desk.labs[f.name]) want.push({ day, file: f.name }); } catch { /* try again next refresh */ } }
+  for (let i = 0; i < want.length; i += 40) { if ($('#deskScreen').classList.contains('hide')) break; const part = want.slice(i, i + 40); let got = {};
+    try { got = await deskGetMany(part.map(w => `telemetry/inbox/labels/${w.day}/${w.file}`)); } catch { break; }
+    for (const w of part) { const p = got[`telemetry/inbox/labels/${w.day}/${w.file}`]; if (!p || !Array.isArray(p.labels)) { desk.labs[w.file] = { bad: 1 }; continue; }
+      const L = p.labels.filter(l => l && !l.undone && l.actual && l.actual !== 'unlabelled');
+      desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), at: +w.file.split('-')[0] }; }
+    const keys = Object.keys(desk.labs); if (keys.length > 900) for (const k of keys.sort((a, b) => (desk.labs[a].at || 0) - (desk.labs[b].at || 0)).slice(0, keys.length - 900)) delete desk.labs[k];
+    store.set('deskLabs', desk.labs); deskRender(); } }
+const deskLabsFor = id => id ? Object.values(desk.labs).filter(x => x && x.f === id) : [];
+// pilots' feedback (Options → Send feedback), newest first, the last 7 days
+async function deskFeedback() {
+  if (desk.busy) return; desk.busy = true; desk.fbMsg = 'Reading feedback…'; deskRender();
+  try { const days = (await deskGet('telemetry/inbox/feedback')).filter(x => x.type === 'dir' && /^\d{4}-\d\d-\d\d$/.test(x.name)).map(x => x.name).sort().reverse().slice(0, 7), paths = [];
+    for (const day of days) for (const f of await deskGet('telemetry/inbox/feedback/' + day)) if (f.type === 'file' && /^\d+-[0-9a-f]+\.json$/.test(f.name)) paths.push(`telemetry/inbox/feedback/${day}/${f.name}`);
+    paths.sort((a, b) => +b.split('/').pop().split('-')[0] - +a.split('/').pop().split('-')[0]); const got = await deskGetMany(paths.slice(0, 120));
+    desk.fb = paths.slice(0, 120).map(p => ({ at: +p.split('/').pop().split('-')[0], f: got[p] })).filter(x => x.f && typeof x.f.text === 'string'); desk.fbMsg = desk.fb.length ? '' : 'No feedback in the last 7 days.'; }
+  catch (err) { desk.fb = null; desk.fbMsg = deskErr(err); }
+  desk.busy = false; deskRender(); }
 function deskRender() {
-  const el = $('#deskPanel'); if (!el) return; const L = desk.list || [], done = store.get('deskDone', {});
+  const el = $('#deskPanel'); if (!el) return; const L = desk.list || [], done = store.get('deskDone', {}), via = deskVia(), fbT = desk.tab === 'feedback';
+  const src = via === 'relay' ? 'through the drop-off with your owner key' : via === 'github' ? `from <b>${esc(desk.repo)}</b> with your GitHub token` : '';
   el.innerHTML = `<div class="row" style="justify-content:space-between"><h2>Flight desk</h2><button data-desk="close">Back</button></div>
-    <p class="note">Flights pilots chose to share, read from <b>${esc(desk.repo)}</b> with your GitHub token. Open one to watch it and judge its tricks: your verdicts are sent as reviewer labels, separate from the pilot's own.</p>
-    ${!gh.token ? '<p class="warn">Add a GitHub token in Options first: one that can read that repository ("Contents: Read"). It stays in this browser.</p>' : ''}
-    <div class="row"><button data-desk="refresh" ${gh.token ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.msg || (L.length ? `${L.length} flights, newest first` : ''))}</span></div>
-    <div class="deskList"><table class="lbT"><tr><th>When</th><th>Pilot</th><th>Map</th><th>Whoop</th><th>Length</th><th>Calls</th><th></th></tr>
-    ${L.map(it => { const i = desk.info[it.file], when = new Date(it.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      return `<tr data-deskfile="${esc(it.file)}" class="${done[it.file] ? 'me' : ''}"><td>${esc(when)}</td><td>${i && !i.bad ? esc(i.name || '(no name)') : '…'}</td><td>${i && !i.bad ? esc(lbMapTitle(i.map)) : ''}</td><td>${i && !i.bad ? esc(i.craft) : ''}</td><td>${i && i.secs ? fmtT(i.secs) : ''}</td><td>${i && !i.bad ? i.calls + (i.flagged ? ` · ${i.flagged} flagged` : '') : i && i.bad ? 'unreadable' : ''}</td><td>${done[it.file] ? '✓ reviewed' : ''}</td></tr>`; }).join('')}</table></div>`;
+    <div class="row"><button data-desk="tab-flights" class="${fbT ? 'ghost' : 'primary'}">Shared flights</button><button data-desk="tab-feedback" class="${fbT ? 'primary' : 'ghost'}">Feedback</button></div>
+    ${!via ? '<p class="warn">Save your owner key in Options → Owner. (An older drop-off relay needs a GitHub token in Options instead, one that can read the data repo.)</p>' : ''}
+    ${fbT ? `<p class="note">What pilots sent with "Send feedback", read ${src}. Newest first, the last 7 days.</p>
+    <div class="row"><button data-desk="refresh" ${via ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.fbMsg || (desk.fb ? `${desk.fb.length} messages` : ''))}</span></div>
+    <div class="deskList">${(desk.fb || []).map(x => { const f = x.f, c = f.context && typeof f.context === 'object' ? f.context : {}, when = new Date(x.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<div class="deskFb"><div class="note"><b>${esc(String(f.name || '(no name)').slice(0, 24))}</b> · ${esc(when)} · ${esc(String(f.category || '').slice(0, 30))}${c.screen ? ' · ' + esc(String(c.screen).slice(0, 20)) : ''}${c.map ? ' · ' + esc(lbMapTitle(String(c.map).slice(0, 24))) : ''}</div><div>${esc(f.text.slice(0, 4000))}</div></div>`; }).join('')}</div>`
+    : `<p class="note">Flights pilots chose to share, read ${src}. Open one to watch it and judge its tricks: your verdicts are sent as reviewer labels, separate from the pilot's own. The Labels column is what was already said about it (hover for the list).</p>
+    <div class="row"><button data-desk="refresh" ${via ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.msg || (L.length ? `${L.length} flights, newest first` : ''))}</span></div>
+    <div class="deskList"><table class="lbT"><tr><th>When</th><th>Pilot</th><th>Map</th><th>Whoop</th><th>Length</th><th>Calls</th><th>Labels</th><th></th></tr>
+    ${L.map(it => { const i = desk.info[it.file], when = new Date(it.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), labs = i && !i.bad ? deskLabsFor(i.id) : [];
+      const own = labs.filter(x => !x.rv).reduce((n, x) => n + x.L.length, 0), rev = labs.filter(x => x.rv), rvN = rev.reduce((n, x) => n + x.L.length, 0), tip = labs.map(x => `${x.by || '?'}${x.rv ? ' (reviewer)' : ''}: ${x.L.join(', ')}`).join('\n');
+      const lab = own || rvN ? `<span title="${esc(tip)}">${own ? `pilot ${own}` : ''}${own && rvN ? ' · ' : ''}${rvN ? `reviewed ${rvN} (${esc([...new Set(rev.map(x => x.by || '?'))].join(', '))})` : ''}</span>` : '';
+      return `<tr data-deskfile="${esc(it.file)}" class="${done[it.file] ? 'me' : ''}"><td>${esc(when)}</td><td>${i && !i.bad ? esc(i.name || '(no name)') : '…'}</td><td>${i && !i.bad ? esc(lbMapTitle(i.map)) : ''}</td><td>${i && !i.bad ? esc(i.craft) : ''}</td><td>${i && i.secs ? fmtT(i.secs) : ''}</td><td>${i && !i.bad ? i.calls + (i.flagged ? ` · ${i.flagged} flagged` : '') : i && i.bad ? 'unreadable' : ''}</td><td>${lab}</td><td>${done[it.file] ? '✓ reviewed' : ''}</td></tr>`; }).join('')}</table></div>`}`;
 }
 async function deskPick(file) {
   const it = (desk.list || []).find(x => x.file === file), i = desk.info[file]; if (!it || !i || i.bad) return; const p = i.p;
@@ -521,12 +586,13 @@ async function deskPick(file) {
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-desk]'), row = e.target.closest('[data-deskfile]');
-  if (b) { const a = b.dataset.desk; if (a === 'close') show('#toolsScreen'); if (a === 'refresh') { desk.list = null; deskLoad(); } return; }
+  if (b) { const a = b.dataset.desk; if (a === 'close') show('#toolsScreen'); if (a === 'refresh') { if (desk.tab === 'feedback') { desk.fb = null; deskFeedback(); } else { desk.list = null; desk.labDays = {}; deskLoad(); } }
+    if (a === 'tab-flights' || a === 'tab-feedback') { desk.tab = a.slice(4); deskOpen(); } return; }
   if (row) deskPick(row.dataset.deskfile);
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'desk') deskOpen();
 });
 // came back from a map change made to open a flight: carry on to it
-setTimeout(async () => { const f = store.get('deskPending', null); if (!f) return; store.set('deskPending', null); if (!ghMenus() || !gh.token) return; deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); if (desk.info[f]) deskPick(f); }, 1500);
+setTimeout(async () => { const f = store.get('deskPending', null); if (!f) return; store.set('deskPending', null); if (!ghMenus() || !deskVia()) return; deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); if (desk.info[f]) deskPick(f); }, 1500);
 
 document.addEventListener('click', e => {
   { const pb = e.target.closest('[data-lbplay]'); if (pb) { lbPlay(pb.dataset.lbplay, pb.dataset.lbmap); return; } }
@@ -539,7 +605,7 @@ document.addEventListener('click', e => {
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'board') lbOpen('menu'); if (act && act.dataset.act === 'judge') judgeOpen();
   const jg = e.target.closest('[data-jg]'), jr = e.target.closest('[data-judge]');
   const jm = e.target.closest('[data-jgmap]'); if (jm) { JG.view = jm.dataset.jgmap; judgeRender(); if (!JG.byMap[JG.view]) judgeLoad(JG.view); return; }
-  if (jg) { const a = jg.dataset.jg; if (a === 'hidedone') { store.set('jgHideDone', !store.get('jgHideDone', false)); judgeRender(); return; } if (a === 'close') { mode = 'menu'; show('#mainMenu'); } if (a === 'prev' || a === 'next') judgeView(a === 'next' ? 1 : -1); if (a === 'refresh') { delete JG.byMap[JG.view]; LB.runs = null; judgeLoad(JG.view); } return; }
+  if (jg) { const a = jg.dataset.jg; if (a === 'hidedone') { store.set('jgHideDone', !store.get('jgHideDone', false)); judgeRender(); return; } if (a === 'close') { mode = 'menu'; show('#mainMenu'); } if (a === 'prev' || a === 'next') judgeView(a === 'next' ? 1 : -1); if (a === 'refresh') { delete JG.byMap[JG.view]; LB.runs = null; JG.pool = null; judgeLoad(JG.view); } return; }
   if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };

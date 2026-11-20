@@ -80,6 +80,12 @@ The same `OWNER_KEY` secret is what the game checks (`POST /owner`) before showi
 reviewer labels so the learners can tell them from anyone else's. After redeploying the worker, type the key once in the game:
 Options → Owner (shown when your pilot name is heyheykoolaid). Until the worker is redeployed the game falls back to the name.
 
+## The owner's desk: shared flights, labels and feedback with the owner key (2026-11-19)
+`POST /desk` lets the game's Flight desk, its Feedback tab and Judge the community read the shared data with the owner key, so
+the owner needs no GitHub token in the browser. It is read-only and reaches only `telemetry/inbox/flight|labels|feedback/` and
+`leaderboard/` (any day), through the relay's own GITHUB_TOKEN (Contents: Read on the data repo, which it already has). Nothing
+to set up beyond redeploying the worker; until then the desk uses the GitHub token from Options if one is saved.
+
 ## Publishing official maps through the drop-off (owner only)
 The Map Editor's "Publish for everyone" (Official map mode, pilot name heyheykoolaid) can go through this relay instead
 of a GitHub token in the browser. The relay commits `maps/official/<map>.json` to the game repo; GitHub Pages rebuilds.

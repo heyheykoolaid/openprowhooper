@@ -25,6 +25,10 @@
 //     them (file names only), GET /track?id= returns one checked again; a best lap (kind 'racetime', with its ghost) as
 //     racetimes/<track hash>/<lap ms>-<name>-<pilot>-<time>.json, GET /raceboard?track= is each pilot's best from the
 //     file names, GET /ghost?track=&id= returns one lap. Nothing outside tracks/ and racetimes/ can be read that way;
+//   - the owner's desk: POST /desk with the owner key reads (never writes) shared flights, review labels and feedback
+//     under telemetry/inbox/{flight,labels,feedback}/ and posted runs of any day under leaderboard/, so the owner's
+//     Flight desk, feedback inbox and Judge the community need no GitHub token in the browser. Paths are checked against
+//     fixed patterns, every file goes through clean() again, nothing is cached; wrong keys are slowed like /official's.
 //   - ENABLED = "0" switches it off without deleting anything.
 // Variables: GITHUB_TOKEN (secret), GITHUB_REPO "owner/repo", optional GITHUB_BRANCH, ALLOW_ORIGINS (comma separated,
 // default https://heyheykoolaid.github.io), PER_IP_HOUR (30), DAILY_CAP (800), ENABLED. Optional KV binding LIMITS makes
@@ -239,6 +243,43 @@ async function ownerCheck(request, env, reply, origin, allowed) {
   if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
   return reply(200, 'owner');
 }
+// POST /desk { key, op: 'list' | 'get' | 'getMany', path | paths }: the owner reading the project's shared data from the
+// game (Flight desk, feedback, earlier days' board runs). Read-only, and only these places:
+const DESK_DAY = '\\d{4}-\\d\\d-\\d\\d';
+const DESK_LIST = new RegExp(`^(telemetry/inbox/(flight|labels|feedback)(/${DESK_DAY})?|leaderboard(/${DESK_DAY})?)$`);
+const DESK_FILE = new RegExp(`^telemetry/inbox/(flight|labels|feedback)/${DESK_DAY}/\\d{10,16}-[0-9a-f]{8,32}\\.json$`);
+const DESK_RUN = new RegExp(`^leaderboard/${DESK_DAY}/\\d{8}-[a-z0-9-]{1,24}-[A-Za-z0-9_-]{1,40}-[a-z0-9]{6,40}-\\d{10,16}\\.json$`);
+async function deskApi(request, env, fetchImpl, reply, origin, allowed) {
+  if (!allowed.includes(origin)) return reply(403, 'not from the game');
+  if (!env.OWNER_KEY) return reply(503, 'owner key not set up: add the secret OWNER_KEY in Cloudflare');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000), text = await request.text();
+  if (text.length > 20000) return reply(413, 'too large');
+  let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
+  if (!j || typeof j.key !== 'string' || !j.key || j.key.length > 200 || !['list', 'get', 'getMany'].includes(j.op)) return reply(400, 'bad request');
+  const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
+  if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
+  if (!(await bump(env, `desk:${ip}:${hour}`, 3600, 3000))) return reply(429, 'slow down');
+  const H = { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' }, ref = `?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`;
+  const json = body => reply(200, JSON.stringify(body), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  if (j.op === 'list') {
+    if (typeof j.path !== 'string' || !DESK_LIST.test(j.path)) return reply(400, 'not a place the desk can list');
+    try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${j.path}${ref}`, { headers: { ...H, 'Accept': 'application/vnd.github+json' } });
+      if (r.status === 404) return json([]); if (!r.ok) return reply(502, `GitHub said ${r.status}`);
+      const L = await r.json(); return json(Array.isArray(L) ? L.filter(x => x && (x.type === 'file' || x.type === 'dir') && typeof x.name === 'string' && /^[A-Za-z0-9_.-]{1,160}$/.test(x.name)).map(x => ({ name: x.name, type: x.type, size: +x.size || 0 })) : []); }
+    catch { return reply(502, 'could not reach GitHub'); }
+  }
+  const one = async path => {   // one file, cleaned again as what its folder says it is (null when it is not)
+    if (typeof path !== 'string') return null; const m = DESK_FILE.exec(path), kind = m ? m[1] : DESK_RUN.test(path) ? 'score' : null; if (!kind) return null;
+    const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}${ref}`, { headers: { ...H, 'Accept': 'application/vnd.github.raw+json' } });
+    if (!r.ok) return null; let p; try { p = JSON.parse(await r.text()); } catch { return null; }
+    const verified = kind === 'labels' && p && p.ownerVerified === true, c = clean(kind, p); if (c && verified) c.ownerVerified = true; return c;
+  };
+  if (j.op === 'get') { if (typeof j.path !== 'string' || !(DESK_FILE.test(j.path) || DESK_RUN.test(j.path))) return reply(400, 'not a file the desk can read');
+    try { const c = await one(j.path); return c ? json(c) : reply(404, 'no such file'); } catch { return reply(502, 'could not reach GitHub'); } }
+  if (!Array.isArray(j.paths) || !j.paths.length || j.paths.length > 40) return reply(400, 'give 1 to 40 paths');   // a Worker may make 50 requests per call
+  const out = {}; await Promise.all(j.paths.map(async path => { try { out[path] = await one(path); } catch { out[path] = null; } }));
+  return json(out);
+}
 async function official(request, env, fetchImpl, reply, origin, allowed) {
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (!env.OWNER_KEY) return reply(503, 'publishing is not set up: add the secret OWNER_KEY in Cloudflare');
@@ -270,6 +311,7 @@ async function handle(request, env, fetchImpl = fetch) {
   if (request.method !== 'POST') return reply(405, 'POST only');
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/owner')) return ownerCheck(request, env, reply, origin, allowed);
+  if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/desk')) return deskApi(request, env, fetchImpl, reply, origin, allowed);
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (+(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'too large');
   const text = await request.text(); if (text.length > MAX_BYTES) return reply(413, 'too large');

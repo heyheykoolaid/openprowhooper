@@ -618,9 +618,17 @@ it, sinking 7 m/s or more, no hit, no tumble, pulled out upright under 3.5 m; an
 the Flight desk) sends the decided verdicts as `pro-whooper-flight-labels/1` for THAT flight with `reviewer: true`,
 `by`, `byId`, `runOf`, `src`, `ref` on each label (`reviewerSave`; queued `explicit`, so it goes even with automatic
 sharing off). A guest run never feeds the viewer's own learner and is never stored as their run.
-**Flight desk** (Tools & labs, only when the name is heyheykoolaid): lists shared flights straight from the private data
-repo with the GitHub token from Options (it needs Contents: Read there; the name alone opens nothing), newest first,
-and opens one for review on its own map (switching map and coming back if needed: `store 'deskPending'`).
+**Flight desk** (Tools & labs, the owner's menus): lists shared flights newest first and opens one for review on its own map
+(switching map and coming back if needed: `store 'deskPending'`). **Since 2026-11-19 it reads through the relay with the owner
+key** (`POST /desk` in tools/dropoff-worker.mjs: ops list / get / getMany (≤ 40 files, the free plan's 50 subrequests), read-only,
+only `telemetry/inbox/{flight,labels,feedback}/…` and `leaderboard/<any day>/…`, fixed path patterns, every file through `clean()`
+again (labels keep the relay's own `ownerVerified`), `no-store`, wrong keys slowed like /official's; test/dropoff.js), so no GitHub
+token is needed; `deskVia()` in dropoff.js picks the relay when the owner key is confirmed (`ownerOk.k`), else the GitHub token
+(an old relay answers /desk as a bad upload: `desk.oldRelay`, then the token, or a "redeploy the relay" note). Its **Labels**
+column shows what was already said about each flight (the pilot's own and reviewers', from the label files of that day and the
+next; summaries cached in `store 'deskLabs'`, at most 900), and a **Feedback** tab lists pilots' feedback of the last 7 days.
+**Judge the community** with the relay desk re-flies the last `JG_DAYS` (3) UTC days of posted runs (`jgRecent`), not just
+today's: the board resets at UTC midnight, late afternoon on the west coast. Pilots' board stays today-only.
 
 ## Using the data (tools/signatures.js) and the error log
 `node tools/signatures.js <data folder>` is the first thing to run on new shared data: it re-flies every flight and
