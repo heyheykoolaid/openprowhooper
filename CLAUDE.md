@@ -626,7 +626,12 @@ again (labels keep the relay's own `ownerVerified`), `no-store`, wrong keys slow
 token is needed; `deskVia()` in dropoff.js picks the relay when the owner key is confirmed (`ownerOk.k`), else the GitHub token
 (an old relay answers /desk as a bad upload: `desk.oldRelay`, then the token, or a "redeploy the relay" note). Its **Labels**
 column shows what was already said about each flight (the pilot's own and reviewers', from the label files of that day and the
-next; summaries cached in `store 'deskLabs'`, at most 900), and a **Feedback** tab lists pilots' feedback of the last 7 days.
+next; summaries with their time spans cached in `store 'deskLabs2'`, at most 900), and a **Feedback** tab lists pilots' feedback of
+the last 7 days. **Review queue** tab (owner, 2026-11-19; `deskQueue`, `deskQOpen`): the 40 most pressing unanswered moments in
+the loaded flights: F-flagged calls (100), Q presses (90, opened 4 s before with a note to add the trick), library maybes (60),
+Watcher < 50 % (50+) and < 70 % (30+), minus 3 a day of age, at most 3 per flight; a moment is answered when any label's span
+covers it (−1.5 / +2.5 s) or you judged it here (`store 'deskQDone'`, set when the review closes with a verdict or an added
+trick). Another map reloads into it (`deskPending` { file, t }) and opens the moment there.
 **Judge the community** with the relay desk re-flies the last `JG_DAYS` (3) UTC days of posted runs (`jgRecent`), not just
 today's: the board resets at UTC midnight, late afternoon on the west coast. Pilots' board stays today-only.
 

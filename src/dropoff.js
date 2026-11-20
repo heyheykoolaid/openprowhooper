@@ -501,7 +501,7 @@ async function lbWatch() {
 // relay, or no owner key confirmed, it falls back to the GitHub token from Options (Contents: Read on the data repo).
 // Tabs: shared flights (with the labels already given on each) and pilots' feedback. Reviewing a flight sends reviewer
 // labels through the drop-off as before.
-const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
+const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs2', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
 const deskVia = () => lbBase() && store.get('ownerKey', '') && (store.get('ownerOk', null) || {}).k && !desk.oldRelay ? 'relay' : gh.token ? 'github' : null;
 async function deskRelay(body) {
   const r = await fetch(`${lbBase()}/desk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: store.get('ownerKey', ''), ...body }) });
@@ -547,10 +547,34 @@ async function deskLabels() {
     try { got = await deskGetMany(part.map(w => `telemetry/inbox/labels/${w.day}/${w.file}`)); } catch { break; }
     for (const w of part) { const p = got[`telemetry/inbox/labels/${w.day}/${w.file}`]; if (!p || !Array.isArray(p.labels)) { desk.labs[w.file] = { bad: 1 }; continue; }
       const L = p.labels.filter(l => l && !l.undone && l.actual && l.actual !== 'unlabelled');
-      desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), at: +w.file.split('-')[0] }; }
+      desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), T: L.slice(0, 60).filter(l => Number.isFinite(+l.t)).map(l => [+Math.min(+l.t, Number.isFinite(+l.repStart) ? +l.repStart : +l.t).toFixed(1), +(+l.t).toFixed(1)]), at: +w.file.split('-')[0] }; }
     const keys = Object.keys(desk.labs); if (keys.length > 900) for (const k of keys.sort((a, b) => (desk.labs[a].at || 0) - (desk.labs[b].at || 0)).slice(0, keys.length - 900)) delete desk.labs[k];
-    store.set('deskLabs', desk.labs); deskRender(); } }
+    store.set('deskLabs2', desk.labs); deskRender(); } }
 const deskLabsFor = id => id ? Object.values(desk.labs).filter(x => x && x.f === id) : [];
+// The review queue (owner, 2026-11-19: "list the most pressing things that need reviewing"): moments in the listed flights
+// that nobody has answered yet, most pressing first: a call the pilot flagged with F, a trick the game missed (Q), the trick
+// library's guesses (maybe), then calls the game was unsure of (Watcher < 70 %, the less sure the higher). Newer flights rank a
+// little higher, at most 3 moments per flight so one run cannot fill it, 40 in all. A moment counts as answered when any label
+// (the pilot's or a reviewer's) covers it, or once you have judged it here (store 'deskQDone').
+const DESK_Q = 40, deskQKey = (file, t) => `${file}@${(+t).toFixed(1)}`;
+function deskQueue() {
+  const done = store.get('deskQDone', {}), out = [];
+  for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
+    const answered = t => spans.some(([a, b]) => t >= a - 1.5 && t <= b + 2.5), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
+    for (const e of Array.isArray(p.events) ? p.events : []) { if (!e || !Number.isFinite(e.t) || typeof e.name !== 'string' || e.name === 'Crash' || e.name === 'near') continue;
+      const c = Number.isFinite(e.conf) ? e.conf : 1, pc = `${Math.round(c * 100)} %`;
+      const r = e.flagged ? [100, 'the pilot flagged this call as wrong (F)'] : e.maybe ? [60, "the trick library's guess (a maybe)"] : c < 0.5 ? [50 + (0.5 - c) * 40, `the game was very unsure (${pc})`] : c < 0.7 ? [30 + (0.7 - c) * 50, `the game was unsure (${pc})`] : null;
+      if (r) per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] - age * 3, why: r[1] }); }
+    for (const m of Array.isArray(p.missed) ? p.missed : []) if (m && Number.isFinite(m.t)) per.push({ file: it.file, kind: 'missed', t: m.t, name: '(a trick the game missed)', score: 90 - age * 3, why: 'the pilot pressed Q: the game missed a trick just before this' });
+    out.push(...per.filter(q => !answered(q.t) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }
+  return out.sort((a, b) => b.score - a.score).slice(0, DESK_Q); }
+async function deskQOpen(q) {
+  const it = (desk.list || []).find(x => x.file === q.file), i = desk.info[q.file]; if (!it || !i || i.bad) return; const p = i.p;
+  if (p.map !== MAP_ID) { if (!S.MAPS[p.map]) { desk.msg = 'That flight is on a map this version does not have.'; deskRender(); return; } store.set('deskPending', { file: q.file, t: q.t }); store.set('map', p.map); $('#loading').textContent = 'Loading ' + S.MAPS[p.map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); return; }
+  try { guestOpen(await FlightLog.unpack(p.trace), q.kind === 'call' ? [q.e] : [], { name: p.name || '(no name)', flight: p.id, started: p.started, source: 'desk', ref: `${it.day}/${it.file}`, clip: deskQKey(q.file, q.t) }, true); desk.openFile = q.file;
+    if (q.kind === 'call') { const x = recapItems()[0]; if (x) recapPlay(x); } else { if (recap.play) recapSeek(Math.max(0, q.t - 4)); flash('<b>THE PILOT PRESSED Q HERE</b><small>the game missed a trick just before: add what they flew at the red line</small>', 'near'); }
+    renderRecap(); }
+  catch { desk.msg = 'That flight could not be opened.'; deskRender(); } }
 // pilots' feedback (Options → Send feedback), newest first, the last 7 days
 async function deskFeedback() {
   if (desk.busy) return; desk.busy = true; desk.fbMsg = 'Reading feedback…'; deskRender();
@@ -561,12 +585,17 @@ async function deskFeedback() {
   catch (err) { desk.fb = null; desk.fbMsg = deskErr(err); }
   desk.busy = false; deskRender(); }
 function deskRender() {
-  const el = $('#deskPanel'); if (!el) return; const L = desk.list || [], done = store.get('deskDone', {}), via = deskVia(), fbT = desk.tab === 'feedback';
+  const el = $('#deskPanel'); if (!el) return; const L = desk.list || [], done = store.get('deskDone', {}), via = deskVia(), fbT = desk.tab === 'feedback', qT = desk.tab === 'queue', Q = desk.list ? deskQueue() : []; desk.q = Q;
   const src = via === 'relay' ? 'through the drop-off with your owner key' : via === 'github' ? `from <b>${esc(desk.repo)}</b> with your GitHub token` : '';
   el.innerHTML = `<div class="row" style="justify-content:space-between"><h2>Flight desk</h2><button data-desk="close">Back</button></div>
-    <div class="row"><button data-desk="tab-flights" class="${fbT ? 'ghost' : 'primary'}">Shared flights</button><button data-desk="tab-feedback" class="${fbT ? 'primary' : 'ghost'}">Feedback</button></div>
+    <div class="row"><button data-desk="tab-queue" class="${qT ? 'primary' : 'ghost'}">Review queue${desk.list ? ` (${Q.length})` : ''}</button><button data-desk="tab-flights" class="${fbT || qT ? 'ghost' : 'primary'}">Shared flights</button><button data-desk="tab-feedback" class="${fbT ? 'primary' : 'ghost'}">Feedback</button></div>
     ${!via ? '<p class="warn">Save your owner key in Options → Owner. (An older drop-off relay needs a GitHub token in Options instead, one that can read the data repo.)</p>' : ''}
-    ${fbT ? `<p class="note">What pilots sent with "Send feedback", read ${src}. Newest first, the last 7 days.</p>
+    ${qT ? `<p class="note">The moments most worth your verdict in the last ${L.length || ''} shared flights, most pressing first: calls a pilot flagged (F), tricks the game missed (Q), the trick library's guesses, then calls the game was unsure of. Anything a pilot or reviewer already answered is left out, and so is each one you judge here.</p>
+    <div class="row"><button data-desk="refresh" ${via ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.msg || (desk.list ? (Q.length ? `${Q.length} moments to review` : (Object.keys(desk.info).length < Math.min(60, L.length) ? 'Reading flights…' : 'Nothing waiting. Nice!')) : ''))}</span></div>
+    <div class="deskList"><table class="lbT"><tr><th>When</th><th>Pilot</th><th>Map</th><th>Call</th><th>Why it needs you</th><th></th></tr>
+    ${Q.map((q, k) => { const it = L.find(x => x.file === q.file), i = desk.info[q.file], when = new Date(it.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<tr data-deskq="${k}" title="Open this moment"><td>${esc(when)}</td><td>${esc(i.name || '(no name)')}</td><td>${esc(lbMapTitle(i.map))}</td><td>${esc(q.name)}</td><td>${esc(q.why)}</td><td>▶</td></tr>`; }).join('')}</table></div>`
+    : fbT ? `<p class="note">What pilots sent with "Send feedback", read ${src}. Newest first, the last 7 days.</p>
     <div class="row"><button data-desk="refresh" ${via ? '' : 'disabled'}>↻ Refresh</button><span class="note">${esc(desk.fbMsg || (desk.fb ? `${desk.fb.length} messages` : ''))}</span></div>
     <div class="deskList">${(desk.fb || []).map(x => { const f = x.f, c = f.context && typeof f.context === 'object' ? f.context : {}, when = new Date(x.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       return `<div class="deskFb"><div class="note"><b>${esc(String(f.name || '(no name)').slice(0, 24))}</b> · ${esc(when)} · ${esc(String(f.category || '').slice(0, 30))}${c.screen ? ' · ' + esc(String(c.screen).slice(0, 20)) : ''}${c.map ? ' · ' + esc(lbMapTitle(String(c.map).slice(0, 24))) : ''}</div><div>${esc(f.text.slice(0, 4000))}</div></div>`; }).join('')}</div>`
@@ -587,12 +616,16 @@ async function deskPick(file) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-desk]'), row = e.target.closest('[data-deskfile]');
   if (b) { const a = b.dataset.desk; if (a === 'close') show('#toolsScreen'); if (a === 'refresh') { if (desk.tab === 'feedback') { desk.fb = null; deskFeedback(); } else { desk.list = null; desk.labDays = {}; deskLoad(); } }
-    if (a === 'tab-flights' || a === 'tab-feedback') { desk.tab = a.slice(4); deskOpen(); } return; }
+    if (a === 'tab-flights' || a === 'tab-feedback' || a === 'tab-queue') { desk.tab = a.slice(4); deskOpen(); } return; }
+  const qr = e.target.closest('[data-deskq]'); if (qr) { const q = (desk.q || [])[+qr.dataset.deskq]; if (q) deskQOpen(q); return; }
   if (row) deskPick(row.dataset.deskfile);
   const act = e.target.closest('[data-act]'); if (act && act.dataset.act === 'desk') deskOpen();
 });
 // came back from a map change made to open a flight: carry on to it
-setTimeout(async () => { const f = store.get('deskPending', null); if (!f) return; store.set('deskPending', null); if (!ghMenus() || !deskVia()) return; deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); if (desk.info[f]) deskPick(f); }, 1500);
+setTimeout(async () => { const P = store.get('deskPending', null); if (!P) return; store.set('deskPending', null); if (!ghMenus() || !deskVia()) return; const f = typeof P === 'string' ? P : P.file; if (typeof P !== 'string') desk.tab = 'queue';
+  deskOpen(); for (let k = 0; k < 60 && !(desk.info[f]); k++) await new Promise(r => setTimeout(r, 500)); const i = desk.info[f]; if (!i || i.bad) return;
+  if (typeof P === 'string') { deskPick(f); return; }   // a review-queue moment: the call at that time, or the Q press
+  const e = (i.p.events || []).find(x => x && Number.isFinite(x.t) && Math.abs(x.t - P.t) < 0.05); deskQOpen(e ? { file: f, kind: 'call', e, t: e.t, name: e.name } : { file: f, kind: 'missed', t: P.t }); }, 1500);
 
 document.addEventListener('click', e => {
   { const pb = e.target.closest('[data-lbplay]'); if (pb) { lbPlay(pb.dataset.lbplay, pb.dataset.lbmap); return; } }
