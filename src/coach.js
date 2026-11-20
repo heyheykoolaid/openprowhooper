@@ -234,11 +234,17 @@ function demoObjects() {
   const seen = new Set(); return out.sort((a, b) => a.d - b.d).filter(x => !seen.has(x.name) && seen.add(x.name)).slice(0, 8);
 }
 function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
-  const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0);
-  const tries = open ? [null, null, null] : demoObjects().map(o => o.name);
+  const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0), objs = open ? [] : demoObjects().map(o => o.name);
+  // owner, 2026-11-20: real examples first. A confirmed example of the trick from the trick library (pilots' labels and the demo
+  // GIFs, rebuilt as labels come in: MV.knowledge's `fromLibrary`), flown on this map; the hand-written script only when no learned
+  // flight is called here
+  const lib = MV.kbCan && MV.kbCan(name) && MV.kbExamples(name).length ? [0, 1, 2, 3].map(k => ({ lib: true, obj: objs.length ? objs[k % objs.length] : null })) : [];
+  const tries = [...lib, ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o }))];
   for (let k = 0; k < tries.length; k++) {
-    let m = null; try { m = MV.make(name, world, seed0 + k * 977, tries[k] ? { object: tries[k], wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
-    if (open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5, 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
+    const T = tries[k]; let m = null;
+    try { m = T.lib ? MV.fromLibrary(name, world, seed0 + k * 977, { object: T.obj || undefined, wobble: 0 }) : MV.make(name, world, seed0 + k * 977, T.obj ? { object: T.obj, wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
+    if (T.lib && m.source !== 'library') continue;
+    if (T.lib ? (m.object === 'open air' && !m.inPlace) : open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5, 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
     const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map() }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass }, orig = S.TrickDetector.prototype.update, D0 = detector;
     let got; Object.assign(coach, st);
     try { S.TrickDetector.prototype.update = function (...a) { const r = orig.apply(this, a); const D = this; for (const kk of D.toks || []) { const id = kk.ax + kk.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: kk.ax, dir: kk.dir, raw: kk.raw, t0: kk.t0, t1: kk.t1, inv: kk.inv > (kk.n || 1) * 0.5 }); } }
@@ -247,7 +253,8 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
     finally { S.TrickDetector.prototype.update = orig; }
     const j = coachJudgeAny(coach.alts, 0, true), ok = got.some(e => e.name === name) || j.done >= j.steps.length;
     Object.assign(coach, keep); void D0;
-    if (ok || k === tries.length - 1) return { m, got, j, object: tries[k] || 'open air' };
+    if (T.lib && !ok) continue;   // a learned flight the game does not call here (its reading leaned on the pilot's own object): next
+    if (ok || k === tries.length - 1) return { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib };
   }
   return null;
 }
@@ -268,16 +275,18 @@ function demoBuild(f) {
   // fill in times the judge could not place (the next / previous known ones)
   for (let k = 0; k < demo.steps.length; k++) { const d = demo.steps[k]; if (d.t0 == null) { const prev = demo.steps.slice(0, k).reverse().find(x => x.t1 != null); d.t0 = prev ? prev.t1 : 0.5; } if (d.t1 == null || d.t1 < d.t0) d.t1 = d.t0 + 0.6; }
   for (const d of demo.steps) { d.sticks = stickWords(rows, d.t0, d.t1); }
-  const first = demo.steps.length ? demo.steps[0].t0 : 1, pre = rows.filter(r => r[0] >= first - 1 && r[0] < first);
+  const first = demo.steps.length ? demo.steps[0].t0 : 1, pre = rows.filter(r => r[0] >= first - 1 && r[0] < Math.max(first, 0.4));   // a move that starts at once: its first moments
   const v = pre.length ? pre.reduce((s, r) => s + Math.hypot(r[21], r[23]), 0) / pre.length : 0, h = pre.length ? pre.reduce((s, r) => s + r[2], 0) / pre.length : 0, th = pre.length ? pre.reduce((s, r) => s + r[11], 0) / pre.length : 0;
   demo.setup = `${f.object === 'open air' ? 'Open air, with room all round' : `Line up on the <b>${esc(f.object)}</b>`}: come in at about <b>${v.toFixed(1)} m/s</b>${f.object === 'open air' ? '' : `, <b>${h.toFixed(1)} m</b> up`}, throttle about <b>${pct(th)}%</b>, level.`;
+  const M = f.m, src = f.lib ? `A real flight: ${M.by ? `<b>${esc(M.by)}</b>'s` : 'a pilot\'s'} confirmed ${esc(coach.name)}${M.map && S.MAPS[M.map] ? ` on ${esc(S.MAPS[M.map].title || M.map)}` : ''}${M.when ? `, ${esc(new Date(M.when).toLocaleDateString())}` : ''}, from the trick library.` : 'The bot\'s own version (no confirmed flight of it from pilots works here yet).';
+  demo.setup += `<br><small>${src}</small>`;
   demo.called = f.got.map(e => e.name); demo.cur = -1;
 }
 function coachDemo() {
-  const MV = window.Maneuvers; if (!MV || !MV.LIB[coach.name]) { flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
+  const MV = window.Maneuvers; if (!MV || (!MV.LIB[coach.name] && !(MV.kbCan && MV.kbCan(coach.name) && MV.kbExamples(coach.name).length))) { flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
   const f = demoFly(coach.name); if (!f) { flash(`<b>NO SPOT FOR THE DEMO HERE</b><small>no bar the bot can use on this map: try the playground</small>`, 'near'); return; }
   demoBuild(f); ghostOff(); drone.armed = false;
-  Object.assign(judge, { demo: coach.name, m: f.m, name: coach.name, events: f.got, rows: f.got.rows || null, t: 0, hold: 0, speed: 1, phase: 'demo', cam: 'fpv', source: 'script', ex: null, from: null, orb: null, keepOrb: false });
+  Object.assign(judge, { demo: coach.name, m: f.m, name: coach.name, events: f.got, rows: f.got.rows || null, t: 0, hold: 0, speed: 1, phase: 'demo', cam: 'fpv', source: f.lib ? 'library' : 'script', ex: f.lib ? f.m.ex : null, from: null, orb: null, keepOrb: false });
   const pts = []; for (let t = 0; t < f.m.T; t += 0.05) pts.push(f.m.at(t).pos); const C = S.mul(pts.reduce((a, p) => S.add(a, p), S.v3()), 1 / pts.length);
   judge.look = C; judge.camPos = S.add(C, S.v3(4, 1.2, 4)); judge.lookS = null;
   mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#coachBox').classList.add('hide'); $('#judgeBox').classList.remove('hide'); trailClear(); demoRender();

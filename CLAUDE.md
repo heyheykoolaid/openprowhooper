@@ -659,7 +659,10 @@ and motions"; `coachDemo`, `demoFly`, `demoBuild`): the bot flies the trick on t
 open air 3.5 m above them; a flight its own detector calls) through Judge the Bot's player (`judge.demo`: FPV camera, sticks
 always shown, loops, no verdicts; Space pause, S slow-mo, C camera, Esc / ◂ My turn back to training at the start), and the panel
 gives the setup (speed, height, throttle, the object) and each step with the sticks and throttle the bot used there
-(`stickWords`), lighting up as it is flown. **GoldenEye arrows** (`demoArrows`, `#demoArrows`, owner: "big arrows around the
+(`stickWords`), lighting up as it is flown. **Real examples first** (owner, 2026-11-20): Show me flies a confirmed example of the trick from the trick library (`MV.fromLibrary`,
+the same knowledge as Judge the Bot, rebuilt from labels each week), up to 4 tries on this map's bars, kept only when the game calls it
+here; the hand-written script only after that. The setup line names it ("A real flight: <pilot>'s confirmed <trick> on <map>, <date>",
+escaped) or says it is the bot's own version. **GoldenEye arrows** (`demoArrows`, `#demoArrows`, owner: "big arrows around the
 center of the screen"): the right stick as arrows out from the crosshair (pitch up / down, roll left / right), yaw as a curved
 arrow over it, the throttle as a gauge on the left with PUNCH IT / CUT while it moves; size and colour follow how far the stick goes. The detector worker sends tokens while it is
 on (`DW.wantDbg`); a reset (R, a new flight) restarts the window (`coachClock`). test/coach.js: the bot's flight of each of its
