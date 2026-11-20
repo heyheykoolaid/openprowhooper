@@ -39,6 +39,8 @@ Copy the token. Paste it only into Cloudflare in step 3: not into the game, the 
    | `ALLOW_ORIGINS` | Text | `https://openprowhooper.com,https://www.openprowhooper.com,https://heyheykoolaid.github.io` |
 4. Recommended: **Storage & Databases → KV** → create a namespace `dropoff-limits`; then in the Worker,
    **Settings → Bindings → Add → KV namespace**, variable name `LIMITS`. This makes the daily cap exact.
+   The same namespace also keeps the **review badges** (GET /badges). To keep them apart, create a second namespace
+   `dropoff-badges` and bind it as `BADGES`; without either binding the game shows only the counts built into it.
 5. Copy the Worker's address (`https://prowhooper-dropoff.<you>.workers.dev`).
 
 ## 4. Tell the game

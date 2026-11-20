@@ -223,7 +223,7 @@ async function telRenderStatus() {
   const col = $('#telCollect'); if (col) col.classList.toggle('hide', !(c && c.owner));
 }
 // ---- first start: every pilot picks a name, and says yes or no to sharing, before the menu
-function pilotShowName() { const el = $('#menuPilot'); if (el) el.textContent = pilotName() ? `pilot: ${pilotName()}` : ''; ownerMenus(); if (nameOwner() && !store.get('ownerOk', null)) setTimeout(ownerVerify, 0); }   /* later: lbBase is set up further down this file */
+function pilotShowName() { const el = $('#menuPilot'); if (el) el.innerHTML = pilotName() ? `pilot: ${esc(pilotName())} ${typeof badgeLine === 'function' ? badgeLine(pilotName()) : ''}` : ''; ownerMenus(); if (nameOwner() && !store.get('ownerOk', null)) setTimeout(ownerVerify, 0); }   /* later: lbBase is set up further down this file */
 function pilotAsk() {
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
@@ -327,7 +327,7 @@ async function lbLoad(day) {
   try { const r = await fetch(`${lbBase()}/board?day=${day}`); if (!r.ok) throw 0; const j = await r.json(); LB.runs = Array.isArray(j.runs) ? j.runs.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score)).slice(0, 100) : []; LB.msg = ''; }
   catch { LB.runs = null; LB.msg = 'Could not reach the leaderboard just now.'; }
 }
-const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td><td class="lbPlayC">${e.id ? `<button class="lbPlay" data-lbplay="${esc(e.id)}" data-lbmap="${esc(e.map || '')}" title="Watch this run">▶</button>` : ''}</td></tr>`).join('');
+const lbRows = (runs, max, me) => runs.slice(0, max).map((e, i) => `<tr data-lbrun="${esc(e.id || '')}" class="${me && e.name === me ? 'me' : ''}" title="Click for the scoring sheet and the replay"><td>${i + 1}</td><td>${badgeHtml(e.name)}${esc(e.name)}</td><td>${Number(e.score).toLocaleString()}</td><td class="lbPlayC">${e.id ? `<button class="lbPlay" data-lbplay="${esc(e.id)}" data-lbmap="${esc(e.map || '')}" title="Watch this run">▶</button>` : ''}</td></tr>`).join('');
 function lbResultsBox() {
   const el = $('#lbBox'), L = LB.last; if (!el || !L) return;
   const runs = (LB.runs || []).filter(e => e.map === L.map), name = pilotName(), done = LB.posted[L.id];
@@ -400,6 +400,7 @@ function reviewerBuild() {
 async function reviewerSend(pkg, quiet) {
   const { of, me, labels, stamp } = pkg;
   const go = telQueue('labels', stamp, { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: String(of.flight).slice(0, 40), started: of.started || new Date().toISOString(), pilot: telPilot(), name: me, labels }, true).then(async () => ((await telList()).find(x => x.id === 'labels/' + stamp) || {}).sent ? 'sent' : 'queued').catch(() => 'queued');
+  go.then(() => setTimeout(badgesLoad, 4000));
   if (quiet) return go;
   procShow('Saving your review of this run…', `${labels.length} reviewer label${labels.length === 1 ? '' : 's'} for ${of.name || 'this pilot'}'s flight`, 0.2); procCreep(0.9, 2500);
   const r = await procWait(go, 9000);

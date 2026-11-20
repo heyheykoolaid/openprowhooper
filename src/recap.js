@@ -248,7 +248,7 @@ function recapSave(force) {
   const jobs = [];
   ghEnqueue(`calibration/review/${recap.started.replace(/[:.]/g, '-')}-${recap.id}.json`, pl, `run review: ${pl.run.labels.length} labels`);
   // with flight telemetry on, the labels follow the flight to the drop-off (the flight itself carries the trace)
-  if (tel.on) { jobs.push(telCapture('review')); jobs.push(telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels })); }
+  if (tel.on) { jobs.push(telCapture('review')); setTimeout(badgesLoad, 8000); jobs.push(telQueue('labels', telStamp(recap), { format: 'pro-whooper-flight-labels/1', build: '0.1', flight: recap.id, started: recap.started, pilot: telPilot(), name: pilotName() || null, labels: pl.run.labels })); }
   learnQueue({ id: recap.id, started: recap.started, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, trace: recap.trace, jobs: jobs.filter(Boolean), shared: tel.on });
 }
 // ---- Learning from reviews (Sim.learnFromLabels). When a review is saved, the game re-flies the labelled stretches of

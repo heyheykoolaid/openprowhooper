@@ -18,6 +18,7 @@ const checks = [
   ['vaporwave school map (builds, spawn clear, transitions, orbit and loop on its objects)', () => { const o = run('school.js', []); return /(\d+)\/\1 school map checks/.test(o) ? null : o; }],
   ['flight telemetry packing (round trip, size, same trick calls)', () => { const o = run('flightlog.js', []); return /(\d+)\/\1 flight log checks/.test(o) ? null : o; }],
   ['slide disarm with the real physics (slide, re-arm, fly away)', () => { const o = run('slide.js', []); return /(\d+)\/\1 slide checks/.test(o) ? null : o; }],
+  ['review badges (one per decided moment, once however often sent)', () => { const o = run('badges.js', []); return /(\d+)\/\1 badge checks/.test(o) ? null : o; }],
   ['telemetry drop-off relay (formats, paths, no tokens)', () => { const o = run('dropoff.js', []); return /(\d+)\/\1 drop-off checks/.test(o) ? null : o; }],
   ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['video review tracker (synthetic fisheye footage)', () => { const o = run('vision.js'); const m = o.match(/(\d+)\/(\d+) vision checks/); return m && m[1] === m[2] ? null : o; }],

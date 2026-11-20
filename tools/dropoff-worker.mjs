@@ -121,6 +121,25 @@ function cleanLayer(p) {
   return { moved: Object.fromEntries(Object.entries(M).map(([k, m]) => [k, { dx: +m.dx || 0, dy: +m.dy || 0, dz: +m.dz || 0, ry: +m.ry || 0, s: m.s === undefined ? 1 : +m.s }])),
     removed: R.slice(), added: A.map(a => ({ asset: a.asset, x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, ry: +a.ry || 0, s: a.s === undefined ? 1 : +a.s })) };
 }
+// ---- review badges (owner, 2026-11-20): one review per decided moment a pilot sends (a ✓, ✗, correction or named added trick,
+// own runs and other pilots' alike; undecided touches never count), one per second of one flight however often it is re-sent.
+// Kept in KV (env.BADGES, or the LIMITS namespace): badge:<name> = { n, seen: [flight@second…] } and the list badges:v1 =
+// { since, n: { name: [display, count] } }, served by GET /badges. tools/badges.js counts what came before `since`.
+const BADGE_KEY = 'badges:v1', BADGE_NAME = /^[A-Za-z0-9_. -]{2,24}$/;
+const reviewMoments = labels => { const out = new Set(); for (const l of Array.isArray(labels) ? labels : []) { if (!l || typeof l !== 'object' || l.undone || !(l.verdict === 'yes' || l.verdict === 'no') || !(typeof l.actual === 'string' && l.actual) || !Number.isFinite(+l.t)) continue; out.add(Math.round(+l.t)); } return [...out]; };
+const badgeName = p => { const L = Array.isArray(p.labels) ? p.labels : [], by = (L.find(l => l && typeof l.by === 'string' && l.by) || {}).by || p.name; return typeof by === 'string' && BADGE_NAME.test(by.trim()) ? by.trim() : null; };
+let badgeCache = null;
+async function badgeAdd(env, p) {
+  const kv = env.BADGES || env.LIMITS, name = badgeName(p); if (!kv || !name) return 0; const k = name.toLowerCase();
+  try { const me = JSON.parse((await kv.get('badge:' + k)) || 'null') || { n: 0, seen: [] }, seen = new Set(me.seen); let add = 0;
+    for (const t of reviewMoments(p.labels)) { const key = `${String(p.flight).slice(0, 40)}@${t}`; if (seen.has(key)) continue; seen.add(key); me.seen.push(key); add++; }
+    if (!add) return 0; me.n += add; if (me.seen.length > 4000) me.seen = me.seen.slice(-4000); await kv.put('badge:' + k, JSON.stringify(me));
+    const all = JSON.parse((await kv.get(BADGE_KEY)) || 'null') || { since: Date.now(), n: {} }; all.n[k] = [name, me.n]; await kv.put(BADGE_KEY, JSON.stringify(all)); badgeCache = null; return add;
+  } catch { return 0; } }
+async function badges(env, reply) {
+  const kv = env.BADGES || env.LIMITS; if (!kv) return reply(404, 'badges are not set up: bind a KV namespace as BADGES (or LIMITS)');
+  if (!badgeCache || Date.now() - badgeCache.at > 60000) { let all = null; try { all = JSON.parse((await kv.get(BADGE_KEY)) || 'null'); } catch { /* none yet */ } badgeCache = { at: Date.now(), body: JSON.stringify(all || { since: null, n: {} }) }; }
+  return reply(200, badgeCache.body, { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=60' }); }
 const mem = new Map();   // best-effort counters for this machine: key -> { n, until }
 async function bump(env, key, ttl, limit, shared) {
   if (shared && env.LIMITS) { try { const n = +(await env.LIMITS.get(key)) || 0; if (n >= limit) return false; await env.LIMITS.put(key, String(n + 1), { expirationTtl: ttl }); return true; } catch { return false; } }   // can't count: don't accept
@@ -307,7 +326,7 @@ async function handle(request, env, fetchImpl = fetch) {
   const reply = (status, text, extra) => new Response(text, { status, headers: { ...cors, ...(extra || {}) } });
   if (request.method === 'OPTIONS') return reply(204, '');
   if (env.ENABLED === '0' || !env.GITHUB_TOKEN || !env.GITHUB_REPO) return reply(503, 'closed');
-  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
+  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/badges')) return badges(env, reply); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
   if (request.method !== 'POST') return reply(405, 'POST only');
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/owner')) return ownerCheck(request, env, reply, origin, allowed);
@@ -331,8 +350,9 @@ async function handle(request, env, fetchImpl = fetch) {
   let r; try { r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`, { method: 'PUT',
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' },
     body: JSON.stringify({ message: `drop-off: ${j.kind}`, content: btoa(bin), branch: env.GITHUB_BRANCH || 'main' }) }); } catch { return reply(502, 'could not store it'); }
+  if (r.ok && j.kind === 'labels') await badgeAdd(env, payload);
   if (r.ok && j.kind === 'score') boardCache.delete(day); if (r.ok && j.kind === 'map') mapsCache.delete(payload.base); if (r.ok && j.kind === 'track') rgCache.delete('tracks'); if (r.ok && j.kind === 'racetime') rgCache.delete(`racetimes/${payload.track}`);
   return r.ok ? reply(200, 'ok') : reply(502, 'could not store it');
 }
 export default { fetch: (request, env) => handle(request, env) };
-export { handle, clean, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer, trackFile, lapFile, lapsFrom };
+export { handle, clean, reviewMoments, badgeName, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer, trackFile, lapFile, lapsFrom };

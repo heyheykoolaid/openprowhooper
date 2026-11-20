@@ -732,6 +732,16 @@ run waits 10 s** (`hubDefer`: `reviewerBuild` now, `reviewerSend(pkg, quiet)` la
 sent); own runs save as before. "You judged N today" (`store 'hubDay'`), judged items marked (`store 'hubDone'`). The old screens
 (Flight desk, Judge the community, the board's ▶, Quick check, SKITTLES) all still work. `window.__pw.hub` for tests.
 
+**Review badges** (owner, 2026-11-20; `BADGE_TIERS` / `badgeHtml` / `badgesLoad` in hub.js, `badgeAdd` / `reviewMoments` in
+tools/dropoff-worker.mjs, tools/badges.js, test/badges.js): a pixel Skittle next to a pilot's name by reviews made: 25 Red, 50 Orange,
+100 Yellow, 250 Green, 500 Purple, 1000 Taste the Rainbow (a striped Skittle that shimmers). One review per decided moment sent (✓,
+✗, correction, named added trick; own runs count too, owner: "it all adds up"), once per second of a flight however often it is
+re-sent; the reviewer's name for reviewer labels, else the uploader's. The relay counts as labels arrive (KV `BADGES` or `LIMITS`:
+`badge:<name>` with the moments seen, and the list `badges:v1` { since, n }) and serves GET /badges; what was sent before ships in the
+build (community/badges.json from `node tools/badges.js <data repo> --write` → `window.PW_BADGES`), only the part before `since` added.
+Shown on the main menu's pilot line (with what is left to the next one), the board, the hub's top line and board rows; a call-out
+when you reach a new one (`store 'badgeTier'`). Names, not ids: as on the board, anyone can type any name.
+
 ## Dive, reviewer labels and the Flight desk (2026-11-17)
 **Dive** (was called 41 times in 20 flights, mostly wrongly): one committed descent, nose at least 25° down for 40% of
 it, sinking 7 m/s or more, no hit, no tumble, pulled out upright under 3.5 m; and either beside a wall or building

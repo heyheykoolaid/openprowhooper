@@ -63,7 +63,7 @@ function hubItems(sec) {
   }
   if (sec === 'quick' && !recap.guest && recap.id) for (const x of quickPick()) out.push({ key: `quick:${recap.id}@${x.t.toFixed(1)}`, title: x.e.name, sub: x.e.flag ? 'you flagged it (F)' : x.e.maybe ? "the trick library's guess" : `the game was ${Math.round((x.e.conf ?? 0.75) * 100)} % sure`, map: MAP_ID, pilot: me, tricks: [x.e.name], at: Date.now(), done: false, open: () => { recap.quick = { list: [x.i], k: 0, n: 0 }; openRecap('hub'); recapPlay(x); renderRecap(); } });
   if (sec === 'board') for (const e of LB.runs || []) { if (!e.id || String(e.name).toLowerCase() === me) continue;
-    out.push({ key: 'board:' + e.id, title: `${e.name} · ${Number(e.score).toLocaleString()}`, sub: `${hubMapT(e.map)} · posted today`, map: e.map, pilot: String(e.name).toLowerCase(), tricks: [], at: Date.now(), done: !!HUB.done['board:' + e.id], open: () => hubOpenBoard(e) }); }
+    out.push({ key: 'board:' + e.id, badge: e.name, title: `${e.name} · ${Number(e.score).toLocaleString()}`, sub: `${hubMapT(e.map)} · posted today`, map: e.map, pilot: String(e.name).toLowerCase(), tricks: [], at: Date.now(), done: !!HUB.done['board:' + e.id], open: () => hubOpenBoard(e) }); }
   if (sec === 'queue' && desk.list) for (const q of deskQueue()) { const i = desk.info[q.file] || {}, p = i.p || {};
     out.push({ key: 'queue:' + deskQKey(q.file, q.t), title: q.name, sub: `${p.name || '(no name)'} · ${hubMapT(p.map)} · ${q.why}`, map: p.map, pilot: String(p.name || '').toLowerCase(), tricks: [q.name, q.vote].filter(Boolean), at: (desk.list.find(x => x.file === q.file) || {}).at, done: false, people: hubPeople(i.id, q.t), open: () => deskQOpen(q) }); }
   if (sec === 'flights' && desk.list) { const dn = store.get('deskDone', {});
@@ -144,10 +144,10 @@ function hubRender() {
   else if (sec.id === 'feedback') body = desk.fb ? (desk.fb.length ? desk.fb.map(x => `<div class="hubFb"><small>${esc(new Date(x.at).toLocaleString())}${x.f.name ? ' · ' + esc(String(x.f.name).slice(0, 40)) : ''}</small><p>${esc(String(x.f.text).slice(0, 2000))}</p></div>`).join('') : '<p class="note">No feedback in the last 7 days.</p>') : `<p class="note">${esc(desk.fbMsg || (HUB.busy.feedback ? 'Loading…' : 'Save your owner key in Options → Owner.'))}</p>`;
   else {
     const trickPick = sec.id === 'trick' ? `<div class="row"><select data-hubtrick><option value="">Pick a trick…</option>${abcSort(ALL_TRICKS().map(t => nameOf(t))).map(n => hubOpt(n, HUB.trick)).join('')}</select>${HUB.trick ? `<button data-hub="botfly" class="ghost" title="The bot flies it from the trick library (the playground)">▶ the bot flies it</button>` : ''}</div>` : '';
-    const rows = items.map((it, k) => `<div class="hubRow ${it.done ? 'done' : ''}" data-hubopen="${k}"><div><b>${esc(it.title)}</b><small>${esc(it.sub)}</small></div><span>${HUB.pending.some(p => p.key === it.key) ? '⏳ sending' : it.done ? '✓' : it.people != null && it.people < 3 && it.people > 0 ? `${it.people}/3` : ''}${it.map && it.map !== MAP_ID ? ' <i title="flown on another map: opening it switches map">⇄</i>' : ''} ▶</span></div>`).join('');
+    const rows = items.map((it, k) => `<div class="hubRow ${it.done ? 'done' : ''}" data-hubopen="${k}"><div><b>${it.badge ? badgeHtml(it.badge) : ''}${esc(it.title)}</b><small>${esc(it.sub)}</small></div><span>${HUB.pending.some(p => p.key === it.key) ? '⏳ sending' : it.done ? '✓' : it.people != null && it.people < 3 && it.people > 0 ? `${it.people}/3` : ''}${it.map && it.map !== MAP_ID ? ' <i title="flown on another map: opening it switches map">⇄</i>' : ''} ▶</span></div>`).join('');
     body = trickPick + (all.length ? hubFilterBar(all) : '') + `<div class="hubList" id="hubList">${rows || `<p class="note">${esc(HUB.msg[sec.id] || (HUB.busy[sec.id] ? 'Loading…' : all.length ? 'Nothing matches the filters.' : sec.id === 'trick' && !HUB.trick ? 'Pick a trick above.' : sec.id === 'quick' ? 'Nothing to check in your last run.' : sec.id === 'mine' ? 'No runs yet: fly one (10 s or more) and it shows up here.' : 'Nothing here right now.'))}</p>`}</div>`;
   }
-  el.innerHTML = `<div class="hubTop"><h2>Review Hub</h2><span class="note">You judged <b>${q.n}</b> today</span>${pend ? `<button data-hub="undo" class="ghost" title="Take back your verdicts on ${esc(pend.title)} before they are sent">↶ Undo ${esc(pend.title.slice(0, 30))} (${Math.max(0, Math.ceil((pend.due - Date.now()) / 1000))} s)</button>` : ''}<button data-hub="close">Back</button></div>
+  el.innerHTML = `<div class="hubTop"><h2>Review Hub</h2><span class="note hubMe">${pilotName() ? badgeLine(pilotName()) + ' · ' : ''}You judged <b>${q.n}</b> today</span>${pend ? `<button data-hub="undo" class="ghost" title="Take back your verdicts on ${esc(pend.title)} before they are sent">↶ Undo ${esc(pend.title.slice(0, 30))} (${Math.max(0, Math.ceil((pend.due - Date.now()) / 1000))} s)</button>` : ''}<button data-hub="close">Back</button></div>
     <div class="hubCols"><div class="hubSide">${side}</div><div class="hubMain"><p class="note">${esc(sec.hint)}</p>${body}
     <p class="note hubKeys">In the player: <kbd>Y</kbd> it was that trick · <kbd>N</kbd> not a trick · <kbd>Shift</kbd>+<kbd>→</kbd> next · <kbd>Shift</kbd>+<kbd>←</kbd> previous · <kbd>Esc</kbd> back here${owner ? '' : ''}</p></div></div>`;
   const L = $('#hubList'); if (L) { L.scrollTop = HUB.scroll[sec.id] || 0; L.onscroll = () => { HUB.scroll[sec.id] = L.scrollTop; }; }
@@ -237,3 +237,35 @@ setTimeout(async () => { const P = store.get('hubPending', null); if (!P) return
   hubOpen(P.sec); await hubLoad(P.sec); if (P.sec === 'queue' || P.sec === 'flights' || P.sec === 'disagree') await deskDetails();
   const L = hubFilter(hubItems(P.sec)), k = L.findIndex(it => it.key === P.key); if (k >= 0) hubOpenItem(L, k); }, 1700);
 window.__pw = window.__pw || {}; window.__pw.hub = { state: HUB, items: s => hubItems(s), open: s => hubOpen(s), openItem: (s, k) => { HUB.sec = s; const L = hubFilter(hubItems(s)); return hubOpenItem(L, k); }, keep: () => hubKeepRun(), load: s => hubLoad(s), mine: () => hubLoadMine() };
+
+// ============================================================ Review badges (owner, 2026-11-20): pixel Skittles by reviews
+// One review per decided moment a pilot sends (own runs count too; "it all adds up"). The relay counts them as they arrive
+// (GET /badges: { since, n: { name: [display, count] } }); what was sent before it started counting ships in the build
+// (community/badges.json → window.PW_BADGES, tools/badges.js), and only the part before `since` is added. Names, not ids.
+var BADGE_TIERS = [[25, 'Red Skittle', 'red'], [50, 'Orange Skittle', 'orange'], [100, 'Yellow Skittle', 'yellow'], [250, 'Green Skittle', 'green'], [500, 'Purple Skittle', 'purple'], [1000, 'Taste the Rainbow', 'rainbow']];
+var BADGE = { live: store.get('badgesLive', null), uri: {} };   // var, not const: names are drawn from earlier files at start-up
+function badgeCount(name) {
+  if (!BADGE) return 0; const k = String(name || '').trim().toLowerCase(); if (!k) return 0; const L = BADGE.live, since = L && L.since ? L.since : Infinity, B = (window.PW_BADGES && window.PW_BADGES.n) || {};
+  const old = (B[k] ? B[k][1] : []).filter(x => x[0] < since).reduce((s, x) => s + x[1], 0), now = L && L.n && L.n[k] ? +L.n[k][1] || 0 : 0; return old + now; }
+const badgeTier = n => { let t = -1; BADGE_TIERS.forEach(([m], i) => { if (n >= m) t = i; }); return t; };
+function badgeUri(i) {
+  if (BADGE.uri[i]) return BADGE.uri[i];
+  const rows = ['.....OOOOOO.....', '...OOMMMMMMOO...', '..OMMLLMMMMMMO..', '.OMLLMMMMMMMMMO.', '.OMLMMMMMMMMMMO.', 'OMMMMMMMMMMMMMMO', 'OMMMMMMMMMMMMMMO', 'OMMMMMMMMMMMMMMO', '.ODMMMMMMMMMMDO.', '.ODDMMMMMMMMDDO.', '..ODDDDDDDDDDO..', '...OODDDDDDOO...', '.....OOOOOO.....'];
+  const C = { red: ['#e8202a', '#a3101a', '#ff7a80'], orange: ['#ff7a12', '#b84e06', '#ffb070'], yellow: ['#ffd21f', '#c79a00', '#fff0a0'], green: ['#2fbf3a', '#17821f', '#8ff09a'], purple: ['#7a2bb8', '#4e167e', '#c89af0'] }, band = ['red', 'orange', 'yellow', 'green', 'purple'], c = BADGE_TIERS[i][2];
+  let r = ''; rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '.') return; const p = C[c === 'rainbow' ? band[Math.min(4, Math.floor((x - 1) / 2.8))] : c]; r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${ch === 'O' ? '#1a1014' : ch === 'M' ? p[0] : ch === 'D' ? p[1] : p[2]}"/>`; }));
+  for (const [x, y] of [[7, 3], [8, 3], [9, 3], [6, 4], [7, 5], [8, 5], [9, 6], [6, 7], [7, 7], [8, 7]]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="#fff"/>`;
+  return (BADGE.uri[i] = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 13" shape-rendering="crispEdges">${r}</svg>`)); }
+// the badge next to a name ('' below 25 reviews); big = the larger one for the pilot's own line
+function badgeHtml(name, big) { if (!BADGE_TIERS) return ''; const n = badgeCount(name), t = badgeTier(n); if (t < 0) return '';
+  return `<img class="pwBadge${big ? ' big' : ''}${t === 5 ? ' rainbow' : ''}" src="${badgeUri(t)}" alt="${esc(BADGE_TIERS[t][1])}" title="${esc(BADGE_TIERS[t][1])} · ${n} review${n === 1 ? '' : 's'}">`; }
+function badgeLine(name) { if (!BADGE_TIERS) return ''; const n = badgeCount(name), t = badgeTier(n), next = BADGE_TIERS[t + 1];
+  return `${badgeHtml(name, true)}<span class="pwBadgeTxt">${t >= 0 ? esc(BADGE_TIERS[t][1]) + ' · ' : ''}${n} review${n === 1 ? '' : 's'}${next ? ` · ${next[0] - n} to the ${esc(next[1])}` : ''}</span>`; }
+async function badgesLoad() {
+  if (!lbBase()) return; try { const r = await fetch(`${lbBase()}/badges`); if (!r.ok) return; const j = await r.json(); if (!j || typeof j !== 'object' || !j.n || typeof j.n !== 'object') return;
+    BADGE.live = { since: Number.isFinite(+j.since) ? +j.since : null, n: j.n }; store.set('badgesLive', BADGE.live); } catch { return; }
+  const me = pilotName(), t = badgeTier(badgeCount(me)), was = store.get('badgeTier', null);
+  if (me && was != null && t > was) flash(`<b>YOU EARNED THE ${esc(BADGE_TIERS[t][1].toUpperCase())}</b><small>${badgeCount(me)} reviews: thanks for helping the game learn</small>`);
+  if (me) store.set('badgeTier', t); badgesShow(); }
+function badgesShow() { try { pilotShowName(); } catch { /* not ready */ } if (!$('#lbScreen').classList.contains('hide')) lbRender(); if (!$('#hubScreen').classList.contains('hide')) hubRender(); }
+setTimeout(badgesLoad, 2500); setInterval(() => { if (mode === 'menu') badgesLoad(); }, 300000);
+window.__pw.badges = { count: n => badgeCount(n), tier: n => badgeTier(n), html: n => badgeHtml(n), load: () => badgesLoad(), state: BADGE };
