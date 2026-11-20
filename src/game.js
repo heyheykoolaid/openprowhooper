@@ -48,7 +48,9 @@ if (!store.get('batOff', false)) { tune.batteryLife = false; store.set('batOff',
     if (r && r.center === o[0] && r.max === o[1] && Math.abs(r.expo - o[2]) < 1e-6) Object.assign(r, { center: d[ax].center, max: d[ax].max, expo: d[ax].expo }); }
   tune.ratesV2 = true; store.set('tune', tune); })();
 // the map: chosen on the main menu, remembered, built once at start-up (changing it reloads the page)
-const MAP_ID = S.MAPS[store.get('map', 'moose')] ? store.get('map', 'moose') : 'moose';   // Moose Knuckle Park is the default (pilot, 2026-11-17)
+const MAP_ID = (() => { let id = store.get('map', 'moose');
+  if (id === 'training' && !store.get('coachPending', null)) { id = store.get('trainBack', 'moose'); if (id === 'training') id = 'moose'; store.set('map', id); }   // the Training Room only opens for Train (coach.js)
+  return S.MAPS[id] ? id : 'moose'; })();   // Moose Knuckle Park is the default (pilot, 2026-11-17)
 // The pilot's own maps (Map Editor). Players never change an official map: their map is a named copy of one, a layer over
 // it (store 'myMaps': [{ id, name, base, E, at }]; the one being flown: store 'myMap', only while its base map is loaded).
 // Layouts from before (store 'mapEdits', one per map, which changed the map itself) became "<map> (my layout)" once.

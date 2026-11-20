@@ -111,6 +111,7 @@ document.addEventListener('click', e => {
   if (a === 'free' || a === 'session') { train.on = false; renderTrain(); if (typeof ask !== 'undefined') { ask.pending = []; } }
   if ((a === 'free' || a === 'session') && mode === 'judge') stopJudge();
   if ((a === 'free' || a === 'session' || a === 'menu' || a === 'train') && coach.on) coachStop();
+  if ((a === 'free' || a === 'session' || a === 'menu') && world.id === 'training') { if (mode === 'recap') recapSave(); coachLeave(false); return; }   // the Training Room is only for Train: anything else goes home
   if (a === 'free') startFly(false); if (a === 'session') startFly(true);
   if (a === 'settings' || a === 'settingsBack' || a === 'menu') { const on = a === 'settings'; $('#mainMenu .menuBtns:not(#menuSettings)').classList.toggle('hide', on); $('#menuSettings').classList.toggle('hide', !on); }
   if (a === 'garage') openGarage(); if (a === 'controls') openControls(); if (a === 'tricks') openTricks();

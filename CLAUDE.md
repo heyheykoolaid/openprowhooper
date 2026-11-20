@@ -1058,6 +1058,21 @@ The start box is painted with the Static Massive logo (`assets/flags/staticmassi
 **The Vaporwave School is hidden** (owner, 2026-11-19): `hidden: true` in `S.MAPS` keeps it out of the Maps carousel and the board's
 and Judge's map carousels; it still builds (tests, old flights, board runs re-fly on it), and a pilot already on it stays there.
 
+## The Training Room (`training`, `buildTraining` in maps.js, theme 'lab'; owner, 2026-11-20: "a big gray boring room")
+A 100 x 60 x 18 m smooth gray concrete box: high observation windows of pale, featureless light in dark frames (`labWindow`,
+`labFrame`), flat shadowless light (hemisphere 2.7, a weak sun with no shadows), light gray fog; no particles, no sound beyond the
+props, nothing moves. **Hidden** (not in the Maps carousel): **Train always runs there** (coach.js `coachGoRoom`: stores
+`coachPending` and `trainBack`, sets the map, reloads; on arrival `coachStart` puts the pilot in front of the obstacle the trick
+needs: `coachStation` by category / `COACH_ST_OVR` → `COACH_SPOTS`: the 2.2 m test bar, 1.1 m gap gate, medium pole, test wall,
+dive tower, ceiling slab, the pilot figure or the open-air box; R comes back there). ✓ Done, Free fly and Menu / Free fly /
+Session from the pause menu load the pilot's own map again (`coachLeave`; Done reopens the Tricktionary: `tricksPending`); a page
+opened on the room without a pending trick goes straight back (`MAP_ID` in game.js). The map is the same for every trick, so
+shared flights re-fly exactly. West half: the trick bay (`trickPark` in lab gray plus `addPilot`). East half: the training circuit
+from the owner's brief: 1 the Entry Straight (start mark at (-4, 22), facing east; one gate), 2 the First 180 (two gates), 3 the
+Center Cross (four gates in a plus), 4 the High Line (blocks 0.8-3.2 m), 5 the Precision Corridor (two barriers, a 3.4 m lane,
+four 1.6 m gates), 6 the Return Loop (its gate a little off the line). Not built yet: the brief's race modes (time attack, gate
+order randomizer, altitude restriction, precision penalty, endurance with no HUD): they need RaceGOW's timing on this room.
+
 ## Map lights (Options → Graphics; `PERF.lights`, `store 'mapLights'`, `mapLightsBuild` in worldview.js)
 Map lamps are real point lights; three.js lights every pixel once per light, so More Warehouse's 18 made the game feel
 "heavier, with a bit of latency" for a tester (a low frame rate reads the sticks late). Auto (default) starts Full and, if

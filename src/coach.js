@@ -107,12 +107,46 @@ function coachJudge(steps, t0, strictObj) {
   return { out, done: i, objName: obj != null ? (coach.passes.find(c => c.obj === obj) || {}).name : null };
 }
 // ---- the session
+// ---- The Training Room (owner, 2026-11-20): Train always happens there. From any other map it stores the trick and where
+// the pilot came from, loads the room (a reload, like any map change) and starts on arrival; Done / Free fly / Menu load the
+// pilot's own map again (Done reopens the Tricktionary). The room holds every kind of obstacle; the pilot is put in front
+// of the one the trick needs (`coachStation`), and R brings them back there.
+const ROOM = 'training';
+const COACH_CAT_ST = { 'Open Air Tricks': 'open', 'Other Tricks': 'open', Powerloops: 'bar', 'Maverick Loops': 'bar', 'Matty Flips': 'bar', SplitS: 'bar', 'Jump Roping': 'bar',
+  'Pole Dancing': 'pole', Rewinds: 'pole', 'Wall Tricks': 'wall', Gaps: 'gap' };
+const COACH_ST_OVR = { Dive: 'tower', Perch: 'tower', 'Ceiling Tap': 'slab', 'Slide Disarm': 'open', Facepunch: 'pilot', 'Stall Rewind': 'wall', 'Wall Stick': 'wall', 'Juicy Flick': 'open', 'Juicy Tornado': 'open',
+  'Inverted Yaw Tracking': 'pole', 'Eject Roll': 'pole', 'Stellar Eject Roll': 'pole', 'Maverick Tap Rewind': 'bar', 'Power Switch Tap': 'bar', Snapback: 'bar', Forani: 'bar', 'True Barani': 'bar', Blindflip: 'bar' };
+function coachStation(name, cat, plan) {
+  let st = COACH_ST_OVR[name] || COACH_CAT_ST[(cat || '').trim()] || 'open';
+  if (st === 'open' && plan && plan.cross) st = 'bar';   // anything flown over and under something
+  return st;
+}
+const COACH_SPOTS = {   // the room's obstacle for each station, and where the pilot starts: [x, z, yaw] (yaw π/2 faces west, -π/2 east, π south)
+  bar: ['Test Bar 2.2 m', -26.5, -12, Math.PI / 2], gap: ['Gap Gate 1.1 m', -30, -19, Math.PI / 2], pole: ['Test Pole medium', -36, 9, Math.PI],
+  wall: ['Test Wall 3 m', -24, -10, -Math.PI / 2], tower: ['Dive Tower 14 m', -23, 6, -Math.PI / 2], slab: ['Ceiling Slab 2.3 m', -22, -3.5, Math.PI],
+  pilot: ['Pilot', -18, 13, Math.PI], open: ['Open Air Box', -36, 2, Math.PI / 2] };
+function coachGoRoom(name) {
+  store.set('coachPending', { name, at: Date.now() }); if (world.id !== ROOM) store.set('trainBack', MAP_ID); store.set('map', ROOM);
+  mapGoLoad('The Training Room');
+}
+function coachLeave(toTricks) {   // back to the pilot's own map (the room is only for training)
+  if (world.id !== ROOM) { if (toTricks) { pause(); openTricks(); } return; }
+  const back = store.get('trainBack', 'moose'); store.set('map', S.MAPS[back] && back !== ROOM ? back : 'moose'); store.set('coachPending', null); if (toTricks) store.set('tricksPending', true);
+  mapGoLoad(S.MAPS[store.get('map', 'moose')].title);
+}
+setTimeout(() => {   // arriving: start the trick that brought us here, or reopen the Tricktionary after leaving
+  const P = store.get('coachPending', null); if (P && world.id === ROOM) { store.set('coachPending', null); coachStart(P.name); return; }
+  if (store.get('tricksPending', false)) { store.set('tricksPending', false); openTricks(); }
+}, 1200);
 function coachStart(name) {
   const plan = coachPlan(name); if (!plan) return;
   const t = window.TPW_TRICKS.find(x => x.name.trim() === name) || { name, cat: '', desc: '' };
+  if (world.id !== ROOM) { coachGoRoom(name); return; }
+  const stn = coachStation(name, t.cat, plan), sp = COACH_SPOTS[stn];
+  world.spawn = { pos: S.v3(sp[1], 0.03, sp[2]), yaw: sp[3] }; coach.room = true;
   startFly(false);
   Object.assign(coach, { on: true, sticks: undefined, freeze: null, doneN: 0, name, t, steps: plan.steps, alts: plan.alts, cross: plan.cross, end: plan.end, tryN: 1, phase: 'parts', msg: '', result: null, ask: null, log: [], toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), obj: null, done: false });
-  coach.spots = S.trickSpots(name, t.cat).on; coachNewTry(); renderCoach();
+  coach.spots = [COACH_SPOTS[stn][0]]; coachNewTry(); renderCoach();
   flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, judged live</small>`);
 }
 function coachNewTry() {
@@ -207,8 +241,8 @@ document.addEventListener('click', e => {
   if (a === 'pauses') { store.set('coachPauses', !store.get('coachPauses', true)); if (coach.freeze) coachFreezeEnd(); renderCoach(); }
   if (a === 'skip') { coach.ask = null; coachTryDone(false, 'skipped'); }
   if (a === 'ghost') coachDemo();
-  if (a === 'stop') { coachStop(); renderCoach(); }
-  if (a === 'tricks' || a === 'done') { coachStop(); pause(); openTricks(); }   // owner: Done goes back to the Tricktionary
+  if (a === 'stop') { coachStop(); renderCoach(); coachLeave(false); }   // Free fly: back on the pilot's own map
+  if (a === 'tricks' || a === 'done') { coachStop(); coachLeave(true); }   // owner: Done goes back to the Tricktionary
 });
 addEventListener('keydown', e => {
   if (!coach.on || mode !== 'fly' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;

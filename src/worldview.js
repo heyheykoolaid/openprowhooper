@@ -301,6 +301,10 @@ function mats() {
   MAT.asphalt = std(TX.asphalt); MAT.concrete = std(TX.concrete); MAT.brick = std(TX.brick); MAT.rubberMat = std(TX.rubberMat); MAT.sand = std(TX.sand); MAT.court = std(TX.court);
   for (const k of ['paintRed', 'paintBlue', 'paintGreen', 'paintOrange', 'plasticYellow', 'rust', 'dumpster', 'bin']) MAT[k] = std(TX[k], { roughness: 0.6, metalness: 0.25 });
   MAT.galv = std(TX.galv, { roughness: 0.45, metalness: 0.6 }); MAT.metalSlide = std(TX.metalSlide, { roughness: 0.3, metalness: 0.8 }); MAT.metalPlate = std(TX.metalPlate, { roughness: 0.6, metalness: 0.5 });
+  // the Training Room (owner, 2026-11-20): smooth gray concrete, pale observation glass in dark frames, plain gates
+  { const g = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, metalness: 0, ...o });
+    MAT.labWall = g(0x8e9093); MAT.labFloor = g(0x7c7e80, { roughness: 0.8 }); MAT.labBlock = g(0x9c9ea0); MAT.labGate = g(0x5a5d61, { roughness: 0.6 }); MAT.labBar = g(0x6c7074, { roughness: 0.5 });
+    MAT.labMark = g(0xc9cccf); MAT.labFrame = g(0x26282b, { roughness: 0.5 }); MAT.labWindow = new THREE.MeshBasicMaterial({ color: 0xe9eef2 }); }
   MAT.metal = MAT.galv; MAT.chain = new THREE.MeshStandardMaterial({ color: 0x8b8f92, metalness: 0.8, roughness: 0.4 });
   MAT.wood = std(TX.wood); MAT.chainlink = new THREE.MeshStandardMaterial({ map: TX.chainlink, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, metalness: 0.5, roughness: 0.5 });
   MAT.rubberBlack = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 }); MAT.tire = MAT.rubberBlack;
@@ -694,25 +698,27 @@ function buildScene() {
   const VAPOR = world.theme === 'vapor';
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
-  const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk', NYC_ = world.theme === 'nyc';   // Slackvegan City: golden hour down the avenue
+  const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk', NYC_ = world.theme === 'nyc';
+  const LAB = world.theme === 'lab';   // the Training Room: flat, even, shadowless light from the high windows; nothing else   // Slackvegan City: golden hour down the avenue
   if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
   const [sc, sg] = cnv(16, 512); const gr = sg.createLinearGradient(0, 0, 0, 512);
-  if (NYC_) { gr.addColorStop(0, '#4e6a9e'); gr.addColorStop(0.4, '#9aaabc'); gr.addColorStop(0.56, '#f0c890'); gr.addColorStop(0.64, '#f49a58'); gr.addColorStop(0.74, '#b8705a'); gr.addColorStop(1, '#5a4a48'); }
+  if (LAB) { gr.addColorStop(0, '#dfe3e6'); gr.addColorStop(1, '#c9cdd0'); }
+  else if (NYC_) { gr.addColorStop(0, '#4e6a9e'); gr.addColorStop(0.4, '#9aaabc'); gr.addColorStop(0.56, '#f0c890'); gr.addColorStop(0.64, '#f49a58'); gr.addColorStop(0.74, '#b8705a'); gr.addColorStop(1, '#5a4a48'); }
   else if (PNW) { gr.addColorStop(0, '#4f86c6'); gr.addColorStop(0.42, '#8fb6dc'); gr.addColorStop(0.6, '#cfe0ec'); gr.addColorStop(0.72, '#b4c2c4'); gr.addColorStop(1, '#5a6452'); }   // clear winter blue (the owner's photos, 2026-11-19)
   else { gr.addColorStop(0, '#5f86b3'); gr.addColorStop(0.45, '#a9b9c7'); gr.addColorStop(0.62, '#e7c49a'); gr.addColorStop(0.75, '#d99a6c'); gr.addColorStop(1, '#6e5a4a'); }
   sg.fillStyle = gr; sg.fillRect(0, 0, 16, 512); const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.renderOrder = -4000; playRoot.add(sky);   // drawn first: the backdrops' mountains paint over it
   // lights
-  playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  if (LAB) playRoot.add(new THREE.HemisphereLight(0xf2f5f7, 0x9a9da0, 2.7)); else playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
   // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
   const sun = new THREE.DirectionalLight(NYC_ ? 0xffb066 : PNW ? 0xffe2bc : 0xffcf98, NYC_ ? 3.1 : PNW ? 2.7 : 2.6);
-  if (NYC_) sun.position.set(-62, 17, 9); else if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18);   /* Slackvegan: low in the west, straight down the avenue: long golden shadows */ sun.castShadow = true;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
+  if (NYC_) sun.position.set(-62, 17, 9); else if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18);   /* Slackvegan: low in the west, straight down the avenue: long golden shadows */ sun.castShadow = !LAB; if (LAB) sun.intensity = 0.55;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(world.groundCuts ? groundWithCuts(GS, world.groundCuts) : new THREE.PlaneGeometry(GS, GS), PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
+  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(world.groundCuts ? groundWithCuts(GS, world.groundCuts) : new THREE.PlaneGeometry(GS, GS), LAB ? MAT.labFloor : PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; if (!world.groundCuts) for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * GS / 4, guv.getY(i) * GS / 4);
   playRoot.add(gnd);
   }
@@ -730,6 +736,7 @@ function buildScene() {
   if (VAPOR || VICE_ || DUSK_) return;
   // lamp lights
   if (IND) scene.fog = new THREE.Fog(0x24252b, 30, 140);
+  if (LAB) scene.fog = new THREE.Fog(0xb9bdc0, 60, 220);
   if (PNW) { scene.fog = new THREE.Fog(0xc6d4de, 60, 220); pnwBackdrop(); }
   if (NYC_) { scene.fog = new THREE.Fog(0xd8b08a, 55, 230); nycBackdrop(); }
   // lamp lights are made with the objects (buildObjects)

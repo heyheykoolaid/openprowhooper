@@ -1744,6 +1744,50 @@
 
     return K.done({ id: 'slackvegan', title: 'Slackvegan City', theme: 'nyc', zones, groundHoles, groundCuts, spawn: { pos: v3(-41, 0.03, 6), yaw: -Math.PI / 2 }, bounds: { x: [-XW - 1, XW + 1], z: [-25, 43] } });
   }
+  // =============================================================== The Training Room (owner, 2026-11-20)
+  // A vast gray concrete box: no lore, no personality, no candy. High observation windows of pale, featureless light; flat
+  // shadowless light; nothing moves. The west half is the trick bay (the Trick Park's lab-sheet obstacles: test bars, gap
+  // gates, poles, a figure-8 pair, a ceiling slab, a wall, a dive tower, the open-air box, and a pilot figure); Train drops
+  // the pilot in front of the one the trick needs (coachStation in coach.js). The east half is the training circuit: 1 the
+  // Entry Straight, 2 the First 180, 3 the Center Cross, 4 the High Line, 5 the Precision Corridor, 6 the Return Loop with
+  // its offset gate. Not in the Maps carousel (hidden): Train loads it and leaves it. The map is the same for every trick,
+  // so a flight re-flies exactly.
+  function buildTraining() {
+    const K = kit(), { O, box } = K, { frame } = parts(K), zones = [];
+    const X = 50, Z = 30, H = 18, T = 0.4;
+    for (const [c, h, n, name] of [[v3(0, H / 2, -Z - T / 2), v3(X + T, H / 2, T / 2), v3(0, 0, 1), 'North Wall'], [v3(0, H / 2, Z + T / 2), v3(X + T, H / 2, T / 2), v3(0, 0, -1), 'South Wall'],
+      [v3(-X - T / 2, H / 2, 0), v3(T / 2, H / 2, Z), v3(1, 0, 0), 'West Wall'], [v3(X + T / 2, H / 2, 0), v3(T / 2, H / 2, Z), v3(-1, 0, 0), 'East Wall']]) {
+      const o = O(name, 'wall', { wallNormal: n }); box(o, c, h, 'labWall', 0, 0, 0, { noSurvey: true });
+      // the observation windows: a row high on every wall, pale glass in dark frames, looking down at the floor
+      const along = n.z ? 'x' : 'z', L = n.z ? X : Z, step = 8, y = 13.4, wh = 1.9, ww = 2.7, inset = (n.z ? c.z : c.x) + (n.z ? n.z : n.x) * (T / 2 + 0.02);
+      const w = O('Observation Window', 'deco');
+      for (let u = -L + step / 2; u <= L - step / 2 + 0.01; u += step) {
+        const at = (du, dy) => along === 'x' ? v3(u + du, y + dy, inset) : v3(inset, y + dy, u + du), hs = (a, b) => along === 'x' ? v3(a, b, 0.03) : v3(0.03, b, a);
+        box(w, at(0, 0), hs(ww / 2 + 0.12, wh / 2 + 0.12), 'labFrame', 0, 0, 0, { noCollide: true });
+        box(w, along === 'x' ? v3(u, y, inset + n.z * 0.02) : v3(inset + n.x * 0.02, y, u), hs(ww / 2, wh / 2), 'labWindow', 0, 0, 0, { noCollide: true });
+        box(w, along === 'x' ? v3(u, y, inset + n.z * 0.03) : v3(inset + n.x * 0.03, y, u), hs(0.035, wh / 2), 'labFrame', 0, 0, 0, { noCollide: true }); } }
+    { const o = O('Ceiling', 'deco'); box(o, v3(0, H + 0.25, 0), v3(X + T, 0.25, Z + T), 'labWall', 0, 0, 0, { noSurvey: true }); }
+    zones.push({ shape: 'zone', mat: 'labFloor', c: v3(0, 0.006, 0), h: v3(X, 0, Z) });
+    // ---- the trick bay (west): the Trick Park's obstacles in lab gray, and a pilot to fly round
+    trickPark(K, -47, 0, 1, { post: 'labGate', bar: 'labBar', pole: 'labGate', slab: 'labWall', wall: 'labWall', tower: 'labWall', accent: 'labMark', glow: false, zone: 'labFloor' });
+    addPilot(K, -18, 19);
+    // ---- the training circuit (east). Gates are plain square frames; the route runs clockwise from the start (-4, 22)
+    const G = (name, x, z, w, h, along) => frame(name, x, z, w, h, along, 'labGate');
+    G('1 Entry Gate', 40, 22, 3.2, 3.0, 'z');                                    // 1 the Entry Straight: one line, one gate
+    G('2 First 180 Gate A', 46, 14, 3.0, 2.8, 'x'); G('2 First 180 Gate B', 38, 6, 3.0, 2.8, 'z');   // 2 the First 180: a wide U-turn
+    G('3 Center Cross N', 18, 1, 2.6, 2.6, 'x'); G('3 Center Cross S', 18, 11, 2.6, 2.6, 'x');       // 3 the Center Cross: a plus sign
+    G('3 Center Cross W', 13, 6, 2.6, 2.6, 'z'); G('3 Center Cross E', 23, 6, 2.6, 2.6, 'z');
+    // 4 the High Line: plain concrete blocks and platforms of varying heights, lowest first
+    [[44, 0.8], [39, 1.6], [34, 2.4], [29, 3.2], [24, 2.0], [19, 1.2]].forEach(([x, h], i) => { const o = O(`4 High Line Block ${h.toFixed(1)} m`, 'building', { tall: h, perchHeight: h });
+      box(o, v3(x, h / 2, -10), v3(i === 3 ? 2.5 : 1.5, h / 2, i === 3 ? 2.5 : 1.5), 'labBlock', 0, 0, 0, { noSurvey: true }); });
+    // 5 the Precision Corridor: two long barriers, a 3.4 m lane, four tight gates in it
+    for (const [z, n] of [[-19.8, v3(0, 0, -1)], [-23.6, v3(0, 0, 1)]]) { const o = O('5 Corridor Barrier', 'wall', { wallNormal: n }); box(o, v3(23, 1.25, z), v3(17, 1.25, 0.15), 'labBlock', 0, 0, 0, { noSurvey: true }); }
+    [34, 27, 20, 13].forEach((x, i) => G(`5 Corridor Gate ${i + 1}`, x, -21.7, 1.6, 1.8, 'z'));
+    // 6 the Return Loop: a wide open sweep back north-west to the start; its gate hangs a little off the line
+    G('6 Return Gate', 1.4, 11, 2.6, 2.6, 'x');
+    { const o = O('Start Mark', 'deco'); box(o, v3(-4, 0.008, 22), v3(0.9, 0.004, 0.9), 'labMark', 0, 0, 0, { noCollide: true }); }
+    return K.done({ id: 'training', title: 'The Training Room', theme: 'lab', zones, spawn: { pos: v3(-4, 0.03, 22), yaw: -Math.PI / 2 }, bounds: { x: [-X, X], z: [-Z, Z] } });
+  }
   S.MAPS = {
     moose: { id: 'moose', title: 'Moose Knuckle Park', blurb: 'A quiet Revelstoke park: tall cedars to weave through, swings, a tire tunnel and mountain views.', build: () => closeIn(S.surveyObstacles(edited('moose', buildMoose()))) },
     school: { id: 'school', hidden: true, title: 'Vaporwave School', blurb: 'An abandoned school at sunset: a bowl, chrome pillars, rooftop gaps and empty classrooms.', build: () => closeIn(S.surveyObstacles(edited('school', buildSchool()))) },
@@ -1752,7 +1796,8 @@
     ship: { id: 'ship', title: 'Ship Drugs', blurb: 'An 80s cruise ship mid police raid: a neon atrium, a drained pool, slide tubes and lots of gaps.', build: () => closeIn(S.surveyObstacles(edited('ship', buildShip()))) },
     murderdome: { id: 'murderdome', title: 'The Murderdome', blurb: 'A ruined dome at dusk: scrap, fire, chain-link and a bowl. Witness me!', build: () => closeIn(S.surveyObstacles(edited('murderdome', buildMurderdome()))) },
     slackvegan: { id: 'slackvegan', title: 'Slackvegan City', blurb: 'A sticky New York block at golden hour: taxis, the El, fire escapes, round voids and a full-building dive. The bodega cat judges.', build: () => closeIn(S.surveyObstacles(edited('slackvegan', buildSlackvegan()))) },
+    training: { id: 'training', hidden: true, title: 'The Training Room', blurb: 'A large, empty gray concrete room. Train loads it for you.', build: () => closeIn(S.surveyObstacles(buildTraining())) },
     playground: { id: 'playground', title: 'The Playground', blurb: 'Where it all started: swings, slides, monkey bars, a brick wall and a skate corner.', build: () => closeIn(S.surveyObstacles(edited('playground', Object.assign(addPlaygroundExtras(S.buildPlayground()), { id: 'playground', title: 'the playground', theme: 'playground' })))) },
   };
-  S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose; S.buildMurderdome = buildMurderdome; S.buildSlackvegan = buildSlackvegan;
+  S.buildTraining = buildTraining; S.buildSchool = buildSchool; S.buildClappy = buildClappy; S.buildWarehouse = buildWarehouse; S.buildMoose = buildMoose; S.buildMurderdome = buildMurderdome; S.buildSlackvegan = buildSlackvegan;
 })(typeof window !== 'undefined' ? window : globalThis);
