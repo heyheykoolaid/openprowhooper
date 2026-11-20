@@ -459,6 +459,17 @@ function coachLive(simDt) {
     const tilt = Math.max(0, Math.min(60, +tune.camTilt || 0)), target = p.ax === 'P' && Math.abs(p.deg - 180) < 60 ? 180 + (c.sg < 0 ? tilt : -tilt) : p.deg;
     if (!pick || target > pick.target) pick = { st, c, target };
   }
+  // owner, 2026-11-20: rolls pause where the WINGS are level with the horizon (upside-down after a half roll, upright after a
+  // full one), from the quad's own attitude, not the degree count: a sloppy roll that wobbles the pitch or sits off-axis still
+  // pauses flat. Yaw spins stay on degrees (the quad is level the whole time).
+  if (pick && pick.st[k].rot.ax === 'R' && (Math.abs(pick.st[k].rot.deg - 180) < 60 || Math.abs(pick.st[k].rot.deg - 360) < 90)) {
+    const half = Math.abs(pick.st[k].rot.deg - 180) < 60, c = pick.c, ry = Math.abs(drone.right().y), up = drone.up().y;
+    const closing = c.ry != null && ry < c.ry; c.ry = ry;
+    const remaining = Math.asin(Math.min(1, ry)) * 180 / Math.PI, side = half ? up < -0.2 : up > 0.2;
+    if (c.acc >= pick.st[k].rot.deg * 0.6 && side && closing && remaining <= c.rate * COACH_EASE + 3) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }
+    else if (c.acc >= pick.st[k].rot.deg * 1.3 + 40) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }   // never level (a very sloppy roll): pause anyway once well past it
+    return;
+  }
   if (pick && pick.c.acc + pick.c.rate * COACH_EASE >= pick.target * 0.97) { coach.steps = pick.st; coach.preFroze = k + 1; L.R = L.P = L.Y = null; coachFreezeStart(k + 1); }
 }
 function coachStepSticks() {   // the bot's sticks for each step, from one flight of the trick on this map (for the pause arrows)
@@ -512,4 +523,4 @@ setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' |
   const F = coach.freeze, now = performance.now(), dt = Math.min(0.5, (now - F.last) / 1000); F.last = now; F.waited += dt;   // a long hitch counts at most half a second
   F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
   if (F.held >= COACH_HOLD) coachFreezeEnd(); else coachFreezeDraw(); }, 100);
-window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), state: () => JSON.stringify({ held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), state: () => JSON.stringify({ ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
