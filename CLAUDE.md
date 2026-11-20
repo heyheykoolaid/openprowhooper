@@ -337,7 +337,7 @@ sky, low warm sun from the south-west, long shadows). `tools/map_thumbs.py --ext
 every map, since the morning of 2026-11-19; restored.
 **Wall art** (2026-11-19): the Rogue Monkey FPV, FPV Your World and RidgeRipper FPV logos (`assets/graffiti/roguemonkey`,
 `fpvyourworld`, `ridgeripper`; their makers' marks, at the owner's request, for this game only; credited on the main menu and in
-the README) are in the rotation for graffiti walls (`turn()` in worldview.js; wide logos painted smaller: `AH`), on Clappy's
+the README) are in the rotation for graffiti walls (the RodFpv and Alligator Man logos, `rodfpv`, `alligatorman`, 2026-11-20, only on Clappy's South Flats 2, facing the plaza; windows are left out behind any piece given a width `w`) (`turn()` in worldview.js; wide logos painted smaller: `AH`), on Clappy's
 North Shops 3 and on the school's Main Hall.
 
 **Map edges** (`closeIn` in maps.js, run on every `S.MAPS` build after the Surveyor): invisible walls `EDGE_OUT` 25 m

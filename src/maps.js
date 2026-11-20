@@ -170,7 +170,8 @@
         const ax = along === 'x', ctr = ax ? v3(c, h / 2, out * dm) : v3(out * dm, h / 2, c), half = ax ? v3(hl, h / 2, 8) : v3(8, h / 2, hl);
         const o = O(`${name} ${i + 1}`, 'building', { wallNormal: ax ? v3(0, 0, -out) : v3(-out, 0, 0), tall: h, perchHeight: h });
         const art = name === 'North Shops' && i === 1 ? { graffiti: 'south', art: [{ name: 'clappy', x: 0.3, y: 3.6, h: 5.6, rot: -0.03 }, { name: 'heyhey', x: 0.74, y: 3.8, h: 4.2, rot: 0.03 }] }
-          : name === 'North Shops' && i === 2 ? { graffiti: 'south', art: [{ name: 'roguemonkey', x: 0.18, y: 4.15, h: 1.9, rot: -0.03 }, { name: 'fpvyourworld', x: 0.5, y: 3.95, h: 2.7, rot: 0.02 }, { name: 'ridgeripper', x: 0.82, y: 4.2, h: 1.35, rot: -0.04 }] } : {};   // friends of the project (owner, 2026-11-19)
+          : name === 'North Shops' && i === 2 ? { graffiti: 'south', art: [{ name: 'roguemonkey', x: 0.18, y: 4.15, h: 1.9, rot: -0.03 }, { name: 'fpvyourworld', x: 0.5, y: 3.95, h: 2.7, rot: 0.02 }, { name: 'ridgeripper', x: 0.82, y: 4.2, h: 1.35, rot: -0.04 }] }
+          : name === 'South Flats' && i === 1 ? { graffiti: 'north', art: [{ name: 'alligatorman', x: 0.3, y: 5.7, h: 4.3, w: 4.2, rot: -0.02 }, { name: 'rodfpv', x: 0.74, y: 5.3, h: 2.3, w: 4.1, rot: 0.02 }] } : {};   // friends of the project (owner, 2026-11-19; RodFpv and Alligator Man 2026-11-20)
         box(o, ctr, half, ['brick', 'concrete', 'vConcrete', 'brick'][(i + n) % 4], 0, 0, 0, art);
         blocks.push({ ax, out, a0, a1, h });
         // street face: a shutter or storefront, an awning over it, balconies on the taller ones
@@ -184,8 +185,12 @@
         // a parapet round the roof, and roof clutter (AC boxes, a water tank on the tall ones, a stair hut)
         const fz = out * d0, P = (m, y, off) => ax ? v3(m, y, fz - out * off) : v3(fz - out * off, y, m), Sz = (a, y, d) => ax ? v3(a, y, d) : v3(d, y, a);
         const win = O('Window', 'deco'), trim = O('Facade Trim', 'deco'), floors = Math.floor(h / 3);
+        // no window painted over: a piece with its width given (`w`, metres) keeps the wall behind it clear (the facade's u runs
+        // west to east facing south, east to west facing north)
+        const behindArt = (m, y) => (art.art || []).some(p => { if (!p.w || !ax) return false; const u = (art.graffiti === 'north' ? a1 - m : m - a0) / (a1 - a0) * (a1 - a0);
+          return Math.abs(u - p.x * (a1 - a0)) < p.w / 2 + 0.6 && Math.abs(y - p.y) < p.h / 2 + 0.75; });
         for (let fl = 1; fl < floors; fl++) { const yb = fl * 3; box(trim, P(c, yb, 0.06), Sz(hl, 0.06, 0.06), 'concrete');
-          for (let m = a0 + 1.5; m < a1 - 1.0; m += 2.4) { box(win, P(m, yb + 1.55, 0.025), Sz(0.55, 0.72, 0.02), 'glass', 0, 0, 0, { noCollide: true }); box(win, P(m, yb + 0.78, 0.07), Sz(0.66, 0.04, 0.07), 'concrete'); } }
+          for (let m = a0 + 1.5; m < a1 - 1.0; m += 2.4) { if (behindArt(m, yb + 1.55)) continue; box(win, P(m, yb + 1.55, 0.025), Sz(0.55, 0.72, 0.02), 'glass', 0, 0, 0, { noCollide: true }); box(win, P(m, yb + 0.78, 0.07), Sz(0.66, 0.04, 0.07), 'concrete'); } }
         for (const e of [a0, a1]) { if (e === -40 || e === 40) continue; const sx = e === a0 ? -1 : 1;
           for (let fl = 1; fl < floors; fl++) for (const dd of [26.5, 30.5, 34.5, 38]) { const y = fl * 3 + 1.55, pos = ax ? v3(e + sx * 0.025, y, out * dd) : v3(out * dd, y, e + sx * 0.025); box(win, pos, ax ? v3(0.02, 0.6, 0.45) : v3(0.45, 0.6, 0.02), 'glass', 0, 0, 0, { noCollide: true }); } }
         { const pr = O('Parapet', 'deco'), ph = 0.45, pt = 0.1;

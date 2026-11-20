@@ -83,7 +83,7 @@ Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.co
 - **Slackvegan City:** the start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`), added at the owner's request, for this game only; it belongs to its makers.
 - **The Murderdome:** made in the spirit of the Dirtbag FPV club and Spider Sugar FPV. The start flag is the Dirtbag FPV logo (`assets/flags/dirtbag.webp`), added at the pilot's request, for this game only; it belongs to the club.
 - **The Playground's sign gantry** carries the Metal Craft FPV logo (`assets/flags/metalcraft.webp`), added at the owner's request, for this game only; it belongs to Metal Craft FPV.
-- **Graffiti:** the MoPenguinz FPV, ByTe_Me, Rogue Monkey FPV, FPV Your World and RidgeRipper FPV logos appear on the walls alongside the pilot's own pieces. They belong to their makers and are used in this game only.
+- **Graffiti:** the MoPenguinz FPV, ByTe_Me, Rogue Monkey FPV, FPV Your World, RidgeRipper FPV, RodFpv and Alligator Man logos appear on the walls alongside the pilot's own pieces. They belong to their makers and are used in this game only.
 
 ## Art
 Graffiti pieces in `assets/graffiti/` — HeyHey KoolAid, Clappy and RWDC — are original drawings by the pilot (heyheykoolaid)
