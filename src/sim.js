@@ -51,6 +51,13 @@ const PARTS = {
     meteor75:   { name: 'Meteor75 Pro frame', size: 75, cells: 1, cap: [300, 550], mass: 3.9, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
     // 2S whoops (estimates from typical builds: Mobula7-style 75 mm and Mobula8 / Beta85X-style 85 mm; tune from a Blackbox log when one arrives)
     whoop75_2s: { name: '75mm 2S frame (Mobula7 style)', size: 75, cells: 2, cap: [300, 450], mass: 4.6, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
+    // Fractal Engineering (owner, 2026-11-20): a 1.5 mm carbon base plate with four separate nylon ducts cut from a stock whoop
+    // frame, "squished X" (the motors closer front to back than side to side: `squish` = front-back / side spacing, an estimate
+    // until the pilot's photos and logs), a low board and camera. Weights from the maker: the 65 under 19.5 g and the 75 about
+    // 21 g built with a HappyModel DiamondF4; the 75 Pro is 84 mm motor to motor for 45 mm props. Fit from Blackbox logs.
+    fractal65:  { name: 'Fractal 65 (carbon + ducts)', size: 65, squish: 0.85, cells: 1, cap: [250, 380], mass: 4.6, propMax: 31, ductDrag: 0.98, ductThrust: 1.06, restitution: 0.34 },
+    fractal75:  { name: 'Fractal 75 (carbon + ducts)', size: 75, squish: 0.85, cells: 1, cap: [300, 550], mass: 4.6, propMax: 40, ductDrag: 0.98, ductThrust: 1.06, restitution: 0.32 },
+    fractal75pro: { name: 'Fractal 75 Pro (84 mm, 45 mm props)', size: 84, squish: 0.85, cells: 1, cap: [300, 550], mass: 5.4, propMax: 45, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.30 },
     whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, cells: 2, cap: [450, 650], mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
   },
   motors: { // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
@@ -119,6 +126,9 @@ const PRESETS = {
   '75mm build':      { frame: 'air75', motor: 'm1002_19k', prop: 'p40_2b', battery: 'b450', electronics: 'air' },
   '75mm 2S (Mobula7 style)': { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3b', battery: 'b2s300', electronics: 'aio2s' },
   '75mm 2S light (0802)':    { frame: 'whoop75_2s', motor: 'm0802_16k', prop: 'p40_2b', battery: 'b2s300', electronics: 'aio2s' },
+  'Fractal 65':      { frame: 'fractal65', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
+  'Fractal 75':      { frame: 'fractal75', motor: 'm0802_19k', prop: 'p40_3b', battery: 'b300', electronics: 'air' },
+  'Fractal 75 Pro':  { frame: 'fractal75pro', motor: 'm1002_19k', prop: 'p45_3b', battery: 'b380', electronics: 'air' },
   '85mm 2S (Mobula8 style)': { frame: 'whoop85_2s', motor: 'm1103_11k', prop: 'p51_4b', battery: 'b2s450', electronics: 'aio2s' },
   'Air65 3D':        { frame: 'air65', motor: 'm0702ii_30k', prop: 'p31_3d', battery: 'b300', electronics: 'air' },
   '75mm 2S 3D':      { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3d', battery: 'b2s300', electronics: 'aio2s' },
@@ -151,13 +161,13 @@ function buildDrone(spec) {
   const warnings = [];
   if (spec.frame && spec.battery && !batteryFits(spec.frame, spec.battery)) warnings.push(`${(PARTS.batteries[spec.battery] || {}).name || 'This battery'} does not fit the ${(PARTS.frames[spec.frame] || {}).name || 'frame'}`);
   if (pr.d > fr.propMax) warnings.push(`${pr.name} is too big for ${fr.name} (max ${fr.propMax}mm)`);
-  const arm = (fr.size / 1000) / 2 / Math.SQRT2;          // motor offset on x and z
+  const sq = fr.squish || 1, hd = (fr.size / 1000) / 2, arm = sq === 1 ? hd / Math.SQRT2 : hd / Math.hypot(1, sq), armZ = arm * sq;   // motor offset on x (and z: squished X frames sit closer front to back)
   const mMotor = (mo.mass + pr.mass) / 1000, mFrame = fr.mass / 1000, mEl = el.mass / 1000, mBat = ba.mass / 1000;
   const mass = 4 * mMotor + mFrame + mEl + mBat;
   const rDuct = pr.d / 2000 + 0.0025;
   // inertia (diagonal) from point / simple shapes
   let Ixx = 0, Iyy = 0, Izz = 0;
-  const pts = [[arm, 0, arm], [-arm, 0, arm], [arm, 0, -arm], [-arm, 0, -arm]];
+  const pts = [[arm, 0, armZ], [-arm, 0, armZ], [arm, 0, -armZ], [-arm, 0, -armZ]];
   for (const [x, y, z] of pts) {
     Ixx += mMotor * (y * y + z * z); Iyy += mMotor * (x * x + z * z); Izz += mMotor * (x * x + y * y);
     const mr = mFrame / 4; // duct ring at motor

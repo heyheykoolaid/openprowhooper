@@ -497,6 +497,12 @@ real ones (38k vs 31k rpm) on a third of the power; thrust ×1.31 and torque ×1
 throttle (38 % before; real 30-34 %) with the same top thrust (×0.996), roll / pitch lag and yaw unchanged within a ms. With
 them the drain refits to **2.4** (`DRAIN_DEF`; the 2026-11-18 log and bum-darts); a pilot still on the first fit's 3.2 gets 2.4 once.
 test/battery.js checks both.
+**Fractal Engineering frames** (owner, 2026-11-20; `fractal65`, `fractal75`, `fractal75pro` in `PARTS.frames`, presets "Fractal 65 / 75 / 75 Pro"):
+a 1.5 mm carbon base plate with four separate nylon ducts, "squished X" (`squish` 0.85 = front-back / side motor spacing, an estimate
+from the maker's description: `buildDrone` places the motors from it, absent = the square X as before), published weights (65 under
+19.5 g, 75 about 21 g with a HappyModel DiamondF4; the 75 Pro 84 mm motor to motor for 45 mm props). Drawn with a glossy carbon plate
+and arms and dark nylon ducts (`WHOOP_LOOK.frames.*.carbon`, `duct`). Estimates until the owner's Blackbox logs: feelcheck has the 65
+at TWR 5.2 / hover 33 %, the 75 at 4.2 / 36 % (no stronger 1S 0802 in the catalog), the Pro 4.7 / 33 %.
 **LAVA II packs** (`lava280` 6.8 g, `lava320` 8.2 g, published weights; resistance from the 2026-11-19 log: 0.074-0.089 ohm cold).
 
 ## Whoop feel calibration (2026-11-18; tools/feelcheck.js, test/feel.js)

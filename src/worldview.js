@@ -792,7 +792,7 @@ const WHOOP_LOOK = {
   // Air frames (from the pilot's reference photos): a thin coloured ring round each prop, standing on three slim legs that
   // run down to the motor mount; slightly see-through plastic. Meteor and 2S frames keep a full duct wall.
   frames: { air65: { c: 0x7fd0f2, lip: 0.0008, ring: true, clear: 0.9, braces: 4, mesh: 'air65' }, air65champ: { c: 0x5a5d63, lip: 0.0007, ring: true, clear: 0.72, braces: 3 }, meteor65: { c: 0x1f4fd6, lip: 0.0015 }, air75: { c: 0xe6e8ea, lip: 0.0009, ring: true, clear: 0.6, braces: 4 }, meteor75: { c: 0xd62828, lip: 0.0015 },
-    whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
+    whoop75_2s: { c: 0x2b2f36, lip: 0.0016 }, fractal65: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0012, carbon: true }, fractal75: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0014, carbon: true }, fractal75pro: { c: 0x1c1d20, duct: 0x2e3238, lip: 0.0015, carbon: true }, whoop85_2s: { c: 0x2b2f36, lip: 0.0019 } },
   motors: { m0702se_23k: 0x3b82f6, m0702se_27k: 0xe11d48, m0702ii_30k: 0xf5b301, m0702ii_36k: 0x9333ea, evo_31k: 0x111111, evo_33k: 0xc9a227, m0802_19k: 0x10b981, m1002_19k: 0xf97316, m0802_16k: 0x64748b, m1102_13k: 0x0ea5e9, m1103_11k: 0xef4444 },
   props: { gf1219s: 0xf2f4f6, hq31ul: 0xcfeaff, gf1207: 0xf6f0e6, p40_2b: 0xf2f4f6, p40_3b: 0xeef1f4, p51_3b: 0x4cc9f0, p51_4b: 0xf72585, p31_3d: 0xf4f4f5, p40_3d: 0xf4f4f5 },
   batteries: { b260: 0xc8e000, b300: 0xc8e000, b380: 0xc8e000, lava280: 0x3aa84a, lava320: 0x3aa84a, b450: 0x7c3aed, b2s300: 0xdc2626, b2s450: 0x111827, b2s550: 0x0f766e },
@@ -811,8 +811,8 @@ const lookHex = (v, d) => { const m = typeof v === 'string' && /^#[0-9a-f]{6}$/i
 function makeWhoopMesh(p, sp, tn) {
   const g = new THREE.Group(), pgs = [], discs = [], L = sp.look || {}, FL = WHOOP_LOOK.frames[sp.frame] || { c: 0x18181c, lip: 0.0012 }, CL = WHOOP_LOOK.canopies[sp.electronics] || WHOOP_LOOK.canopies.air;
   const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.08, ...o });
-  const frameC = lookHex(L.frame, FL.c), frameMat = std(frameC, FL.clear ? { transparent: true, opacity: FL.clear, roughness: 0.3 } : {});
-  const ductMat = std(frameC, { side: THREE.DoubleSide, transparent: !!FL.clear, opacity: FL.clear || 1, roughness: 0.3 });
+  const frameC = lookHex(L.frame, FL.c), frameMat = std(frameC, FL.clear ? { transparent: true, opacity: FL.clear, roughness: 0.3 } : FL.carbon ? { roughness: 0.32, metalness: 0.35 } : {});   // Fractal frames: a glossy carbon plate, separate nylon ducts
+  const ductMat = std(FL.duct != null && !L.frame ? FL.duct : frameC, { side: THREE.DoubleSide, transparent: !!FL.clear, opacity: FL.clear || 1, roughness: 0.3 });
   const propC = lookHex(L.props, WHOOP_LOOK.props[sp.prop] ?? 0xe0f040), propMat = std(propC, { transparent: true, opacity: L.props ? 0.9 : 0.72, roughness: 0.25 });   // stock props are milky, see-through plastic
   const mName = (S.PARTS.motors[sp.motor] || {}).name || '0702', md = /(\d\d)(\d\d)/.exec(mName), statD = md ? +md[1] / 1000 : 0.007, statH = md ? +md[2] / 1000 : 0.002;
   const bellR = statD / 2 + 0.0013, bellH = statH + 0.0034, bellMat = std(WHOOP_LOOK.motors[sp.motor] ?? 0x9b6d3a, { metalness: 0.85, roughness: 0.28 }), copper = std(0xb87333, { metalness: 0.7, roughness: 0.4 }), steel = std(0xc8ccd2, { metalness: 0.9, roughness: 0.25 });
