@@ -24,6 +24,7 @@ const checks = [
   ['fast combos the way pilots fly them (ramped rates, 0.1 s gaps, bank-to-bank rolls)', () => { const o = run('fastcombo.js'); const m = o.match(/(\d+)\/(\d+) fast-combo/); return m && m[1] === m[2] ? null : o; }],
   ['every map (builds, spawn clear, bot tricks on its own objects)', () => { const o = run('maps.js'); const m = o.match(/(\d+)\/(\d+) map checks/); return m && m[1] === m[2] ? null : o; }],
   ['trick library (signatures, Watcher vote, maybe calls)', () => { const o = run('library.js'); const m = o.match(/(\d+)\/(\d+) library checks/); return m && m[1] === m[2] ? null : o; }],
+  ['labels pooled by consensus (full weight at 3 people)', () => { const o = run('consensus.js'); const m = o.match(/(\d+)\/(\d+) consensus checks/); return m && m[1] === m[2] ? null : o; }],
   ['community profile (every pilot\'s flying, under the pilot\'s own)', () => { const o = run('community.js'); const m = o.match(/(\d+)\/(\d+) community checks/); return m && m[1] === m[2] ? null : o; }],
   ['learning from review labels (looser only, never against a label)', () => { const o = run('learn.js'); const m = o.match(/(\d+)\/(\d+) learning checks/); return m && m[1] === m[2] ? null : o; }],
   ['Ship Drugs: every gap is really open (5 cm clear of every collider)', () => { const o = run('../tools/gapcheck.js', ['ship']); const m = o.match(/(\d+)\/(\d+) gaps clear/); return m && m[1] === m[2] ? null : o; }],

@@ -9,12 +9,44 @@ require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js')
 // (`inferred`, e.g. Judge the Bot's 'other calls in a one-trick flight') counts barely more than an unreviewed call; anything
 // unreviewed is not a 'no' at all (keep: a faint reason to keep what was called).
 const REVIEWER_TRUST_UNTIL = Date.parse('2026-11-20T00:00:00Z');   // reviewer labels the relay stored before signed owner reviews
-const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5, q: 0.3, inferred: 0.15, keep: 0.1, cap: 6 };
+// reviewer / own / judge / replica / inferred: one voice's weight inside a pooled moment (consensus below). flag / q / keep are one
+// pilot's word that nobody else confirms, so they carry a lone voice's third (0.5, 0.3, 0.1 before 2026-11-20), and the cap
+// is 6 lone labels' worth: every ratio between kinds of evidence stays what it was for evidence from one person.
+const W = { reviewer: 1.5, own: 1.0, judge: 1.0, replica: 0.5, flag: 0.5 / 3, q: 0.3 / 3, inferred: 0.15, keep: 0.1 / 3, cap: 2 };
+// Consensus (owner, 2026-11-20: "a label requires 3 confirmations now … the decision is still a weight itself … everything averages
+// and balances out"): every decided label on one moment of one flight (own, reviewer, board vote, bot verdict) is pooled per trick
+// name: (yes weight − no weight) / the people who judged it, times a ramp that reaches full at CONFIRM different people (1 person
+// 1/3, 2 people 2/3). A 2-1 split is a weak yes, never a tie; a lone label still counts, a third of what three agreeing would.
+const CONFIRM = 3, MOMENT = 1.5;   // MOMENT: labels whose ends lie within 1.5 s of each other are about the same moment
 const worlds = {}, worldOf = (id, layout, official) => { const k = id + (layout ? JSON.stringify(layout) : '') + (official ? '|' + JSON.stringify(official) : ''); if (worlds[k]) return worlds[k]; const m = S.MAPS[id] ? id : 'playground', was = S.officialEdits(m); S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); if (official !== undefined) S.setOfficialEdits(m, official && typeof official === 'object' ? official : null); try { return (worlds[k] = S.MAPS[m].build()); } finally { S.setMapEdits(m, null); S.setOfficialEdits(m, was); } };   // a flight flown on a pilot's own layout (Map Editor) carries it in summary.layout
 const str = (v, n = 60) => typeof v === 'string' ? v.slice(0, n) : '';
 // a pilot is their chosen name where they gave one (the same person flies from more than one browser, each with its own
 // random id), else that id
 const who = (name, id) => str(name, 30).trim().toLowerCase() || str(id) || '?';
+// consensus per moment and trick (CONFIRM above): one voice per person (their latest), pooled as a weight. votes = decided labels
+// on one flight: { a, b, author, actual, target, verdict, src, wYes, wNo, inferred }
+function consensus(votes) {
+  const out = [];
+    votes.sort((x, y) => x.b - y.b); const moments = [];
+    for (const v of votes) { const m = moments.find(m => Math.abs(m.b - v.b) < MOMENT); if (m) m.items.push(v); else moments.push({ b: v.b, items: [v] }); }
+    for (const m of moments) {
+      const names = new Set(); for (const v of m.items) { if (v.actual && v.actual !== 'not a trick') names.add(v.actual); if (v.verdict === 'no' && v.target && v.target !== v.actual) names.add(v.target); }
+      for (const name of names) {
+        const say = new Map();   // author → their latest word on this trick here
+        for (const v of m.items) { const yes = v.actual === name, no = v.verdict === 'no' && v.target === name && v.actual !== name; if (yes || no) say.set(v.author, { v, yes }); }
+        const all = [...say.values()]; if (!all.length) continue;
+        const pro = all.filter(x => x.yes).reduce((s, x) => s + x.v.wYes, 0), con = all.filter(x => !x.yes).reduce((s, x) => s + x.v.wNo, 0);
+        const people = all.filter(x => x.yes || !x.v.inferred).length, ramp = Math.min(1, people / CONFIRM), net = ramp * (pro - con) / all.length;
+        if (Math.abs(net) < 1e-6) continue;   // an even split: nothing either way until someone else judges it
+        const side = all.filter(x => x.yes === net > 0), lead = side.reduce((p, x) => (x.yes ? x.v.wYes : x.v.wNo) > (p.yes ? p.v.wYes : p.v.wNo) ? x : p, side[0]).v;
+        const srcs = side.map(x => x.v.src), src = srcs.includes('reviewer') ? 'reviewer' : srcs.includes('bot') ? 'bot' : srcs.includes('own') ? 'own' : 'judge';
+        const common = { name, a: lead.a, b: lead.b, w: Math.abs(net), author: lead.author, authors: [...say.keys()], people, agree: side.length, src, consensus: +(net / ramp).toFixed(3) };
+        if (net > 0) out.push({ kind: 'want', ...common });
+        else out.push({ kind: 'not', ...common, inferred: side.every(x => x.v.inferred) || undefined });
+      }
+    }
+  return out;
+}
 async function load(files) {
   const flights = new Map(), labelFiles = [];
   for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
@@ -49,17 +81,13 @@ async function load(files) {
       const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
       if (a < T0 - 5 || b > T1 + 5) continue;
       const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own' };
-      if (vote) { votes.push(item); continue; }
       labelled.push([a - 1, b + 2]);
-      if (actual && actual !== 'not a trick' && !l.custom) ev.push({ kind: 'want', name: actual, a, b, w: fl.replica || fl.botSrc === 'library' ? W.replica : rev ? W.reviewer : W.own, author, src: item.src, botSrc: fl.botSrc || undefined });   // a yes on the knowledge bot re-flying a library example confirms that example: half weight, and it adds no new motion
-      if (l.verdict === 'no' && target && target !== actual) ev.push({ kind: 'not', name: target, a, b, w: l.inferred ? W.inferred : fl.replica ? W.replica : rev ? W.reviewer : W.own, author, src: item.src, inferred: !!l.inferred });
+      item.wYes = vote ? W.judge : fl.replica || fl.botSrc === 'library' ? W.replica : rev ? W.reviewer : W.own;   // a yes on the knowledge bot re-flying a library example confirms that example: half weight, and it adds no new motion
+      item.wNo = vote ? W.judge : l.inferred ? W.inferred : fl.replica ? W.replica : rev ? W.reviewer : W.own; item.inferred = !!l.inferred;
       if (l.custom && actual) ev.push({ kind: 'custom', name: actual.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40), label: actual, a, b, author });
+      else votes.push(item);
     }
-    // judge votes count only where two different voters agree on the same call
-    for (const v of votes) { if (v.used) continue; const agree = votes.filter(x => !x.used && x !== v && x.author !== v.author && Math.abs(x.b - v.b) < 1 && x.target === v.target && x.verdict === v.verdict && x.actual === v.actual);
-      if (!agree.length) continue; v.used = true; agree.forEach(x => { x.used = true; }); const authors = [v.author, ...agree.map(x => x.author)].join('+'); labelled.push([v.a - 1, v.b + 2]);
-      if (v.actual && v.actual !== 'not a trick') ev.push({ kind: 'want', name: v.actual, a: v.a, b: v.b, w: W.judge, author: authors, src: 'judge' });
-      if (v.verdict === 'no' && v.target && v.target !== v.actual) ev.push({ kind: 'not', name: v.target, a: v.a, b: v.b, w: W.judge, author: authors, src: 'judge' }); }
+    for (const e of consensus(votes)) ev.push(e.kind === 'want' ? { ...e, botSrc: fl.botSrc || undefined } : e);
     const covered = t => labelled.some(([a, b]) => t >= a && t <= b);
     // live evidence from the flight itself
     for (const e of fl.events) { if (!e || !Number.isFinite(+e.t) || covered(+e.t)) continue; const name = str(e.name);
@@ -73,4 +101,4 @@ async function load(files) {
   return { runs, nFlights: flights.size, nLabelFiles: labelFiles.length };
 }
 
-module.exports = { load, W, who, str, worldOf };
+module.exports = { load, W, CONFIRM, consensus, who, str, worldOf };

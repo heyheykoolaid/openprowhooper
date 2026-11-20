@@ -22,7 +22,7 @@ require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js')
 const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=').slice(1).join('=') : d; };
 const TRADE = 0.25;   // a change may cost labelled evidence worth at most a quarter of what it gains (labels are weights, not vetoes)
 const WRITE = args.includes('--write'), MIN_P = +opt('min-pilots', 2), ROUNDS = +opt('rounds', 3), OUT = path.resolve(opt('out', path.join(ROOT, 'community')));
-const { W } = require('./evidence.js');
+const { W, CONFIRM } = require('./evidence.js');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== '.git') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
 args.filter(a => !a.startsWith('--')).forEach(walk);
 const profilePath = path.join(OUT, 'profile.json'), readProfile = () => { try { return JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch { return null; } };
@@ -65,10 +65,10 @@ function score(runs, flown, baseFlown) {
     for (const e of E) P(e.name).calls++;
     for (const x of run.ev) {
       if (x.kind === 'want') { out.want += x.w; P(x.name).want += x.w; const h = E.find(e => e.name === x.name && inSpan(e, x)); if (h) { explained.add(h); out.hit += x.w; out.value += x.w; P(x.name).hit += x.w; out.hits.push(x);
-          if (B && !B.some(e => e.name === x.name && inSpan(e, x))) { out.gainAuthors.add(x.author); out.gainW += x.w; } }
+          if (B && !B.some(e => e.name === x.name && inSpan(e, x))) { (x.authors || [x.author]).forEach(a => out.gainAuthors.add(a)); out.gainW += x.w; } }
         else if (B && B.some(e => e.name === x.name && inSpan(e, x))) { out.lostConfirmed.push(`${x.name} (${run.name || run.pilot})`); out.lostW += x.w; } }
       if (x.kind === 'not') { P(x.name).not += x.w; const h = E.find(e => e.name === x.name && inSpan(e, x)); if (h) { explained.add(h); out.wrong += x.w; out.value -= 1.5 * x.w; P(x.name).wrong += x.w; } }
-      if (x.kind === 'miss') { const h = E.find(e => Math.abs(e.t - x.t) < 3 && !(B && B.some(b => b.name === e.name && Math.abs(b.t - e.t) < 0.4))); if (h) { explained.add(h); out.value += x.w; out.gainAuthors.add(x.author); } }
+      if (x.kind === 'miss') { const h = E.find(e => Math.abs(e.t - x.t) < 3 && !(B && B.some(b => b.name === e.name && Math.abs(b.t - e.t) < 0.4))); if (h) { explained.add(h); out.value += x.w; (x.authors || [x.author]).forEach(a => out.gainAuthors.add(a)); } }
     }
     if (B) {   // calls nobody spoke about: losing one that was called before costs a little; a brand-new one risks being wrong
       for (const b of B) if (!explained.has(b) && !E.some(e => e.name === b.name && Math.abs(e.t - b.t) < 0.4) && !run.ev.some(x => x.kind === 'not' && x.name === b.name && b.t >= x.a - 0.7 && b.t <= x.b + 2.4)) out.value -= W.keep;
@@ -97,7 +97,7 @@ function bench(profile) {
   const t0 = Date.now(), log = (...a) => process.stderr.write(a.join(' ') + '\n');
   const { runs, nFlights } = await load(files);
   const before = { ...NEUTRAL, ...(readProfile() || {}) }, cur0 = S.setCommunity(before) || S.setCommunity(NEUTRAL);
-  const evAll = runs.flatMap(r => r.ev), pilotsFlying = new Set(runs.map(r => r.pilot)), authors = new Set(evAll.filter(e => e.kind === 'want' || e.kind === 'not').map(e => e.author));
+  const evAll = runs.flatMap(r => r.ev), pilotsFlying = new Set(runs.map(r => r.pilot)), authors = new Set(evAll.filter(e => e.kind === 'want' || e.kind === 'not').flatMap(e => e.authors || [e.author]));
   log(`community: ${runs.length} flights (${nFlights} found), ${pilotsFlying.size} pilots flying, ${authors.size} labelling; ${evAll.length} pieces of evidence`);
   // full re-fly with the current profile: the baseline, and where else a rule change could matter
   const full = runs.map((r, i) => { log(`  re-flying ${i + 1}/${runs.length} ${r.id}`); return fly(r, cur0, null); });
@@ -109,7 +109,7 @@ function bench(profile) {
     let pick = null;
     for (const st of STEPS) { const cand = clone(cur); if (!st.step(cand)) continue;
       log(`  round ${round + 1}: trying ${st.what}`); const f = flyAll(cand), sc = score(runs, f, base);
-      const cost = sc.lostW + Math.max(0, sc.wrong - s0.wrong), ok = sc.value > best.value + 0.05 && cost <= TRADE * sc.gainW + 1e-9;   // a trade, not a veto: labels are weights
+      const cost = sc.lostW + Math.max(0, sc.wrong - s0.wrong), ok = sc.value > best.value + 0.05 / CONFIRM && cost <= TRADE * sc.gainW + 1e-9;   // a trade, not a veto: labels are weights
       if (!ok) continue;
       if (sc.gainAuthors.size < MIN_P) { rejected.push(`${st.what}: helps ${[...sc.gainAuthors].join(', ') || 'nobody'} only (needs ${MIN_P} pilots)`); continue; }
       if (!pick || sc.value > pick.sc.value) pick = { st, cand, sc, f }; }
@@ -150,7 +150,7 @@ function bench(profile) {
     ...names.map(n => { const a = s0.per[n] || {}, b = after.per[n] || {}; return `| ${n} | ${(a.want || 0).toFixed(1)} | ${pct(a.hit || 0, a.want)} | ${pct(b.hit || 0, b.want)} | ${(a.not || 0).toFixed(1)} | ${(a.wrong || 0).toFixed(1)} → ${(b.wrong || 0).toFixed(1)} |`; }), ``,
     `## Custom tricks pilots named`, ...(Object.keys(customs).length ? Object.values(customs).sort((a, b) => b.authors.size - a.authors.size || b.n - a.n).map(c => `- **${c.label}** · ${c.n}× by ${c.authors.size} pilot${c.authors.size > 1 ? 's' : ''}${c.authors.size >= MIN_P ? ' · ready for a draft rule' : ''} · measured: ${[...new Set(c.toks)].slice(0, 6).join(' | ')}`) : ['- none yet']), ``,
     `## Still missed (the to-do list)`, ...(() => { const m = {}; runs.forEach((run, i) => { for (const x of run.ev.filter(e => e.kind === 'want')) if (!flown[i].events.some(e => e.name === x.name && e.t >= x.a - 0.7 && e.t <= x.b + 2.4)) { const k = `${x.name} → ${flown[i].events.filter(e => e.t >= x.a - 0.7 && e.t <= x.b + 2.4).map(e => e.name).join(' + ') || 'nothing'}`; m[k] = (m[k] || 0) + 1; } }); const e = Object.entries(m).sort((a, b) => b[1] - a[1]); return e.length ? e.map(([k, v]) => `- ${v}× ${k}`) : ['- nothing']; })(), ``,
-    `Weights: reviewer ${W.reviewer}, own review ${W.own}, judge pair ${W.judge}, F flag ${W.flag}, Q flag ${W.q}, unreviewed call ${W.keep}; at most ${W.cap} per pilot per trick; changes need ${MIN_P} pilots. ${((Date.now() - t0) / 1000).toFixed(0)} s.`];
+    `Weights (one voice; a moment's labels are pooled, full at ${CONFIRM} people): reviewer ${W.reviewer}, own review ${W.own}, board vote ${W.judge}, F flag ${+W.flag.toFixed(3)}, Q flag ${+W.q.toFixed(3)}, unreviewed call ${+W.keep.toFixed(3)}; at most ${W.cap} per pilot per trick; changes need ${MIN_P} pilots. ${((Date.now() - t0) / 1000).toFixed(0)} s.`];
   const profile = { format: 'pro-whooper-community/1', updated: new Date().toISOString().slice(0, 10), learn: cur.learn, ...(cur.rate ? { rate: cur.rate } : {}), ...(cur.air ? { air: cur.air } : {}), floor: cur.floor || {},
     stats: { flights: runs.length, pilots: pilotsFlying.size, labellers: authors.size, evidence: evAll.length, found: [+(s0.hit / (s0.want || 1)).toFixed(3), +(after.hit / (after.want || 1)).toFixed(3)], changes } };
   console.log(L.join('\n'));

@@ -67,11 +67,23 @@ on top (the looser of the two per knob). The owner approves each change: the wee
 |---|---|---|
 | reviewer label | the owner's Flight desk or Judge-the-community review of someone else's flight | 1.5 |
 | own review label | a pilot's decided ✓ / ✗ / correction / named added trick on their own flight | 1.0 |
-| judge pair | two pilots agreeing on a leaderboard run they watched and reviewed | 1.0 |
+| board vote | a pilot's review of someone else's leaderboard run (or an unsigned claim to be a reviewer) | 1.0 |
 | F flag | "that call was wrong", pressed while flying, never reviewed | 0.5 |
 | Q flag | "a trick was missed here", pressed while flying, never named | 0.3 |
 | inferred "not a trick" | Judge the Bot: the other calls in a one-trick bot flight (the judge looked only at the scripted trick) | 0.15 |
 | unreviewed call | every call nobody flagged or reviewed ("probably fine": losing one costs a little) | 0.1 |
+
+**Three confirmations, pooled into a weight** (the owner, 2026-11-20, as more pilots joined: "a label requires 3
+confirmations now … the decision is still a weight itself … everything averages and balances out"; `consensus` in
+tools/evidence.js, test/consensus.js). Every decided label on one moment of one flight (labels ending within 1.5 s of each
+other: own reviews, reviewer labels, board votes, bot verdicts) is pooled per trick: one voice per person, (yes weight − no
+weight) ÷ the people who judged it, times a ramp that reaches full at 3 different people (one person ⅓, two ⅔). The table's
+weights are each voice's; three pilots agreeing on their own labels make 1.0, a lone own label ⅓, a lone signed owner review
+0.5, a 2-1 split a weak yes (⅓), an even split nothing until someone else judges it. Board votes no longer wait for a second
+pilot: a lone one counts ⅓ like anyone's. The F and Q flags and unreviewed calls are not labels and keep their weights.
+On the data of 2026-11-20 (486 moments: 470 judged by one person, 16 by two) the pooled evidence is about a third of what it
+was; the learners trade gains against costs by ratio, so their decisions stay the same, and the demo GIFs (3) weigh more
+against pilots' examples in the trick library until reviews of the same moments pile up.
 
 **Labels are weights, never verdicts** (the owner, 2026-11-18). Whoops make a lot of motion that looks like a trick and
 isn't, and pilots skip things, so one label never settles a question on its own, and **anything nobody decided is never a

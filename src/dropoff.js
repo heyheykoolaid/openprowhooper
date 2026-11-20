@@ -570,7 +570,7 @@ function deskQueue() {
       const r = e.flagged ? [100, 'the pilot flagged this call as wrong (F)'] : e.maybe ? [60, "the trick library's guess (a maybe)"] : c < 0.5 ? [50 + (0.5 - c) * 40, `the game was very unsure (${pc})`] : c < 0.7 ? [30 + (0.7 - c) * 50, `the game was unsure (${pc})`] : null;
       if (r) { const [bs, bw] = boost(e.name); per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] + bs - age * 3, why: r[1] + bw }); } }
     for (const m of Array.isArray(p.missed) ? p.missed : []) if (m && Number.isFinite(m.t)) per.push({ file: it.file, kind: 'missed', t: m.t, name: '(a trick the game missed)', score: 90 - age * 3, why: 'the pilot pressed Q: the game missed a trick just before this' });
-    // another pilot's vote (a review of a board run): it counts only once a second pilot agrees, so it ranks near the top
+    // another pilot's vote (a review of a board run): a moment counts in full only once 3 people agree (tools/evidence.js consensus), so a second opinion ranks near the top
     for (const T of spans) if (T[2] && !mine(T[4]) && !spans.some(U => U !== T && !U[2] && near(T[1], U))) { const e = (p.events || []).find(x => x && Number.isFinite(x.t) && near(x.t, T));
       const [bs, bw] = boost(T[3]); per.push({ file: it.file, kind: e ? 'call' : 'missed', vote: T[3], e, t: e ? e.t : T[1], name: e ? String(e.name).slice(0, 60) : `(${T[3]})`, score: 95 + bs - age * 3, why: `${T[4] || 'a pilot'} voted "${T[3]}": it counts once a second pilot agrees${bw}` }); }
     out.push(...per.filter(q => (q.why.includes('voted') || !answered(q.t)) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }

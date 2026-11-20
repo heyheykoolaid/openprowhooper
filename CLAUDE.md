@@ -21,6 +21,11 @@ built from these files in order: `game.js` (state, renderer), `worldview.js`, `i
   the same in `learnFromLabels`), no single label vetoes; an unreviewed call is a faint keep (0.1), never a rejection;
   skipped / untouched / unanswered things send nothing; guesses made for the pilot are `inferred` (0.15, never a library
   counter-example). Don't add new ways of turning silence into a "no".
+- **Three confirmations, pooled into a weight** (owner, 2026-11-20, as more pilots joined): every decided label on one moment of
+  one flight is pooled per trick (`consensus` in tools/evidence.js): one voice per person, (yes − no) ÷ the people who judged it,
+  times a ramp that is full at `CONFIRM` 3 people (one person ⅓, two ⅔); a 2-1 split is a weak yes, an even split nothing yet.
+  F / Q flags and unreviewed calls carry a lone voice's third, so their ratios to labels are unchanged; board votes no longer
+  wait for a second pilot. docs/DATA.md, test/consensus.js.
 
 ## When asked to "analyze the calibration data" / "improve trick detection"
 1. `git pull` to get new uploads under `calibration/round-*/`.
@@ -794,7 +799,7 @@ approves: a weekly scheduled task runs it and opens a pull request, and also wor
 moments where the game now calls something else, no longer calls it, makes a new call, or is unsure (< 75%) are
 listed (not the pilot's own runs); each opens as a guest review of that one call. Its verdicts, like the Flight desk's, are
 reviewer labels (weight 1.5). Anyone's review of a leaderboard run watched from the board goes out with `judge: true`:
-tools/community.js counts such a vote only once a second pilot agrees.
+a board vote (weight 1), pooled with everyone else's on that moment (full at 3 people).
 The screen is a carousel of maps like the board's (`JG.view`, arrows, dots, ← →; `judgeView`): each map's runs are re-flown
 on that map's official layout (`jgWorld`, built when it is not the one loaded) and listed per map (`JG.byMap`); opening a
 moment on another map (or with a community/own map loaded) asks, reloads into it (`store 'judgePending'`) and opens it there.

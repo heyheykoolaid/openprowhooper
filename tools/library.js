@@ -11,7 +11,7 @@
 // --check re-flies every shared flight with the new library and reports the "maybe" calls it would make (and how many
 // of them land on a trick a pilot labelled), plus a leave-one-out score of the library against itself.
 const fs = require('fs'), path = require('path');
-const { load, W } = require('./evidence.js'); const S = globalThis.Sim;
+const { load, W, CONFIRM } = require('./evidence.js'); const S = globalThis.Sim;
 const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=').slice(1).join('=') : d; };
 const OUT = path.resolve(opt('out', path.join(ROOT, 'library'))), WRITE = args.includes('--write'), CHECK = args.includes('--check');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== '.git') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
@@ -83,7 +83,7 @@ function flightExamples(runs) {
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       const mo = e.kind === 'want' && e.botSrc !== 'library' ? motionOf(r.rows, det, r.world, from, sig) : null;
       if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.map = r.map || null; mo.by = r.name || null; mo.at = r.started || null; mo.t = +(+e.a).toFixed(1); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
-      out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined, mo }); }
+      out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own / CONFIRM : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined, mo }); }
   }
   return out;
 }
