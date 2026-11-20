@@ -463,8 +463,9 @@ addEventListener('gamepaddisconnected', () => { if (!$('#controls').classList.co
 function updateMenuDevice() {
   const el = $('#menuDevice'); if (!el) return;
   if (GPU_SOFT) { el.innerHTML = `<b style="color:#ff8b7d">Your browser is drawing the game without your graphics card</b> (hardware acceleration is off), so it will run slowly and work the CPU hard. Chrome / Edge: Settings → System → turn on "Use graphics acceleration when available", then relaunch. Firefox: Settings → General → Performance.`; return; } const d = describePad(readPad('radio')) || describePad(readPad('gamepad'));
-  el.innerHTML = inputCfg.mode === 'keyboard' ? (d ? `${d.kind === 'radio' ? 'Radio' : 'Gamepad'} found: <b>${esc(d.name)}</b> — switch to it under Controls.` : 'Input: keyboard. Plug in your radio as a USB joystick for real acro.')
+  const h = inputCfg.mode === 'keyboard' ? (d ? `${d.kind === 'radio' ? 'Radio' : 'Gamepad'} found: <b>${esc(d.name)}</b> — switch to it under Controls.` : 'Input: keyboard. Plug in your radio as a USB joystick for real acro.')
     : (describePad(readPad()) ? `Input: <b>${describePad(readPad()).name}</b> (${inputCfg.mode})` : `Input: ${inputCfg.mode} — not connected yet. Move a stick once it's plugged in.`);
+  if (el.__h !== h) { el.__h = h; el.innerHTML = h; }   // every 2 s: only when it changed, so a click on the menu is never cut in half
 }
 
 // ---------------- trick list

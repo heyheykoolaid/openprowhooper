@@ -175,7 +175,7 @@ function renderCoach() {
   if (coach.done) {
     const ok = coach.log.filter(l => l.ok).length;
     body = `<div class="trLast"><b>Done!</b> ${ok} of ${COACH_TRIES} tries.${coach.log.filter(l => l.phase === 'live').map(l => `<br>Live try ${l.n}: ${esc(l.how)}`).join('')}<br>Now fly it in a Session for points.</div>
-      <div class="trBtns"><button data-co="again">⟲ Train again</button><button data-co="tricks">Tricktionary</button><button data-co="stop" class="ghost">Free fly</button></div>`;
+      <div class="trBtns"><button data-co="again">⟲ Train again</button><button data-co="done">✓ Done</button><button data-co="stop" class="ghost">Free fly</button></div>`;
   } else if (coach.phase === 'parts') {
     const j = coach.last || { out: coach.steps.map(() => ({ ok: false, msg: '' })), done: 0 }, cur = (detector.cur || []).filter(Boolean).find(c => c.raw > 30);
     body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>step by step</b>: fly each part; take your time between them. Sloppy counts: close is good enough to move on.${store.get('coachPauses', true) ? ' The game pauses after each part so you can set up the next.' : ''}</div><ol class="coSteps">${coach.steps.map((s, k) => { const o = j.out[k], st = o.ok ? 'ok' : k === j.done ? 'on' : '';
@@ -190,11 +190,12 @@ function renderCoach() {
       ${!A ? `<div class="trBtns"><button data-co="missed" class="ghost" title="You flew it and the game said nothing">I did it, the game missed it <kbd>Q</kbd></button></div>` : ''}`;
   }
   const show = !!(window.Maneuvers && window.Maneuvers.LIB[coach.name]);
-  box.innerHTML = `<div class="trHead"><small>🎓 TRAIN</small><span class="coDots">${dots}</span></div><div class="trTarget">${esc(coach.name)}</div>
+  const html = `<div class="trHead"><small>🎓 TRAIN</small><span class="coDots">${dots}</span></div><div class="trTarget">${esc(coach.name)}</div>
     <div class="trObs">${coach.obj ? `on <b>${esc(coach.obj)}</b>` : `fly it on: <b>${esc((coach.spots || []).join(', '))}</b>`}${coach.end === 'back' ? ' · ends flying backward' : ''}</div>
     ${coach.result && !coach.done ? `<div class="coRes ${coach.result.ok ? 'ok' : 'no'}">${coach.result.ok ? '✓ Try ' + (coach.tryN - 1) + ' done' : '✗'} <small>${esc(coach.result.how)}</small></div>` : ''}
     ${coach.msg ? `<div class="trMsg">${esc(coach.msg)}</div>` : ''}${body}
-    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="stop" class="ghost">Stop</button></div>`;
+    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button></div>`;
+  if (html !== box.__h) { box.__h = html; box.innerHTML = html; }   // it is checked 7 times a second: rewriting it each time ate clicks (a click needs the same button under the press and the release)
 }
 const esc0 = s => s;   // judge messages are the game's own words (object names already escaped)
 document.addEventListener('click', e => {
@@ -207,7 +208,7 @@ document.addEventListener('click', e => {
   if (a === 'skip') { coach.ask = null; coachTryDone(false, 'skipped'); }
   if (a === 'ghost') coachDemo();
   if (a === 'stop') { coachStop(); renderCoach(); }
-  if (a === 'tricks') { coachStop(); pause(); openTricks(); }
+  if (a === 'tricks' || a === 'done') { coachStop(); pause(); openTricks(); }   // owner: Done goes back to the Tricktionary
 });
 addEventListener('keydown', e => {
   if (!coach.on || mode !== 'fly' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;

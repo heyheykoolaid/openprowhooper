@@ -678,6 +678,9 @@ axis, pauses under `COACH_JOIN` joined, triggered when done + rate × 0.15 s ≥
 step ends), not when the detector has closed the rotation and the 150 ms check has judged it (a quick Snapback was already rolling).
 The judge still decides the step afterwards (`preFroze`: no second pause there). The hold counts once it has stopped; the throttle
 needs to be within 0.35 of the bot's, and is not checked on the keyboard.
+**✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
+re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
+menu's device note (`updateMenuDevice`, every 2 s).
 **Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on
 the "what counted" list and the combo timer's pass resets went quiet after the first reset; they are re-pointed at the mirror.
 
