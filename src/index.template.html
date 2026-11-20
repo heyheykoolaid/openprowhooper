@@ -113,6 +113,8 @@ code { color: var(--acid); }
 #coachBox .coDots i { display: inline-block; width: 11px; height: 11px; margin-left: 4px; border: 1px solid #777; border-radius: 50%; } #coachBox .coDots i.on { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(80,220,255,.35) inset; } #coachBox .coDots i.ok { background: #7dff9a; border-color: #7dff9a; } #coachBox .coDots i.no { background: #ff6a5a; border-color: #ff6a5a; }
 #coachBox .coSteps { margin: 6px 0; padding-left: 20px; } #coachBox .coSteps li { margin: 3px 0; color: #cfc6b4; } #coachBox .coSteps li.on { color: #fff; font-weight: bold; } #coachBox .coSteps li.ok { color: #7dff9a; } #coachBox .coSteps li.bad { color: #ffb0a6; } #coachBox .coSteps.dim li { color: #a9a090; }
 #demoArrows { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 55; pointer-events: none; }
+#coachFreeze { position: fixed; right: 16px; top: 112px; transform: skew(-4deg); z-index: 61; width: min(330px, 30vw); text-align: center; background: rgba(14,13,12,.86); border: 2px solid var(--cyan); box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 18px; font: 13px var(--mono); color: #cfc6b4; }
+#coachFreeze small { display: block; color: var(--cyan); letter-spacing: .1em; } #coachFreeze b { display: block; color: #fff; font-size: 16px; margin: 6px 0; } #coachFreeze span { display: block; font-size: 11px; opacity: .8; } #coachFreeze .cfCount { font-family: 'Bungee'; font-size: 42px; color: #ffd34d; line-height: 1.1; margin-top: 4px; } #coachFreeze .cfSticks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; text-align: left; margin: 6px 0; font-size: 12px; } #coachFreeze .cfSticks i { font-style: normal; color: #a9a090; } #coachFreeze .cfSticks i.ok { color: #7dff9a; } #coachFreeze .cfBar { height: 8px; background: #333; border: 1px solid #111; } #coachFreeze .cfBar i { display: block; height: 100%; background: #7dff9a; transition: width .1s; }
 #judgeBox .demoSteps li { margin: 5px 0; } #judgeBox .demoSteps li.on { color: #fff; font-weight: bold; background: rgba(80,220,255,.12); } #judgeBox .demoSteps li.ok { color: #9fe3b0; } #judgeBox .demoStk { font-weight: normal; color: #ffd34d; font-size: 11px; margin-top: 2px; } #judgeBox .demoOn { border-left: 3px solid var(--cyan); }
 #coachBox .coWhy { color: #ffb0a6; font-weight: normal; margin-top: 2px; } #coachBox .coGot { color: #9fe3b0; } #coachBox .coRes { margin: 6px 0; padding: 5px 8px; border-left: 3px solid #888; } #coachBox .coRes.ok { border-color: #7dff9a; } #coachBox .coRes.no { border-color: #ff6a5a; }
 .tt a.train { margin-left: 6px; }
@@ -416,7 +418,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="fps"></div><div id="perfHud" class="hide"></div>
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
-<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoArrows" class="hide"></canvas>
+<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoArrows" class="hide"></canvas><div id="coachFreeze" class="hide"></div>
 <div id="judgeBox" class="hide"></div><canvas id="judgeSticks" class="hide" width="260" height="120" title="The bot's sticks (V)"></canvas>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">

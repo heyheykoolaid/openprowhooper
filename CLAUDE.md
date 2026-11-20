@@ -664,6 +664,13 @@ center of the screen"): the right stick as arrows out from the crosshair (pitch 
 arrow over it, the throttle as a gauge on the left with PUNCH IT / CUT while it moves; size and colour follow how far the stick goes. The detector worker sends tokens while it is
 on (`DW.wantDbg`); a reset (R, a new flight) restarts the window (`coachClock`). test/coach.js: the bot's flight of each of its
 29 tricks passes its own steps (87/87), five other tricks do not, and six sloppy flips / rolls are judged as a beginner's would be.
+**Pauses between the steps** (owner, 2026-11-20; tries 1-2 only, `coachFreezeStart`, `coachFrozen`, ⏸ Pauses on / off in the panel,
+`store 'coachPauses'`): when a step is done the game freezes where it is (play.js skips its physics steps while `coachFrozen()`, so
+the detector's clock, the recording and the move's air time do not move: the next part is judged as if it came straight on, with
+the same momentum) and shows the next part with GoldenEye arrows; it goes on only when the pilot has **held the sticks in place for
+1.5 s** (`COACH_HOLD`; owner: "not by key press"; a slip drains the bar at double speed): only the axis the part is about, the right
+way, 30 % or more (owner: as relaxed as the steps), and the throttle within a quarter of the bot's (not with the keyboard's height
+hold). The bot's flight of the trick on this map (`coachStepSticks` → `demoFly`) gives the throttle and the arrows' size.
 **Worker fix** (same day): the detector's `reset()` gave the page copy fresh `crossLog` / `passes` arrays, so with the worker on
 the "what counted" list and the combo timer's pass resets went quiet after the first reset; they are re-pointed at the mirror.
 
