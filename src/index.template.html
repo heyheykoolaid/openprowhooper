@@ -357,6 +357,7 @@ body.rcWide #recapBar { right: 12px; }
 #mapList .commMaps { margin-top: 10px; text-align: left; max-height: 150px; overflow-y: auto; } #mapList .commMaps h5 { margin: 0 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--acid); } #mapList .commMaps ul { list-style: none; margin: 0; padding: 0; } #mapList .commMaps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.08); } #mapList .commMaps li b { flex: 0 1 auto; } #mapList .commMaps li small { flex: 1; opacity: .7; } #mapList .commMaps li button { padding: 2px 10px; font-size: 12px; } #mapList .commMaps li.cur { color: var(--acid); }
 #gfxOffer { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 40; max-width: 520px; background: rgba(12,14,20,.92); color: #e8ecf2; border: 1px solid #3a4250; border-radius: 10px; padding: 10px 14px; font-size: 14px; line-height: 1.4; }
 #gfxOffer .row { display: flex; gap: 8px; margin-top: 8px; }
+#moveBox { position: fixed; inset: 0; z-index: 3500; display: flex; align-items: center; justify-content: center; background: rgba(5,6,10,.72); } #moveBox .panel { max-width: 520px; } #moveBox .row { display: flex; gap: 8px; margin-top: 10px; }
 </style>
 <!--THREE-->
 <script>
@@ -531,10 +532,36 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <script>/*BBL*/</script>
 <script>/*FEELFIT*/</script>
 <script>/*FLIGHTLOG*/</script>
-<script>/*DROPOFF_URL*/</script><script>/*NEWS*/</script>
+<script>/*DROPOFF_URL*/</script><script>/*NEWS*/</script><script>/*MOVED*/</script>
+<script>
+// Arriving from the old address (2026-11-20: the game moved to openprowhooper.com). Each web address keeps its own saved data,
+// so the old copy sends the pilot here with their name, settings, builds and maps packed into the address after '#' (that
+// part never reaches any server). It is unpacked into this address's storage before the game starts, then the page reloads
+// clean. Keys already here are kept (a pilot who has flown here before keeps what they have); nothing secret is in it.
+(function () {
+  var h = location.hash; if (h.indexOf('#pwmove=') !== 0) return;
+  window.PW_MOVING = true;
+  var el = document.getElementById('loading'); if (el) el.textContent = 'Bringing your pilot, settings and maps over…';
+  var done = function (ok, n) { try { if (ok) localStorage.setItem('pw.movedIn', JSON.stringify({ at: Date.now(), keys: n })); } catch (e) {} location.replace(location.origin + location.pathname); };
+  try {
+    var b64 = h.slice(8).replace(/-/g, '+').replace(/_/g, '/'), bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).text().then(function (txt) {
+      var j = JSON.parse(txt), n = 0, fresh = !localStorage.getItem('pw.pilotName');
+      if (!j || j.format !== 'pro-whooper-move/1' || !j.keys || typeof j.keys !== 'object') return done(false, 0);
+      Object.keys(j.keys).forEach(function (k) {
+        if (!/^pw\.[A-Za-z0-9_.\-]{1,80}$/.test(k) || typeof j.keys[k] !== 'string' || /^pw\.(ownerKey|ownerOk)$/.test(k)) return;
+        if (!fresh && localStorage.getItem(k) !== null) return;
+        try { localStorage.setItem(k, j.keys[k]); n++; } catch (e) {}
+      });
+      done(true, n);
+    }).catch(function () { done(false, 0); });
+  } catch (e) { done(false, 0); }
+})();
+</script>
 <script>/*MANEUVERS*/</script>
 <script>/*VISION*/</script>
 <script>if (!window.THREE) __pwErr.push('The 3D engine (three.js) did not load.');</script>
-<script type="module" onerror="__pwBootFail('The game code failed to load.')">/*GAME*/</script>
+<script type="module" onerror="__pwBootFail('The game code failed to load.')">if (window.PW_MOVING) throw new Error('moving your data in: the page reloads in a moment');/*GAME*/</script>
 </body>
 </html>

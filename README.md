@@ -32,7 +32,8 @@ A browser-based tiny-whoop FPV freestyle sim where tricks are scored like Tony H
 
 ## Play
 
-Hosted copy (rebuilt from `main` on every push, once Pages is switched on): https://heyheykoolaid.github.io/openprowhooper/
+Play it at https://openprowhooper.com (Cloudflare, rebuilt from `main` on every push). The old GitHub Pages copy
+(https://heyheykoolaid.github.io/openprowhooper/) offers to move each pilot there with their saved data.
 
 ```bash
 python3 build.py            # → dist/index.html (+ dist/music/) and dist/standalone.html (single file, music embedded)

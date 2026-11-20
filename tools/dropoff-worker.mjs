@@ -302,7 +302,7 @@ async function official(request, env, fetchImpl, reply, origin, allowed) {
   return reply(200, JSON.stringify({ ok: true, at: file.at }), { 'Content-Type': 'application/json' });
 }
 async function handle(request, env, fetchImpl = fetch) {
-  const allowed = (env.ALLOW_ORIGINS || 'https://heyheykoolaid.github.io').split(',').map(s => s.trim()).filter(Boolean), origin = request.headers.get('Origin') || '';
+  const allowed = (env.ALLOW_ORIGINS || 'https://openprowhooper.com,https://www.openprowhooper.com,https://heyheykoolaid.github.io').split(',').map(s => s.trim()).filter(Boolean), origin = request.headers.get('Origin') || '';
   const cors = { 'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0], 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff' };
   const reply = (status, text, extra) => new Response(text, { status, headers: { ...cors, ...(extra || {}) } });
   if (request.method === 'OPTIONS') return reply(204, '');

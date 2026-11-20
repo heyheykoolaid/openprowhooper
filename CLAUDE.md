@@ -337,6 +337,18 @@ ones). Keep them inside the 240 m ground plane. One object, kind 'edge': the Sur
 counts it as a tap, wall ride, over/under or pole. `w.edges` is where the walls are, `w.ceiling` their height, and
 `w.bounds` the built area plus 6 m (the sun's shadow box uses it). The Node tests' base `buildPlayground()` has none.
 
+## Hosting: openprowhooper.com on Cloudflare (2026-11-20)
+The game is served by Cloudflare Pages from this repo (build command `python3 build.py`, output `dist`), at openprowhooper.com
+(and www). GitHub Pages keeps deploying the same build at heyheykoolaid.github.io/openprowhooper. **The move**: `moved.txt`
+(repo root; build.py → `window.PW_MOVED_TO`; empty = off) names the new home; a copy served from any other http(s) address shows
+"Open Pro Whooper has moved" (`moveOffer` / `moveGo` in dropoff.js): it sends waiting flights (`telPump`, up to 12 s), packs every
+`pw.*` localStorage key except the owner key, its tag, the Flight desk caches and the GitHub token inside `pw.ghsync` (`MOVE_SKIP`),
+deflates it and opens the new address with it after `#pwmove=` (the fragment never reaches a server; over 1.5 MB it leaves out
+ghosts and downloaded community maps). A classic script in index.template.html unpacks it before the game module runs
+(`window.PW_MOVING` stops the module), keeps keys already there unless the new address has no pilot name yet, notes `pw.movedIn`
+and reloads clean. The relay's `ALLOW_ORIGINS` must list the new origins (its default now does). Tested end to end between two
+local hosts (name, builds, tune moved; owner key and token not).
+
 ## Performance (2026-11-17, testers reported heavy CPU) — the overlay is Options → Graphics or F3
 - **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,
   glow and a 32 m patch are merged into one mesh (draw calls 800–2000 → 180–400). `store 'mergeStatic'` false turns it off

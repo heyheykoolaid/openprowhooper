@@ -649,3 +649,40 @@ document.addEventListener('click', e => {
   if (jr) { judgeClip(+jr.dataset.judge); return; }
 });
 window.__pw.board = { get state() { return LB; }, open: () => lbOpen('menu') };
+// ============================================================ The move to openprowhooper.com (owner, 2026-11-20)
+// Each web address keeps its own saved data, so a copy served from the old address (GitHub Pages) offers to move the pilot to
+// the new home (moved.txt → window.PW_MOVED_TO) with everything they have saved: name and pilot id, settings and tune, rates,
+// builds, controls, their own maps and tracks, review progress. Waiting flights are sent first. The data rides in the address
+// after '#' (never sent to any server) and is unpacked by the new page before the game starts (index.template.html). Left
+// behind on purpose: the GitHub token and the owner key (typed again on the new site) and the Flight desk's label cache.
+const MOVE_SKIP = /^pw\.(ownerKey|ownerOk|deskLabs\d*|deskQDone|movedIn|moveAsked)$/;
+function moveTarget() { try { const to = window.PW_MOVED_TO; if (!to || !/^https?:/.test(location.protocol) || /^(localhost|127\.|\[::1\])/.test(location.hostname)) return null; const u = new URL(to); return u.origin === location.origin ? null : u; } catch { return null; } }
+async function movePack(dropBig) {
+  const keys = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || !k.startsWith('pw.') || MOVE_SKIP.test(k)) continue; let v = localStorage.getItem(k);
+    if (k === 'pw.ghsync') { try { const g = JSON.parse(v); delete g.token; v = JSON.stringify(g); } catch { continue; } }   // the token never travels
+    if (dropBig && (k.startsWith('pw.rg.best.') || k === 'pw.commMaps')) continue;   // ghosts and downloaded maps come back from the board
+    keys[k] = v; }
+  const raw = new TextEncoder().encode(JSON.stringify({ format: 'pro-whooper-move/1', from: location.origin, at: Date.now(), keys }));
+  const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  let bin = ''; for (let i = 0; i < z.length; i += 0x8000) bin += String.fromCharCode.apply(null, z.subarray(i, i + 0x8000));
+  return { data: btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), n: Object.keys(keys).length };
+}
+async function moveGo() {
+  const to = moveTarget(); if (!to) return; const box = $('#moveBox'); if (box) box.remove();
+  procShow('Moving to ' + to.host + '…', 'Sending any flights still waiting, then packing your pilot, settings and maps', 0.1); procCreep(0.6, 8000);
+  try { await Promise.race([telPump(true), new Promise(r => setTimeout(r, 12000))]); } catch { /* what is still waiting stays here */ }
+  let p = await movePack(false); if (p.data.length > 1500000) p = await movePack(true);
+  procShow('Moving to ' + to.host + '…', `${p.n} saved things packed: opening the new address`, 0.95);
+  setTimeout(() => location.replace(to.origin + to.pathname + '#pwmove=' + p.data), 300);
+}
+setTimeout(() => { const to = moveTarget(); if (!to || $('#moveBox')) return;
+  const el = document.createElement('div'); el.id = 'moveBox';
+  el.innerHTML = `<div class="panel"><h2>Open Pro Whooper has moved</h2><p>The game now lives at <b>${esc(to.host)}</b>. Your pilot name, settings, rates, builds, controls and maps come with you in one click.</p>
+    <p class="note">Your GitHub token${ghMenus() ? ' and owner key' : ''} stay behind: type them again on the new site if you use them. Bookmark the new address.</p>
+    <div class="row"><button class="primary" data-move="go">Take me there with my data</button><button class="ghost" data-move="later">Not now</button></div></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', e => { const b = e.target.closest('[data-move]'); if (!b) return; if (b.dataset.move === 'go') moveGo(); else el.remove(); });
+}, 2500);
+// arrived from the old address: say so once
+setTimeout(() => { const m = store.get('movedIn', null); if (!m || m.shown) return; store.set('movedIn', { ...m, shown: true }); flash(`<b>WELCOME TO ${esc(location.host.toUpperCase())}</b><small>${m.keys ? `${m.keys} saved things came with you` : 'your saved data was already here'} · bookmark this address</small>`, 'good'); }, 3000);

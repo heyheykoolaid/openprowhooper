@@ -36,7 +36,7 @@ Copy the token. Paste it only into Cloudflare in step 3: not into the game, the 
    |---|---|---|
    | `GITHUB_TOKEN` | **Secret** | the token from step 2 |
    | `GITHUB_REPO` | Text | `heyheykoolaid/openprowhooper-data` |
-   | `ALLOW_ORIGINS` | Text | `https://heyheykoolaid.github.io` |
+   | `ALLOW_ORIGINS` | Text | `https://openprowhooper.com,https://www.openprowhooper.com,https://heyheykoolaid.github.io` |
 4. Recommended: **Storage & Databases → KV** → create a namespace `dropoff-limits`; then in the Worker,
    **Settings → Bindings → Add → KV namespace**, variable name `LIMITS`. This makes the daily cap exact.
 5. Copy the Worker's address (`https://prowhooper-dropoff.<you>.workers.dev`).
