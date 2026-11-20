@@ -539,12 +539,15 @@ async function deskLoad() {
   desk.busy = false; deskRender(); await deskDetails(); deskLabels();
 }
 // fill in who flew what, 40 files at a time (each flight file is read once and remembered while the page is open)
+// the desk's data is read while the Flight desk or the Review Hub is open (the hub's owner sections list the same flights)
+const deskAway = () => $('#deskScreen').classList.contains('hide') && $('#hubScreen').classList.contains('hide');
+const deskHub = () => { if (!$('#hubScreen').classList.contains('hide')) hubRender(); };
 async function deskDetails() { const todo = (desk.list || []).slice(0, 60).filter(it => !desk.info[it.file]);
-  for (let i = 0; i < todo.length; i += 20) { if ($('#deskScreen').classList.contains('hide')) return; const part = todo.slice(i, i + 20);
+  for (let i = 0; i < todo.length; i += 20) { if (deskAway()) return; const part = todo.slice(i, i + 20);
     let got = {}; try { got = await deskGetMany(part.map(it => `telemetry/inbox/flight/${it.day}/${it.file}`)); } catch { /* shown as unreadable */ }
     for (const it of part) { const p = got[`telemetry/inbox/flight/${it.day}/${it.file}`];
       desk.info[it.file] = p && p.format === 'pro-whooper-flight/1' ? { p, id: typeof p.id === 'string' ? p.id : '', name: typeof p.name === 'string' ? p.name.slice(0, 24) : '', map: String(p.map || '').slice(0, 24), calls: Array.isArray(p.events) ? p.events.filter(e => e && e.name !== 'Crash').length : 0, secs: p.summary && Number.isFinite(p.summary.seconds) ? p.summary.seconds : null, craft: p.craft && p.craft.names && typeof p.craft.names.frame === 'string' ? p.craft.names.frame.slice(0, 40) : '', flagged: Array.isArray(p.events) ? p.events.filter(e => e && e.flagged).length : 0 } : { bad: true }; }
-    deskRender(); } }
+    deskRender(); deskHub(); } }
 // the labels already given on each listed flight (the pilot's own and reviewers'), from the label files of the same days
 // and the day after; a label file never changes, so its summary is kept between visits (store 'deskLabs')
 const deskLabOne = l => { const a = String(l.actual || '').slice(0, 40), t = String(l.target || '').slice(0, 40);
@@ -554,13 +557,13 @@ async function deskLabels() {
   const want = [];
   for (const day of [...days].sort().reverse()) { if (desk.labDays[day]) continue;
     try { const L = await deskGet('telemetry/inbox/labels/' + day); desk.labDays[day] = true; for (const f of L) if (f.type === 'file' && /^\d+-[0-9a-f]+\.json$/.test(f.name) && !desk.labs[f.name]) want.push({ day, file: f.name }); } catch { /* try again next refresh */ } }
-  for (let i = 0; i < want.length; i += 40) { if ($('#deskScreen').classList.contains('hide')) break; const part = want.slice(i, i + 40); let got = {};
+  for (let i = 0; i < want.length; i += 40) { if (deskAway()) break; const part = want.slice(i, i + 40); let got = {};
     try { got = await deskGetMany(part.map(w => `telemetry/inbox/labels/${w.day}/${w.file}`)); } catch { break; }
     for (const w of part) { const p = got[`telemetry/inbox/labels/${w.day}/${w.file}`]; if (!p || !Array.isArray(p.labels)) { desk.labs[w.file] = { bad: 1 }; continue; }
       const L = p.labels.filter(l => l && !l.undone && l.actual && l.actual !== 'unlabelled');
       desk.labs[w.file] = { f: String(p.flight || '').slice(0, 60), by: String(L.find(l => l.by) ? L.find(l => l.by).by : p.name || '').slice(0, 24), rv: L.some(l => l.reviewer) ? 1 : 0, ok: p.ownerVerified ? 1 : 0, L: L.slice(0, 60).map(deskLabOne), T: L.slice(0, 60).filter(l => Number.isFinite(+l.t)).map(l => [+Math.min(+l.t, Number.isFinite(+l.repStart) ? +l.repStart : +l.t).toFixed(1), +(+l.t).toFixed(1), l.judge ? 1 : 0, String(l.actual).slice(0, 40), String(l.by || p.name || '').slice(0, 24)]), at: +w.file.split('-')[0] }; }
     const keys = Object.keys(desk.labs); if (keys.length > 900) for (const k of keys.sort((a, b) => (desk.labs[a].at || 0) - (desk.labs[b].at || 0)).slice(0, keys.length - 900)) delete desk.labs[k];
-    store.set('deskLabs3', desk.labs); deskRender(); } }
+    store.set('deskLabs3', desk.labs); deskRender(); deskHub(); } }
 const deskLabsFor = id => id ? Object.values(desk.labs).filter(x => x && x.f === id) : [];
 // The review queue (owner, 2026-11-19: "list the most pressing things that need reviewing"): moments in the listed flights
 // that nobody has answered yet, most pressing first: a call the pilot flagged with F, a trick the game missed (Q), the trick

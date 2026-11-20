@@ -117,7 +117,7 @@ async function hubLoad(sec) {
   try {
     if (sec === 'mine' || sec === 'trick') { await hubKeepRun(); await hubLoadMine(); }
     if (sec === 'board' && (!LB.runs || LB.day !== lbToday())) { await lbLoad(lbToday()); if (!LB.runs) HUB.msg.board = LB.msg || 'The board could not be reached.'; }
-    if (['queue', 'flights', 'disagree', 'trick'].includes(sec) && hubOwner()) { if (!deskVia()) HUB.msg[sec] = 'Save your owner key in Options → Owner.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) await deskLabels(); if (desk.msg) HUB.msg[sec] = desk.msg; }
+    if (['queue', 'flights', 'disagree', 'trick'].includes(sec) && hubOwner()) { if (!deskVia()) HUB.msg[sec] = 'Save your owner key in Options → Owner.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) { await deskDetails(); await deskLabels(); } if (desk.msg) HUB.msg[sec] = desk.msg; }
     if (sec === 'community' && hubOwner() && !JG.byMap[MAP_ID]) await judgeLoad(MAP_ID);
     if (sec === 'feedback' && hubOwner() && !desk.fb && deskVia()) await deskFeedback();
   } catch { HUB.msg[sec] = 'Could not load this just now.'; }
