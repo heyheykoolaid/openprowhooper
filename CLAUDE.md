@@ -305,7 +305,11 @@ stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 18 Hi
 brightens the hemisphere (1.9: the pilot found the first version far too dark). Detail pass (2026-11-17): Clappy's
 buildings have windows, floor bands, parapets, rooftop units, water tanks (over/unders) and stair huts (`MAT.glass`);
 the footbridge stairs climb from the plaza onto its west end; balance beams stand on posts; the ladder has rails.
-Destructible or moving props from the brief are not in (the physics world is static). Only the playground draws the
+Destructible or moving props from the brief are not in (the physics world is static). **2026-11-21** (owner): the Mezzanine Stairs stand
+flush against the deck's west end and rise to its top, with a handrail each side, a rail along the deck's west edge that stops where
+the top steps come on and a corner post; `Trailer underside` is a gap (between its legs and wheels: the low-gap survey skips boxes
+over 6 m long). Asked for and still to do: a moving conveyor belt, and two levels more scatter and detail (then gapcheck, floatcheck,
+mapaudit and test/maps.js again). Only the playground draws the
 skyline and power lines; the sun's shadow box is sized from each map's bounds. Static materials `blossom` and `fluoro`
 are new. test/maps.js checks every map (builds, Surveyor counts, clear spawn, bot Powerloops/Mattys on its own objects).
 
@@ -731,6 +735,13 @@ carried on, or a missed over/under 1.6 s), a crash (0.8 s) or R goes back there 
 part (pauses off: held until a stick moves); R at a checkpoint goes back to the start. A turn on another axis or the wrong object
 never rewinds. Live tries: a crash, "Not really" and "Go again" go back to the rolling start. ⟲ Auto-retry on / off in the panel
 (`store 'coachRetry'`, on; off, R still does it). test/coach.js (100 checks).
+**Nothing from the Training Room is kept** (owner, 2026-11-21: "don't save data from training flights … that mode still needs a lot of
+work"): on map `training` `telCapture`, `recapSave` and `hubKeepRun` do nothing (so the live tries' Y / N answers are no longer
+labels), the hub deletes Training Room runs earlier builds kept and leaves shared ones out of every list (`desk.info[…].bad`), and
+tools/evidence.js skips flights on that map (the files stay in the data repo). **Big objects** (same day: "loops and trippy spins
+should be on large objects … a 10 m object for the square"): `Big Square 10 m` (a frame 10 m wide and high at x -8, z -15..-5,
+flown east-west; station `big`: Powerloops and Maverick Loops, start at (4, -10) at 4-7 m/s, 3 m up when it goes under first) and
+`Big Pole 12 m` (r 0.3 at (-10, 11); the `pole` station). Show me still flies the small bars (`demoObjects` takes bars up to 3.2 m).
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
 re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
 menu's device note (`updateMenuDevice`, every 2 s).
@@ -790,7 +801,9 @@ require multiple verifications, prioritize tricks that other pilots have labelle
 there (95: it counts only once a second pilot agrees), and +10 per other pilot (up to +20) who has labelled that trick anywhere
 (the learners need 2+ pilots); label spans carry [a, b, judge, actual, by] (`store 'deskLabs3'`). A moment is answered when any label's span
 covers it (−1.5 / +2.5 s) or you judged it here (`store 'deskQDone'`, set when the review closes with a verdict or an added
-trick). Another map reloads into it (`deskPending` { file, t }) and opens the moment there. **A reviewer's undecided change** (owner, 2026-11-20: a
+trick). Another map reloads into it (`deskPending` { file, t }) and opens the moment there. **A moment with no game call** (owner, 2026-11-21: a disagreement opened with an empty timeline): what the pilots said there goes on the
+timeline as maybes (`q.says` → events `exec: 'PILOTS SAY'`, `maybe: true`, over the labels' span; `guestOpen` keeps `maybe`), the first
+one playing: ✓ the one you agree with or pick what it was. **A reviewer's undecided change** (owner, 2026-11-20: a
 queue moment's Wall Tap was moved later, Done sent nothing and the queue kept it): closing a guest review with calls moved,
 stretched, graded or grouped but given no verdict asks (`closeRecap`): OK counts them ✓ and sends (progress bar, queue marked),
 Cancel stays in the review. Nothing is assumed without the click.

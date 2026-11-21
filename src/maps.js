@@ -298,7 +298,16 @@
     // ---- mezzanine (north-east) with an office under it and stairs up
     { const o = slabOU('Mezzanine', v3(15, 4.5, -17), v3(13, 0.12, 3), 'metalPlate'); for (const x of [3, 9, 15, 21, 27]) pipe(o, v3(x, 0, -14.2), v3(x, 4.4, -14.2), 0.1, 'paintBlue');
       bar('Mezzanine Rail', v3(2, 5.5, -14), v3(28, 5.5, -14), 0.03, 'plasticYellow');
-      const st = O('Mezzanine Stairs', 'deco'); for (let i = 0; i < 12; i++) box(st, v3(1.6 - 0.0, 4.5 * (i + 1) / 12 / 2, -14.4 - (11 - i) * 0.3 + 0), v3(0.6, 4.5 * (i + 1) / 12 / 2, 0.15), 'metalPlate', 0, 0, 0);
+      // the stairs climb south along the mezzanine's west end and step onto it at its south-west corner (owner, 2026-11-21: "the
+      // stairs do not line up to the railings"): flush against the deck's edge and up to its top, a handrail down each side, a
+      // rail along the deck's west edge that stops where the top steps come on, a post where the rails meet
+      const st = O('Mezzanine Stairs', 'deco'), SX = 1.4, TOP = 4.62; for (let i = 0; i < 12; i++) box(st, v3(SX, TOP * (i + 1) / 12 / 2, -14.4 - (11 - i) * 0.3), v3(0.6, TOP * (i + 1) / 12 / 2, 0.15), 'metalPlate', 0, 0, 0, { noSurvey: true });
+      { const zl = -17.7, zt = -14.4, yl = TOP / 12 + 0.9, yt = TOP + 0.9, rail = (x, z1, y1) => { pipe(st, v3(x, yl, zl), v3(x, y1, z1), 0.025, 'plasticYellow', { noSurvey: true }); pipe(st, v3(x, TOP / 12, zl), v3(x, yl, zl), 0.025, 'plasticYellow', { noSurvey: true }); };
+        rail(SX - 0.6, zt, yt); pipe(st, v3(SX - 0.6, TOP, zt), v3(SX - 0.6, yt, zt), 0.025, 'plasticYellow', { noSurvey: true });
+        const zo = -15.0, yo = yl + (yt - yl) * (zo - zl) / (zt - zl); rail(2.0, zo, yo);   // the deck side: up to where the opening onto the deck starts
+        pipe(st, v3(2.0, yo, zo), v3(2.0, 5.5, zo), 0.025, 'plasticYellow', { noSurvey: true });
+        pipe(st, v3(2.0, TOP, -14.0), v3(2.0, 5.5, -14.0), 0.03, 'plasticYellow', { noSurvey: true }); }
+      bar('Mezzanine Rail', v3(2, 5.5, -20), v3(2, 5.5, -15.0), 0.03, 'plasticYellow');
       const of = O('Office', 'building', { wallNormal: v3(0, 0, 1), tall: 3.2 });
       box(of, v3(24, 1.6, -15.2), v3(4, 1.6, 0.06), 'vConcrete'); box(of, v3(20, 1.6, -17.6), v3(0.06, 1.6, 2.4), 'vConcrete'); box(of, v3(24, 3.25, -17.6), v3(4, 0.05, 2.4), 'vConcrete');
       O('Office Window', 'gap', { gap: { c: v3(24, 1.5, -15.2), n: v3(0, 0, 1), hu: 1.0, hv: 0.5, u: v3(1, 0, 0) } }); }
@@ -316,6 +325,7 @@
     { const m = O('Floor Marking', 'deco'); for (const z of [-11.5, -4.5, 2.5]) box(m, v3(-15, 0.008, z), v3(13, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); for (const x of [-16, 0, 16]) box(m, v3(x, 0.008, Z - 2), v3(2.4, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); }
     // ---- outside: the loading dock and a parked trailer
     { const d = O('Loading Dock', 'deco'); box(d, v3(0, 0.6, Z + T + 1.5), v3(22, 0.6, 1.5), 'concrete'); for (const x of [-16, 0, 16]) for (const s of [-1, 1]) box(d, v3(x + s * 1.8, 0.8, Z + T + 3.05), v3(0.2, 0.25, 0.06), 'rubberBlack');
+      O('Trailer underside', 'gap', { gap: { c: v3(-16, 0.6, 28.9), n: v3(1, 0, 0), hu: 3.7, hv: 0.48, u: v3(0, 0, 1) } });   // owner, 2026-11-21: under the truck counts (between its legs and its wheels)
       const tr = O('Trailer', 'overunder', { obstacle: { a: v3(-17.25, 0, 30), b: v3(-14.75, 0, 30), under: 1.25, over: 4.15 } }); box(tr, v3(-16, 2.7, 30), v3(1.25, 1.45, 6), 'metalPlate'); box(tr, v3(-16, 1.2, 30), v3(1.2, 0.05, 6), 'metal');
       for (const z of [33.5, 34.8]) for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 1.05, 0.5, z), v3(-16 + s * 1.3, 0.5, z), 0.5, 'tire');
       for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 0.9, 0, 24.6), v3(-16 + s * 0.9, 1.15, 24.6), 0.05, 'metal'); }
@@ -1785,6 +1795,12 @@
     // ---- the trick bay (west): the Trick Park's obstacles in lab gray, and a pilot to fly round
     trickPark(K, -47, 0, 1, { post: 'labGate', bar: 'labBar', pole: 'labGate', slab: 'labWall', wall: 'labWall', tower: 'labWall', accent: 'labMark', glow: false, zone: 'labFloor' });
     addPilot(K, -18, 19);
+    // ---- big objects (owner, 2026-11-21: "the tests for loops and trippy spins should be on large objects … a 10 m object for the
+    // square"): a square frame 10 m wide and 10 m high between the bay and the circuit, flown east-west, and a tall thick pole
+    { const x = -8, za = -15, zb = -5, h = 10, r = 0.1, o = K.O('Big Square 10 m', 'overunder', { obstacle: { a: v3(x, 0, za), b: v3(x, 0, zb), under: h - r, over: h + r } });
+      for (const z of [za, zb]) K.pipe(o, v3(x, 0, z), v3(x, h, z), 0.12, 'labGate'); K.pipe(o, v3(x, h, za), v3(x, h, zb), r, 'labBar');
+      box(o, v3(x, 0.006, -10), v3(0.04, 0.004, 5), 'labMark', 0, 0, 0, { noCollide: true }); }
+    { const o = K.O('Big Pole 12 m', 'pole'); K.pipe(o, v3(-10, 0, 11), v3(-10, 12, 11), 0.3, 'labGate'); }
     // ---- the training circuit (east). Gates are plain square frames; the route runs clockwise from the start (-4, 22)
     const G = (name, x, z, w, h, along) => frame(name, x, z, w, h, along, 'labGate');
     G('1 Entry Gate', 40, 22, 3.2, 3.0, 'z');                                    // 1 the Entry Straight: one line, one gate

@@ -31,7 +31,7 @@ addEventListener('unhandledrejection', e => { const r = e && e.reason; errNote(r
 
 // ---- what leaves: one finished run. Called while the run's arrays are still in place; packs in the background.
 function telCapture(reason) {
-  if (!tel.on || !recap.id || recap.telDone === recap.id || race.on || recap.guest) return null;
+  if (!tel.on || !recap.id || recap.telDone === recap.id || race.on || recap.guest || MAP_ID === 'training') return null;   // owner, 2026-11-21: Training Room flights are not saved or sent
   let rows = recap.trace; if (rows.length < TEL.minSeconds * TRACE_HZ && !(recap.pieces && recap.pieces.length) && !recap.spill) return null;
   const sq = telSqueeze(rows.filter(r => r[0] > recap.telUpTo)); let act = 0; for (const r of sq.rows) act += rowActive(r) ? 1 : 0;
   telSpillEnd(); const pend = recap.pieces.splice(0);   // the older pieces of a long run go first (packed in the background below)
@@ -387,7 +387,7 @@ function guestOpen(rows, events, of, review) {
   if (!recap.guest) LB.keep = { trace: recap.trace, events: recap.events, flags: recap.flags, id: recap.id, started: recap.started, mode: recap.mode, dirty: recap.dirty, telDone: recap.telDone };   // the player's own run comes back afterwards
   recapReset(); recap.guest = true; recap.guestOf = of; recap.trace = rows; recap.telDone = recap.id;
   const plain = x => String(x).replace(/[<>&"'`\\]/g, '');   // someone else's file: names are shown in many places, so no markup gets in at all
-  recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: plain(e.name).slice(0, 60), exec: plain(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? plain(e.obstacle).slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null }));
+  recap.events = (Array.isArray(events) ? events : []).filter(e => e && Number.isFinite(e.t) && typeof e.name === 'string' && e.name !== 'Crash' && e.name !== 'near').slice(0, 400).map(e => ({ t: e.t, t0: Number.isFinite(e.t0) ? e.t0 : e.t - 1.2, name: plain(e.name).slice(0, 60), exec: plain(e.exec || '').slice(0, 12), clean: Number.isFinite(e.clean) ? e.clean : null, obstacle: typeof e.obstacle === 'string' ? plain(e.obstacle).slice(0, 60) : null, conf: Number.isFinite(e.conf) ? e.conf : null, fails: [], verdict: null, actual: null, ...(e.maybe ? { maybe: true } : {}) }));
   openRecap(of.source); recap.review = !!review; renderRecap();
 }
 // build the reviewer labels from the review in hand (null if nothing is decided yet) and send them (quiet: no modal, for the
@@ -548,6 +548,7 @@ async function deskDetails() { const todo = (desk.list || []).slice(0, 60).filte
     let got = {}; try { got = await deskGetMany(part.map(it => `telemetry/inbox/flight/${it.day}/${it.file}`)); } catch { /* shown as unreadable */ }
     for (const it of part) { const p = got[`telemetry/inbox/flight/${it.day}/${it.file}`];
       desk.info[it.file] = p && p.format === 'pro-whooper-flight/1' ? { p, id: typeof p.id === 'string' ? p.id : '', name: typeof p.name === 'string' ? p.name.slice(0, 24) : '', map: String(p.map || '').slice(0, 24), calls: Array.isArray(p.events) ? p.events.filter(e => e && e.name !== 'Crash').length : 0, secs: p.summary && Number.isFinite(p.summary.seconds) ? p.summary.seconds : null, craft: p.craft && p.craft.names && typeof p.craft.names.frame === 'string' ? p.craft.names.frame.slice(0, 40) : '', flagged: Array.isArray(p.events) ? p.events.filter(e => e && e.flagged).length : 0 } : { bad: true }; }
+    for (const it of part) { const i = desk.info[it.file]; if (i && i.map === 'training') i.bad = true; }   // Training Room flights sent by earlier builds stay out of every review list
     deskRender(); deskHub(); } }
 // the labels already given on each listed flight (the pilot's own and reviewers'), from the label files of the same days
 // and the day after; a label file never changes, so its summary is kept between visits (store 'deskLabs')
@@ -593,8 +594,9 @@ function deskQueue() {
 async function deskQOpen(q) {
   const it = (desk.list || []).find(x => x.file === q.file), i = desk.info[q.file]; if (!it || !i || i.bad) return; const p = i.p;
   if (p.map !== MAP_ID) { if (!S.MAPS[p.map]) { desk.msg = 'That flight is on a map this version does not have.'; deskRender(); return; } store.set('deskPending', { file: q.file, t: q.t }); store.set('map', p.map); $('#loading').textContent = 'Loading ' + S.MAPS[p.map].title + '…'; show('#loading'); setTimeout(() => location.reload(), 300); return; }
-  try { guestOpen(await FlightLog.unpack(p.trace), q.kind === 'call' ? [q.e] : [], { name: p.name || '(no name)', flight: p.id, started: p.started, source: 'desk', ref: `${it.day}/${it.file}`, clip: deskQKey(q.file, q.t) }, true); desk.openFile = q.file;
-    if (q.kind === 'call') { const x = recapItems()[0]; if (x) recapPlay(x); } else { if (recap.play) recapSeek(Math.max(0, q.t - 4)); flash(q.vote ? `<b>A PILOT VOTED: ${esc(q.vote)}</b><small>the game made no call here: add the trick at the red line if you agree</small>` : '<b>THE PILOT PRESSED Q HERE</b><small>the game missed a trick just before: add what they flew at the red line</small>', 'near'); }
+  try { const said = q.kind !== 'call' && Array.isArray(q.says) && Number.isFinite(q.a) ? q.says.map(nm => ({ t: q.b, t0: Math.min(q.a, q.b - 0.4), name: String(nm), exec: 'PILOTS SAY', maybe: true })) : [];   // what pilots said where the game called nothing: shown like the library's maybes, yours to confirm or correct
+    guestOpen(await FlightLog.unpack(p.trace), q.kind === 'call' ? [q.e] : said, { name: p.name || '(no name)', flight: p.id, started: p.started, source: 'desk', ref: `${it.day}/${it.file}`, clip: deskQKey(q.file, q.t) }, true); desk.openFile = q.file;
+    if (q.kind === 'call' || said.length) { const x = recapItems()[0]; if (x) recapPlay(x); if (said.length) flash(`<b>PILOTS SAID: ${said.map(x => esc(x.name)).join(' / ').toUpperCase()}</b><small>the game called nothing here: ✓ the one you agree with, or pick what it was</small>`, 'near'); } else { if (recap.play) recapSeek(Math.max(0, q.t - 4)); flash(q.vote ? `<b>A PILOT VOTED: ${esc(q.vote)}</b><small>the game made no call here: add the trick at the red line if you agree</small>` : '<b>THE PILOT PRESSED Q HERE</b><small>the game missed a trick just before: add what they flew at the red line</small>', 'near'); }
     renderRecap(); }
   catch { desk.msg = 'That flight could not be opened.'; deskRender(); } }
 // pilots' feedback (Options → Send feedback), newest first, the last 7 days

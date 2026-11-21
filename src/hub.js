@@ -30,14 +30,16 @@ const hubMapT = id => (S.MAPS[id] || {}).title || id || '';
 
 // ---- My runs: keep every run worth reviewing (called when a new flight starts, when a review is saved, and when the hub opens)
 async function hubKeepRun() {
-  if (recap.guest || !recap.id || recap.trace.length < 10 * TRACE_HZ) return; const id = recap.id, rows = recap.trace.slice(), started = recap.started, map = MAP_ID, camTilt = tune.camTilt;
+  if (recap.guest || !recap.id || recap.trace.length < 10 * TRACE_HZ || MAP_ID === 'training') return; const id = recap.id,   // owner, 2026-11-21: nothing from the Training Room is kept
+  rows = recap.trace.slice(), started = recap.started, map = MAP_ID, camTilt = tune.camTilt;
   const events = JSON.parse(JSON.stringify(recap.events)), flags = JSON.parse(JSON.stringify(recap.flags));
   try { const packed = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ);
     await idb.put('runs', { id: 'mine-' + id, mine: true, run: id, started, at: Date.now(), map, camTilt, events, flags, packed, secs: rows.length / TRACE_HZ, layout: !!MAP_EDITS });
     const all = (await idb.all('runs')).filter(r => r && r.mine).sort((a, b) => (b.at || 0) - (a.at || 0)); for (const old of all.slice(HUB_MINE)) await idb.del('runs', old.id);
     HUB.mine = null; } catch { /* storage full or blocked: the run just isn't kept */ }
 }
-async function hubLoadMine() { try { HUB.mine = (await idb.all('runs')).filter(r => r && (r.mine || r.review)); } catch { HUB.mine = []; } }
+async function hubLoadMine() { try { const all = (await idb.all('runs')).filter(r => r && (r.mine || r.review)); for (const r of all) if (r.map === 'training') { try { await idb.del('runs', r.id); } catch { /* next time */ } }   // Training Room runs kept by earlier builds are removed
+    HUB.mine = all.filter(r => r.map !== 'training'); } catch { HUB.mine = []; } }
 const hubDecided = e => e.verdict === 'yes' || (e.verdict === 'no' && !!e.actual);
 // an older review (saved before runs were kept here): put the pilot's verdicts back on the calls from its labels
 function hubFromLabels(r) {
@@ -85,7 +87,7 @@ function hubPeople(flight, t) { if (!flight) return 0; const m = hubMoments().fi
 const hubFlightOf = id => (desk.list || []).find(it => (desk.info[it.file] || {}).id === id);
 function hubMomentItem(m, key, title) {
   const it = hubFlightOf(m.flight), i = it && desk.info[it.file]; if (!i || i.bad) return null; const p = i.p, e = (p.events || []).find(x => x && Number.isFinite(x.t) && x.t >= m.a - 1.5 && x.t <= m.b + 2.5);
-  const q = { file: it.file, kind: e ? 'call' : 'missed', e, t: e ? e.t : m.b, name: e ? String(e.name).slice(0, 60) : '' };
+  const q = { file: it.file, kind: e ? 'call' : 'missed', e, t: e ? e.t : m.b, name: e ? String(e.name).slice(0, 60) : '', a: m.a, b: m.b, says: [...new Set(m.says.values())].filter(x => x && x !== 'not a trick').slice(0, 4) };   // no game call there: the pilots' own answers go on the timeline (owner, 2026-11-21: "the trick was not on the timeline")
   return { key, title, sub: `${p.name || '(no name)'} · ${hubMapT(p.map)} · ${[...m.says].map(([w, a]) => `${w}: ${a}`).join(' · ')}`, map: p.map, pilot: String(p.name || '').toLowerCase(), tricks: [...new Set(m.says.values())], at: it.at, people: m.says.size, disputed: new Set(m.says.values()).size > 1, done: !!HUB.done[key], open: () => deskQOpen(q) };
 }
 function hubDisagreements() { const out = []; for (const m of hubMoments()) { if (new Set(m.says.values()).size < 2) continue; const d = hubMomentItem(m, `disagree:${m.flight}@${m.b.toFixed(1)}`, [...new Set(m.says.values())].join(' or ') + '?'); if (d) out.push(d); } return out; }

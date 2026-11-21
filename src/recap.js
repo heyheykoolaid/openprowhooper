@@ -243,6 +243,7 @@ function recapPayload() {
 }
 function recapSave(force) {
   if (recap.guest) { if (recap.dirty || force) { if (typeof HUB !== 'undefined' && HUB.nav && HUB.nav.open && !force) hubDefer(); else reviewerSave(); } return; }   // someone else's run: nothing is kept as yours; your verdicts go out as reviewer labels (from the Review Hub after a 10 s undo window)
+  if (MAP_ID === 'training') { recap.dirty = false; return; }   // owner, 2026-11-21: nothing from the Training Room is saved, sent or learned from
   if (!recap.dirty && !force) return; const pl = recapPayload(); if (!pl.run.labels.length) return; recap.dirty = false; hubKeepRun();   /* the Review Hub's My runs keeps the run with its verdicts */
   try { idb.put('runs', { id: 'review-' + recap.id, started: recap.started, review: true, map: MAP_ID, camTilt: tune.camTilt, labels: pl.run.labels, events: pl.run.events, hz: TRACE_HZ, cols: TRACE_COLS, trace: recap.trace, craft: { ...spec }, tune }); } catch {}
   const jobs = [];

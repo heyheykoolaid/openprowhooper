@@ -115,17 +115,19 @@ function coachJudge(steps, t0, strictObj) {
 // pilot's own map again (Done reopens the Tricktionary). The room holds every kind of obstacle; the pilot is put in front
 // of the one the trick needs (`coachStation`), and R brings them back there.
 const ROOM = 'training';
-const COACH_CAT_ST = { 'Open Air Tricks': 'open', 'Other Tricks': 'open', Powerloops: 'bar', 'Maverick Loops': 'bar', 'Matty Flips': 'bar', SplitS: 'bar', 'Jump Roping': 'bar',
+const COACH_CAT_ST = { 'Open Air Tricks': 'open', 'Other Tricks': 'open', Powerloops: 'big', 'Maverick Loops': 'big',   // loops on the big square (owner, 2026-11-21: "the small object just isn't gonna work")
+  'Matty Flips': 'bar', SplitS: 'bar', 'Jump Roping': 'bar',
   'Pole Dancing': 'pole', Rewinds: 'pole', 'Wall Tricks': 'wall', Gaps: 'gap' };
 const COACH_ST_OVR = { Dive: 'tower', Perch: 'tower', 'Ceiling Tap': 'slab', 'Slide Disarm': 'open', Facepunch: 'pilot', 'Stall Rewind': 'wall', 'Wall Stick': 'wall', 'Juicy Flick': 'open', 'Juicy Tornado': 'open',
   'Inverted Yaw Tracking': 'pole', 'Eject Roll': 'pole', 'Stellar Eject Roll': 'pole', 'Maverick Tap Rewind': 'bar', 'Power Switch Tap': 'bar', Snapback: 'bar', Forani: 'bar', 'True Barani': 'bar', Blindflip: 'bar' };
 function coachStation(name, cat, plan) {
   let st = COACH_ST_OVR[name] || COACH_CAT_ST[(cat || '').trim()] || 'open';
-  if (st === 'open' && plan && plan.cross) st = 'bar';   // anything flown over and under something
+  if (st === 'open' && plan && plan.cross) st = 'bar';
+  if (st === 'big' && COACH_ST_OVR[name]) st = COACH_ST_OVR[name];   // anything flown over and under something
   return st;
 }
 const COACH_SPOTS = {   // the room's obstacle for each station, and where the pilot starts: [x, z, yaw] (yaw π/2 faces west, -π/2 east, π south)
-  bar: ['Test Bar 2.2 m', -26.5, -12, Math.PI / 2], gap: ['Gap Gate 1.1 m', -30, -19, Math.PI / 2], pole: ['Test Pole medium', -36, 9, Math.PI],
+  big: ['Big Square 10 m', 4, -10, Math.PI / 2], bar: ['Test Bar 2.2 m', -26.5, -12, Math.PI / 2], gap: ['Gap Gate 1.1 m', -30, -19, Math.PI / 2], pole: ['Big Pole 12 m', -10, 3, Math.PI],
   wall: ['Test Wall 3 m', -24, -10, -Math.PI / 2], tower: ['Dive Tower 14 m', -23, 6, -Math.PI / 2], slab: ['Ceiling Slab 2.3 m', -22, -3.5, Math.PI],
   pilot: ['Pilot', -18, 13, Math.PI], open: ['Open Air Box', -36, 2, Math.PI / 2] };
 function coachGoRoom(name) {
@@ -163,8 +165,8 @@ function coachEntry(stn, bot) {
   const sp = world.spawn, yaw = sp.yaw || 0, fw = S.qrot(S.qaxis(S.v3(0, 1, 0), yaw), S.v3(0, 0, -1)), name = COACH_SPOTS[stn][0], cl = (x, a, b) => Math.max(a, Math.min(b, x));
   const o = world.objs.find(x => x.name === name), gap = world.objs.find(x => x.name === name + ' opening' && x.gap), bv = bot ? bot.v : null;
   let y, v, back = 0, obj = name;
-  if (stn === 'bar' && o && o.obstacle) { let first = null; for (const st of coach.steps) { first = st.pass || (st.during && st.during[0]) || null; if (first) break; }
-    y = first === 'O' ? o.obstacle.over + 0.7 : Math.max(0.6, o.obstacle.under * 0.55); v = cl(bv ?? 3.5, 2, 4.5); }
+  if ((stn === 'bar' || stn === 'big') && o && o.obstacle) { let first = null; for (const st of coach.steps) { first = st.pass || (st.during && st.during[0]) || null; if (first) break; }
+    y = first === 'O' ? o.obstacle.over + 0.7 : Math.max(0.6, Math.min(3, o.obstacle.under * 0.55)); v = stn === 'big' ? cl((bv ?? 4) * 1.6, 4, 7) : cl(bv ?? 3.5, 2, 4.5); }   // a big loop needs more speed in
   else if (stn === 'gap' && gap) { y = gap.gap.c.y; v = cl(bv ?? 3, 2, 4); }
   else if (stn === 'pole') { y = 1.5; v = cl(bv ?? 3, 2, 5); }
   else if (stn === 'open') { y = cl(bot ? bot.y : 3, 2.5, 6); v = cl(bv ?? 4, 0, 6); back = 4; obj = 'open air'; }
