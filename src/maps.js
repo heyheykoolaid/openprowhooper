@@ -253,19 +253,19 @@
       for (const d of doors) { box(o, v3((x0 + d - DW) / 2, H / 2, z), v3((d - DW - x0) / 2, H / 2, T / 2), 'metalPlate'); box(o, v3(d, (DH + H) / 2, z), v3(DW, (H - DH) / 2, T / 2), 'metalPlate'); x0 = d + DW;
         box(o, v3(d, DH + 0.3, z - 0.2), v3(DW, 0.3, 0.2), 'galv');   // the rolled-up door
         neon(o, v3(d, DH - 0.02, z - T / 2 - 0.01), v3(DW, 0.02, 0.01), 'plasticYellow');
-        O('Roll-up Door', 'gap', { gap: { c: v3(d, DH / 2, z), n: v3(0, 0, 1), hu: DW, hv: DH / 2, u: v3(1, 0, 0) } }); }
+        O('Roll-up Door', 'gap', { gap: { c: v3(d, (DH - 0.12) / 2, z), n: v3(0, 0, 1), hu: DW - 0.1, hv: (DH - 0.12) / 2, u: v3(1, 0, 0) } }); }   /* the opening less 10 cm of frame (tools/gapcheck.js) */
       box(o, v3((x0 + X) / 2, H / 2, z), v3((X - x0) / 2, H / 2, T / 2), 'metalPlate'); }
     { const r = O('Warehouse Roof', 'deco'), holes = [[-15, -4], [15, -4]], SW = 3, SL = 5;   // skylights: two pairs, each opening 6 x 10 m split in two
       // strips of roof between and around the skylight openings (x -18..-12 and 12..18, z -9..1)
       for (const [a, b] of [[-X - T, -18], [-12, 12], [18, X + T]]) box(r, v3((a + b) / 2, H + 0.15, 0), v3((b - a) / 2, 0.15, Z + T), 'metal');
       for (const [hx] of holes) { box(r, v3(hx, H + 0.15, (-Z - T - 9) / 2), v3(SW, 0.15, (Z + T - 9) / 2), 'metal'); box(r, v3(hx, H + 0.15, (1 + Z + T) / 2), v3(SW, 0.15, (Z + T - 1) / 2), 'metal');
         box(r, v3(hx, H + 0.1, -4), v3(SW, 0.03, 0.08), 'galv', 0, 0, 0, { noCollide: true });
-        for (const zc of [-6.5, -1.5]) O('Skylight', 'gap', { gap: { c: v3(hx, H + 0.15, zc), n: v3(0, 1, 0), hu: SW, hv: SL / 2, u: v3(1, 0, 0) } }); void SL; } }
+        for (const zc of [-6.45, -1.55]) O('Skylight', 'gap', { gap: { c: v3(hx, H + 0.15, zc), n: v3(0, 1, 0), hu: SW - 0.1, hv: SL / 2 - 0.05, u: v3(1, 0, 0) } }); void SL; } }
     // ---- steel columns (the roof's), lights on the roof trusses
     const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); neon(col, v3(x, 1.2, z), v3(0.21, 0.08, 0.21), 'plasticYellow'); }
     // lights: three rows of high-bay fittings under the trusses (strong: the pilot found the first version far too dark)
-    for (const x of [-25, -15, -5, 5, 15, 25]) for (const z of [-13, -1, 11]) { const l = O('High-bay Light', 'deco', (x + z) % 2 === 0 || z === -1 ? { light: v3(x, H - 1.0, z), lightColor: 0xeef5ff, lightPower: 60, lightRange: 30 } : {});
-      box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal'); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H - 0.3, z), 0.01, 'chain', { noCollide: true }); }
+    for (const x of [-25, -15, -5, 5, 15, 25]) for (const z0 of [-13, -1, 11]) { const z = Math.abs(x) === 15 && z0 === -1 ? 2.2 : z0, l = O('High-bay Light', 'deco', (x + z0) % 2 === 0 || z0 === -1 ? { light: v3(x, H - 1.0, z), lightColor: 0xeef5ff, lightPower: 60, lightRange: 30 } : {});   /* two hung in a skylight opening, from nothing: now just south of it */
+      box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal'); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H, z), 0.01, 'chain', { noCollide: true }); }
     // the roof structure: a truss every 6 m (top and bottom chords and diagonals), purlins along the hall
     { const tr = O('Roof Truss', 'deco'); for (let x = -27; x <= 27; x += 6) { pipe(tr, v3(x, H - 0.3, -Z), v3(x, H - 0.3, Z), 0.07, 'galv'); pipe(tr, v3(x, H - 1.6, -Z + 1), v3(x, H - 1.6, Z - 1), 0.05, 'galv');
         for (let z = -Z + 1; z < Z - 1; z += 3) pipe(tr, v3(x, H - 1.6, z), v3(x, H - 0.3, z + 1.5), 0.025, 'galv', { noSurvey: true }); }
@@ -282,15 +282,15 @@
       for (let i = 0; i < nb; i++) { const xa = x0 + i * bw, xb = xa + bw;
         for (const y of [1.6, 3.2, 4.8, 6.4]) { bar('Rack Beam', v3(xa, y, rz - D), v3(xb, y, rz - D), 0.05, 'paintOrange'); pipe(up, v3(xa, y, rz + D), v3(xb, y, rz + D), 0.05, 'paintOrange');
           box(up, v3((xa + xb) / 2, y + 0.06, rz), v3(bw / 2 - 0.06, 0.02, D), 'wood');
-          if (rnd() < 0.55) { const w = 0.4 + rnd() * 0.35, hh = 0.25 + rnd() * 0.35; box(crate, v3(xa + 0.6 + rnd() * (bw - 1.2), y + 0.08 + hh, rz), v3(w, hh, Math.min(D - 0.05, w)), rnd() < 0.5 ? 'wood' : 'dumpster'); } }
-        if (i % 3 === 1) O('Rack Bay', 'gap', { gap: { c: v3((xa + xb) / 2, 2.4, rz), n: v3(0, 0, 1), hu: bw / 2 - 0.08, hv: 0.7, u: v3(1, 0, 0) } }); } }
+          if (rnd() < 0.55) { const w = 0.4 + rnd() * 0.35, hh = 0.25 + rnd() * 0.35, px = xa + 0.6 + rnd() * (bw - 1.2), mt = rnd() < 0.5 ? 'wood' : 'dumpster'; if (!(i % 3 === 1 && y === 1.6)) box(crate, v3(px, y + 0.08 + hh, rz), v3(w, hh, Math.min(D - 0.05, w)), mt); } }   /* the same draws as before; a crate in a Rack Bay gap is left out (four gaps were blocked) */
+        if (i % 3 === 1) O('Rack Bay', 'gap', { gap: { c: v3((xa + xb) / 2, 2.42, rz), n: v3(0, 0, 1), hu: bw / 2 - 0.16, hv: 0.62, u: v3(1, 0, 0) } }); } }
     // ---- shipping containers: stacks in the east half, one open both ends as a tunnel
     const cont = (name, cx, cy, cz, ry, mat, open) => { const L = 6, W = 1.2, Hh = 1.3, alongX = ry === 0, o = O(name, 'overunder');
       const c = v3(cx, cy + Hh, cz), hx = alongX ? L / 2 : W, hz = alongX ? W : L / 2;
       if (!open) box(o, c, v3(hx, Hh, hz), mat);
       else { box(o, v3(cx, cy + 2 * Hh - 0.05, cz), v3(hx, 0.05, hz), mat); box(o, v3(cx, cy + 0.05, cz), v3(hx, 0.05, hz), mat);
         for (const s of [-1, 1]) box(o, alongX ? v3(cx, cy + Hh, cz + s * (W - 0.05)) : v3(cx + s * (W - 0.05), cy + Hh, cz), alongX ? v3(L / 2, Hh, 0.05) : v3(0.05, Hh, L / 2), mat);
-        O(name + ' mouth', 'gap', { gap: { c: v3(cx + (alongX ? L / 2 : 0), cy + Hh, cz + (alongX ? 0 : L / 2)), n: alongX ? v3(1, 0, 0) : v3(0, 0, 1), hu: W - 0.1, hv: Hh - 0.1, u: alongX ? v3(0, 0, 1) : v3(1, 0, 0) } }); }
+        O(name + ' mouth', 'gap', { gap: { c: v3(cx + (alongX ? L / 2 : 0), cy + Hh, cz + (alongX ? 0 : L / 2)), n: alongX ? v3(1, 0, 0) : v3(0, 0, 1), hu: W - 0.2, hv: Hh - 0.2, u: alongX ? v3(0, 0, 1) : v3(1, 0, 0) } }); }
       o.obstacle = alongX ? { a: v3(cx, 0, cz - W), b: v3(cx, 0, cz + W), under: cy, over: cy + 2 * Hh } : { a: v3(cx - W, 0, cz), b: v3(cx + W, 0, cz), under: cy, over: cy + 2 * Hh }; return o; };
     cont('Container', 8, 0, -9, 0, 'paintBlue'); cont('Container', 8, 2.6, -9, 0, 'paintRed');
     cont('Container', 16, 0, -9, 0, 'paintGreen'); cont('Container', 24, 0, -4, 1, 'paintOrange'); cont('Container', 24, 2.6, -4, 1, 'paintBlue'); cont('Container', 24, 5.2, -4, 1, 'paintGreen');
@@ -309,19 +309,20 @@
         pipe(st, v3(2.0, TOP, -14.0), v3(2.0, 5.5, -14.0), 0.03, 'plasticYellow', { noSurvey: true }); }
       bar('Mezzanine Rail', v3(2, 5.5, -20), v3(2, 5.5, -15.0), 0.03, 'plasticYellow');
       const of = O('Office', 'building', { wallNormal: v3(0, 0, 1), tall: 3.2 });
-      box(of, v3(24, 1.6, -15.2), v3(4, 1.6, 0.06), 'vConcrete'); box(of, v3(20, 1.6, -17.6), v3(0.06, 1.6, 2.4), 'vConcrete'); box(of, v3(24, 3.25, -17.6), v3(4, 0.05, 2.4), 'vConcrete');
-      O('Office Window', 'gap', { gap: { c: v3(24, 1.5, -15.2), n: v3(0, 0, 1), hu: 1.0, hv: 0.5, u: v3(1, 0, 0) } }); }
+      box(of, v3(21.5, 1.6, -15.2), v3(1.5, 1.6, 0.06), 'vConcrete'); box(of, v3(26.5, 1.6, -15.2), v3(1.5, 1.6, 0.06), 'vConcrete'); box(of, v3(24, 0.5, -15.2), v3(1, 0.5, 0.06), 'vConcrete'); box(of, v3(24, 2.6, -15.2), v3(1, 0.6, 0.06), 'vConcrete');   /* the wall round the window: it was one solid slab with the gap inside it */
+      box(of, v3(20, 1.6, -17.6), v3(0.06, 1.6, 2.4), 'vConcrete'); box(of, v3(24, 3.25, -17.6), v3(4, 0.05, 2.4), 'vConcrete');
+      O('Office Window', 'gap', { gap: { c: v3(24, 1.5, -15.2), n: v3(0, 0, 1), hu: 0.9, hv: 0.4, u: v3(1, 0, 0) } }); }
     // ---- two catwalks crossing the hall, the crane bridge, the conveyor
     { slabOU('Catwalk', v3(-1, 7.5, 6), v3(27, 0.05, 0.6), 'metalPlate'); for (const z of [5.4, 6.6]) bar('Catwalk Rail', v3(-28, 8.5, z), v3(26, 8.5, z), 0.025, 'plasticYellow');
       slabOU('Catwalk', v3(5, 8.6, 0), v3(0.6, 0.05, 13), 'metalPlate'); for (const x of [4.4, 5.6]) bar('Catwalk Rail', v3(x, 9.6, -13), v3(x, 9.6, 13), 0.025, 'plasticYellow');
       const hg = O('Catwalk Hanger', 'deco'); for (const x of [-20, -5, 15]) for (const z of [5.4, 6.6]) pipe(hg, v3(x, 7.5, z), v3(x, H, z), 0.015, 'galv', { noCollide: true }); }
     for (const z of [-Z + 0.5, Z - 0.5]) bar('Crane Runway', v3(-X + 0.5, 10, z), v3(X - 0.5, 10, z), 0.12, 'plasticYellow');
     { const o = slabOU('Crane Bridge', v3(-12, 10.2, 0), v3(0.35, 0.3, Z - 0.6), 'plasticYellow'); pipe(o, v3(-12, 9.9, 3), v3(-12, 6.5, 3), 0.02, 'chain', { noCollide: true }); box(o, v3(-12, 6.3, 3), v3(0.25, 0.2, 0.25), 'rust'); }
-    { const o = slabOU('Conveyor', v3(10, 1.0, 12), v3(14, 0.1, 0.45), 'rubberBlack'); for (let x = -3.5; x <= 23.5; x += 3) for (const z of [11.6, 12.4]) pipe(o, v3(x, 0, z), v3(x, 0.9, z), 0.04, 'galv'); }
+    const conv = slabOU('Conveyor', v3(10, 1.0, 12), v3(14, 0.1, 0.45), 'rubberBlack'); for (let x = -3.5; x <= 23.5; x += 3) for (const z of [11.6, 12.4]) pipe(conv, v3(x, 0, z), v3(x, 0.9, z), 0.04, 'galv');
     // ---- crate stacks, barrels, a forklift, floor markings
     for (const [x, z, n] of [[-6, 10, 3], [-3, 15, 2], [3, 14.5, 1], [-24, 10, 2], [-18, 15, 3], [26, 10, 2]]) { const o = O('Crate Stack', 'deco'); for (let k = 0; k < n; k++) box(o, v3(x + (k % 2) * 0.1, 0.74 + k * 1.2, z), v3(0.58, 0.6, 0.58), 'wood', k * 0.3); }
     { const b = O('Barrels', 'deco'); for (const [x, z] of [[-26, 16], [-25.3, 16.6], [-26.6, 16.8], [27, 15], [26.3, 15.7]]) pipe(b, v3(x, 0, z), v3(x, 0.9, z), 0.3, ['paintBlue', 'paintRed', 'rust'][Math.floor(rnd() * 3)]); }
-    { const f = O('Forklift', 'deco'), x = 9, z = 17; box(f, v3(x, 0.6, z), v3(0.6, 0.45, 1.0), 'plasticYellow'); for (const s of [-1, 1]) pipe(f, v3(x + s * 0.45, 0, z - 1.0), v3(x + s * 0.45, 2.6, z - 1.0), 0.04, 'metal'); box(f, v3(x, 0.15, z - 1.6), v3(0.5, 0.03, 0.6), 'metal'); box(f, v3(x, 1.9, z + 0.2), v3(0.6, 0.04, 0.7), 'metal'); }
+    { const f = O('Forklift', 'deco'), x = 9, z = 17; box(f, v3(x, 0.6, z), v3(0.6, 0.45, 1.0), 'plasticYellow'); for (const s of [-1, 1]) pipe(f, v3(x + s * 0.45, 0, z - 1.0), v3(x + s * 0.45, 2.6, z - 1.0), 0.04, 'metal'); box(f, v3(x, 0.15, z - 1.6), v3(0.5, 0.03, 0.6), 'metal'); box(f, v3(x, 1.9, z + 0.2), v3(0.6, 0.04, 0.7), 'metal'); for (const sx of [-1, 1]) for (const dz of [-0.4, 0.8]) pipe(f, v3(x + sx * 0.55, 1.0, z + dz), v3(x + sx * 0.55, 1.88, z + dz), 0.025, 'metal', { noSurvey: true }); }
     { const m = O('Floor Marking', 'deco'); for (const z of [-11.5, -4.5, 2.5]) box(m, v3(-15, 0.008, z), v3(13, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); for (const x of [-16, 0, 16]) box(m, v3(x, 0.008, Z - 2), v3(2.4, 0.004, 0.06), 'plasticYellow', 0, 0, 0, { noCollide: true }); }
     // ---- outside: the loading dock and a parked trailer
     { const d = O('Loading Dock', 'deco'); box(d, v3(0, 0.6, Z + T + 1.5), v3(22, 0.6, 1.5), 'concrete'); for (const x of [-16, 0, 16]) for (const s of [-1, 1]) box(d, v3(x + s * 1.8, 0.8, Z + T + 3.05), v3(0.2, 0.25, 0.06), 'rubberBlack');
@@ -329,9 +330,122 @@
       const tr = O('Trailer', 'overunder', { obstacle: { a: v3(-17.25, 0, 30), b: v3(-14.75, 0, 30), under: 1.25, over: 4.15 } }); box(tr, v3(-16, 2.7, 30), v3(1.25, 1.45, 6), 'metalPlate'); box(tr, v3(-16, 1.2, 30), v3(1.2, 0.05, 6), 'metal');
       for (const z of [33.5, 34.8]) for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 1.05, 0.5, z), v3(-16 + s * 1.3, 0.5, z), 0.5, 'tire');
       for (const s of [-1, 1]) pipe(tr, v3(-16 + s * 0.9, 0, 24.6), v3(-16 + s * 0.9, 1.15, 24.6), 0.05, 'metal'); }
+    // ================================================================ the detail pass (owner, 2026-11-21)
+    // "a moving conveyor belt … two levels more scatter and detail". Added last with its own random stream, so nothing above moves.
+    // Trim carries noSurvey (solid, never an over/under of its own); the new trick objects are named and tagged by hand.
+    const belts = [];
+    { let s2 = 7717; const r2 = () => (s2 = (s2 * 16807) % 2147483647) / 2147483647, pick = a => a[Math.floor(r2() * a.length)], NS = { noSurvey: true }, ND = { noCollide: true };
+      const bx = (o, x, y, z, hx, hy, hz, mat, ry = 0, opt = NS) => box(o, v3(x, y, z), v3(hx, hy, hz), mat, ry, 0, 0, opt);
+      const post = (o, x, z, y0, y1, r, mat, opt = NS) => pipe(o, v3(x, y0, z), v3(x, y1, z), r, mat, opt);
+      // ---- the conveyor runs (east, 1.2 m/s): whatever rests on the belt is carried along (sim.js: surf.belt; worldview.js draws the cleats)
+      { const V = 1.2; conv.obstacle.over = 1.21; conv.prims[0].surf = { e: 0.1, f: 0.9, belt: v3(V, 0, 0) }; belts.push({ x0: -4, x1: 24, z: 12, hw: 0.45, y: 1.1, v: V });
+        for (const z of [11.52, 12.48]) bx(conv, 10, 1.14, z, 14.1, 0.07, 0.03, 'galv');
+        for (const x of [-4.05, 24.05]) pipe(conv, v3(x, 1.0, 11.6), v3(x, 1.0, 12.4), 0.1, 'darkMetal', NS);
+        bx(conv, 23.5, 0.55, 12.66, 0.3, 0.25, 0.22, 'paintBlue');
+        const st = O('Conveyor Control', 'deco'); post(st, -4.7, 12.9, 0, 1.1, 0.04, 'galv'); bx(st, -4.7, 1.2, 12.9, 0.12, 0.12, 0.08, 'plasticYellow'); bx(st, -4.7, 1.25, 12.99, 0.04, 0.04, 0.02, 'paintRed');
+        const bin = O('Parcel Bin', 'deco'); bx(bin, 25.3, 0.04, 12, 0.75, 0.04, 0.75, 'dumpster'); for (const [dx, dz, hx, hz] of [[-0.72, 0, 0.03, 0.75], [0.72, 0, 0.03, 0.75], [0, -0.72, 0.75, 0.03], [0, 0.72, 0.75, 0.03]]) bx(bin, 25.3 + dx, 0.45, 12 + dz, hx, 0.4, hz, 'dumpster');
+        for (const [dx, dz, h] of [[-0.3, -0.25, 0.16], [0.25, 0.2, 0.12], [-0.1, 0.35, 0.1]]) bx(bin, 25.3 + dx, 0.08 + h, 12 + dz, 0.22, h, 0.18, 'cardboard'); }
+      // ---- goods on the empty rack shelves (never on the shelf under a Rack Bay gap), guards at the row ends, a board on each row
+      { const goods = O('Rack Goods', 'deco'), occ = crate.vis.map(v => v.c), bw = 2.7, x0 = -28;
+        for (const rz of [-15, -8, -1]) for (let i = 0; i < 8; i++) for (const y of [1.6, 3.2, 4.8, 6.4]) { const xa = x0 + i * bw, xc = xa + bw / 2, top = y + 0.08, kind = r2(), n = 1 + Math.floor(r2() * 3), u = [r2(), r2(), r2(), r2(), r2(), r2()], m1 = pick(['paintBlue', 'paintRed', 'rust']), m2 = pick(['cardboard', 'signWhite', 'cardboard', 'fadedBlue']);
+          if ((i % 3 === 1 && y === 1.6) || kind > 0.8 || occ.some(c => Math.abs(c.x - xc) < bw / 2 && Math.abs(c.z - rz) < 0.2 && c.y > y && c.y < y + 1.5)) continue;
+          if (kind < 0.5) for (let k = 0; k < n; k++) { const w = 0.28 + u[k] * 0.14, hh = 0.18 + u[k + 3] * 0.3; bx(goods, xa + 0.55 + k * 0.8, top + hh, rz + (u[k + 3] - 0.5) * 0.2, w, hh, Math.min(0.4, w + 0.05), 'cardboard'); }
+          else if (kind < 0.65) for (let k = 0; k < 2; k++) post(goods, xc - 0.35 + k * 0.7, rz, top + 0.02, top + 0.85, 0.27, m1);
+          else { bx(goods, xc, top + 0.07, rz, 0.55, 0.07, 0.45, 'wood'); bx(goods, xc, top + 0.14 + 0.42, rz, 0.5, 0.42, 0.42, m2); } }
+        const gd = O('Rack Guard', 'deco'), sg = O('Rack Sign', 'deco');
+        for (const rz of [-15, -8, -1]) { for (const x of [-28.45, -5.95]) { for (const dz of [-0.6, 0.6]) post(gd, x, rz + dz, 0, 0.45, 0.04, 'plasticYellow'); pipe(gd, v3(x, 0.45, rz - 0.6), v3(x, 0.45, rz + 0.6), 0.04, 'plasticYellow', NS); }
+          bx(sg, -6.4, 7.5, rz, 0.03, 0.3, 0.6, 'paintBlue'); bx(sg, -6.36, 7.5, rz, 0.01, 0.2, 0.45, 'signWhite', 0, ND); } }
+      // ---- services on the walls and under the roof: sprinkler main and conduit, panels, extinguishers, wall fans, a vent duct
+      { const sv = O('Wall Services', 'deco');
+        for (const [y, r, m] of [[3.0, 0.06, 'paintRed'], [3.3, 0.04, 'galv'], [3.5, 0.03, 'galv']]) pipe(sv, v3(-29.6, y, -19.7), v3(1.2, y, -19.7), r, m, NS);
+        for (const x of [-27, -9]) pipe(sv, v3(x, 0, -19.7), v3(x, 3.0, -19.7), 0.06, 'paintRed', NS);
+        pipe(sv, v3(-29.72, 2.6, -19.4), v3(-29.72, 2.6, 19.4), 0.03, 'galv', NS);
+        for (const z of [-4.5, 8.5]) { bx(sv, -29.86, 1.5, z, 0.13, 0.5, 0.4, 'darkMetal'); bx(sv, -29.72, 1.75, z, 0.01, 0.08, 0.2, 'plasticYellow', 0, ND); }
+        for (const x of [-21, -3]) { post(sv, x, -19.69, 0.9, 1.3, 0.07, 'paintRed'); bx(sv, x, 1.65, -19.75, 0.12, 0.12, 0.01, 'paintRed', 0, ND); }
+        for (const x of [-8, 8]) post(sv, x, 19.93, 0.9, 1.3, 0.07, 'paintRed');
+        for (const z of [-8, 8]) { bx(sv, 29.87, 7.6, z, 0.13, 0.7, 0.7, 'darkMetal'); bx(sv, 29.73, 7.6, z, 0.01, 0.55, 0.55, 'galv', 0, ND); }
+        const du = O('Vent Duct', 'deco'); pipe(du, v3(-27, 10.8, 16), v3(27, 10.8, 16), 0.28, 'galv', NS); for (let x = -27; x <= 27; x += 6) bx(du, x, 10.485, 16, 0.1, 0.04, 0.2, 'galv');
+        for (const x of [-18, 0, 18]) bx(du, x, 10.47, 16, 0.3, 0.05, 0.3, 'darkMetal'); }
+      // ---- the mezzanine: rail posts and a mid rail, a break corner, lockers, shelving; a workshop and stores under it; the office
+      { const mz = O('Mezzanine Fittings', 'deco'), DY = 4.62;
+        for (let x = 4; x <= 28; x += 2) post(mz, x, -14, DY, 5.5, 0.02, 'plasticYellow'); pipe(mz, v3(2, 5.06, -14), v3(28, 5.06, -14), 0.015, 'plasticYellow', NS);
+        for (const z of [-19.6, -18.1, -16.6]) post(mz, 2, z, DY, 5.5, 0.02, 'plasticYellow');
+        const tb = O('Break Table', 'deco'); box(tb, v3(6.5, DY + 0.74, -17.4), v3(0.8, 0.03, 0.45), 'wood'); for (const sx of [-1, 1]) for (const sz of [-1, 1]) post(tb, 6.5 + sx * 0.7, -17.4 + sz * 0.38, DY, DY + 0.71, 0.025, 'metal');
+        for (const [x, z, s] of [[6.0, -16.6, 1], [7.0, -18.2, -1]]) { bx(mz, x, DY + 0.22, z, 0.2, 0.22, 0.2, 'fadedBlue'); bx(mz, x, DY + 0.62, z + s * 0.18, 0.2, 0.2, 0.025, 'fadedBlue'); }
+        for (let k = 0; k < 5; k++) bx(mz, 21.3 + k * 0.62, DY + 0.9, -19.7, 0.3, 0.9, 0.28, k % 2 ? 'fadedBlue' : 'paintBlue');
+        bx(mz, 26.6, DY + 0.95, -19.6, 0.45, 0.95, 0.38, 'darkMetal'); bx(mz, 26.6, DY + 1.2, -19.21, 0.36, 0.5, 0.01, 'fluoro', 0, { noCollide: true, glow: true });
+        for (const x of [10, 12.4, 14.8]) { for (const dx of [-1.1, 1.1]) for (const dz of [-0.25, 0.25]) post(mz, x + dx, -19.6 + dz, DY, DY + 1.9, 0.025, 'galv'); for (const y of [0.5, 1.1, 1.7]) { bx(mz, x, DY + y, -19.6, 1.12, 0.02, 0.28, 'metalPlate'); for (let k = 0; k < 3; k++) { const on = r2() < 0.7, hh = 0.1 + r2() * 0.14, w = 0.24 + r2() * 0.08, m = pick(['cardboard', 'cardboard', 'paintRed', 'wood']); if (on) bx(mz, x - 0.75 + k * 0.75, DY + y + 0.02 + hh, -19.6, w, hh, 0.22, m); } } }
+        for (const [x, z, n] of [[17.5, -18.8, 3], [18.6, -19.0, 2], [3.2, -19.2, 2], [24.5, -16.2, 1]]) for (let k = 0; k < n; k++) bx(mz, x, DY + 0.25 + k * 0.5, z, 0.3, 0.25, 0.28, 'cardboard');
+        const ws = O('Workbench', 'deco'); box(ws, v3(6, 0.92, -19.45), v3(1.5, 0.04, 0.45), 'wood', 0, 0, 0, NS); for (const sx of [-1, 1]) for (const sz of [-1, 1]) post(ws, 6 + sx * 1.4, -19.45 + sz * 0.38, 0, 0.88, 0.035, 'darkMetal');
+        bx(ws, 6, 0.3, -19.45, 1.4, 0.02, 0.4, 'metalPlate'); bx(ws, 5.0, 1.04, -19.3, 0.1, 0.08, 0.14, 'darkMetal'); bx(ws, 6.0, 1.9, -19.96, 1.5, 0.6, 0.03, 'wood'); bx(ws, 7.0, 1.02, -19.5, 0.25, 0.06, 0.15, 'paintRed');
+        bx(mz, 8.6, 0.55, -19.5, 0.4, 0.55, 0.3, 'paintRed'); bx(mz, 8.6, 1.13, -19.5, 0.42, 0.03, 0.32, 'darkMetal');
+        for (let k = 0; k < 3; k++) post(mz, 10.4 + k * 0.32, -19.72, 0.02, 1.3, 0.12, ['paintGreen', 'paintBlue', 'rust'][k]); pipe(mz, v3(10.2, 0.9, -19.56), v3(11.24, 0.9, -19.56), 0.012, 'chain', NS);
+        for (const x of [13.5, 16.2]) { for (const dx of [-1.2, 1.2]) for (const dz of [-0.3, 0.3]) post(mz, x + dx, -19.6 + dz, 0, 2.4, 0.03, 'paintOrange'); for (const y of [0.15, 0.9, 1.65, 2.38]) { bx(mz, x, y, -19.6, 1.22, 0.02, 0.33, 'metalPlate'); for (let k = 0; k < 3; k++) { const on = r2() < 0.8, hh = 0.14 + r2() * 0.18, w = 0.26 + r2() * 0.1, m = pick(['cardboard', 'wood', 'dumpster', 'cardboard']); if (on && y < 2) bx(mz, x - 0.8 + k * 0.8, y + 0.02 + hh, -19.6, w, hh, 0.26, m); } } }
+        bx(mz, 18.6, 0.45, -19.5, 0.3, 0.45, 0.3, 'dumpster');
+        const od = O('Office Desk', 'deco'); box(od, v3(24, 0.74, -18.9), v3(0.9, 0.03, 0.4), 'wood', 0, 0, 0, NS); for (const sx of [-1, 1]) bx(od, 24 + sx * 0.85, 0.36, -18.9, 0.03, 0.36, 0.38, 'wood');
+        bx(od, 24.3, 0.97, -19.05, 0.26, 0.17, 0.02, 'fluoro', 0, { glow: true, noSurvey: true }); bx(od, 24.3, 0.79, -19.05, 0.06, 0.02, 0.06, 'darkMetal');
+        bx(mz, 24, 0.24, -18.1, 0.22, 0.24, 0.22, 'fadedBlue'); bx(mz, 24, 0.66, -17.86, 0.22, 0.2, 0.03, 'fadedBlue');
+        bx(mz, 21.0, 0.65, -19.6, 0.25, 0.65, 0.3, 'darkMetal'); bx(mz, 27.2, 0.9, -19.6, 0.5, 0.9, 0.25, 'fadedBlue'); }
+      // ---- catwalk rail posts and a ladder; the crane's wall brackets, end trucks, trolley and pendant
+      { const cw = O('Catwalk Fittings', 'deco');
+        for (let x = -28; x <= 26; x += 3) for (const z of [5.4, 6.6]) post(cw, x, z, 7.55, 8.5, 0.02, 'plasticYellow');
+        for (let z = -13; z <= 13; z += 3.25) for (const x of [4.4, 5.6]) post(cw, x, z, 8.65, 9.6, 0.02, 'plasticYellow');
+        for (const z of [5.8, 6.2]) post(cw, -28.04, z, 0, 8.5, 0.025, 'galv'); for (let y = 0.4; y < 8.4; y += 0.4) pipe(cw, v3(-28.04, y, 5.8), v3(-28.04, y, 6.2), 0.015, 'galv', NS);
+        const cr = O('Crane Fittings', 'deco'); for (let x = -27; x <= 27; x += 6) for (const s of [-1, 1]) bx(cr, x, 9.82, s * 19.8, 0.1, 0.1, 0.2, 'plasticYellow');
+        bx(cr, -12, 10.62, 3, 0.45, 0.12, 0.4, 'darkMetal'); for (const s of [-1, 1]) bx(cr, -12, 10.2, s * 19.2, 0.7, 0.22, 0.2, 'darkMetal');
+        pipe(cr, v3(-11.6, 9.9, 3.4), v3(-11.6, 1.6, 3.4), 0.012, 'rubberBlack', ND); bx(cr, -11.6, 1.45, 3.4, 0.05, 0.14, 0.035, 'plasticYellow', 0, ND); }
+      // ---- new trick objects: two hanging aisle signs and a cable tray (over / unders), and a scissor lift
+      for (const [z, m] of [[-9, 'paintBlue'], [3, 'paintGreen']]) { const o = O('Hanging Sign', 'overunder', { obstacle: { a: v3(-3.2, 0, z), b: v3(-0.8, 0, z), under: 4.6, over: 5.4 } });
+        box(o, v3(-2, 5.0, z), v3(1.2, 0.4, 0.03), m); for (const s of [-1, 1]) bx(o, -2, 5.0, z + s * 0.035, 0.9, 0.22, 0.004, 'signWhite', 0, ND); for (const dx of [-0.9, 0.9]) pipe(o, v3(-2 + dx, 5.4, z), v3(-2 + dx, 11.71, z), 0.012, 'chain', ND); }
+      { const o = slabOU('Cable Tray', v3(18, 6.2, 12), v3(0.25, 0.04, 4.5), 'galv'); for (const s of [-1, 1]) bx(o, 18 + s * 0.24, 6.27, 12, 0.012, 0.05, 4.5, 'galv'); for (const z of [9, 15]) pipe(o, v3(18, 6.24, z), v3(18, 11.71, z), 0.012, 'galv', ND);
+        for (const dx of [-0.12, 0, 0.12]) pipe(o, v3(18 + dx, 6.27, 7.6), v3(18 + dx, 6.27, 16.4), 0.02, 'rubberBlack', ND); }
+      { const sl = O('Scissor Lift', 'deco'), x = 22, z = 8;
+        bx(sl, x, 0.4, z, 0.6, 0.25, 1.15, 'paintOrange'); for (const sx of [-1, 1]) for (const dz of [-0.8, 0.8]) pipe(sl, v3(x + sx * 0.5, 0.2, z + dz), v3(x + sx * 0.68, 0.2, z + dz), 0.2, 'tire', NS);
+        for (const sx of [-1, 1]) for (const [za, zb] of [[-1, 1], [1, -1]]) for (const [ya, yb] of [[0.65, 1.75], [1.75, 2.85]]) pipe(sl, v3(x + sx * 0.5, ya, z + za), v3(x + sx * 0.5, yb, z + zb), 0.03, 'paintOrange', NS);
+        bx(sl, x, 2.9, z, 0.65, 0.05, 1.25, 'metalPlate'); for (const sx of [-1, 1]) for (const dz of [-1.2, 0, 1.2]) post(sl, x + sx * 0.62, z + dz, 2.95, 4.0, 0.02, 'paintOrange');
+        for (const sx of [-1, 1]) pipe(sl, v3(x + sx * 0.62, 4.0, z - 1.2), v3(x + sx * 0.62, 4.0, z + 1.2), 0.02, 'paintOrange', NS); for (const dz of [-1.2, 1.2]) pipe(sl, v3(x - 0.62, 4.0, z + dz), v3(x + 0.62, 4.0, z + dz), 0.02, 'paintOrange', NS);
+        bx(sl, x + 0.55, 3.5, z + 1.14, 0.1, 0.1, 0.08, 'darkMetal'); }
+      // ---- on the floor: pallet stacks, wrapped pallets, drums, totes, bins, cones, a pallet jack, barriers, shelving, a scrubber, the charger
+      { const sc = O('Pallet Stack', 'deco'); for (const [x, z, n] of [[-28.6, 2.2, 7], [-28.6, 3.6, 5], [28.4, 18.4, 6], [-5.2, -18.6, 4]]) for (let k = 0; k < n; k++) bx(sc, x, 0.07 + k * 0.15, z, 0.6, 0.07, 0.5, 'wood', (r2() - 0.5) * 0.12);
+        const wp = O('Wrapped Pallet', 'deco'); for (const [x, z] of [[-21, 12.6], [-14, 12], [-12.4, 13.7], [-26.6, 13.2], [28.2, 3.5], [28.2, 5.0]]) { const hh = 0.35 + r2() * 0.3, m = pick(['cardboard', 'signWhite', 'cardboard', 'fadedBlue']); bx(wp, x, 0.07, z, 0.6, 0.07, 0.5, 'wood'); bx(wp, x, 0.14 + hh, z, 0.52, hh, 0.44, m); }
+        const dr = O('Drums', 'deco'); for (const [x, z] of [[-10.27, 15.76], [-9.72, 15.8], [-10.0, 16.26]]) post(dr, x, z, 0.16, 1.0, 0.25, pick(['paintBlue', 'rust', 'paintBlue']));
+        const gl = O('Gaylord Box', 'deco'); bx(gl, 20, 0.14 + 0.45, 16, 0.55, 0.45, 0.48, 'cardboard');
+        const ib = O('IBC Tote', 'deco'); for (const z of [-12.2, -10.8]) { bx(ib, 28.3, 0.07, z, 0.6, 0.07, 0.5, 'wood'); bx(ib, 28.3, 0.14 + 0.5, z, 0.5, 0.5, 0.42, 'signWhite'); for (const sx of [-1, 1]) for (const sz of [-1, 1]) post(ib, 28.3 + sx * 0.53, z + sz * 0.45, 0.14, 1.2, 0.015, 'galv'); for (const sz of [-1, 1]) pipe(ib, v3(27.77, 1.2, z + sz * 0.45), v3(28.83, 1.2, z + sz * 0.45), 0.015, 'galv', NS); }
+        const bn = O('Wheelie Bin', 'deco'); for (const [x, z, m] of [[-9.2, 19.4, 'dumpster'], [11.6, 19.4, 'dumpster'], [29.2, -13.6, 'darkMetal'], [-29.2, 17.6, 'dumpster']]) { bx(bn, x, 0.47, z, 0.3, 0.47, 0.32, m); bx(bn, x, 0.96, z, 0.32, 0.02, 0.34, 'darkMetal'); }
+        const cn = O('Traffic Cone', 'deco'); for (const [x, z] of [[7.6, 15.6], [10.4, 15.6], [7.6, 18.4], [10.4, 18.4], [20.6, 6.2], [23.4, 6.2], [20.6, 9.8], [23.4, 9.8], [-2.6, 9.2], [-1.4, 10.4]]) { pipe(cn, v3(x, 0, z), v3(x, 0.32, z), 0.14, 'coneOrange', { cone: true, noSurvey: true }); bx(cn, x, 0.02, z, 0.16, 0.02, 0.16, 'rubberBlack'); }
+        const pj = O('Pallet Jack', 'deco'); { const x = -17.2, z = 10.6; bx(pj, x, 0.3, z + 0.75, 0.22, 0.3, 0.12, 'paintRed'); for (const s of [-1, 1]) bx(pj, x + s * 0.2, 0.06, z, 0.07, 0.04, 0.65, 'paintRed'); pipe(pj, v3(x, 0.6, z + 0.8), v3(x, 1.15, z + 1.1), 0.02, 'darkMetal', NS); pipe(pj, v3(x - 0.15, 1.15, z + 1.1), v3(x + 0.15, 1.15, z + 1.1), 0.02, 'darkMetal', NS); }
+        const br = O('Barrier', 'deco'); for (const [x, z] of [[-2, 9.8], [3.6, 9.4]]) { bx(br, x, 0.85, z, 0.7, 0.08, 0.02, 'plasticYellow'); for (const s of [-1, 1]) for (const t of [-1, 1]) pipe(br, v3(x + s * 0.6, 0.8, z), v3(x + s * 0.6, 0, z + t * 0.2), 0.015, 'galv', NS); }
+        const es = O('Wall Shelving', 'deco'); for (const z of [9.8, 12.3]) { for (const dz of [-1.2, 1.2]) for (const dx of [-0.25, 0.25]) post(es, 29.45 + dx, z + dz, 0, 2.6, 0.03, 'paintBlue'); for (const y of [0.2, 1.0, 1.8, 2.58]) { bx(es, 29.45, y, z, 0.28, 0.02, 1.22, 'metalPlate'); for (let k = 0; k < 3; k++) { const on = r2() < 0.8, hh = 0.14 + r2() * 0.2, w = 0.24 + r2() * 0.1, m = pick(['cardboard', 'wood', 'cardboard', 'dumpster']); if (on && y < 2.5) bx(es, 29.45, y + 0.02 + hh, z - 0.8 + k * 0.8, 0.22, hh, w, m); } } }
+        const fs = O('Floor Scrubber', 'deco'); bx(fs, -1.6, 0.4, -19.0, 0.35, 0.37, 0.5, 'paintBlue'); bx(fs, -1.6, 0.06, -18.4, 0.4, 0.05, 0.12, 'rubberBlack'); pipe(fs, v3(-1.6, 0.7, -19.4), v3(-1.6, 1.05, -19.6), 0.02, 'darkMetal', NS);
+        const ch = O('Charger', 'deco'); bx(ch, 6.4, 0.9, 19.8, 0.35, 0.5, 0.2, 'paintGreen'); pipe(ch, v3(6.75, 0.6, 19.7), v3(8.5, 0.05, 18.2), 0.015, 'rubberBlack', ND); }
+      // ---- floor paint: hazard bars in the doorways, the forklift's bay, a walkway from the stairs down the middle aisle
+      { const m = O('Floor Marking', 'deco'), ln = (x, z, hx, hz, mat = 'plasticYellow') => box(m, v3(x, 0.008, z), v3(hx, 0.004, hz), mat, 0, 0, 0, ND);
+        for (const d of [-16, 0, 16]) for (let k = -3; k <= 3; k++) ln(d + k * 0.6, Z - 0.5, 0.15, 0.4);
+        ln(9, 15.3, 1.3, 0.04); ln(9, 18.7, 1.3, 0.04); ln(7.7, 17, 0.04, 1.7); ln(10.3, 17, 0.04, 1.7);
+        for (const x of [0.6, 2.2]) ln(x, -2.75, 0.03, 10.75, 'signWhite'); for (let z = -13; z <= 8; z += 1.5) ln(1.4, z, 0.5, 0.12, 'signWhite'); }
+      // ---- lock rods on the container doors (drawn only, 2 cm proud)
+      { const cd = O('Container Doors', 'deco'); for (const [cx, cy, cz, ry] of [[8, 0, -9, 0], [8, 2.6, -9, 0], [16, 0, -9, 0], [24, 0, -4, 1], [24, 2.6, -4, 1], [24, 5.2, -4, 1]]) for (const e of [-1, 1]) for (const k of [-0.85, -0.3, 0.3, 0.85]) {
+          if (ry === 0) pipe(cd, v3(cx + e * 3.02, cy + 0.12, cz + k), v3(cx + e * 3.02, cy + 2.48, cz + k), 0.018, 'galv', ND); else pipe(cd, v3(cx + k, cy + 0.12, cz + e * 3.02), v3(cx + k, cy + 2.48, cz + e * 3.02), 0.018, 'galv', ND); } }
+      // ---- the yard: dock steps, bollards and levellers, a box truck at door 3, a fence with a gate, two light poles, dumpsters, pallets
+      { const yd = O('Dock Fittings', 'deco'), ZD = Z + T;
+        for (let i = 0; i < 4; i++) bx(yd, 22.6, (i + 1) * 0.15, 23.12 - i * 0.36, 0.6, (i + 1) * 0.15, 0.18, 'concrete');
+        post(yd, 23.2, 23.12, 0.3, 1.2, 0.02, 'plasticYellow'); post(yd, 23.2, 22.04, 1.2, 2.1, 0.02, 'plasticYellow'); pipe(yd, v3(23.2, 1.2, 23.12), v3(23.2, 2.1, 22.04), 0.02, 'plasticYellow', NS);
+        for (const d of [-16, 0, 16]) { for (const s of [-1, 1]) post(yd, d + s * 2.7, ZD + 3.5, 0, 1.0, 0.09, 'plasticYellow'); bx(yd, d, 1.208, ZD + 1.2, 1.7, 0.008, 1.0, 'metalPlate', 0, ND); bx(yd, d + 2.6, 5.2, ZD + 0.08, 0.15, 0.08, 0.08, 'fluoro', 0, { noCollide: true, glow: true }); }
+        const bt = O('Box Truck', 'overunder', { obstacle: { a: v3(16, 0, 26.2), b: v3(16, 0, 31.4), under: 1.04, over: 3.9 } });   /* crossed sideways, between the axles (lengthwise the wheels are in the way) */
+        box(bt, v3(16, 2.55, 27.6), v3(1.2, 1.35, 3.6), 'metalPlate'); box(bt, v3(16, 1.12, 28.6), v3(1.05, 0.08, 4.6), 'darkMetal', 0, 0, 0, NS); box(bt, v3(16, 1.85, 32.5), v3(1.15, 0.85, 0.85), 'paintBlue', 0, 0, 0, NS); bx(bt, 16, 2.2, 33.36, 0.95, 0.35, 0.01, 'glass', 0, ND);
+        for (const z of [25.4, 32.4]) { for (const s of [-1, 1]) pipe(bt, v3(16 + s * 0.8, 0.5, z), v3(16 + s * 1.05, 0.5, z), 0.5, 'tire', NS); bx(bt, 16, 0.85, z, 0.8, 0.2, 0.12, 'darkMetal'); }
+        O('Box Truck underside', 'gap', { gap: { c: v3(16, 0.52, 28.9), n: v3(1, 0, 0), hu: 2.6, hv: 0.42, u: v3(0, 0, 1) } });
+        const fn = O('Yard Fence', 'deco'), FZ = 37.6, FX = 29.6; for (const [a, b] of [[-FX, -4], [4, FX]]) box(fn, v3((a + b) / 2, 1.1, FZ), v3((b - a) / 2, 1.1, 0.03), 'chainlink', 0, 0, 0, NS);
+        for (const s of [-1, 1]) box(fn, v3(s * FX, 1.1, (ZD + FZ) / 2), v3(0.03, 1.1, (FZ - ZD) / 2), 'chainlink', 0, 0, 0, NS);
+        for (let x = -FX; x <= FX + 0.01; x += 3.7) if (Math.abs(x) > 4.2) post(fn, x, FZ, 0, 2.3, 0.04, 'galv');
+        const gt = bar('Yard Gate', v3(-4, 3.4, FZ), v3(4, 3.4, FZ), 0.06, 'paintBlue'); for (const s of [-1, 1]) post(gt, s * 4, FZ, 0, 3.4, 0.07, 'paintBlue');
+        for (const s of [-1, 1]) { const lp = O('Yard Light', 'pole'); pipe(lp, v3(s * 26, 0, 31), v3(s * 26, 7.5, 31), 0.09, 'galv'); pipe(lp, v3(s * 26, 7.5, 31), v3(s * 24.6, 7.7, 31), 0.04, 'galv', NS); box(lp, v3(s * 24.4, 7.62, 31), v3(0.35, 0.06, 0.16), 'fluoro', 0, 0, 0, { noSurvey: true, glow: true }); }
+        const dm = O('Dumpster', 'deco'); for (const z of [26, 28.4]) { bx(dm, 27.6, 0.62, z, 0.75, 0.6, 1.0, 'dumpster'); bx(dm, 27.6, 1.25, z, 0.78, 0.03, 1.03, 'darkMetal'); }
+        const yp = O('Pallet Stack', 'deco'); for (const [x, z, n] of [[-26.5, 24.6, 6], [-25, 24.8, 3], [8.5, 24.4, 4]]) for (let k = 0; k < n; k++) bx(yp, x, 0.07 + k * 0.15, z, 0.6, 0.07, 0.5, 'wood', (r2() - 0.5) * 0.15);
+        const yc = O('Traffic Cone', 'deco'); for (const [x, z] of [[13.6, 34.6], [18.4, 34.6], [-19, 36.6], [-13, 36.6]]) { pipe(yc, v3(x, 0, z), v3(x, 0.32, z), 0.14, 'coneOrange', { cone: true, noSurvey: true }); bx(yc, x, 0.02, z, 0.16, 0.02, 0.16, 'rubberBlack'); } } }
     void frame;
     const zones = [{ shape: 'zone', mat: 'concrete', c: v3(0, 0.005, 0), h: v3(X, 0, Z) }, { shape: 'zone', mat: 'asphalt', c: v3(0, 0.004, Z + 9), h: v3(X, 0, 9) }];
-    return K.done({ id: 'warehouse', title: 'More Warehouse', theme: 'industrial', zones, spawn: { pos: v3(0, 0.03, 16), yaw: 0 }, bounds: { x: [-X, X], z: [-Z, Z + 18] } });
+    return K.done({ id: 'warehouse', title: 'More Warehouse', theme: 'industrial', zones, belts, spawn: { pos: v3(0, 0.03, 16), yaw: 0 }, bounds: { x: [-X, X], z: [-Z, Z + 18] } });
   }
 
   // =============================================================== Abandoned Vaporwave School

@@ -358,6 +358,16 @@ function mats() {
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
   vaporMats(); viceMats(); duskMats(); nycMats();
 }
+// More Warehouse's conveyor (world.belts, owner 2026-11-21): cleats that travel with the belt so it is seen to move (the physics
+// that carries the quad is sim.js's surf.belt). Built on first use, and again whenever the scene was rebuilt
+const BELT = { root: null, of: null, t: 0 };
+function beltTick(dt) {
+  const B = world.belts; if (!B || !B.length) return;
+  if (BELT.of !== B || !BELT.root || BELT.root.parent !== playRoot) { if (BELT.root && BELT.root.parent) BELT.root.parent.remove(BELT.root); BELT.root = new THREE.Group(); BELT.of = B; BELT.t = 0; const mat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.75 });
+    for (const b of B) { const n = Math.max(1, Math.floor((b.x1 - b.x0) / 0.7)); for (let i = 0; i < n; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, b.hw * 2 - 0.06), mat); m.userData = { b, i, n }; m.position.set(b.x0, b.y + 0.006, b.z); BELT.root.add(m); } }
+    playRoot.add(BELT.root); }
+  BELT.t += dt; for (const m of BELT.root.children) { const { b, i, n } = m.userData, L = b.x1 - b.x0 - 0.1, s = ((i / n) * L + BELT.t * b.v) % L; m.position.x = b.x0 + 0.05 + (s < 0 ? s + L : s); }
+}
 function boxGeo(h, density = 0.5, off = null, t0 = null) {   // off: the box's centre, to lay the texture in world space (facades: windows on a floor grid)
   const g = new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) {

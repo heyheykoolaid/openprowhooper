@@ -61,8 +61,14 @@ EXTRA = {
     #'clappy-beams':  ('clappy', [3, 2.2, 13], [0, 0.8, 9.5]),
     #'clappy-tower':  ('clappy', [-1, 4, -1], [-6, 2.5, -5]),
     #'clappy-shops':  ('clappy', [-6, 9, 13], [-4, 5, 34]),
-    #'warehouse-in':  ('warehouse', [-25, 5, 14], [10, 3, -8]),
-    #'warehouse-up':  ('warehouse', [10, 6, 12], [-10, 8, -14]),
+    'wh-in':     ('warehouse', [-25, 5, 14], [10, 3, -8]),
+    'wh-belt':   ('warehouse', [3, 3.2, 17.5], [16, 1, 10]),
+    'wh-mezz':   ('warehouse', [8, 7.5, -8], [18, 4, -19]),
+    'wh-under':  ('warehouse', [2.5, 1.8, -13], [16, 1.2, -19.5]),
+    'wh-east':   ('warehouse', [10, 5, 3], [27, 2, 9]),
+    'wh-racks':  ('warehouse', [-3, 4, -11.5], [-25, 3, -9]),
+    'wh-yard':   ('warehouse', [-4, 7, 44], [8, 1.5, 24]),
+    'wh-top':    ('warehouse', [0, 11, 19], [0, 5, -10]),
 }
 
 async def shot(b, mid, view, size):
@@ -92,7 +98,9 @@ async def main():
                 (await shot(b, mid, view, None)).save(out / (name + '.png')); print('shot', name)
         if '--no-thumbs' not in sys.argv:
             d = ROOT / 'assets' / 'maps'; d.mkdir(parents=True, exist_ok=True)
+            one = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--map=')), '')   # --map=<id>: only that map's thumbnail
             for mid, view in VIEWS.items():
+                if one and mid != one: continue
                 (await shot(b, mid, view, (480, 270))).save(d / (mid + '.webp'), quality=78); print('thumb', mid)
         await b.close()
 

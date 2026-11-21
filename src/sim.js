@@ -856,7 +856,11 @@ class Drone {
     Fb.x += -0.5 * RHO * p.cdA.x * Math.abs(vb.x) * vb.x - p.rotorDrag * sumW * vb.x;
     Fb.y += -0.5 * RHO * p.cdA.y * Math.abs(vb.y) * vb.y;
     Fb.z += -0.5 * RHO * p.cdA.z * Math.abs(vb.z) * vb.z - p.rotorDrag * sumW * vb.z;
-    Tb.x += -p.angDrag * this.w.x * Math.abs(this.w.x) * 1000; Tb.y += -p.angDrag * this.w.y * Math.abs(this.w.y) * 600; Tb.z += -p.angDrag * this.w.z * Math.abs(this.w.z) * 1000;
+    // tune.deadSpin (absent = 1: the physics as it was; the game fills in 0.1): how much of the rotational air drag a disarmed quad
+    // in the air still feels. The drag was set with the motors running (the PID flies through it); with them off it stopped a
+    // 680 deg/s flip in a quarter turn, where a real whoop tumbles on (owner, 2026-11-21: disarm tricks)
+    const aD = p.angDrag * (!this.armed && !this.crashed && this.tune.deadSpin != null ? +this.tune.deadSpin : 1);
+    Tb.x += -aD * this.w.x * Math.abs(this.w.x) * 1000; Tb.y += -aD * this.w.y * Math.abs(this.w.y) * 600; Tb.z += -aD * this.w.z * Math.abs(this.w.z) * 1000;
     // ---- integrate
     const Fw = qrot(this.q, Fb); Fw.y -= p.mass * G;
     // race fields (RaceGOW: fan drafts push, battery-saver zones add thrust); maps without fields are untouched
@@ -956,7 +960,9 @@ class Drone {
           this.pos = add(this.pos, mul(ct.n, ct.d * 0.9));
           const r = sub(ct.pt, this.pos);
           const wW = qrot(this.q, this.w);
-          const vc = add(this.vel, cross(wW, r));
+          // surf.belt: the surface itself moves (More Warehouse's conveyor): contact and friction are worked out against the belt,
+          // so whatever rests on it is carried along. Absent everywhere else: the physics is unchanged
+          const bv = ct.surf && ct.surf.belt, vc = bv ? sub(add(this.vel, cross(wW, r)), bv) : add(this.vel, cross(wW, r));
           const vn = dot(vc, ct.n);
           if (vn < 0) {
             if (-vn > maxImpact) { maxImpact = -vn; hitOwner = ct.owner; hitNormal = ct.n; hitSurf = ct.surf; }   // ct.surf: RaceGOW surfaces { e, f, crash }
@@ -1021,7 +1027,20 @@ const EXTRA_TRICKS = [
   { cat: 'Open Air Tricks', name: 'Juicy Tornado', diff: 'Intermediate', pts: 350, extra: true,
     desc: 'A Juicy Flick followed straight away by a forward double roll: flick forward to inverted with a punch of throttle, roll back upright, and keep rolling the same way for two more full rolls while flying forward (owner, 2026-11-20). Points: a Juicy Flick plus a Double Roll, until the owner sets them.' },
   { cat: 'Wall Tricks', name: 'Wall Stick', diff: 'Novice', pts: 200, extra: true,
-    desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' }];
+    desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' },
+  // disarm tricks (owner, 2026-11-21): the rotation is carried by the quad's own momentum with the motors off. Points are placeholders
+  { cat: 'Other Tricks', name: 'Disarm Flip', diff: 'Novice', pts: 200, extra: true,
+    desc: 'Start a flip, disarm in the air and let the whoop carry a full flip round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.' },
+  { cat: 'Other Tricks', name: 'Disarm Roll', diff: 'Novice', pts: 200, extra: true,
+    desc: 'Start a roll, disarm in the air and let the whoop carry a full roll round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.' },
+  { cat: 'Other Tricks', name: 'Disarm Spin', diff: 'Novice', pts: 200, extra: true,
+    desc: 'Start a yaw spin, disarm in the air and let the whoop carry a full flat spin round, upright, with the motors off, then re-arm and fly away. Points are a placeholder until the owner sets them.' },
+  { cat: 'Other Tricks', name: 'Dead Pirate Spin', diff: 'Intermediate', pts: 350, extra: true,
+    desc: 'The Disarm Spin upside-down: inverted, spinning flat, motors off for a full turn; then re-arm, come upright and fly away. Points are a placeholder until the owner sets them.' },
+  { cat: 'Other Tricks', name: 'Disarm Loop', diff: 'Intermediate', pts: 400, extra: true,
+    desc: 'A loop with a dead top: punch up and pull back, disarm as you go over, let the whoop fall round the top of the loop with the motors off, re-arm on the way down and pull out. Points are a placeholder until the owner sets them.' }];
+const DEAD_LOOP_UP = 1.0, DEAD_LOOP_V = 2.0;   // a loop climbs at least this (m) and is flown into at least this fast (m/s)
+const DEAD_TURN = 300, DEAD_LOOP_OFF = 120, DEAD_AWAY = 0.6;   // deg of one axis with the motors off for a flip / roll / spin; of pitch for a loop's dead top; s flown clear after the re-arm
 for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
 function trickPoints(name) { const t = TRICK_DATA.find(t => t.name.trim() === name); return t ? t.pts : 0; }
 
@@ -1301,7 +1320,7 @@ class TrickDetector {
     this.pending = null; this.debug = [];
     this.active = false; this.samples = []; this.restT = 0; this.events = []; this.crossLog = [];
     this.prevSide = {}; this.contacts = []; this.out = []; this.wallRide = null; this.diveMaxY = 0; this.dive = null;
-    this.climb = null; this.slide = null; this.perch = null; this.stick = null; this.lastTap = -10; this.time = 0;
+    this.climb = null; this.slide = null; this.perch = null; this.stick = null; this.dead = null; this.deadPend = null; this.deadMute = null; this.yHist = []; this.lastTap = -10; this.time = 0;
   }
   // call every physics step (or every few)
   update(d, dt, rc) {
@@ -1724,7 +1743,7 @@ class TrickDetector {
     // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
     // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
     if (d.contactThisStep) this.lastTouch = t;
-    this.stickTick(d, t);
+    this.stickTick(d, t); this.deadTick(d, t);
     const sl = this.slide;
     if (sl) { const hs = Math.hypot(d.vel.x, d.vel.z);
       if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) { sl.lastC = t; const o = this.world.objs[d.contactOwner]; sl.surface = d.contactGround || !o ? 'the ground' : o.name; }
@@ -1747,11 +1766,43 @@ class TrickDetector {
       if (held >= WALL_STICK_MIN && !d.crashed && d.armed && !this.pendingFly) this.pendingFly = { name: 'Wall Stick', t, y0: d.pos.y, obstacle: st.obstacle, seconds: held };
     }
   }
+  // ---- disarm tricks (owner, 2026-11-21; not in the TPW book): disarm in the air, let the quad's own momentum carry the rotation,
+  // re-arm before it touches anything, fly on. Disarm Flip / Disarm Roll: DEAD_TURN of pitch / roll with the motors off. Disarm
+  // Spin: the same on yaw, a flat spin, upright; Dead Pirate Spin: upside-down. Disarm Loop: a loop whose top is flown dead
+  // (DEAD_LOOP_OFF of pitch with the motors off inside one continuous turn of DEAD_TURN, upside-down over the top of a climb).
+  // The ordinary reading of the same rotation (Flip, Roll, Yaw Spin, Powerloop…) is not called beside it (deadMute, in commit).
+  deadTick(d, t) {
+    const Y = this.yHist || (this.yHist = []); if (!Y.length || t - Y[Y.length - 1][0] >= 0.05 || t < Y[Y.length - 1][0]) { if (Y.length && t < Y[Y.length - 1][0]) Y.length = 0; Y.push([t, d.pos.y, Math.hypot(d.vel.x, d.vel.z)]); if (Y.length > 120) Y.shift(); }
+    const D = this.dead; if (D) { if (d.crashed || d.contactThisStep) { this.dead = null; this.deadMute = { a: D.t - 0.05, b: t + 2.5 }; }   /* it landed or hit something with the motors off: nothing from that rotation */
+      else { const u = d.up().y; D.up += u; D.n++; } }
+    const M = this.deadMute; if (M && t > M.b) this.deadMute = null;
+    const P = this.deadPend; if (!P) return;
+    if (d.crashed || !d.armed || d.contactThisStep) { this.deadPend = null; return; }   // it has to be caught and flown away
+    if (t - P.t < DEAD_AWAY) return;
+    this.deadPend = null; let name = P.name, deg = P.deg;
+    if (!name) {   // the loop: one continuous pitch turn from before the disarm to now, upside-down on the way, after a climb, upright again
+      const H = this.attLog || [], from = P.t0 - 2.5; let best = 0, minUp = 1, a0 = null;
+      for (let i = H.length - 1; i >= 0 && H[i][0] >= from; i--) { const v = P.sgn * (this.axRot[1] - H[i][4]); if (v > best) { best = v; a0 = H[i][0]; } }
+      if (a0 != null) for (let i = H.length - 1; i >= 0 && H[i][0] >= a0; i--) minUp = Math.min(minUp, H[i][1]);
+      const ys = Y.filter(y => a0 != null && y[0] >= a0 - 0.3), climb = ys.length ? Math.max(...ys.map(y => y[1])) - ys[0][1] : 0, vIn = ys.length ? Math.max(...ys.slice(0, 8).map(y => y[2])) : 0;
+      if (best >= DEAD_TURN && minUp < -0.5 && climb >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V && d.up().y > 0.4) { name = 'Disarm Loop'; deg = best; }   // flown into, up and over: a flip on the spot is not a loop
+    }
+    if (!name) return;
+    this.emit({ name, exec: Math.abs(deg - 360) <= 40 || deg > 400 ? 'CLEAN' : 'SLOPPY', clean: Math.max(50, Math.round(100 - Math.abs(Math.min(deg, 360) - 360) / 2)), continuous: true, obstacle: 'open air', seconds: +P.secs.toFixed(2), deg: Math.round(deg), deadDeg: Math.round(P.deg), draft: true });
+  }
   onArmChange(d, armed) {
     const t = this.time, speed = len(d.vel);
+    if (!armed && !d.crashed && !d.contactThisStep && t - (this.lastTouch ?? -9) > 0.2) this.dead = { t, A0: (this.axRot || [0, 0, 0]).slice(), up: 0, n: 0 };   // disarmed in the air
+    if (armed) { const D = this.dead; this.dead = null;
+      if (D && !d.crashed && !d.contactThisStep && t - D.t >= 0.12) { const A = this.axRot || [0, 0, 0], r = [0, 1, 2].map(i => Math.abs(A[i] - D.A0[i])), sum = r[0] + r[1] + r[2] || 1, k = r.indexOf(Math.max(...r)), upM = D.n ? D.up / D.n : 1;
+        let name = null; if (r[k] >= DEAD_TURN && r[k] >= 0.6 * sum) name = k === 1 ? 'Disarm Flip' : k === 0 ? 'Disarm Roll' : upM > 0.5 ? 'Disarm Spin' : upM < -0.5 ? 'Dead Pirate Spin' : null;
+        // a loop's dead top: enough pitch with the motors off, after a climb (a flip carried only part of the way round, dead, stays a Flip)
+        const Y = (this.yHist || []).filter(y => y[0] >= D.t - 2.5), climbed = Y.length ? Math.max(...Y.map(y => y[1])) - Math.min(...Y.map(y => y[1])) : 0, vIn = Y.length ? Math.max(...Y.map(y => y[2])) : 0;
+        const loop = !name && k === 1 && r[1] >= DEAD_LOOP_OFF && r[1] >= 0.6 * sum && climbed >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V;
+        if (name || loop) { this.deadPend = { name, t, t0: D.t, deg: r[k], sgn: Math.sign(A[1] - D.A0[1]) || 1, secs: t - D.t }; this.deadMute = { a: D.t - (name ? 0.7 : 2.5), b: t + DEAD_AWAY + 1.8 }; } } }
     if (!armed && !d.crashed) {
       if (speed > 1.2) this.slide = { t, dist: 0, lastC: -9, stopT: null, surface: null };   // disarmed on the move: a slide may follow
-      else if (d.pos.y > 4.5 && speed < 1 && d.up().y > 0.8) this.perch = { t, y: d.pos.y };
+      else if (d.pos.y > 4.5 && speed < 1 && d.up().y > 0.8 && (d.contactThisStep || t - (this.lastTouch ?? -9) < 0.3)) this.perch = { t, y: d.pos.y };   // resting on something (a hover with the motors cut for a moment was called a Perch)
     } else if (armed) {
       // re-armed while still sliding (a moment's grace after it stops), having really slid (whoops stop quickly: 0.75 m)
       const sl = this.slide; if (sl && sl.dist >= 0.75 && (sl.stopT == null || t - sl.stopT < 0.6)) this.pendingFly = { name: 'Slide Disarm', t, y0: d.pos.y, obstacle: sl.surface, meters: sl.dist };
@@ -2065,6 +2116,7 @@ class StreamDetector extends TrickDetector {
     if (this.live && this.live.laps >= 0.5) out.push({ name: this.live.name, laps: this.live.laps, pts: Math.round(trickPoints(this.live.name) * this.live.laps / 2), counts: this.live.laps >= 1 });
     if (this.wallRide && this.wallRide.emitted) out.push({ name: this.wallRide.name2 || 'Wall Ride', meters: len(sub(this.lastD.pos, this.wallRide.p0)) });
     if (this.slide && this.slide.dist > 0.3) out.push({ name: this.slide.dist >= 0.75 ? 'Slide Disarm · re-arm!' : 'Sliding', meters: this.slide.dist });
+    if (this.dead && this.lastD && !this.lastD.armed) out.push({ name: 'Motors off · re-arm!' });
     return out;
   }
   endOrbit(P, ob, reason) {
@@ -2600,6 +2652,8 @@ class StreamDetector extends TrickDetector {
   vetoedFor(name, t0) { return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35); }
   commit(p, t) {
     this.pend = this.pend.filter(x => x !== p);
+    // a rotation carried with the motors off is a disarm trick's (deadTick), never also a Flip / Roll / Yaw Spin / Powerloop
+    { const D = this.dead, M = this.deadMute; if ((D && p.tDone > D.t - 0.05) || (M && p.t0 < M.b && p.tDone > M.a)) { for (const sp of p.spans || []) sp.tok.usedUntil = Math.max(sp.tok.usedUntil, sp.b); return; } }
     const rv = this.watcher.review(p), floor = this.watcher.on && this.community && this.community.floor[p.name];
     if (!rv.veto && floor && rv.conf < floor) { rv.veto = true; rv.why = `under the community's ${Math.round(floor * 100)}% for ${p.name}`; }
     if (rv.veto) {   // the Watcher says no: remember it, tell the game why, and let the detector find the next-best reading
@@ -2645,7 +2699,7 @@ class StreamDetector extends TrickDetector {
   drainReviews() { const r = this.reviews; this.reviews = []; return r; }
   pushDebug(x) { (this.debug = this.debug || []).push(x); if (this.debug.length > 12) this.debug.shift(); }
   provisional() { return this.pend.map(p => p.name); }
-  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly || !!(this.stick && this.time - this.stick.t0 > 0.5); }
+  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly || !!this.dead || !!this.deadPend || !!(this.stick && this.time - this.stick.t0 > 0.5); }
 }
 
 // ================================================================= THE WATCHER (second, live judge)
@@ -3069,7 +3123,7 @@ function importDiff(text, tune) {
   return { tune: t, found };
 }
 
-const EVENT_TRICKS_DRAFT = ['Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
+const EVENT_TRICKS_DRAFT = ['Disarm Flip', 'Disarm Roll', 'Disarm Spin', 'Dead Pirate Spin', 'Disarm Loop', 'Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
 // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
 const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];

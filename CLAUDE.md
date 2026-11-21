@@ -315,8 +315,25 @@ the footbridge stairs climb from the plaza onto its west end; balance beams stan
 Destructible or moving props from the brief are not in (the physics world is static). **2026-11-21** (owner): the Mezzanine Stairs stand
 flush against the deck's west end and rise to its top, with a handrail each side, a rail along the deck's west edge that stops where
 the top steps come on and a corner post; `Trailer underside` is a gap (between its legs and wheels: the low-gap survey skips boxes
-over 6 m long). Asked for and still to do: a moving conveyor belt, and two levels more scatter and detail (then gapcheck, floatcheck,
-mapaudit and test/maps.js again). Only the playground draws the
+over 6 m long). **The detail pass and the moving conveyor** (owner, same day; the block at the end of `buildWarehouse`, its own random
+stream so nothing built before it moves; test/belt.js): the Conveyor runs east at 1.2 m/s and carries whatever rests on it:
+**physics hook `surf.belt`** (a velocity on a prim's `surf`; `Drone.collide` works contact and friction out against the moving
+surface; absent on every other prim, so the physics elsewhere is unchanged), `world.belts` for worldview.js's travelling cleats
+(`beltTick`, called from play.js). New trick objects, tagged by hand: two **Hanging Signs** (x -2, z -9 and 3, 4.6-5.4 m), a
+**Cable Tray** (x 18, 6.2 m), the **Yard Gate** (a bar 3.4 m up in the new yard fence), a **Box Truck** at door 3 (crossed sideways
+between its axles, with a `Box Truck underside` gap), two **Yard Lights** (poles); the bot's Powerloop, Matty and Split-S are called
+on the signs, tray and gate 3/3 each without touching anything (the truck and the trailer are called too, but the bot's loop clips
+them: a real loop there has to be bigger). Scatter is `noSurvey` trim: goods on the empty rack shelves, rack guards and boards,
+sprinkler main, conduit, panels, extinguishers, wall fans and a vent duct, rail posts on the mezzanine and both catwalks, a break
+corner, lockers and shelving on the deck, a workbench, cylinders, stores and the office's desk under it, a catwalk ladder, the
+crane's brackets, trolley and pendant, a scissor lift, pallet stacks, wrapped pallets, drums, totes, bins, cones, a pallet jack,
+wall shelving, floor paint, container lock rods, and outside dock steps, bollards, a fence, dumpsters. **Fixed on the way** (the
+checks the owner asked for): tools/gapcheck.js 4/22 → 25/25 clear (the Office Window was a gap inside a solid wall: the wall now has
+a real opening; four Rack Bays had crates in them; door, skylight, tunnel and bay gaps are 10 cm inside their frames);
+tools/floatcheck.js 19 → 0 floating groups (the high-bay lights' chains reach the roof, the two that hung in a skylight opening
+moved 3 m south; crane runway brackets; posts for the x = 5 catwalk's rails and the forklift's guard). tools/mapaudit.js still
+notes the four containers standing on the floor as over/unders with no under (they are: only over counts). `tools/map_thumbs.py
+--extra --only=wh` shoots eight check views, `--map=<id>` remakes one thumbnail. Only the playground draws the
 skyline and power lines; the sun's shadow box is sized from each map's bounds. Static materials `blossom` and `fluoro`
 are new. test/maps.js checks every map (builds, Surveyor counts, clear spawn, bot Powerloops/Mattys on its own objects).
 
@@ -676,6 +693,23 @@ The Champion and Air75 frames are still drawn from primitives. Visual only: phys
 Arming is required to fly. Take-off without arming is an option in Controls, off by default (`autoArmTick` in input.js,
 `store 'autoArm'`; when on: disarmed + throttle seen at rest, then raised = armed, and the arm switch disarms on its falling edge only). The radio reset switch is off unless enabled in Controls (`P.reset.enabled`): only R resets by default. RaceGOW Tracks
 now lives under Tools & labs. The 3D mode call-out reads METALCRAFT MODE (`.popup.metal`).
+
+## Disarm tricks (owner, 2026-11-21; `deadTick` / `onArmChange` / `commit` in sim.js, `EXTRA_TRICKS`, test/disarm.js)
+Not in the TPW book; all draft, points placeholders until the owner sets them. Disarm in the air, let the quad's own momentum carry
+the rotation with the motors off, re-arm before it touches anything and fly on for `DEAD_AWAY` 0.6 s. **Disarm Flip** / **Disarm
+Roll** (200): `DEAD_TURN` 300 deg of pitch / roll while disarmed, at least 60 % of all the rotation. **Disarm Spin** (200): the same on
+yaw, upright (a flat spin); **Dead Pirate Spin** (350): upside-down (mean up.y under -0.5 while the motors are off). **Disarm Loop**
+(400): a loop with a dead top: `DEAD_LOOP_OFF` 120 deg of pitch with the motors off inside one continuous pitch turn of 300 or more,
+upside-down on the way, climbing `DEAD_LOOP_UP` 1 m, flown into at `DEAD_LOOP_V` 2 m/s or more (a flip on the spot is not a loop).
+A landing or a hit with the motors off ends it with nothing. The ordinary reading of the same rotation (Flip, Roll, Yaw Spin,
+Powerloop, Inverted Yaw Spin) is not called beside it (`deadMute`, checked at the top of `commit`; while disarmed in the air
+nothing commits). The HUD shows "Motors off · re-arm!"; they keep a combo alive. **Physics: `tune.deadSpin`** (absent = 1, the
+physics and its hash unchanged; the game fills in `DEAD_SPIN_DEF` 0.1 in game.js; Advanced physics → Feel → Disarmed spin drag;
+in `summary.feel`): the share of the rotational air drag a disarmed quad in the air still feels. As built a cut 680 deg/s flip
+stopped within a quarter turn (the drag was set with the motors running); at 0.1 a flip or roll carries 345 deg in 0.6 s, a flat
+spin in 1.3 s (the stopping props take a bite out of the yaw at once). 0.1 is a first guess: set it from the owner's own disarm
+flips (a Blackbox log of one would give the real decay). **Perch** now needs the quad resting on something when it disarms (a
+hover with the motors cut for a moment was called a Perch). The bot does not fly these and Train has no steps for them yet.
 
 ## INFINITY LOOPS and BIG BEN (owner, 2026-11-20; `CHAIN_BONUS` in sim.js, test/chains.js)
 Not in the TPW calculator; kept apart from the trick score like K.W.A.D. (`ScoreKeeper.chainBonus`, added to `total`; the

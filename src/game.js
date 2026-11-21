@@ -31,6 +31,10 @@ for (const [k, v] of Object.entries(FEEL_DEF)) if (tune[k] == null) tune[k] = v;
 // 0.9, not the 0.45 of everything else; with it a whoop pushed into a wall sticks from about a third throttle. Physics
 // (Node) keeps no wallGrip, so its hash is unchanged; the game fills it in for pilots who have none.
 const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_DEF;
+// Disarmed spin (tune.deadSpin, owner 2026-11-21: disarm tricks): the share of the rotational air drag a quad with its motors off still
+// feels. At 1 (the physics as built) a cut flip stopped within a quarter turn; a real whoop tumbles on. The game fills in 0.1: a
+// first guess, to be set from the owner's own disarm flips. Node keeps none, so the physics hash is unchanged.
+const DEAD_SPIN_DEF = 0.1; if (tune.deadSpin == null) tune.deadSpin = DEAD_SPIN_DEF;
 // Battery drain (tune.drain): the motor model alone draws a third of what a real whoop does (Blackbox, 2026-11-19: a real Air65 hovers
 // on 10-14 W, the sim on 5-6 W); fitted on three quads' logs to 3.0-3.3 (4.3 on a cold, windy day). Absent in the physics = 1.
 // Props fitted to a real whoop's hover rpm (owner, 2026-11-19: "about 34,000 rpm, just to try"): thrust ×1.31, torque ×1.8

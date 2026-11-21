@@ -82,3 +82,26 @@ The owner's first go with the presentation pass:
 - "don't tell people to let the stick go": cues now say "stop it as the horizon comes level" / "stop it there". Open: the owner may
   want different words for the stop; the 15 hand-written cues are still drafts.
 
+### More Warehouse: the detail pass and the moving conveyor (2026-11-21)
+The owner: "lets do the more warehouse pass, don't forget all the checks for gaps and over/unders."
+- **The belt has to carry the quad**, so it is physics, not a picture: a surface may have a velocity and contact is worked out against
+  it. 1.2 m/s east. Left open: parcels riding the belt (they would need to move and collide; not built).
+- **Detail is trim, trick objects are named**: scatter never becomes an over/under by accident (it is marked so the Surveyor skips
+  it); what is meant to be flown round was added on purpose and tested with the bot: two hanging signs, a cable tray, the yard gate.
+- **The checks found old faults**, fixed in the same pass: the Office Window was painted on a solid wall, four rack bays had crates in
+  them, the lights hung from nothing. Gaps 4/22 clear before, 25/25 after; floating groups 19 before, 0 after.
+- Left as it is: the box truck and the trailer count as over/unders, but the bot's own loop clips them (a real loop there is bigger);
+  the four floor-standing containers have no "under". Say if the vehicles should count only as gaps.
+
+### Disarm tricks (2026-11-21)
+The owner: "let's also build out disarm tricks, i forgot another disarm trick, the disarm spin. same thing as a loop with the dead
+motion, it's just a flatspin while upright. there's an upside down version, call it, 'dead pirate spin'".
+- **Five tricks**: Disarm Flip, Disarm Roll, Disarm Spin (flat, upright), Dead Pirate Spin (flat, upside-down), Disarm Loop (a loop
+  whose top is flown with the motors off). All need a re-arm in the air and 0.6 s flown clear; a landing with the motors off is nothing.
+- **One call per move**: a rotation carried dead is the disarm trick's, never also a Flip / Roll / Yaw Spin / Powerloop.
+- **The sim could not do them**: with the motors off a flip stopped in a quarter turn, because the rotational drag had been set for
+  powered flight. Decided: a disarmed quad in the air feels a tenth of it (a slider in Advanced physics). A guess, not a measurement.
+- **Open, the owner's to set**: the points (placeholders 200 / 200 / 200 / 350 / 400), how much rotation has to be dead (300 of 360
+  for flip, roll and spin; 120 for the loop's top), whether doubles count for more, and the spin drag after trying real ones.
+- Found on the way: a hover with the motors cut for a moment was being called a Perch. Fixed.
+

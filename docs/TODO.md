@@ -12,8 +12,7 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 2. **Daily K.W.A.D.** (agreed 2026-11-20): four daily tricks per map, the same for everyone, from the date (the board's UTC day): K and W
    easy and anywhere, A and D on a named object. Letters on the HUD, a bonus for all four, shown on the main menu and the board. Only
    tricks the game calls reliably; obstacle letters on objects the bot already flies well on that map. Keep 250 a letter + 2000.
-3. **More Warehouse** (owner, 2026-11-21): a moving conveyor belt (it has to carry the quad: a surface that moves what rests on it), and
-   two levels more scatter and visual detail; then gapcheck / floatcheck / mapaudit / test/maps.js.
+3. ~~More Warehouse: moving conveyor and the detail pass~~ done 2026-11-21 (gapcheck 25/25, floatcheck 0). Open: parcels riding the belt.
 4. **Community learner re-run** (it did not finish on 2026-11-21, and the detector changed since): run it in the background, bring the
    owner what it wants to change.
 
@@ -21,9 +20,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 5. **Train mode, older asks**: step-by-step for pole, wall and gap tricks (steps by hand); judging "upright" and "flying backward" in
    the steps; flow ideas never done (slow-mo instead of full stops, tries that adapt to the pilot, a ghost in the live tries, a sound
    per step, no reload into the Training Room). Show me now flies the Big Square for the loop tricks (2026-11-21): check it by eye.
-6. **Disarm tricks** (flip, roll, loop): rotation counted while disarmed in the air, re-arm before landing or crashing; the loop accepts
-   a partly ballistic path over the top. Own points (not in TPW). Check the sim's disarmed coasting and spin decay first; needs the
-   owner's test flights.
+6. ~~Disarm tricks~~ built 2026-11-21 (Disarm Flip / Roll / Spin, Dead Pirate Spin, Disarm Loop; test/disarm.js). Still to do: the bot
+   flying them (Judge the Bot, Show me), Train steps, doubles.
 7. **3D mode scoring**: decide with 3D pilots which tricks count and what they are worth, and whether 3D gets its own board.
 8. **Trick challenges and the trick board** (owner, 2026-11-20): a pilot names a trick, flies it and posts it; others try it; a try
    passes when its motion matches closely enough (the library's signature match); 3 different pilots passing confirms it and the owner
@@ -55,6 +53,9 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - **Feel**: the real Air65 measured quicker and springier than the sim (its feedforward). Fit it once a test-card log is in.
 
 ## Waiting on the owner
+- Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points
+  (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
+- More Warehouse: look over the detail pass; should the box truck and trailer count as over/unders or only as gaps?
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).
 - Fly the trainer: rolling starts, instant retry, and today's intro / cues / sticks-big view.
 - Fly the Feel Lab test card on the Fractal 65 / 75 and send the logs.

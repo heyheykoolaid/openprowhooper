@@ -99,7 +99,7 @@ function renderCombo() {
   const el = $('#combo'); const prov = mode === 'fly' ? detector.provisional() : [], live = mode === 'fly' && detector.liveState ? detector.liveState() : [];
   if (!combo.active && !prov.length && !live.length) { el.classList.add('hide'); return; }
   el.classList.remove('hide');
-  const liveTxt = l => l.laps !== undefined ? `<span class="live">${l.name.replace(' x2', '')} ×${l.laps}${l.counts ? ` <b>+${l.pts}</b>` : ''}</span>` : `<span class="live">${l.name} ${l.meters.toFixed(1)}m</span>`;
+  const liveTxt = l => l.laps !== undefined ? `<span class="live">${l.name.replace(' x2', '')} ×${l.laps}${l.counts ? ` <b>+${l.pts}</b>` : ''}</span>` : l.meters === undefined ? `<span class="live">${l.name}</span>` : `<span class="live">${l.name} ${l.meters.toFixed(1)}m</span>`;
   const list = [...combo.names.map(n => `<span>${n}</span>`), ...prov.map(n => `<span class="prov">${n}…</span>`), ...live.map(liveTxt)];
   const livePts = live.reduce((a, l) => a + (l.counts ? l.pts : 0), 0);
   el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}${combo.active ? `<div class="cTimer"><i style="width:${detector.busy() ? 100 : Math.max(0, Math.round(100 - (performance.now() / 1000 - combo.lastT) / COMBO_IDLE * 100))}%"></i></div>` : ''}`;
@@ -347,6 +347,7 @@ function frame(now) {
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   if (world.theme === 'dusk') duskTick(Math.min(0.1, dt || 0.016));
   if (world.theme === 'nyc') nycTick(Math.min(0.1, dt || 0.016));
+  if (world.belts) beltTick(Math.min(0.1, dt || 0.016));
   meowTick(Math.min(0.1, dt || 0.016));
   renderer.render(scene, cam);
   if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk' || world.theme === 'nyc')) bloomRender(cam);   // racing: the gates' LEDs glow
