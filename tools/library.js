@@ -78,7 +78,7 @@ function flightExamples(runs) {
   for (const r of runs) {
     // each labelled stretch is re-flown through the detector itself, so the example is measured exactly as the game measures
     // a move live: rotation, up.y, the over/under/gap passes and the sticks (the detector's libSigOf)
-    for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue; if (e.inferred) continue;   // a guessed 'no' is never a counter-example
+    for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue; if (e.inferred) continue; if (e.crashed) continue;   // graded "crash": the right trick, but not how it is flown   // a guessed 'no' is never a counter-example
       const from = Math.max(r.rows[0][0], e.a - 3.5), { det, events: rev } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       const mo = e.kind === 'want' && e.botSrc !== 'library' ? motionOf(r.rows, det, r.world, from, sig) : null;

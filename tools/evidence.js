@@ -41,6 +41,9 @@ function consensus(votes) {
         const side = all.filter(x => x.yes === net > 0), lead = side.reduce((p, x) => (x.yes ? x.v.wYes : x.v.wNo) > (p.yes ? p.v.wYes : p.v.wNo) ? x : p, side[0]).v;
         const srcs = side.map(x => x.v.src), src = srcs.includes('reviewer') ? 'reviewer' : srcs.includes('bot') ? 'bot' : srcs.includes('own') ? 'own' : 'judge';
         const common = { name, a: lead.a, b: lead.b, w: Math.abs(net), author: lead.author, authors: [...say.keys()], people, agree: side.length, src, consensus: +(net / ramp).toFixed(3) };
+        // "crash" (owner, 2026-11-21): the right trick, flown into a crash: the name still stands (it is no 'not'), but when half or more
+        // of the people who said yes graded it a crash it is `crashed`: never an example of how the trick is flown
+        if (net > 0 && side.filter(x => x.v.crash).length * 2 >= side.length && side.some(x => x.v.crash)) common.crashed = true;
         if (net > 0) out.push({ kind: 'want', ...common });
         else out.push({ kind: 'not', ...common, inferred: side.every(x => x.v.inferred) || undefined });
       }
@@ -48,6 +51,7 @@ function consensus(votes) {
   return out;
 }
 async function load(files) {
+  const grades = [];
   const flights = new Map(), labelFiles = [];
   for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
     const items = j.format === 'pro-whooper-telemetry-bundle/1' && Array.isArray(j.items) ? j.items.map(x => x && x.payload).filter(Boolean) : [j];
@@ -80,7 +84,8 @@ async function load(files) {
       const vote = !!l.judge || (rev && l.src === 'board') || (!!l.reviewer && !bot && !trustedRev);
       const a = Math.min(+l.repStart || +l.t, +l.t), b = Math.max(+l.repStart || +l.t, +l.t), actual = str(l.actual), target = str(l.target);
       if (a < T0 - 5 || b > T1 + 5) continue;
-      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own', at: lf._relayAt || 0 };   // when it was sent: a person's latest word wins
+      const item = { a, b, author, custom: !!l.custom, actual, target, verdict: l.verdict, src: bot ? 'bot' : vote ? 'judge' : rev ? 'reviewer' : 'own', at: lf._relayAt || 0, crash: l.execActual === 'CRASH' };
+      if (l.verdict === 'yes' && typeof l.execActual === 'string') grades.push({ flight: fl.id, t: +l.t, trick: actual, game: str(l.exec || '').slice(0, 12), pilot: l.execActual.slice(0, 12), author });   // how it was flown: the game's grade next to the pilot's (tools/grades.js)   // when it was sent: a person's latest word wins
       labelled.push([a - 1, b + 2]);
       item.wYes = vote ? W.judge : fl.replica || fl.botSrc === 'library' ? W.replica : rev ? W.reviewer : W.own;   // a yes on the knowledge bot re-flying a library example confirms that example: half weight, and it adds no new motion
       item.wNo = vote ? W.judge : l.inferred ? W.inferred : fl.replica ? W.replica : rev ? W.reviewer : W.own; item.inferred = !!l.inferred;
@@ -98,7 +103,7 @@ async function load(files) {
   // a pilot may not carry more than W.cap labels' worth on any one trick
   const per = {}; for (const r of runs) for (const e of r.ev) if (e.kind === 'want' || e.kind === 'not') { const k = e.author + '|' + e.name; (per[k] = per[k] || []).push(e); }
   for (const list of Object.values(per)) { const tot = list.reduce((s, e) => s + e.w, 0); if (tot > W.cap) list.forEach(e => { e.w *= W.cap / tot; }); }
-  return { runs, nFlights: flights.size, nLabelFiles: labelFiles.length };
+  return { runs, grades, nFlights: flights.size, nLabelFiles: labelFiles.length };
 }
 
 module.exports = { load, W, CONFIRM, consensus, who, str, worldOf };

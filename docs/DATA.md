@@ -163,3 +163,8 @@ to check one, replay its trace through the detector and ScoreKeeper. The file na
 Sent by the player's own click in Video Review: `frames` ([t, roll, pitch, yaw] camera rotation per sample, at most
 6000), `marks` (U/O), `detected`, `labels`, `analysis` (lens FOV, tilt, rate), pilot name/id and profile. Never the
 video and never its file name. Labelled REAL flying: weigh it above sim labels when tuning.
+
+## Grades (how it was flown)
+A decided label may carry `execActual`: `CLEAN`, `SLOPPY`, `BUMP` or `CRASH` (2026-11-21), next to the game's own `exec`. `CRASH` means the
+right trick flown into a crash: still a yes for the name, pooled like any label, `crashed` on the pooled moment when half or more of the yes voices
+said so, and never a library example. `node tools/grades.js <data repo>` tabulates game grade against pilot grade.

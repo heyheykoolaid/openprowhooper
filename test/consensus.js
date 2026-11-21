@@ -29,4 +29,8 @@ e = one([yes('owner', 'Barani', 10, W.reviewer)], 'want', 'Barani');
 check('a reviewer label alone keeps its weight in the average (1.5 / 3)', near(e, W.reviewer / CONFIRM), e && e.w.toFixed(3));
 const apart = consensus([yes('rod', 'Flip', 10), yes('ali', 'Flip', 20)]).filter(x => x.name === 'Flip');
 check('labels 10 s apart are two moments', apart.length === 2 && apart.every(x => near(x, 1 / 3)), apart.map(x => x.w.toFixed(3)).join(', '));
+// "crash" (owner, 2026-11-21): the name stands, but it is not an example of the trick
+{ const c = consensus([{ ...yes('rod', 'Flip', 10), crash: true }]).find(x => x.name === 'Flip'); check('a call graded crash is still a yes for the trick, marked crashed', c && c.kind === 'want' && c.crashed === true && near(c, 1 / 3));
+  const d = consensus([{ ...yes('rod', 'Flip', 10), crash: true }, yes('ali', 'Flip', 10), yes('wonky', 'Flip', 10)]).find(x => x.name === 'Flip'); check('one crash grade among three yeses does not mark it', d && d.kind === 'want' && !d.crashed);
+  const f = consensus([{ ...yes('rod', 'Flip', 10), crash: true }, { ...yes('ali', 'Flip', 10), crash: true }, yes('wonky', 'Flip', 10)]).find(x => x.name === 'Flip'); check('two of three does', f && f.crashed === true); }
 console.log(`\n${ok}/${n} consensus checks`);

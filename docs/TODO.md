@@ -33,5 +33,5 @@ the video reference. Needs: a new relay kind (`challenge`), a board screen, the 
 - The learned witness (2026-11-21, tools/witness.py): built and tested, not voting. Next: train it on call-window signatures (bot flights + shared flights' calls re-flown), check a clean roll scores high, mark it live, add it to the weekly run.
 - Feel: the first step-response read says the real Air65 is quicker and springier than the sim (feedforward): fit it once a test-card log is in.
 - More Warehouse (owner, 2026-11-21): a moving conveyor belt (it has to carry the quad: a surface that moves what rests on it), and two levels more scatter and visual detail; re-run gapcheck / floatcheck / mapaudit / test/maps.js after.
-- Review grades (owner, 2026-11-21, to decide): "incomplete" and "crash" next to clean / sloppy / bump.
+- Review grades: "crash" is in (2026-11-21); "incomplete" waits. Once crash grades come in, tune the bump / crash line from `node tools/grades.js` (and look at the 11 calls the game graded clean that pilots graded bump).
 - Train: Show me on the Big Square (the bot's loops only fly bars up to 3.2 m); the mode "still needs a lot of work" (owner).
