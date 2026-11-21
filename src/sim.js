@@ -1092,6 +1092,40 @@ function libDist(a, b) {
   for (let i = 0; i < N; i++) for (let j = Math.max(0, i - B); j <= Math.min(N - 1, i + B); j++) { const k = cost(i, j); D[i][j] = k + (i || j ? Math.min(i ? D[i - 1][j] : Infinity, j ? D[i][j - 1] : Infinity, i && j ? D[i - 1][j - 1] : Infinity) : 0); }
   return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d)))) + libExtra(a, b);
 }
+// ---- The learned witness (owner, 2026-11-21; tools/witness.py → community/witness.json): extra-trees trained on the library's
+// confirmed examples (with noisy copies of each), read here as plain arrays. For a move the rules called X it gives the share of
+// trees' votes for X: one more soft vote in the Watcher (`votes.learned`), only for the tricks it has shown it knows (`vote`)
+// and only when the model is marked `live` (not yet: see the Watcher), never a veto, never a namer. Absent (Node tests) = no vote. `witFeats` must match `feats` in tools/witness.py (test/witness.js).
+let WITNESS = null;
+function setWitness(M) {
+  WITNESS = null; if (!M || M.format !== 'pro-whooper-witness/1' || M.nf !== 116 || !Array.isArray(M.classes) || !Array.isArray(M.trees) || M.trees.length > 400) return null;
+  const K = M.classes.length, trees = [];
+  for (const t of M.trees) { const n = t && Array.isArray(t.f) ? t.f.length : 0; if (!n || n > 20000 || !Array.isArray(t.t) || !Array.isArray(t.r) || !Array.isArray(t.v) || t.t.length !== n || t.r.length !== n) return null;
+    for (let i = 0; i < n; i++) { const f = t.f[i], r = t.r[i]; if (!Number.isInteger(f) || !Number.isInteger(r) || f >= M.nf || (f >= 0 ? !(r > i && r < n && i + 1 < n && Number.isFinite(t.t[i])) : !(r >= 0 && r < t.v.length))) return null; }   // children only ever lie further on: no loops
+    if (!t.v.every(v => Array.isArray(v) && v.length % 2 === 0 && v.length <= 8 && v.every((x, j) => Number.isInteger(x) && x >= 0 && (j % 2 ? x <= 100 : x < K)))) return null;
+    trees.push({ f: Int16Array.from(t.f), t: Float64Array.from(t.t), r: Int32Array.from(t.r), v: t.v }); }
+  WITNESS = { classes: M.classes.map(c => String(c).slice(0, 60)), vote: new Set((Array.isArray(M.vote) ? M.vote : []).map(String)), live: M.live === true, trees, stats: M.stats && typeof M.stats === 'object' ? M.stats : {}, updated: String(M.updated || '').slice(0, 20) };
+  return WITNESS;
+}
+function witFeats(sig) {
+  const X = new Float64Array(116), c = sig.c, d = Math.max(+sig.d || 0.1, 0.1), u = sig.u && sig.u.length === LIB_N ? sig.u : null; let o = 0;
+  for (let i = 0; i < 72; i++) X[o++] = c[i] / 360;
+  let mn = 1, sum = 0, inv = 0; for (let i = 0; i < 24; i++) { const v = u ? u[i] / 100 : 1; X[o++] = v; mn = Math.min(mn, v); sum += v; if (v < -0.3) inv++; }
+  X[o++] = Math.log(d);
+  for (let a = 0; a < 3; a++) X[o++] = Math.abs(c[69 + a]) / 360;
+  for (let a = 0; a < 3; a++) { let s = 0; for (let i = 1; i < 24; i++) s += Math.abs(c[i * 3 + a] - c[(i - 1) * 3 + a]); X[o++] = s / 360 / d; }
+  X[o++] = mn; X[o++] = sum / 24; X[o++] = u ? u[23] / 100 : 1; X[o++] = inv / 24;
+  if (typeof sig.ps === 'string') { const ps = sig.ps, cnt = ch => Math.min(ps.split(ch).length - 1, 3) / 3; X[o] = Math.min(ps.length, 6) / 6; X[o + 1] = cnt('U'); X[o + 2] = cnt('O'); X[o + 3] = cnt('G');
+    const f = 'UOG'.indexOf(ps[0] || '?'); if (f >= 0) X[o + 4 + f] = 1; X[o + 7] = ps.includes('OU') ? 1 : 0; X[o + 8] = ps.includes('UO') ? 1 : 0; }
+  return X;
+}
+// the share of the trees' votes that go to `name` for this move (0-1), or null when the witness does not know that trick
+function witnessProb(sig, name) {
+  const Wt = WITNESS; if (!Wt || !sig || !Array.isArray(sig.c) || sig.c.length !== 72) return null; const k = Wt.classes.indexOf(name); if (k < 0) return null;
+  const X = witFeats(sig); let p = 0;
+  for (const t of Wt.trees) { let i = 0; while (t.f[i] >= 0) i = X[t.f[i]] <= t.t[i] ? i + 1 : t.r[i]; const v = t.v[t.r[i]]; let tot = 0, me = 0; for (let j = 0; j < v.length; j += 2) { tot += v[j + 1]; if (v[j] === k) me = v[j + 1]; } if (tot) p += me / tot; }
+  return p / Wt.trees.length;
+}
 function libK(k) { return k && typeof k === 'object' && Array.isArray(k.th) && k.th.length === 8 && k.th.every(Number.isFinite) && Number.isFinite(+k.cmd) ? { th: k.th.map(v => clamp(Math.round(v), 0, 100)), cmd: clamp(Math.round(+k.cmd), 0, 100) } : null; }
 // A library example's motion (tools/library.js; the knowledge bot in maneuvers.js flies it): 25 Hz from just before the move
 // to just after, in a frame turned to the flight's own heading (forward = -z, as the body), so no map position travels:
@@ -2712,10 +2746,14 @@ class Watcher {
     if (LIBRARY && LIBRARY.by[p.name] && LIBRARY.by[p.name].pos && this.det.lib) {   // the library: how much does this move look like the examples of this trick (and not another)?
       const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05), m = sig ? libMatch(sig) : [], me = m.find(x => x.name === p.name);
       if (me) { let v = clamp(1 - (me.pos - 0.15) / (LIB_THR * 1.4), 0, 1); const other = m.find(x => x.name !== p.name); if (other && other.pos < me.pos - 0.08) v *= 0.6; if (me.neg < me.pos) v *= 0.6; by.library = { n: 1, ok: v }; } }
+    // The learned witness does NOT vote yet (2026-11-21): the library's pilot examples are measured over whole label tiles (a
+    // Roll example runs 1.8-3.8 s with other motion in it), a live call over the detector's own tight window, and a clean 360
+    // roll measured that way got 14 %. It votes once it is trained on call-window signatures (WITNESS.live, set by the trainer).
+    if (WITNESS && WITNESS.live && WITNESS.vote.has(p.name)) { const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05), pw = sig ? witnessProb(sig, p.name) : null; if (pw != null) by.learned = { n: 1, ok: clamp(pw / 0.25, 0, 1) }; }
     const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]), VW = { library: 2 };   // the library leans on the demo GIFs: it counts double
     const wsum = votes.reduce((a, v) => a + (VW[v[0]] || 1), 0), conf = votes.length ? votes.reduce((a, v) => a + v[1] * (VW[v[0]] || 1), 0) / wsum : 1;
     // the veto stays with the measured witnesses: the library only moves the confidence (it is still young)
-    const vv = votes.filter(v => v[0] !== 'library'), vconf = vv.length ? vv.reduce((a, v) => a + v[1], 0) / vv.length : 1, out = vv.length >= 3 && vconf < 0.3;
+    const vv = votes.filter(v => v[0] !== 'library' && v[0] !== 'learned'), vconf = vv.length ? vv.reduce((a, v) => a + v[1], 0) / vv.length : 1, out = vv.length >= 3 && vconf < 0.3;
     return { name: p.name, veto: !!fail || out, why: fail ? fail.label : (out ? 'most witnesses disagree' : null),
       checks, votes: Object.fromEntries(votes.map(([k, v]) => [k, +v.toFixed(2)])), conf: +conf.toFixed(2), t0: +W.t0.toFixed(3), t1: +W.t1.toFixed(3) };
   }
@@ -3156,6 +3194,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

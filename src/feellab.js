@@ -12,6 +12,12 @@ function feelRender() {
     through the sim with the build and tune in your Garage (and your log's rates), and measures both the same way: how fast each axis follows the sticks,
     how closely it tracks, the wobble you did not ask for, and hover throttle. Then it suggests the feel settings that close the gap. Pick your parts in the
     Garage first for the closest match. Your log stays on this computer.</p>
+    <details class="note"><summary><b>The test card</b>: a 70-second flight that measures everything (fly it once per quad)</summary>
+    <ol><li><b>Hover</b> still at chest height, 10 s.</li><li><b>Throttle blips</b>: from the hover punch to about ¾ for half a second, back, wait 2 s. Five times.</li>
+    <li><b>Chops</b>: climb to ~3 m, throttle to zero for half a second, catch it. Three times.</li><li><b>Roll snaps</b>: full stick left for a third of a second, let go; then right. Five each.</li>
+    <li><b>Pitch snaps</b>: the same, forward and back.</li><li><b>Yaw snaps</b>: full yaw left for a second, stop, right for a second. Three each.</li>
+    <li><b>Coast</b>: a fast straight line, then level off and let it coast to a stop, no braking. Three times.</li><li><b>Punch-out</b>: full throttle straight up for a second, then down through your own wash.</li></ol>
+    <p>Blackbox at 1 kHz or faster, a full pack, no wind. Weigh the quad with its pack on and put the weight in the build sheet (Blackbox Lab): it is the cheapest calibration there is.</p></details>
     <div class="row"><label class="ghost">Choose a log… <input type="file" id="flFile" accept=".bbl,.bfl,.txt" hidden></label><button data-fl="pick">Choose a log…</button>
     <span class="note">${esc(FL.file || '')}${FL.logs ? ` · ${FL.logs.length} log${FL.logs.length === 1 ? '' : 's'}, ${logs.length} long enough` : ''}</span></div>`;
   if (logs.length) h += `<p>Flights: ${logs.map(x => `<button class="${FL.pick === x.i ? 'on' : ''}" data-fl="log:${x.i}">#${x.i} · ${Math.round(x.sp.secs)} s</button>`).join(' ')}</p>`;
@@ -21,18 +27,28 @@ function feelRender() {
       ${row('Hover motor', fl1(R.real.hover) + '%', fl1(R.sim.hover) + '%', 'motor output while hovering calm', close(R.real.hover, R.sim.hover, 3))}
       ${['Roll', 'Pitch', 'Yaw'].map((a, k) => row(a + ' follows the sticks', fl1(R.real.axes[k].lag) + ' ms', fl1(R.sim.axes[k].lag) + ' ms', 'later = softer, earlier = locked-in', close(R.real.axes[k].lag, R.sim.axes[k].lag, 1.5))).join('')}
       ${['Roll', 'Pitch', 'Yaw'].map((a, k) => row(a + ' tracking error', fl1(R.real.axes[k].track) + '%', fl1(R.sim.axes[k].track) + '%', 'how far it strays from what you asked', close(R.real.axes[k].track, R.sim.axes[k].track, 2.5))).join('')}
+      ${['Roll', 'Pitch', 'Yaw'].map((a, k) => { const x = R.real.axes[k].step, y = R.sim.axes[k].step, f = z => z ? `${fl1(z.t50)} / ${fl1(z.t90)} ms${z.over >= 3 ? ', ' + Math.round(z.over) + '% over' : ''}` : '—';
+        return row(a + ' step: half way / 90 %', f(x), f(y), 'a sudden stick move, averaged over the flight', x && y ? Math.abs(x.t50 - y.t50) <= 3 && Math.abs(x.over - y.over) <= 10 : null); }).join('')}
       ${row('Unasked wobble (roll / pitch)', R.real.resid.slice(0, 2).map(fl1).join(' / ') + ' °/s', R.sim.resid.slice(0, 2).map(fl1).join(' / ') + ' °/s', 'air, wash, vibration (2–20 Hz)', close(R.real.resid[0], R.sim.resid[0], 2))}
       ${row('Motor dead time', fl1(R.real.motorLag) + ' ms', fl1(R.sim.motorLag) + ' ms', 'before the motor speed starts to move', null)}
       ${row('Buzz (roll, unfiltered gyro)', fl1(R.real.buzz[0]) + ' °/s', '—', 'the sim draws it on the camera', null)}</table>
       <canvas id="flPlot" width="860" height="200"></canvas><label>Window <input type="range" id="flWin" min="0" max="${Math.max(0, Math.floor(R.s.t.length / R.s.hz) - 3)}" step="0.5" value="${FL.win}"> <span class="note">roll: setpoint (grey), your whoop (gold), the sim (cyan)</span></label>
+      <canvas id="flStep" width="860" height="170"></canvas><p class="note">Average step response, roll / pitch / yaw: what the quad does when the sticks ask for a sudden, held rate (1 = exactly what was asked), your whoop (gold) and the sim (cyan), over a quarter of a second. From every second of this flight with stick movement in it; best from the test card's snaps.</p>
       <h3>Suggested</h3>${R.suggest.length ? R.suggest.map(s => `<p>${esc(s.label)}: <b>${s.now} → ${s.to}</b> <span class="note">${esc(s.why)}</span> <button data-fl="apply:${s.key}:${s.to}">Apply</button></p>`).join('') : '<p class="note">Nothing to change: the sim already matches this flight.</p>'}
       <div class="row"><button class="primary" data-fl="fit" ${FL.busy ? 'disabled' : ''}>Find my feel (loop delay and shake together)</button><button data-fl="export">Export the comparison</button></div>
       ${FL.fit ? `<p>Best on this flight: <b>loop delay ${FL.fit.best.loopDelayMs} ms, shake ${Math.round(FL.fit.best.shake * 100)}%</b> <button data-fl="applyFit">Apply both</button></p><p class="note">${FL.fit.rows.slice(1, 4).map(r => `${r.loopDelayMs} ms / ${Math.round(r.shake * 100)}%`).join(' · ')} were next.</p>` : ''}`;
   }
   h += `<p class="note">Drag and coasting cannot be read from a log (a whoop has no GPS): set them by feel in the Garage → Advanced → physics feel.
     Sending your logs to the project (attach them to feedback, or ask the owner) lets the sim's defaults learn from more whoops.</p>`;
-  el.innerHTML = h; feelPlot();
+  el.innerHTML = h; feelPlot(); feelStepPlot();
 }
+function feelStepPlot() { const cv = $('#flStep'), R = FL.res; if (!cv || !R) return; const g = cv.getContext('2d'), W = cv.width, H = cv.height, pw = W / 3;
+  g.fillStyle = '#0b0c10'; g.fillRect(0, 0, W, H); g.font = '11px monospace';
+  ['roll', 'pitch', 'yaw'].forEach((name, k) => { const x0 = k * pw + 8, w = pw - 16, y1 = v => H - 14 - v / 1.5 * (H - 26), A = R.real.axes[k].step, B = R.sim.axes[k].step;
+    g.strokeStyle = '#ffffff22'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1(1)); g.lineTo(x0 + w, y1(1)); g.moveTo(x0, y1(0)); g.lineTo(x0 + w, y1(0)); g.stroke();
+    for (let ms = 50; ms < 250; ms += 50) { g.beginPath(); g.moveTo(x0 + ms / 250 * w, y1(0)); g.lineTo(x0 + ms / 250 * w, y1(0) + 4); g.stroke(); }
+    const line = (S, col) => { if (!S) return; g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath(); S.curve.forEach((v, i) => { const x = x0 + Math.min(1, i * S.dt / 250) * w, y = y1(Math.max(-0.2, Math.min(1.5, v))); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); };
+    line(B, '#3fd4ff'); line(A, '#ffc93c'); g.fillStyle = '#a9a090'; g.fillText(name + (A ? '' : ' (not enough stick movement)'), x0 + 4, 12); g.fillText('250 ms', x0 + w - 44, H - 2); }); }
 function feelPlot() { const cv = $('#flPlot'), R = FL.res; if (!cv || !R) return; const g = cv.getContext('2d'), W = cv.width, H = cv.height, hz = R.s.hz, i0 = Math.floor(FL.win * hz), n = Math.floor(3 * hz);
   g.fillStyle = '#0b0c10'; g.fillRect(0, 0, W, H); const sp = R.s.sp[0], a = R.s.gyro[0], b = R.simS.gyro[0]; let dot = 0, dotS = 0; for (let i = 0; i < sp.length; i++) { dot += sp[i] * a[i]; dotS += sp[i] * b[i]; }
   const sa = dot < 0 ? -1 : 1, sb = dotS < 0 ? -1 : 1; let M = 50; for (let i = i0; i < i0 + n && i < sp.length; i++) M = Math.max(M, Math.abs(sp[i]), Math.abs(a[i]), Math.abs(b[i]));

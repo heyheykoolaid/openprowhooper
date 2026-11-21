@@ -19,6 +19,7 @@ for (const file of files) {
     console.log(`  hover motor      ${f1(R.hover)}%   sim ${f1(M.hover)}%`);
     console.log(`  motor dead time  ${f1(R.motorLag)} ms   sim ${f1(M.motorLag)} ms · step to 63 %: ${f1(R.motorRise)} ms   sim ${f1(M.motorRise)} ms`);
     ['roll', 'pitch', 'yaw'].forEach((a, k) => console.log(`  ${a.padEnd(6)} lag ${f1(R.axes[k].lag).padStart(5)} ms track err ${f1(R.axes[k].track).padStart(5)}%   sim ${f1(M.axes[k].lag).padStart(5)} ms ${f1(M.axes[k].track).padStart(5)}%   peak ${R.axes[k].peak}/${M.axes[k].peak} °/s`));
+    ['roll', 'pitch', 'yaw'].forEach((a, k) => { const x = R.axes[k].step, y = M.axes[k].step; if (x || y) console.log(`  ${a.padEnd(6)} step: half way ${f1(x && x.t50).padStart(5)} ms, 90 % ${f1(x && x.t90).padStart(5)} ms, over ${f1(x && x.over).padStart(4)} %, settles ${x ? x.settle : '—'} (${x ? x.n : 0} windows)   sim ${f1(y && y.t50)} / ${f1(y && y.t90)} ms, over ${f1(y && y.over)} %, settles ${y ? y.settle : '—'}`); });
     console.log(`  unasked wobble   ${R.resid.map(f1).join(' / ')} °/s   sim ${M.resid.map(f1).join(' / ')} (2-20 Hz, gyro minus setpoint)`);
     console.log(`  buzz >40 Hz      ${R.buzz.map(f1).join(' / ')} °/s (real, unfiltered gyro; the sim draws it on the camera only)`);
     for (const s of r.suggest) console.log(`  → ${s.label}: ${s.now} → ${s.to}  (${s.why})`); });

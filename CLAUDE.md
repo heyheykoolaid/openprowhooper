@@ -124,6 +124,16 @@ parsers) to CSV, then compare logged gyro/motor/vbat response to the sim driven 
 `PARTS` numbers (motor Rm/KV, prop Ct/Cq, drag, inertia) in `src/sim.js`. Use the build sheet's weight and parts
 first; they are the cheapest calibration.
 
+**Average step response and the test card** (owner, 2026-11-21; `FeelFit.stepResponse`, test/stepresp.js, docs/FEEL-TEST-CARD.md): the
+method of Plasmatree's PID-Analyzer: every ~1 s window with stick movement (512 samples at ~500 Hz, Hann, a quarter apart) is
+deconvolved (Wiener: rotation over setpoint, damped where the setpoint has no energy, low-passed at 70 Hz), summed into a step and
+averaged by how hard the sticks moved: `t50` / `t90` ms, `over` %, `settle` (the level is the roughest number, within ~7 %), on
+`measure().axes[k].step` for the real log and the sim alike; Feel Lab shows the rows and a roll / pitch / yaw plot (`#flStep`),
+tools/feelfit.js prints them. First read (choppoop 2026-11-19, 4 packs): half way in 5-7.5 ms real vs 7-10 sim (roll / pitch),
+overshoot 18-40 % real vs 5-19 % sim, yaw 19-50 % vs 4-6 %: the real quad is quicker and springier (its feedforward); nothing was
+changed from it yet. The **test card** (hover, throttle blips, chops, roll / pitch / yaw snaps, coast, punch-out; ~70 s) is in the
+doc and in Feel Lab's first panel: ask for it with every new quad's log.
+
 ## The Watcher (src/sim.js `Watcher`, `WATCH`)
 A second, live judge behind the detector: every call is cross-checked against independent witnesses (path, camera view,
 sticks/throttle, demo timing scaled to the pilot's learned speed) and the TPW description. Hard checks veto (the
@@ -869,6 +879,20 @@ sticks (`th`: throttle at 8 points, `cmd`: % of the rotation with that axis's st
 the first 224 examples confirmed and rejected calls were both ~99% commanded. Pilot examples are now measured by re-flying the
 labelled stretch through the detector (`replayTrace(...).det.libSigOf`), exactly as the game measures live. Rebuild: 57%
 leave-one-out (56% before), maybes on the shared flights 109 → 99 with the same 8 right and none wrong, bench unchanged.
+
+## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
+Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
+tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,
+±12 % rotation per axis, up to 15 % of roll read as yaw, wandering sticks, up.y jitter). Features: the signature's 24 x 3 rotation,
+up.y, log duration, totals and rates per axis, the passes; no sticks and no "is it known" flags (they told it where an example
+came from). Rejected calls are never trained on: they are the test. For a call of X it gives the share of trees voting X. First
+build (451 examples, 30 tricks, 112 rejected calls): confirmed vs rejected AUC 0.80 with every pilot in training (the library's
+nearest example: 0.74), 0.70 on a pilot it never saw (library 0.67); names the trick 63 % / 52 % (library 62 % / 43 %).
+**It does not vote yet** (`WITNESS.live` false; build.py ships the model only when `live` is true): the library's pilot examples
+are measured over whole label tiles (a Roll example runs 1.8-3.8 s), a live call over the detector's tight window, and a clean 360
+roll measured that way gets 14 %. Next: train on call-window signatures (the bot's flights and the shared flights' calls re-flown,
+with their Watcher windows), then mark it live: `votes.learned`, weight 1, only for the tricks in `vote` (8+ examples, 70 % found),
+never in the veto. `python3 tools/witness.py [--write]`, community/WITNESS.md, test/witness.js, `PW_WITNESS=file npm run bench`.
 
 ## Judge the Bot feeds the data, and the FPV view sits at the lens (2026-11-17)
 Every judged bot flight goes to the project as a **mini flight** (`judgeShare` in judge.js): `pro-whooper-flight/1` with

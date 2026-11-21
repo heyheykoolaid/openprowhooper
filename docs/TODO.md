@@ -30,4 +30,5 @@ different pilots pass, the trick is confirmed: their examples go into the trick 
 several pilots already shows up as a "maybe"), and the owner names its points and turns it into a real rule. The replays are
 the video reference. Needs: a new relay kind (`challenge`), a board screen, the guest replay viewer, a "this looks like
 <existing trick>" check before posting, and the owner's say before anything is scored.
-
+- The learned witness (2026-11-21, tools/witness.py): built and tested, not voting. Next: train it on call-window signatures (bot flights + shared flights' calls re-flown), check a clean roll scores high, mark it live, add it to the weekly run.
+- Feel: the first step-response read says the real Air65 is quicker and springier than the sim (feedforward): fit it once a test-card log is in.

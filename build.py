@@ -11,9 +11,10 @@ for key, f in [('TRICKS', 'tricks.js'), ('SIM', 'sim.js'), ('MAPS', 'maps.js'), 
 import json as _json
 _cp = root / 'community' / 'profile.json'
 _lib = root / 'library' / 'library.json'   # the trick library (tools/library.js): the demo GIFs and pilots' confirmed tricks
+_wit = root / 'community' / 'witness.json'   # the learned witness (tools/witness.py): a soft vote in the Watcher
 _bd = root / 'community' / 'badges.json'   # review badges sent before the relay counted them (tools/badges.js)
 t = t.replace('/*COMMUNITY*/', ('window.PW_BADGES=' + _json.dumps(_json.loads(_bd.read_text()), separators=(',', ':')) + ';\n' if _bd.exists() else '') + '/*COMMUNITY*/', 1)
-t = t.replace('/*COMMUNITY*/', (('window.Sim.setCommunity(' + _json.dumps(_json.loads(_cp.read_text())) + ');\n') if _cp.exists() else '') + (('window.Sim.setLibrary(' + _json.dumps(_json.loads(_lib.read_text()), separators=(',', ':')) + ');\n') if _lib.exists() else ''))
+t = t.replace('/*COMMUNITY*/', (('window.Sim.setCommunity(' + _json.dumps(_json.loads(_cp.read_text())) + ');\n') if _cp.exists() else '') + (('window.Sim.setLibrary(' + _json.dumps(_json.loads(_lib.read_text()), separators=(',', ':')) + ');\n') if _lib.exists() else '') + (('window.Sim.setWitness(' + _json.dumps({k: v for k, v in _json.loads(_wit.read_text()).items() if k != 'check'}, separators=(',', ':')) + ');\n') if _wit.exists() and _json.loads(_wit.read_text()).get('live') is True else ''))   # shipped only once it votes
 out = root / 'dist'
 # three.js: dist/index.html loads it from the CDN; the standalone build carries its own copy (vendor/, MIT) so it
 # works offline and in sandboxed viewers that block the CDN.

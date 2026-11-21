@@ -53,6 +53,35 @@
       const r0 = Rp[i], r1 = avg(Rp.slice(i + w150 - Math.round(0.02 * hz), i + w150)), tgt = r0 + 0.63 * (r1 - r0); if (Math.abs(r1 - r0) < 1e-6) continue;
       let k = i; while (k < i + w150 && (r1 > r0 ? Rp[k] < tgt : Rp[k] > tgt)) k++; out.push((k - i) / hz * 1000); i += w150; }
     if (out.length < 3) return null; out.sort((a, b) => a - b); return +out[Math.floor(out.length / 2)].toFixed(1); }
+  // ---- the average step response (owner, 2026-11-21; the method of Plasmatree's PID-Analyzer): what the quad would do if the
+  // sticks asked for a sudden, held rate. Freestyle has no clean steps, so every second of flying with some stick movement is
+  // deconvolved (the rotation's spectrum over the setpoint's, damped where the setpoint has no energy: Wiener), turned back
+  // into time and summed up into a step; the windows are averaged by how hard the sticks moved in them. 1 = it does exactly
+  // what was asked. From it: `t50` / `t90` (ms to reach half / 90 %), `over` (% past the mark at its peak) and `settle`
+  // (where it sits after 0.3-0.5 s). The series is first brought down to ~500 Hz (plenty for a 10-30 ms rise).
+  function fft(re, im, inv) { const n = re.length; for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let len = 2; len <= n; len <<= 1) { const a = (inv ? 2 : -2) * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a); for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < len / 2; k++) { const p = i + k, q = p + len / 2, xr = re[q] * cr - im[q] * ci, xi = re[q] * ci + im[q] * cr; re[q] = re[p] - xr; im[q] = im[p] - xi; re[p] += xr; im[p] += xi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } } }
+    if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; } }
+  function stepResponse(sp, gy, hz, opts = {}) {
+    const dec = Math.max(1, Math.round(hz / 500)), fs = hz / dec, down = a => { const o = []; for (let i = 0; i + dec <= a.length; i += dec) { let v = 0; for (let k = 0; k < dec; k++) v += a[i + k]; o.push(v / dec); } return o; };
+    const x = down(sp), y = down(gy), N = 512, hop = 128, M = Math.min(N / 2, Math.round(0.5 * fs)), cut = opts.cutHz || 70, minIn = opts.minIn ?? 20;
+    const acc = new Float64Array(M); let wsum = 0, used = 0;
+    for (let a = 0; a + N <= x.length; a += hop) {
+      let peak = 0, e = 0; for (let i = 0; i < N; i++) { const v = Math.abs(x[a + i]); if (v > peak) peak = v; e += v * v; } if (peak < minIn) continue;
+      const xr = new Float64Array(N), xi = new Float64Array(N), yr = new Float64Array(N), yi = new Float64Array(N);
+      for (let i = 0; i < N; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)); xr[i] = x[a + i] * w; yr[i] = y[a + i] * w; }
+      fft(xr, xi); fft(yr, yi); let pm = 0; for (let k = 0; k < N; k++) pm += xr[k] * xr[k] + xi[k] * xi[k]; const lam = 0.0001 * pm / N + 1e-9;
+      const hr = new Float64Array(N), hi = new Float64Array(N);
+      for (let k = 0; k < N; k++) { const f = (k <= N / 2 ? k : N - k) * fs / N, lp = Math.exp(-0.5 * (f / cut) * (f / cut)), d = xr[k] * xr[k] + xi[k] * xi[k] + lam;   // H = Y conj(X) / (|X|² + λ), low-passed
+        hr[k] = (yr[k] * xr[k] + yi[k] * xi[k]) / d * lp; hi[k] = (yi[k] * xr[k] - yr[k] * xi[k]) / d * lp; }
+      fft(hr, hi, true); let c = 0; const wgt = Math.sqrt(e / N); for (let i = 0; i < M; i++) { c += hr[i]; acc[i] += c * wgt; } wsum += wgt; used++;
+    }
+    if (used < 3) return null;
+    const st = Array.from(acc, v => v / wsum), ms = i => i * 1000 / fs, i0 = Math.round(0.3 * fs), settle = avg(st.slice(i0)) || 1;
+    const cross = lv => { for (let i = 1; i < M; i++) if (st[i] >= lv * settle) { const f = (lv * settle - st[i - 1]) / Math.max(1e-9, st[i] - st[i - 1]); return +ms(i - 1 + f).toFixed(1); } return null; };
+    const pk = Math.max(...st.slice(0, Math.round(0.2 * fs)));
+    return { t50: cross(0.5), t90: cross(0.9), over: +Math.max(0, (pk / settle - 1) * 100).toFixed(1), settle: +settle.toFixed(3), n: used, dt: +(1000 / fs).toFixed(2), curve: st.slice(0, Math.round(0.25 * fs)).map(v => +v.toFixed(3)) };
+  }
   function measure(s) {
     const hz = s.hz, calm = calmIdx(s), m = { hz: Math.round(hz), secs: +(s.t[s.t.length - 1] - s.t[0]).toFixed(1), calm: +(calm.length / hz).toFixed(1) };
     m.hover = calm.length > hz * 0.5 ? +(avg(calm.map(i => s.duty[i])) * 100).toFixed(1) : null;
@@ -62,7 +91,7 @@
     m.axes = [0, 1, 2].map(k => { const sp = s.sp[k], g = s.gyro[k]; let dot = 0; for (let i = 0; i < sp.length; i++) dot += sp[i] * g[i]; const sg = dot < 0 ? -1 : 1, gg = g.map(v => v * sg);
       const lag = lagMs(sp, gg, hz, 120), L = Math.round(lag / 1000 * hz), busy = []; for (let i = 0; i + L < sp.length; i++) if (Math.abs(sp[i]) > 60) busy.push(i);
       const err = busy.length ? Math.sqrt(avg(busy.map(i => (gg[i + L] - sp[i]) ** 2))) / Math.max(1, Math.sqrt(avg(busy.map(i => sp[i] ** 2)))) : null;
-      return { lag: +lag.toFixed(1), track: err == null ? null : +(err * 100).toFixed(1), peak: Math.round(Math.max(...gg.map(Math.abs))) }; });
+      return { lag: +lag.toFixed(1), track: err == null ? null : +(err * 100).toFixed(1), peak: Math.round(Math.max(...gg.map(Math.abs))), step: stepResponse(sp, gg, hz) }; });
     // wobble the pilot did not ask for: gyro minus the setpoint it should follow (moved by the measured lag), 2-20 Hz, where
     // the quad is cruising or hovering (setpoint under 150 °/s): air, wash and the controller's own imperfection
     m.resid = [0, 1, 2].map((k, ai) => { const sp = s.sp[k], g = s.gyro[k]; let dot = 0; for (let i = 0; i < sp.length; i++) dot += sp[i] * g[i]; const sg = dot < 0 ? -1 : 1, L = Math.round(m.axes[ai].lag / 1000 * hz);
@@ -125,6 +154,6 @@
   function fit(preps, opts = {}) { const base = opts.tune || S.defaultTune(), delays = opts.delays || [0, 1.5, 3, 4.5], shakes = opts.shakes || [0, 0.2, 0.35, 0.5, 0.7], rows = [];
     for (const d of delays) for (const sh of shakes) { const tune = { ...base, loopDelayMs: d, shake: sh }; let c = 0; for (const P of preps) c += cost(P.real, measure(simulate(P.s, { ...opts, tune }))); rows.push({ loopDelayMs: d, shake: sh, cost: +(c / preps.length).toFixed(3) }); if (opts.progress) opts.progress(rows.length / (delays.length * shakes.length)); }
     rows.sort((a, b) => a.cost - b.cost); return { best: rows[0], rows }; }
-  root.FeelFit = { series, flightSpan, measure, simulate, suggest, compare, lagMs, prepare, fit, cost };
+  root.FeelFit = { stepResponse, series, flightSpan, measure, simulate, suggest, compare, lagMs, prepare, fit, cost };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.FeelFit;
 })(typeof window !== 'undefined' ? window : globalThis);
