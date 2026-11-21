@@ -64,7 +64,7 @@ function judgeStep(dt) {
 // sticks a pilot would have needed for this flight, the same ones the detector's Watcher saw (MV.detect's rows: throttle col 11,
 // roll / pitch / yaw 24-26), drawn like the flying HUD's overlay; V turns it on and off with the HUD's own setting.
 function judgeSticksDraw() {
-  const cv = $('#judgeSticks'), rows = judge.rows, on = (stickUI.on || judge.demo) && mode === 'judge' && rows && rows.length > 1 && !(judge.demo && (demo.view === 'sticks' || (judge.intro && judge.intro.phase === 'payoff')));
+  const cv = $('#judgeSticks'), rows = judge.demo ? demoRows() : judge.rows, on = (stickUI.on || judge.demo) && mode === 'judge' && rows && rows.length > 1 && !(judge.demo && (demo.view === 'sticks' || (judge.intro && judge.intro.phase === 'payoff')));
   cv.classList.toggle('hide', !on); if (!on) return;
   const at = t => { const i = Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / ((rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1))))), r = rows[i]; return { thr: r[11], roll: r[24], pitch: r[25], yaw: r[26] }; };
   const trail = []; for (let k = 15; k >= 1; k--) if (judge.t - k * 0.033 >= 0) trail.push(at(judge.t - k * 0.033));

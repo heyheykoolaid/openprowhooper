@@ -452,7 +452,19 @@ function demoBuild(f) {
   const M = f.m, src = f.lib ? `A real flight: ${M.by ? `<b>${esc(M.by)}</b>'s` : 'a pilot\'s'} confirmed ${esc(coach.name)}${M.map && S.MAPS[M.map] ? ` on ${esc(S.MAPS[M.map].title || M.map)}` : ''}${M.when ? `, ${esc(new Date(M.when).toLocaleDateString())}` : ''}, from the trick library.` : 'The bot\'s own version (no confirmed flight of it from pilots works here yet).';
   demo.setup += `<br><small>${src}</small>`;
   demo.called = f.got.map(e => e.name); demo.cur = -1;
+  // the sticks as drawn (owner, 2026-11-21: "the sticks look a bit shaky on screen"): the bot's sticks are worked back from its
+  // flight sample by sample, so they jitter; for the picture each is averaged over about a tenth of a second either side
+  // (a bell-shaped weight, so a real snap still reads as a snap). Only the drawing uses these; the step text keeps the raw ones.
+  demo.rowsS = null; if (rows.length > 4) { const dt = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1), sig = DEMO_SMOOTH / Math.max(1e-3, dt), R = Math.max(1, Math.ceil(sig * 2.5)), w = []; for (let k = -R; k <= R; k++) w.push(Math.exp(-0.5 * (k / sig) ** 2));
+    demo.rowsS = rows.map((r, i) => { const o = r.slice(); for (const c of [11, 24, 25, 26]) { let a = 0, n = 0; for (let k = -R; k <= R; k++) { const q = rows[i + k]; if (q) { a += q[c] * w[k + R]; n += w[k + R]; } } o[c] = a / n; } return o; }); }
 }
+const DEMO_SMOOTH = 0.07;   // s: how far either side the drawn sticks are averaged
+const demoRows = () => (judge.demo && demo.rowsS) || judge.rows;
+// to the step before / after the one playing (its cue comes up half a second before it)
+function demoStepAt(k) { const st = demo.steps; if (!st[k] || st[k].t0 == null) return null; let T = st[k].t0 - 0.5; for (let q = 0; q < k; q++) if (st[q].t1 != null && T <= st[q].t1 + 0.25) T = st[q].t1 + 0.26; return Math.max(0, T); }   /* where step k's cue comes up (after the one before has gone) */
+function demoStep(d) { const at = demo.steps.map((x, k) => demoStepAt(k)); let now = -1; at.forEach((T, k) => { if (T != null && T <= judge.t + 0.02) now = k; });
+  let k = now; if (d > 0) { do k++; while (k < at.length && at[k] == null); if (k >= at.length) return; } else if (now < 0) k = at.findIndex(T => T != null); else if (judge.t <= at[now] + 0.6) { do k--; while (k >= 0 && at[k] == null); if (k < 0) k = now; }
+  if (k >= 0 && at[k] != null) demoSeek(at[k]); }
 function coachDemo(intro) {
   const MV = window.Maneuvers; if (!MV || (!MV.LIB[coach.name] && !(MV.kbCan && MV.kbCan(coach.name) && MV.kbExamples(coach.name).length))) { if (!intro) flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
   const f = intro && coach.fly ? coach.fly : demoFly(coach.name); if (!f) { if (intro) return; flash(`<b>NO SPOT FOR THE DEMO HERE</b><small>no bar the bot can use on this map: try the playground</small>`, 'near'); return; }
@@ -499,17 +511,17 @@ function demoRender() {
   box.innerHTML = `<div class="trHead"><small>${I ? '🎓 STEP BY STEP' : '👻 SHOW ME'} · ${esc(judge.demo)}</small><span class="jStat">${judge.speed === 0 ? 'paused' : 'speed ×' + judge.speed}</span></div>
     <div class="trRow jCam"><button data-demo="view" class="${demo.view === 'sticks' ? 'on' : 'ghost'}" title="The radio big and the flight small, or the other way round (B)">🎮 Sticks big</button>${demo.view === 'sticks' ? '' : cams}</div>
     <div class="demoBar" id="demoBar" title="Click or drag to move through the flight"><b id="demoBarFill"></b>${marks}</div>
-    <div class="demoTrans"><button data-demo="t0" title="From the start (Home)">⏮</button><button data-demo="tb" title="Back half a second (←)">◂</button><button data-demo="pp" title="Pause / play (Space)">${judge.speed === 0 ? '▶' : '⏸'}</button><button data-demo="tf" title="On half a second (→)">▸</button>${sp(0.25)}${sp(0.5)}${sp(1)}</div>
+    <div class="demoTrans"><button data-demo="t0" title="From the start (Home)">⏮</button><button data-demo="sb" title="The step before (Shift+← or ,)">◂ Step</button><button data-demo="tb" title="Back half a second (←)">◂</button><button data-demo="pp" title="Pause / play (Space)">${judge.speed === 0 ? '▶' : '⏸'}</button><button data-demo="tf" title="On half a second (→)">▸</button><button data-demo="sf" title="The next step (Shift+→ or .)">Step ▸</button>${sp(0.25)}${sp(0.5)}${sp(1)}</div>
     ${demo.view === 'sticks' ? '' : `<div class="trLast ${demo.cur < 0 ? 'demoOn' : ''}"><b>Setup</b> · ${demo.setup}</div>`}
     <ol class="coSteps demoSteps ${demo.view === 'sticks' ? 'hide' : ''}">${demo.steps.map((d, k) => `<li class="${k === demo.cur ? 'on' : k < demo.cur ? 'ok' : ''}" data-demostep="${k}" title="Jump to this step">${esc(d.cue)}<div class="demoRule">${coachStepText(d.s, vars)}</div>${d.sticks ? `<div class="demoStk">${d.sticks}</div>` : ''}</li>`).join('')}</ol>
     ${demo.called.length && !demo.called.includes(judge.demo) ? `<p class="note">(the game read this flight as ${esc(demo.called.join(' + '))}: the bot's version is rough)</p>` : ''}
-    ${demo.view === 'sticks' ? '' : '<div class="trLast"><kbd>Space</kbd> pause · <kbd>←</kbd> <kbd>→</kbd> step through · <kbd>S</kbd> speed · <kbd>B</kbd> sticks big · <kbd>Esc</kbd> back</div>'}
+    ${demo.view === 'sticks' ? '' : '<div class="trLast"><kbd>Space</kbd> pause · <kbd>←</kbd> <kbd>→</kbd> half a second · <kbd>,</kbd> <kbd>.</kbd> step · <kbd>S</kbd> speed · <kbd>B</kbd> sticks big · <kbd>Esc</kbd> back</div>'}
     <div class="trFoot">${I ? '' : '<button data-demo="again">⟲ Another flight</button>'}<button data-demo="back" class="primary">${I ? 'Skip ▸ my turn' : '◂ My turn'}</button></div>`;
 }
 // the radio, big (Mode 2: left stick throttle / yaw, right stick pitch / roll): each gimbal with its travel, the stick where the bot
 // has it and where it has just been, and an arrow on a stick only while it is moving or held well off centre
 function demoRadio() {
-  const cv = $('#demoRadio'), rows = judge.rows; if (!cv || !rows || rows.length < 2) return;
+  const cv = $('#demoRadio'), rows = demoRows(); if (!cv || !rows || rows.length < 2) return;
   const W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d'), dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1), at = t => rows[Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / dtR)))];
   g.clearRect(0, 0, W, H); g.fillStyle = '#0d0e12'; g.fillRect(0, 0, W, H);
@@ -522,7 +534,7 @@ function demoRadio() {
     g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - rad, py); g.lineTo(cx + rad, py); g.moveTo(cx, py - rad); g.lineTo(cx, py + rad); g.stroke();
     for (const f of [-1, -0.5, 0.5, 1]) { g.beginPath(); g.moveTo(cx + f * rad * 0.86, py - 7); g.lineTo(cx + f * rad * 0.86, py + 7); g.moveTo(cx - 7, py + f * rad * 0.86); g.lineTo(cx + 7, py + f * rad * 0.86); g.stroke(); }
     const P = q => { const [x, y] = xy(q, k); return [cx + Math.max(-1, Math.min(1, x)) * rad * 0.86, py - Math.max(-1, Math.min(1, y)) * rad * 0.86]; };
-    for (let i = 12; i >= 1; i--) { const t = judge.t - i * 0.03; if (t < 0) continue; const a = P(at(t)); g.fillStyle = `rgba(255,200,90,${0.5 * (1 - i / 13)})`; g.beginPath(); g.arc(a[0], a[1], rad * 0.07, 0, 7); g.fill(); }
+    for (let i = 10; i >= 1; i--) { const t = judge.t - i * 0.035; if (t < 0) continue; const a = P(at(t)); g.fillStyle = `rgba(255,200,90,${0.5 * (1 - i / 13)})`; g.beginPath(); g.arc(a[0], a[1], rad * 0.07, 0, 7); g.fill(); }
     const [sx, sy] = P(r); g.strokeStyle = '#000'; g.lineWidth = rad * 0.13; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, py); g.lineTo(sx, sy); g.stroke();
     g.strokeStyle = '#8b90a0'; g.lineWidth = rad * 0.08; g.beginPath(); g.moveTo(cx, py); g.lineTo(sx, sy); g.stroke(); g.lineCap = 'butt';
     g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(sx, sy, rad * 0.16, 0, 7); g.fill(); g.lineWidth = 3; g.strokeStyle = '#111'; g.stroke();
@@ -543,13 +555,15 @@ document.addEventListener('pointerdown', e => { if (!judge.demo || !e.target.clo
 document.addEventListener('pointermove', e => { if (demo.drag && judge.demo) demoBarSeek(e); });
 document.addEventListener('pointerup', () => { demo.drag = false; });
 addEventListener('keydown', e => { if (!judge.demo || mode !== 'judge' || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
-  if (e.code === 'ArrowLeft') { e.preventDefault(); demoSeek(judge.t - 0.5); } if (e.code === 'ArrowRight') { e.preventDefault(); demoSeek(judge.t + 0.5); } if (e.code === 'Home') demoSeek(0);
+  if (e.code === 'ArrowLeft') { e.preventDefault(); if (e.shiftKey) demoStep(-1); else demoSeek(judge.t - 0.5); } if (e.code === 'ArrowRight') { e.preventDefault(); if (e.shiftKey) demoStep(1); else demoSeek(judge.t + 0.5); } if (e.code === 'Home') demoSeek(0);
+  if (e.code === 'Comma') demoStep(-1); if (e.code === 'Period') demoStep(1);
   if (e.code === 'KeyB') { demo.view = demo.view === 'sticks' ? 'fpv' : 'sticks'; demoView(); demoRender(); } });
 document.addEventListener('click', e => {
   const li = e.target.closest('[data-demostep]'); if (li && judge.demo) { const d = demo.steps[+li.dataset.demostep]; if (d) demoSeek(Math.max(0, d.t0 - 0.5)); return; }
   const b = e.target.closest('[data-demo]'); if (!b) return; e.stopPropagation(); b.blur(); const a = b.dataset.demo;
   if (a === 'back') demoBack();
   if (a === 'view') { demo.view = demo.view === 'sticks' ? 'fpv' : 'sticks'; demoView(); demoRender(); }
+  if (a === 'sb') demoStep(-1); if (a === 'sf') demoStep(1);
   if (a === 't0') demoSeek(0); if (a === 'tb') demoSeek(judge.t - 0.5); if (a === 'tf') demoSeek(judge.t + 0.5);
   if (a === 'pp') { judge.speed = judge.speed ? 0 : (demo.lastSpeed || 1); demoRender(); }
   if (a.startsWith('sp')) { judge.speed = demo.lastSpeed = +a.slice(2); demoRender(); }
@@ -561,7 +575,7 @@ document.addEventListener('click', e => {
 // arrows up / down (pitch forward / back) and left / right (roll), the left stick's yaw as a curved arrow over the top, and
 // the throttle as a gauge on the left with an arrow while it is moving. Bigger and brighter the further the stick goes.
 function demoArrows() {
-  const cv = $('#demoArrows'), rows = judge.rows; if (!cv) return;
+  const cv = $('#demoArrows'), rows = demoRows(); if (!cv) return;
   const on = !!(judge.demo && mode === 'judge' && rows && rows.length > 1); if (!on) { if (!coach.freeze) cv.classList.add('hide'); return; }
   const dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1), at = t => rows[Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / dtR)))];
   const r = at(judge.t), r0 = at(judge.t - 0.15), dT = (r[11] - r0[11]) / 0.15, q = v => Math.abs(v) >= 0.25 ? v : 0;   // owner, 2026-11-21: arrows only on the stick that moves, only while it moves

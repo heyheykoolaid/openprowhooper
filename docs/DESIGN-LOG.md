@@ -56,3 +56,15 @@ fourth grade ("pretty crashy bumps, where you shouldn't get any points"); "incom
 ### Training Room data, big objects
 The owner: nothing from training flights is kept ("that mode still needs a lot of work"); loops and trippy spins are taught on large
 objects (a 10 m square, a 12 m pole).
+
+### Show me: calmer sticks, step buttons (2026-11-21)
+Owner, after trying the presentation pass: "it looks good, but the sticks look a bit shaky on screen, can we filter that a bit? and
+there be next and back buttons arrows for each step?"
+- **Why they shook**: the bot's sticks are worked back from its flight sample by sample (its PID chasing a scripted path), so they
+  carry jitter no thumb makes. **Decided**: smooth only what is drawn (radio, arrows, small stick view) with a bell-weighted average,
+  0.07 s (`DEMO_SMOOTH`); the step text ("the bot used…") and everything the judge reads keep the raw sticks. A real snap still
+  reads as a snap. Open: the amount is a guess from screenshots; the owner says more or less after watching it.
+- **Step buttons**: ◂ Step / Step ▸ next to the half-second arrows (Shift+← / Shift+→ or , / .). They land where that step's cue
+  comes up (half a second before it, or just after the step before has finished when two overlap); Back first returns to the start
+  of the step playing, then to the one before. Steps the bot's flight did not show (no time) are skipped.
+

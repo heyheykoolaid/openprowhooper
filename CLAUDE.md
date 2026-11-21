@@ -761,7 +761,7 @@ last); Space / Skip ends it; ▶ Intro in the panel plays it again (Shift-click:
 `demoView`, `demoRadio`, `#demoRadio`, `body.demoBig`; B): the radio fills the screen (Mode 2), the game's canvas is shrunk between the
 gimbals by CSS only (no filter, nothing drawn over it), the panel becomes a strip at the top. **Scrubbable player** (`demoSeek`,
 `#demoBar`): a bar with a mark per step (click / drag), ⏮ ◂ ⏸ ▸, ×0.25 / ×0.5 / ×1, ← → half a second, Home, a click on a step jumps
-to it. **Arrows** in Show me only for a stick at a quarter or more, the throttle gauge only while the throttle moves. Show me and the
+to it. **Step buttons and calmer sticks** (owner, same day: "the sticks look a bit shaky"; `demoStep`, `demoStepAt`, `demo.rowsS`, `DEMO_SMOOTH` 0.07 s): ◂ Step / Step ▸ (Shift+← / Shift+→, `,` / `.`) jump to where the step's cue comes up; the sticks as DRAWN (radio, arrows, the small stick view) are a bell-weighted average of the bot's, the step text keeps the raw ones. **Arrows** in Show me only for a stick at a quarter or more, the throttle gauge only while the throttle moves. Show me and the
 intro fly the **Big Square** for the `big` station. Not built of the nine: the Examples stage, "connect it" as the last try, stick
 modes 1 / 3 / 4, the ladder (docs/TODO.md).
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
