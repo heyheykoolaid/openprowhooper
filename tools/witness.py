@@ -79,6 +79,19 @@ def main():
     write = '--write' in sys.argv
     lib = json.loads((ROOT / 'library' / 'library.json').read_text())
     E = [e for e in lib['examples'] if isinstance(e.get('c'), list) and len(e['c']) == 72]
+    # call-window training (2026-11-21, tools/witness-data.js): the library's pilot examples are cut over whole label tiles, a live
+    # call over the Watcher's tight window. When community/witness-train.json is there, pilots' examples come from it instead: the
+    # game's own call windows (confirmed = positives, rejected = the test), the bot's calls (weight 0.5) and, where the game made no
+    # call, the label's span (half weight). The demo GIFs stay.
+    tf = ROOT / 'community' / 'witness-train.json'
+    calls = tf.exists() and '--tiles' not in sys.argv
+    if calls:
+        tr = json.loads(tf.read_text())['examples']
+        E = [dict(e, kind='demo') for e in E if not e.get('p') and not e.get('neg')]
+        for e in tr:
+            if isinstance(e.get('c'), list) and len(e['c']) == 72:
+                E.append(dict(e, w=e.get('w', 1) * (0.5 if e.get('kind') == 'span' else 1)))
+    KIND = np.array([e.get('kind') or 'tile' for e in E])
     n = len(E)
     X = np.array([feats(e['c'], e.get('u'), e['d'], e.get('ps'), e.get('k')) for e in E])
     assert X.shape[1] == NF
@@ -129,23 +142,30 @@ def main():
         folds[k % 5].append(i)
         seen[T[i]] = k + 1
     spA, topA, nA = test(folds)
-    pilots = sorted(set(P[idx]) - {'demo'})
+    pilots = sorted(set(P[idx]) - {'demo', 'bot'})
     spB, topB, nB = test([[i for i in idx if P[i] == p] for p in pilots])
 
     model = train(idx)
     pn = proba(model, neg) if len(neg) else np.zeros((0, len(cls)))
     sn = [pn[r][ci[T[i]]] for r, i in enumerate(neg)]
 
-    def auc(sp):
-        ii = [i for i in idx if i in sp]
+    def auc(sp):   # with call windows: pilots' confirmed calls against pilots' rejected calls, like for like
+        ii = [i for i in idx if i in sp and (not calls or (KIND[i] == 'call' and P[i] != 'bot'))]
         return roc_auc_score([1] * len(ii) + [0] * len(sn), [sp[i] for i in ii] + sn) if len(sn) and ii else float('nan')
 
-    a = np.array([spA[i] for i in idx if i in spA])
+    botroll = [spA[i] for i in idx if i in spA and P[i] == 'bot' and T[i] == 'Roll']
+    if botroll:
+        print(f"the bot's clean Rolls, held out (call window): median {np.median(botroll) * 100:.0f} %, lowest {min(botroll) * 100:.0f} %, n {len(botroll)}")
+    for k in sorted(set(KIND[idx])):
+        v = [spA[i] for i in idx if i in spA and KIND[i] == k and P[i] != 'bot']
+        if v:
+            print(f'held-out score by kind {k}: median {np.median(v) * 100:.0f} % (n {len(v)}), under 10 %: {np.mean(np.array(v) < 0.1) * 100:.0f} %')
+    a = np.array([spA[i] for i in idx if i in spA and (not calls or (KIND[i] == 'call' and P[i] != 'bot'))])
     sn_a = np.array(sn)
     lines = [
         '# The learned witness', '',
         f'{datetime.datetime.utcnow():%Y-%m-%d %H:%M} UTC · trained on {len(idx)} confirmed examples of {len(cls)} tricks '
-        f'({MIN}+ examples each) from the trick library, each with {AUG}-{AUG * 2} noisy copies · tested on {len(neg)} calls pilots rejected.', '',
+        f'({MIN}+ examples each) from ' + ('the game\'s own call windows (pilots\' confirmed calls, the bot, label spans where it made no call) and the demo GIFs' if calls else 'the trick library') + f', each with {AUG}-{AUG * 2} noisy copies · tested on {len(neg)} calls pilots rejected.', '',
         '| test | names the trick (top-1) | tells a confirmed call from a rejected one (AUC; 0.5 = a coin, 1 = perfect) |', '|---|---|---|',
         f'| every pilot in training (5 folds) | {topA * 100:.0f} % of {nA} | {auc(spA):.2f} |',
         f'| a pilot it never saw | {topB * 100:.0f} % of {nB} | {auc(spB):.2f} |', '',

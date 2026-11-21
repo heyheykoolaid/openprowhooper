@@ -746,6 +746,7 @@ tools/evidence.js skips flights on that map (the files stay in the data repo). *
 should be on large objects … a 10 m object for the square"): `Big Square 10 m` (a frame 10 m wide and high at x -8, z -15..-5,
 flown east-west; station `big`: Powerloops and Maverick Loops, start at (4, -10) at 4-7 m/s, 3 m up when it goes under first) and
 `Big Pole 12 m` (r 0.3 at (-10, 11); the `pole` station). Show me still flies the small bars (`demoObjects` takes bars up to 3.2 m).
+**Presentation pass, planned** (owner, 2026-11-21, after a no-talking tutorial video he liked): docs/TODO.md "Train mode, presentation pass" (payoff first, sticks big / FPV small, short coaching cues shown early, arrows only on the moving stick, a scrubbable slow-motion walkthrough, an Examples stage, "connect it" as the last try, other stick modes, a ladder). Not built yet.
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
 re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
 menu's device note (`updateMenuDevice`, every 2 s).
@@ -897,6 +898,21 @@ the first 224 examples confirmed and rejected calls were both ~99% commanded. Pi
 labelled stretch through the detector (`replayTrace(...).det.libSigOf`), exactly as the game measures live. Rebuild: 57%
 leave-one-out (56% before), maybes on the shared flights 109 → 99 with the same 8 right and none wrong, bench unchanged.
 
+## Bump grades, Split-S by attitude (2026-11-21, owner: "fix the grades the game gives", "fix Split-S")
+**Bumps**: tools/grades.js had the game saying CLEAN 11 times where pilots graded bump. Re-flown: 4 had a knock between the move's end and
+the (later) call, 5 a knock 0.1-1.6 s after the call, 2 were Wall Taps. Now (`commit` in sim.js) a knock of `BUMP_AFTER` 1.5 or harder
+between the move's end and its call counts against it, and in the game a knock that hard within `BUMP_LATE` 0.6 s after a clean / sloppy
+call turns it into a BUMP (`ScoreKeeper.lateBump`: points to the bump rate, the streak as if it had been one, `late: true`;
+`lateBumpCheck` in play.js: the recap event, the combo's points, a "a hit on the way out" flash). Soft touches change nothing.
+test/bumps.js; bench and stress unchanged.
+**Split-S** (`SPLIT_LOOK`, the end of `matchObstacle`; test/splits.js): 14 of 34 confirmed Split-S labels were missed. The half roll reads
+well, the pull-through does not (55-140 deg for a real half loop). When no table pattern fits: one half roll (100-250), at most a nose-up
+pull, over then under ONE object, upside-down on the way, upright and flying forward under it, heading turned back = a Split-S
+(`splitWitness`). 20 -> 22 of 34 found, bench 96.7 %, stress unchanged. The other 12 are not tolerance: 5 have no over-then-under of one
+object (flown in open air or only over something: by the book a Split-S needs the object; **owner to decide whether an open-air Split-S
+counts**), 2 are read as Double Dutch (under, over, under of the swing set), the rest sit beside a Matty, a 540 Split S, a Dive or a Perch.
+**tools/probe-label.js printed calls at the wrong time** on flights whose trace does not start at 0 (it added the start twice): fixed.
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,
@@ -905,6 +921,13 @@ up.y, log duration, totals and rates per axis, the passes; no sticks and no "is 
 came from). Rejected calls are never trained on: they are the test. For a call of X it gives the share of trees voting X. First
 build (451 examples, 30 tricks, 112 rejected calls): confirmed vs rejected AUC 0.80 with every pilot in training (the library's
 nearest example: 0.74), 0.70 on a pilot it never saw (library 0.67); names the trick 63 % / 52 % (library 62 % / 43 %).
+**Retrained on call windows (2026-11-21)**: `node tools/witness-data.js <data repo>` re-flies every decided label and keeps the signature
+of the window the Watcher judged for the game's call there (`watch.t0..t1`, now on every call's `watch`): 272 confirmed calls, 65
+rejected (the test), 167 label spans where the game made no call (half weight), plus 424 bot calls (weight 0.5) ->
+community/witness-train.json (derived numbers only). tools/witness.py trains on it when it is there (`--tiles` = the old way): 877
+examples, 47 tricks; names the trick 78 % (every pilot in training) / 57 % (a pilot it never saw); confirmed vs rejected calls AUC
+0.75 / 0.70; the bot's clean Rolls held out score 40-47 % (14 % before; chance is ~2 %); a call it gives under 10 % is 36 % of the
+rejected and 10 % of the confirmed; bench with it voting 96.7 % (unchanged). **Still off: the owner decides** (a retrain never sets `live`).
 **It does not vote yet** (`WITNESS.live` false; build.py ships the model only when `live` is true): the library's pilot examples
 are measured over whole label tiles (a Roll example runs 1.8-3.8 s), a live call over the detector's tight window, and a clean 360
 roll measured that way gets 14 %. Next: train on call-window signatures (the bot's flights and the shared flights' calls re-flown,

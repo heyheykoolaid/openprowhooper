@@ -30,8 +30,22 @@ different pilots pass, the trick is confirmed: their examples go into the trick 
 several pilots already shows up as a "maybe"), and the owner names its points and turns it into a real rule. The replays are
 the video reference. Needs: a new relay kind (`challenge`), a board screen, the guest replay viewer, a "this looks like
 <existing trick>" check before posting, and the owner's say before anything is scored.
-- The learned witness (2026-11-21, tools/witness.py): built and tested, not voting. Next: train it on call-window signatures (bot flights + shared flights' calls re-flown), check a clean roll scores high, mark it live, add it to the weekly run.
+- The learned witness: retrained on call windows (2026-11-21; numbers in CLAUDE.md and community/WITNESS.md). Off until the owner says to turn it on (`live` in community/witness.json, then build). Add tools/witness-data.js + witness.py to the weekly run.
 - Feel: the first step-response read says the real Air65 is quicker and springier than the sim (feedforward): fit it once a test-card log is in.
 - More Warehouse (owner, 2026-11-21): a moving conveyor belt (it has to carry the quad: a surface that moves what rests on it), and two levels more scatter and visual detail; re-run gapcheck / floatcheck / mapaudit / test/maps.js after.
 - Review grades: "crash" is in (2026-11-21); "incomplete" waits. Once crash grades come in, tune the bump / crash line from `node tools/grades.js` (and look at the 11 calls the game graded clean that pilots graded bump).
 - Train: Show me on the Big Square (the bot's loops only fly bars up to 3.2 m); the mode "still needs a lot of work" (owner).
+
+## Train mode, presentation pass (owner, 2026-11-21: "I really like these improvements"; from headmazta's no-talking Barani tutorial and other sims' lessons; presentation and flow only, never how a 5 inch flies)
+1. **Payoff first**: before try 1, two or three full-speed passes of the trick (a confirmed library example, else the bot), no text; then the steps.
+2. **Sticks big, FPV small** for the walkthrough (the radio fills the view, the flight a small picture between the gimbals); then **FPV big, sticks small** for the examples.
+3. **One short coaching cue per step**, about hands and eyes ("cut throttle as you go inverted", "catch it before the ground"), hand-written for the common tricks, shown ~0.5 s before the pause; the rule-made text ("flip 180") stays as the fallback.
+4. **Arrows only on the stick that moves, only while it moves**; nothing drawn for a stick that stays put.
+5. **A slow-motion walkthrough** of the whole trick with the cues, before the pilot's tries; scrubbable (restart, back, pause, slow, a progress bar), like FS One / SeligSIM lessons.
+6. **Examples stage** at the end: real confirmed flights of the trick on different maps and objects, with the pilot's name.
+7. **"Connect it" as the last try**: land the trick, then chain it into anything; the combo counting is the pass mark.
+8. **Stick display in Mode 1 / 3 / 4** for pilots who do not fly Mode 2.
+9. **A ladder**: tricks in an order, something earned per rung (RealFlight's lessons with unlockable rewards); a "learned" mark in the Tricktionary.
+Order to build: 1, 3, 4 (small), then 2 and 5 (the player), then 6, 7, 9; 8 with the stick view.
+- Split-S in open air: 5 confirmed labels have no object under it. Owner to decide: count it (a new open-air variant) or leave it to the book.
+- Review queue for every pilot (owner, 2026-11-21: "it makes sense"): needs a public, read-only relay route for a short list of moments (see the plan given in chat), a relay redeploy, and the sharing prompt's wording checked.

@@ -13,6 +13,6 @@ const want = process.argv[2] || 'Barani', root = process.argv[3]; const files = 
     console.log(`\n== ${lf.flight} ${p.map} label ${a.toFixed(2)}..${b.toFixed(2)} (rel ${(a - T0).toFixed(2)}) verdict ${l.verdict} target ${l.target} via ${l.via} timed ${l.timed}`);
     for (const k of toks) if (k.t1 + T0 > a - 4 && k.t0 + T0 < b + 2) console.log(`tok ${k.ax}${k.dir > 0 ? '+' : '-'}${Math.round(k.raw)} ${k.inv > k.n * 0.5 ? 'INV' : ''} t ${(k.t0 + T0 - a).toFixed(2)}..${(k.t1 + T0 - a).toFixed(2)} inv ${k.inv}/${k.n}`);
     for (const c of cr) if (c.t + T0 > a - 4 && c.t + T0 < b + 2) console.log(`pass ${c.kind} ${c.name} t ${(c.t + T0 - a).toFixed(2)} ${JSON.stringify(Object.fromEntries(Object.entries(c).filter(([k]) => /up|fwd|dir|spd|lat|back|upright/.test(k))))}`);
-    for (const e of R.events) if (e.t + T0 > a - 4 && e.t + T0 < b + 3) console.log(`call ${e.name} ${e.exec} t ${(e.t + T0 - a).toFixed(2)} conf ${e.watch && e.watch.conf}`);
+    for (const e of R.events) if (e.t > a - 4 && e.t < b + 3) console.log(`call ${e.name} ${e.exec} t ${(e.t - a).toFixed(2)} conf ${e.watch && e.watch.conf}`);
     let s = ''; for (const r of rows) if (r[0] > a - 3 && r[0] < b + 1.5 && Math.round((r[0] - a) * 100) % 10 === 0) { const q = { w: r[4], x: r[5], y: r[6], z: r[7] }, up = S.qrot(q, S.v3(0, 1, 0)), fw = S.qrot(q, S.v3(0, 0, -1)); s += `${(r[0] - a).toFixed(1)}:u${up.y.toFixed(1)} f${Math.round(Math.atan2(-fw.x, -fw.z) * 57)} y${r[2].toFixed(1)}  `; } console.log(s);
   } })();

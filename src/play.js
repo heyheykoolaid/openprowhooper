@@ -104,6 +104,17 @@ function renderCombo() {
   const livePts = live.reduce((a, l) => a + (l.counts ? l.pts : 0), 0);
   el.innerHTML = `<div class="cList">${list.slice(-7).join('<i>+</i>')}</div>${combo.active || livePts ? `<div class="cPts">${(combo.pts + livePts).toLocaleString()}<small> × streak ${score.streak.toFixed(2)}</small></div>` : ''}${combo.active ? `<div class="cTimer"><i style="width:${detector.busy() ? 100 : Math.max(0, Math.round(100 - (performance.now() / 1000 - combo.lastT) / COMBO_IDLE * 100))}%"></i></div>` : ''}`;
 }
+// a knock just after a call makes it a bump (owner, 2026-11-21): the points and the streak are put right, the recorded call
+// says BUMP (with `late`), and the pilot is told
+let lateTrick = null;
+function lateBumpCheck() {
+  const L = lateTrick; if (!L) return; if (drone.time > L.until || mode !== 'fly') { lateTrick = null; return; }
+  if (!(drone.contactThisStep && drone.armed && (drone.lastImpact || 0) >= S.BUMP_AFTER)) return; lateTrick = null;
+  const back = score.lateBump();
+  const e = recap.events[L.i]; if (e && e.name === L.name) { e.exec = 'BUMP'; e.late = true; }
+  combo.pts = Math.max(0, combo.pts - back); renderCombo(); updateBreakdown();
+  flash(`<b>BUMP</b><small>${esc(L.name)}: a hit on the way out · −${back}</small>`, 'near');
+}
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
   if (ev.name === 'near') { flash(`<b>SO CLOSE</b><small>${ev.near}</small>`, 'near'); return; }
@@ -111,6 +122,7 @@ function onTrick(ev) {
   if (ev.exec === 'CRASH') { comboEnd(true); flash(`<b>CRASH!</b><small>streak lost</small>`, 'crash'); updateBreakdown(); return; }
   if (!r) return;
   comboAdd(r);
+  lateTrick = r.exec === 'CLEAN' || r.exec === 'SLOPPY' ? { until: drone.time + S.BUMP_LATE, name: r.name, i: recap.events.length - 1 } : null;
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
   if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); combo.pts += c.pts; renderCombo(); }
@@ -274,6 +286,7 @@ function frame(now) {
       if (pf) { const a = performance.now(); drone.step(rc, DT); tPh += performance.now() - a; }
       else drone.step(rc, DT);
       if (!race.on) { detQ.push(detSnap(drone, rc)); recordTrace(rc); }   // judged after the frame is drawn (detFlush)
+      if (lateTrick && drone.contactThisStep) lateBumpCheck();
       if (drone.contactThisStep && CAT.ids.has(drone.contactOwner)) catHit();   // Slackvegan's bodega cat
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);

@@ -1059,6 +1059,8 @@ function setCommunity(c) { COMMUNITY = cleanCommunity(c); return COMMUNITY; }
 // Live it does two things: votes in the Watcher on every rule call (weight 2), and when the rules call nothing for a move
 // that closely matches examples of a trick, says "maybe <trick>?" (never scored; the pilot confirms it in review).
 const FEEL_KEYS = { weightFeel: [0.5, 1.5], dragFeel: [0.5, 2], washFeel: [0, 2], motorFeel: [0.5, 2], sagFeel: [0, 2], groundFeel: [0, 2] };   // see Drone.setParams
+const BUMP_LATE = 0.6;    // s after a call in which a knock (BUMP_AFTER) still makes it a bump (the game applies it: ScoreKeeper.lateBump)
+const BUMP_AFTER = 1.5;   // m/s: a knock this hard after a move's end, before its call, makes the call a BUMP (soft touches and landings do not)
 let LIBRARY = null; const MAYBE_NAMES = new Set();   // filled from OPEN_TRICKS and OBSTACLE_TRICKS below
 const LIB_N = 24, LIB_HZ = 25, LIB_ON = 90, LIB_QUIET = 0.35, LIB_WAIT = 2.5, LIB_THR = 0.3, LIB_GAP = 0.06;
 // up: the up.y of the quad at each sample (from the attitude; when missing, as in a GIF, it is integrated from the rotation
@@ -1171,6 +1173,7 @@ function mergeProfiles(c, p) {
   if (c.air) o.air = Math.max(o.air || 0, c.air);
   return o;
 }
+const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
 let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
 function matchTokens(pat, toks) {
   if (pat.length !== toks.length) return null;
@@ -1594,6 +1597,18 @@ class TrickDetector {
       if (yw) best = { name: 'Ninja Star', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
       if (gk && gk.fwdDot < -0.4 && toks.some(x => x.ax === 'P' && x.raw > 120)) best = { name: 'Reverse Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
     }
+    // Split-S by attitude (2026-11-21: 16 of 34 confirmed Split-S labels were missed). The half roll is measured well, the pull-through
+    // is not (55-140 deg read for a real half loop: slow ends under the token threshold, part of it on yaw with camera tilt). When
+    // nothing in the table fits: one half roll, at most a nose-up pull, over then under ONE object, upside-down on the way and upright
+    // under it, flying forward the other way from where the roll began = a Split-S.
+    if (!best && this.fbIn) for (const id in byObj) { const seq = byObj[id], kinds = seq.map(c => c.kind).join(''), pos = kinds.lastIndexOf('OU'); if (pos < 0) continue;
+      const part = seq.slice(pos, pos + 2), big = toks.filter(x => x.raw >= 90), R = big.filter(x => x.ax === 'R');
+      if (part[0].dir === part[1].dir || R.length !== 1 || R[0].raw < 100 || R[0].raw > 250 || big.some(x => x !== R[0] && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < R[0].t0 - 0.1))) continue;
+      const r = R[0], u = part[1]; if (!(u.upY > 0.5) || !(u.fwdDot > 0.2) || part.every(c => c.latDot > 0.7) || r.t0 > u.t || u.t - r.t0 > SPLIT_LOOK || part[0].t < r.t0 - 1.5) continue;
+      const W = this.fbIn(r.t0 - 0.1, u.t); if (W.length < 4 || Math.min(...W.map(x => x.up.y)) > -0.3) continue;
+      const f0 = W[0].f, f1 = W[W.length - 1].f, h0 = Math.hypot(f0.x, f0.z), h1 = Math.hypot(f1.x, f1.z); if (h0 < 0.3 || h1 < 0.3 || (f0.x * f1.x + f0.z * f1.z) / (h0 * h1) > -0.4) continue;
+      if (this.watcher && (this.vetoedFor('Split-S', r.t0) || !this.watcher.pre('Split-S', { toks, part, obj: +id, t0: r.t0 }))) continue;
+      const tv = big.filter(x => x === r || x.ax === 'P'); best = { name: 'Split-S', toks: tv, err: 0.4, obstacle: seq[0].name, obj: +id, clen: 2, part, ct1: u.t, splitWitness: true }; break; }
     return best;
   }
   nearMiss(toks, crosses) {
@@ -2585,7 +2600,10 @@ class StreamDetector extends TrickDetector {
     // fallback called three Mattys for one flip: the bot's run on Clappy Park, 2026-11-18)
     if (p.part && p.part.length) { const a0 = Math.min(...p.part.map(c => c.t)) - 0.3, a1 = Math.max(...p.part.map(c => c.t)) + 0.35, own = p.part[0].obj;
       for (const c of this.crossLog) if (c.obj !== own && c.t >= a0 && c.t <= a1) c.used = true; }
-    const contacts = this.contacts.filter(c => c.t >= p.t0 - 0.05 && c.t <= p.tDone + 0.05);
+    // a hit on the way out is a bump too (owner, 2026-11-21, from pilots' grades: 11 calls the game graded clean were graded bump,
+    // and in four the quad hit something between the end of the move and the call, which is made a little later): any contact
+    // during the move, and a real knock (BUMP_AFTER) after it up to now
+    const contacts = this.contacts.filter(c => c.t >= p.t0 - 0.05 && (c.t <= p.tDone + 0.05 || (c.t <= t + 1e-6 && (c.impact || 0) >= BUMP_AFTER)));
     const g = this.grade(p, contacts, p.toks);
     for (const k of p.toks) { const m = k.rateSum / k.n, v = Math.sqrt(Math.max(0, k.rateSq / k.n - m * m)); const cv = v / (m || 1); if (cv > 0.45) { g.clean = Math.max(0, g.clean - Math.round((cv - 0.45) * 40)); g.notes.push('uneven rotation speed'); } }
     if (g.exec === 'CLEAN' && g.clean < 70) g.exec = 'SLOPPY';
@@ -2601,7 +2619,7 @@ class StreamDetector extends TrickDetector {
     // PENDULUM_GAP of the last one's end and nothing else in between, is called as one Pendulum (scored once, not as a
     // third halved Half Matty). Any other trick breaks the chain.
     const pd = pendulumStep(this.hmChain, p), name = pd.name; this.hmChain = pd.chain;
-    this.emit({ name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft || name === 'Half Matty Pendulum', watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id) } });
+    this.emit({ name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft || name === 'Half Matty Pendulum', watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id), t0: rv.t0, t1: rv.t1 } });   // t0 / t1: the window the Watcher judged (the detector's clock)
   }
   pushReview(rv) { this.reviews.push(rv); if (this.reviews.length > 20) this.reviews.shift(); }
   drainReviews() { const r = this.reviews; this.reviews = []; return r; }
@@ -2936,6 +2954,7 @@ class ScoreKeeper {
     else if (ev.exec === 'CLEAN' || ev.exec === 'SLOPPY') { if (repeatM > 0 && this.b2b === 1) { this.streak += adjRaw / 10000; this.streakCount++; } }
     this.maxStreak = Math.max(this.maxStreak, this.streak);
     if (ev.exec !== 'MISSED') { this.counts[ev.name] = n + 1; if (totwIdx >= 0) this.totwCounts[ev.name] = (this.totwCounts[ev.name] || 0) + 1; }
+    this.last = { i: this.log.length, streak0: streakM, execM };   // for lateBump
     this.prev = ev.name;
     let kwadHit = null;
     for (const L in KWAD) if (KWAD[L] === ev.name && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; }
@@ -2957,6 +2976,15 @@ class ScoreKeeper {
     this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name), pts, base, repeat: rep };
     if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
     this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus); return r;
+  }
+  // The last trick scored clean or sloppy, and the quad knocked into something on the way out (owner, 2026-11-21: pilots graded
+  // such calls "bump"): it is a BUMP after all. Its points drop to a bump's and the streak is what a bump leaves it at.
+  // Returns the points taken back, or 0 when there was nothing to change.
+  lateBump() {
+    const L = this.last, e = L && this.log[L.i]; if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
+    const net = Math.round(e.net * EXEC_MULT.BUMP / L.execM), back = e.net - net;
+    e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = (1 + L.streak0) / 2; this.last = null;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus); return back;
   }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
 }
@@ -3194,6 +3222,6 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { BUMP_AFTER, BUMP_LATE, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);
