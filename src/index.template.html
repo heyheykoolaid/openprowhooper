@@ -112,6 +112,15 @@ code { color: var(--acid); }
 #coachBox { position: fixed; left: 16px; top: 112px; width: min(360px, 44vw); max-height: calc(100vh - 230px); overflow-y: auto; z-index: 60; background: rgba(14,13,12,.88); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
 #coachBox .coDots i { display: inline-block; width: 11px; height: 11px; margin-left: 4px; border: 1px solid #777; border-radius: 50%; } #coachBox .coDots i.on { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(80,220,255,.35) inset; } #coachBox .coDots i.ok { background: #7dff9a; border-color: #7dff9a; } #coachBox .coDots i.no { background: #ff6a5a; border-color: #ff6a5a; }
 #coachBox .coSteps { margin: 6px 0; padding-left: 20px; } #coachBox .coSteps li { margin: 3px 0; color: #cfc6b4; } #coachBox .coSteps li.on { color: #fff; font-weight: bold; } #coachBox .coSteps li.ok { color: #7dff9a; } #coachBox .coSteps li.bad { color: #ffb0a6; } #coachBox .coSteps.dim li { color: #a9a090; }
+#coachCue { position: fixed; left: 50%; bottom: 176px; transform: translateX(-50%); z-index: 62; max-width: min(760px, 80vw); background: #000; color: #fff; border: 2px solid #fff3; padding: 9px 20px 10px; font: 700 22px/1.25 'Oswald', 'Arial Narrow', 'Bungee', Impact, sans-serif; letter-spacing: .04em; text-transform: uppercase; text-align: center; pointer-events: none; }
+#coachCue small { display: block; font: 700 11px var(--mono); letter-spacing: .18em; color: var(--acid); margin-bottom: 3px; }
+#demoRadio { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 56; pointer-events: none; }
+body.demoBig #judgeBox { left: 50%; right: auto; top: 10px; transform: translateX(-50%); width: min(620px, 80vw); } body.demoBig #judgeBox .trFoot { margin-top: 6px; }
+body.demoBig #view { left: 50% !important; top: 56% !important; right: auto !important; bottom: auto !important; width: 27vw !important; height: 15.2vw !important; transform: translate(-50%, -50%); z-index: 57; border: 3px solid #000; border-radius: 14px; box-shadow: 0 0 0 2px #3a3d48; }
+body.demoBig #coachCue { bottom: 3vh; }
+#judgeBox .demoBar { position: relative; height: 14px; margin: 8px 0 6px; background: #ffffff18; border: 1px solid #000; cursor: pointer; touch-action: none; } #judgeBox .demoBar b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--acid); } #judgeBox .demoBar i { position: absolute; top: -3px; bottom: -3px; width: 3px; background: #fff; } #judgeBox .demoBar i.on { background: var(--hot); width: 4px; }
+#judgeBox .demoTrans { display: flex; gap: 4px; flex-wrap: wrap; } #judgeBox .demoTrans button { font-size: 12px; padding: 3px 9px; transform: none; box-shadow: 2px 2px 0 #111; border-width: 2px; font-family: system-ui; } #judgeBox .demoTrans button.on { background: var(--acid); }
+#judgeBox .demoSteps li { cursor: pointer; } #judgeBox .demoRule { font-weight: normal; color: #a9a090; font-size: 11px; } #coachFreeze .cfRule { display: block; font-size: 11px; opacity: .75; margin: -4px 0 8px; }
 #demoArrows { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 55; pointer-events: none; }
 #coachFreeze { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 61; width: min(460px, 70vw); text-align: center; background: rgba(12,12,14,.84); border: 1px solid rgba(80,220,255,.55); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.45); padding: 10px 18px 12px; font: 13px var(--mono); color: #cfc6b4; }
 #coachFreeze small { display: block; color: var(--cyan); letter-spacing: .12em; font-size: 11px; } #coachFreeze b { display: block; color: #fff; font-size: 17px; margin: 4px 0 8px; } #coachFreeze b small { display: inline; color: #a9a090; letter-spacing: 0; } #coachFreeze span { display: block; font-size: 11px; opacity: .8; margin-top: 6px; }
@@ -441,7 +450,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="fps"></div><div id="perfHud" class="hide"></div>
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
-<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoArrows" class="hide"></canvas><div id="coachFreeze" class="hide"></div>
+<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoRadio" class="hide"></canvas><canvas id="demoArrows" class="hide"></canvas><div id="coachCue" class="hide"></div><div id="coachFreeze" class="hide"></div>
 <div id="judgeBox" class="hide"></div><canvas id="judgeSticks" class="hide" width="260" height="120" title="The bot's sticks (V)"></canvas>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">

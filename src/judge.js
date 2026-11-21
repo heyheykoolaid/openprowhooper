@@ -24,7 +24,7 @@ function startJudge(trick) {
   train.on = false; renderTrain(); drone.armed = false; ghostOff();
   mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#judgeBox').classList.remove('hide'); judgeNext();
 }
-function stopJudge() { judgeUpload(); judge.demo = null; $('#judgeBox').classList.add('hide'); $('#judgeSticks').classList.add('hide'); $('#demoArrows').classList.add('hide'); trailClear(); droneMesh.scale.setScalar(1); }
+function stopJudge() { judgeUpload(); judge.demo = null; judge.intro = null; document.body.classList.remove('demoBig'); { const r = $('#demoRadio'); if (r) r.classList.add('hide'); const c = $('#coachCue'); if (c) c.classList.add('hide'); } $('#judgeBox').classList.add('hide'); $('#judgeSticks').classList.add('hide'); $('#demoArrows').classList.add('hide'); trailClear(); droneMesh.scale.setScalar(1); }
 // Where the bot's flight comes from (owner, 2026-11-19: the bot should be the game's current knowledge of each trick): mostly
 // the knowledge bot (MV.knowledge: a confirmed example from the trick library re-flown with small variations, or the script
 // retimed to the library's pace), sometimes the hand-written script, so verdicts on both keep coming. Each flight is tagged.
@@ -52,8 +52,9 @@ function judgeNext() {
 }
 function judgeStep(dt) {
   const m = judge.m; if (!m) return;
-  judge.t = Math.min(m.T, judge.t + dt * judge.speed);
-  if (judge.demo) { if (judge.t >= m.T) { judge.hold = (judge.hold || 0) + dt; if (judge.hold > 1.4) { judge.hold = 0; judge.t = 0; trailClear(); } } demoTick(); }   // Train → Show me: loops, no verdicts
+  const end = judge.demo && judge.intro && demo.b ? demo.b : m.T;   // the intro plays the trick itself, without the long run-in and run-out
+  judge.t = Math.min(end, judge.t + dt * judge.speed);
+  if (judge.demo) { if (judge.t >= end) { judge.hold = (judge.hold || 0) + dt; if (judge.hold > (judge.intro ? 0.7 : 1.4)) { judge.hold = 0; if (!demoLoop()) return; judge.t = judge.intro ? demo.a || 0 : 0; trailClear(); } } demoTick(); }   // Train → Show me: loops, no verdicts (the intro: full speed twice, slowly once, then the pilot's turn)
   else if (judge.t >= m.T && judge.phase === 'watch') { judge.phase = 'ask'; renderJudge(); }
   const s = m.at(judge.t); drone.pos = s.pos; drone.q = s.q; for (let i = 0; i < 4; i++) drone.motorW[i] = 2600;
   if (judge.t < m.T) trailPush(s.pos);
@@ -63,7 +64,7 @@ function judgeStep(dt) {
 // sticks a pilot would have needed for this flight, the same ones the detector's Watcher saw (MV.detect's rows: throttle col 11,
 // roll / pitch / yaw 24-26), drawn like the flying HUD's overlay; V turns it on and off with the HUD's own setting.
 function judgeSticksDraw() {
-  const cv = $('#judgeSticks'), rows = judge.rows, on = (stickUI.on || judge.demo) && mode === 'judge' && rows && rows.length > 1;
+  const cv = $('#judgeSticks'), rows = judge.rows, on = (stickUI.on || judge.demo) && mode === 'judge' && rows && rows.length > 1 && !(judge.demo && (demo.view === 'sticks' || (judge.intro && judge.intro.phase === 'payoff')));
   cv.classList.toggle('hide', !on); if (!on) return;
   const at = t => { const i = Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / ((rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1))))), r = rows[i]; return { thr: r[11], roll: r[24], pitch: r[25], yaw: r[26] }; };
   const trail = []; for (let k = 15; k >= 1; k--) if (judge.t - k * 0.033 >= 0) trail.push(at(judge.t - k * 0.033));
@@ -147,7 +148,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyS') { judge.speed = judge.speed === 1 ? 0.5 : judge.speed === 0.5 ? 0.25 : 1; renderJudge(); }
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); renderJudge(); judgeSticksDraw(); }
   if (e.code === 'KeyC') { judge.cam = judge.cam === 'spectator' ? 'fpv' : judge.cam === 'fpv' ? 'chase' : 'spectator'; renderJudge(); }
-  if (judge.demo) { if (e.code === 'Space') { e.preventDefault(); judge.speed = judge.speed ? 0 : 1; demoRender(); } return; }
+  if (judge.demo) { if (e.code === 'Space') { e.preventDefault(); if (judge.intro && judge.intro.phase === 'payoff') { demoBack(); return; } judge.speed = judge.speed ? 0 : (demo.lastSpeed || 1); demoRender(); } return; }
   if (judge.phase === 'ask') { if (e.code === 'Digit1') judgeVerdict('clean'); if (e.code === 'Digit2') judgeVerdict('sloppy'); if (e.code === 'Digit3') judgeVerdict('wrong'); }
   if (judge.phase === 'reveal' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); judgeNext(); }
 });

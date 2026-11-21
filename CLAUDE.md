@@ -9,6 +9,9 @@ built from these files in order: `game.js` (state, renderer), `worldview.js`, `i
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
+- **Keep the rolling design doc** (owner, 2026-11-21): whenever a design question is discussed (what to build, how it should behave,
+  what was decided or left open), add an entry to docs/DESIGN-LOG.md that day, and keep docs/TODO.md as the one ordered list. Mirror
+  both to the claude.ai Project (`claude/design-log.md`, `claude/todo.md`) when they change.
 - Keep `npm test` green. Every behaviour change to trick detection must keep all suites passing and should add a
   regression case (a synthetic flight in `test/*.js` or a real recording in `test/fixtures/`).
 - Scoring must stay faithful to the TPW calculator (see `ScoreKeeper` in `src/sim.js`). Presentation (combo display) may differ.
@@ -746,7 +749,21 @@ tools/evidence.js skips flights on that map (the files stay in the data repo). *
 should be on large objects … a 10 m object for the square"): `Big Square 10 m` (a frame 10 m wide and high at x -8, z -15..-5,
 flown east-west; station `big`: Powerloops and Maverick Loops, start at (4, -10) at 4-7 m/s, 3 m up when it goes under first) and
 `Big Pole 12 m` (r 0.3 at (-10, 11); the `pole` station). Show me still flies the small bars (`demoObjects` takes bars up to 3.2 m).
-**Presentation pass, planned** (owner, 2026-11-21, after a no-talking tutorial video he liked): docs/TODO.md "Train mode, presentation pass" (payoff first, sticks big / FPV small, short coaching cues shown early, arrows only on the moving stick, a scrubbable slow-motion walkthrough, an Examples stage, "connect it" as the last try, other stick modes, a ladder). Not built yet.
+**Presentation pass** (owner, 2026-11-21, after a no-talking tutorial video he liked; docs/DESIGN-LOG.md has the reasoning; test/coach.js):
+**cues** (`COACH_CUES`, `coachCue`, `coachCueAt`, `coachCaption`, `#coachCue`): one short imperative per step, hand-written for 15
+common tricks (used only when the steps shown are the trick's first pattern, one cue per step) and made from the rule plus the bot's
+throttle for every other step; shown as a caption (bottom centre, STEP k OF n) while that step is the one to fly, as the headline of
+the pause card, and in the player from 0.5 s before the step. Drafts: the owner edits the wording. **Intro** (`coachDemo(true)`,
+`judge.intro`, `demoLoop`, `INTRO_PASSES` 2, `INTRO_SLOW` 0.4, `store 'coachIntro'`, `coachIntroSeen`): at the first start of a trick
+the bot's flight (`coach.fly`, kept by `coachStepSticks`) plays twice at full speed with nothing on screen, then once slowly in the
+sticks-big view with the cues, then hands over; only `demo.a..demo.b` is played (1.2 s before the first step to 1.4 s after the
+last); Space / Skip ends it; ▶ Intro in the panel plays it again (Shift-click: off for new tricks). **Sticks big** (`demo.view`,
+`demoView`, `demoRadio`, `#demoRadio`, `body.demoBig`; B): the radio fills the screen (Mode 2), the game's canvas is shrunk between the
+gimbals by CSS only (no filter, nothing drawn over it), the panel becomes a strip at the top. **Scrubbable player** (`demoSeek`,
+`#demoBar`): a bar with a mark per step (click / drag), ⏮ ◂ ⏸ ▸, ×0.25 / ×0.5 / ×1, ← → half a second, Home, a click on a step jumps
+to it. **Arrows** in Show me only for a stick at a quarter or more, the throttle gauge only while the throttle moves. Show me and the
+intro fly the **Big Square** for the `big` station. Not built of the nine: the Examples stage, "connect it" as the last try, stick
+modes 1 / 3 / 4, the ladder (docs/TODO.md).
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
 re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
 menu's device note (`updateMenuDevice`, every 2 s).

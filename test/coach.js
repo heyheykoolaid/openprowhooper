@@ -40,5 +40,11 @@ for (const [name, toks, want] of sloppy) { Object.assign(C.coach, { toks, passes
   C.coach.bank = null; }
 S.TrickDetector.prototype.update = orig;
 for (const b of bad) console.log('  ✗ ' + b);
+// coaching cues (2026-11-21): every step of every trainable trick gets a short cue; the hand-written ones are used only when they fit the steps shown
+{ const Cc = new Function('S', 'window', 'env', 'esc', `const detector = {};\n${src}\nreturn { coachPlan, coachCue, COACH_CUES };`)(S, { TPW_TRICKS: globalThis.TPW_TRICKS }, env, x => x);
+  let bad = 0, steps = 0; for (const t of names) { const P = Cc.coachPlan(t); for (const st of P.alts) st.forEach((_, k) => { steps++; const c = Cc.coachCue(t, st, k, null); if (typeof c !== 'string' || c.length < 8 || c.length > 150 || /undefined|NaN/.test(c)) { bad++; console.log('  ✗ cue', t, k, c); } }); }
+  let fit = 0; for (const t in Cc.COACH_CUES) { const P = Cc.coachPlan(t); if (P && P.alts[0].length === Cc.COACH_CUES[t].length && Cc.coachCue(t, P.alts[0], 0, null) === Cc.COACH_CUES[t][0]) fit++; else console.log('  ✗ hand-written cues do not fit the steps of', t); }
+  const g = Cc.coachCue('Power Roll', Cc.coachPlan('Power Roll').alts[0], 1, { T: 0.05, dT: -1 });
+  const okc = !bad && fit === Object.keys(Cc.COACH_CUES).length && /Cut the throttle/.test(g); console.log(`${okc ? '✓' : '✗'} coaching cues: ${steps} steps have one, ${fit} tricks hand-written, the bot's throttle is read ("${g}")`); if (!okc) process.exitCode = 1; }
 console.log(`${ok}/${n} scripted flights pass every training step (${names.length} tricks)`);
 if (ok < n * 0.85 || wrong < pairs.length) process.exit(1);
