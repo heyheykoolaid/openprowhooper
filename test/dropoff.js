@@ -136,7 +136,7 @@
   { // every pilot's Review queue (POST /review, 2026-11-21): no key; flights whose pilot agreed and labels only, recent days only
     const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10), D = day(1), OLD = day(30), seen = [];
     const F = (d, n) => `telemetry/inbox/flight/${d}/179500000000${n}-0123456789abcdef.json`;
-    const files = { [F(D, 0)]: flight({ id: 'ok', summary: { reviewOk: true, errors: [{ m: 'boom' }], feel: { w: 1 } } }), [F(D, 1)]: flight({ id: 'private', summary: { feel: { w: 1 } } }), [F(D, 2)]: flight({ id: 'nosum' }),
+    const files = { [F(D, 0)]: flight({ id: 'ok', summary: { reviewOk: true, errors: [{ m: 'boom' }], feel: { w: 1 } } }), [F(D, 1)]: flight({ id: 'private', summary: { reviewOk: false, feel: { w: 1 } } }), [F(D, 2)]: flight({ id: 'nosum' }),
       [F(OLD, 3)]: flight({ id: 'old', summary: { reviewOk: true } }),
       [`telemetry/inbox/labels/${D}/1795000000005-0123456789abcdef.json`]: { format: 'pro-whooper-flight-labels/1', flight: 'ok', pilot: 'p1', name: 'Rod', labels: [{ t: 1, actual: 'Flip', verdict: 'yes' }] },
       [`telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json`]: { format: 'pro-whooper-feedback/1', at: 'now', text: 'private words', name: 'Rod' } };
@@ -146,10 +146,10 @@
       return { ok: false, status: 404 }; };
     const rev = (body, ip, o = {}) => handle(new Request('https://drop/review', { method: 'POST', headers: { Origin: o.origin ?? GAME, 'CF-Connecting-IP': ip }, body: JSON.stringify(body) }), o.env || env(), ghd);
     let r = await rev({ op: 'list', path: 'telemetry/inbox/flight' }, '7.8.0.1'), L = await r.json(); check('review: recent days are listed with no key, old ones are not', r.status === 200 && L.length === 1 && L[0].name === D);
-    r = await rev({ op: 'get', path: F(D, 0) }, '7.8.0.1'); L = await r.json(); check('review: a flight whose pilot agreed is served, without its error log', r.status === 200 && L.id === 'ok' && L.summary.reviewOk === true && !L.summary.errors && L.summary.feel);
+    r = await rev({ op: 'get', path: F(D, 0) }, '7.8.0.1'); L = await r.json(); check('review: a shared flight is served, without its error log', r.status === 200 && L.id === 'ok' && !L.summary.errors && L.summary.feel);
     r = await rev({ op: 'getMany', paths: [F(D, 0), F(D, 1), F(D, 2), F(OLD, 3), `telemetry/inbox/labels/${D}/1795000000005-0123456789abcdef.json`, `telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json`] }, '7.8.0.1'); L = await r.json();
-    check('review: flights without the pilot\'s yes are not served', L[F(D, 0)] && L[F(D, 1)] === null && L[F(D, 2)] === null);
-    check('review: old flights and feedback are not served, labels are', L[F(OLD, 3)] === null && Object.values(L).filter(Boolean).length === 2 && !JSON.stringify(L).includes('private words'));
+    check('review: a pilot who opted out is not served, everyone else is', L[F(D, 0)] && L[F(D, 1)] === null && L[F(D, 2)] && L[F(D, 2)].id === 'nosum');
+    check('review: old flights and feedback are not served, labels are', L[F(OLD, 3)] === null && Object.values(L).filter(Boolean).length === 3 && !JSON.stringify(L).includes('private words'));
     r = await rev({ op: 'get', path: `telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json` }, '7.8.0.2'); check('review: feedback cannot be read', r.status === 400);
     r = await rev({ op: 'list', path: 'telemetry/inbox/feedback' }, '7.8.0.2'); const r2 = await rev({ op: 'list', path: 'leaderboard' }, '7.8.0.2'), r3 = await rev({ op: 'list', path: 'telemetry/inbox/flight/' + OLD }, '7.8.0.2'), r4 = await rev({ op: 'get', path: 'maps/official/moose.json' }, '7.8.0.2');
     check('review: nothing else can be listed or read', r.status === 400 && r2.status === 400 && r3.status === 400 && r4.status === 400);

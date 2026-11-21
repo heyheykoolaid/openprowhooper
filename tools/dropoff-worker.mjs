@@ -269,8 +269,8 @@ const DESK_LIST = new RegExp(`^(telemetry/inbox/(flight|labels|feedback)(/${DESK
 const DESK_FILE = new RegExp(`^telemetry/inbox/(flight|labels|feedback)/${DESK_DAY}/\\d{10,16}-[0-9a-f]{8,32}\\.json$`);
 const DESK_RUN = new RegExp(`^leaderboard/${DESK_DAY}/\\d{8}-[a-z0-9-]{1,24}-[A-Za-z0-9_-]{1,40}-[a-z0-9]{6,40}-\\d{10,16}\\.json$`);
 // POST /review { op, path | paths }: the same reading for EVERY pilot's Review queue (owner, 2026-11-21), with no key and much less
-// to read: only shared flights and review labels (never feedback), only the last REVIEW_DAYS days, only flights whose pilot agreed
-// to other pilots reviewing them (`summary.reviewOk`, set by the game after asking), without the flight's error log, and
+// to read: only shared flights and review labels (never feedback), only the last REVIEW_DAYS days, not the flights of a pilot who
+// opted out (`summary.reviewOk: false`, the Options checkbox), without the flight's error log, and
 // REVIEW_PER_HOUR requests an address. Read-only like the desk; every file cleaned again. REVIEW=0 closes it.
 const REVIEW_DAYS = 7, REVIEW_PER_HOUR = 240;
 const REVIEW_LIST = new RegExp(`^telemetry/inbox/(flight|labels)(/(${DESK_DAY}))?$`), REVIEW_FILE = new RegExp(`^telemetry/inbox/(flight|labels)/(${DESK_DAY})/\\d{10,16}-[0-9a-f]{8,32}\\.json$`);
@@ -304,7 +304,7 @@ async function deskApi(request, env, fetchImpl, reply, origin, allowed, guest) {
     const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}${ref}`, { headers: { ...H, 'Accept': 'application/vnd.github.raw+json' } });
     if (!r.ok) return null; let p; try { p = JSON.parse(await r.text()); } catch { return null; }
     const verified = kind === 'labels' && p && p.ownerVerified === true, c = clean(kind, p); if (c && verified) c.ownerVerified = true;
-    if (guest && c && kind === 'flight') { if (!(c.summary && c.summary.reviewOk === true)) return null; delete c.summary.errors; }   // only flights whose pilot said other pilots may review them
+    if (guest && c && kind === 'flight') { if (c.summary && c.summary.reviewOk === false) return null; if (c.summary) delete c.summary.errors; }   // every shared flight, except a pilot's who opted out (owner, 2026-11-21: "drop it": the queue only shows brief moments)
     return c;
   };
   if (j.op === 'get') { if (!fileOk(j.path)) return reply(400, 'not a file the desk can read');

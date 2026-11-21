@@ -102,6 +102,6 @@ The key is checked by hash in constant time; five wrong keys make an address wai
 browser (store 'ownerKey'). If it ever leaks, change the secret in Cloudflare (old key stops working at once).
 
 ## The Review queue for every pilot (2026-11-21)
-`POST /review` is the desk's reading without a key, for any pilot's Review Hub: only shared flights whose pilot agreed to it
-(`summary.reviewOk`) and review labels, only the last 7 days, 240 requests an hour per address, never feedback, never writing.
+`POST /review` is the desk's reading without a key, for any pilot's Review Hub: shared flights (not those of a pilot who opted out in Options:
+`summary.reviewOk: false`) and review labels, only the last 7 days, 240 requests an hour per address, never feedback, never writing.
 Nothing to set up: redeploy the worker. To close it, add the variable `REVIEW` = `0`.

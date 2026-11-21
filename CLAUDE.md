@@ -774,10 +774,10 @@ sent); own runs save as before. "You judged N today" (`store 'hubDay'`), judged 
 **The Review queue is for every pilot** (owner, 2026-11-21: "it makes sense"; `deskVia()` 'guest', `deskRelayOn`, `reviewOkOn` / `reviewAsk` in
 dropoff.js; `POST /review` in tools/dropoff-worker.mjs; test/dropoff.js): any named pilot's hub lists the queue through the relay's
 `/review`: the desk's reading with no key and much less to read: shared flights and review labels only (never feedback), the last
-`REVIEW_DAYS` 7 days, `REVIEW_PER_HOUR` 240 requests an address, the flight's error log removed, and **only flights whose pilot agreed**
-(`summary.reviewOk`, sent when `store 'reviewOk'` is true: new pilots by the first-start prompt's wording and yes, pilots already
-sharing by a one-time notice, both by a checkbox under Share flight telemetry in Options). Flights sent before that carry no yes and are
-never served to guests. A guest never gets their own runs in the queue. Their verdicts are reviewer labels without the owner's
+`REVIEW_DAYS` 7 days, `REVIEW_PER_HOUR` 240 requests an address, the flight's error log removed. **Every shared flight is served** (owner,
+same day, after seeing an empty queue as a second pilot: "drop it. the review queue only shows brief moments in flights"): the first
+build served only flights whose pilot had opted in; now only a pilot who unticks "Let other pilots review moments from my shared runs"
+(Options, `store 'reviewOk'` false -> `summary.reviewOk: false` on their flights) is left out. The first-start prompt says so. A guest never gets their own runs in the queue. Their verdicts are reviewer labels without the owner's
 signature, so tools/evidence.js counts them as votes, pooled three deep. `REVIEW=0` on the relay closes it; an older relay answers
 /review as a bad upload and the hub says the queue opens once the relay is updated. **Redeploy the relay.** Not checked end to end
 against a live relay with real flights (the relay's rules and the hub's rendering are tested separately).

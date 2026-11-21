@@ -49,7 +49,7 @@ function telCapture(reason) {
     missed: recap.flags.filter(f => !sq.rows.length || f.t >= sq.rows[0][0] - 1).map(f => ({ t: f.t })) };
   const stamp = telStamp(recap); rows = sq.rows; recap.telUpTo = rows.length ? rows[rows.length - 1][0] : recap.telUpTo;
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); for (const pc of pend) await telPieceSend(pc); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (sq.gaps.length) head.summary.gaps = sq.gaps; if (recap.pieceN) head.summary.pieces = recap.pieceN; try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (reviewOkOn()) head.summary.reviewOk = true; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); for (const pc of pend) await telPieceSend(pc); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (sq.gaps.length) head.summary.gaps = sq.gaps; if (recap.pieceN) head.summary.pieces = recap.pieceN; try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (!reviewOkOn()) head.summary.reviewOk = false; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
 
 // ---- Long runs and walking away (owner, 2026-11-19). The replay keeps the last 8 minutes; with sharing on, what falls out of it
@@ -91,7 +91,7 @@ async function telPieceSend(pc) {
       events: recap.events.filter(e => e.t >= t0 && e.t <= t1 + 0.5).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
       missed: recap.flags.filter(f => f.t >= t0 && f.t <= t1).map(f => ({ t: f.t })) };
     head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.summary.piece = { of: pc.id, n: pc.n, t0, t1, gaps: pc.gaps };
-    try { head.summary.feel = feelSnap(); } catch {} if (store.get('reviewOk', null) === true) head.summary.reviewOk = true; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);
+    try { head.summary.feel = feelSnap(); } catch {} if (store.get('reviewOk', null) === false) head.summary.reviewOk = false; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);
     head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); pc.rows = null; await telQueue('flight', telStamp(pc) + '-p' + pc.n, head); return true;
   } catch { return false; }
 }
@@ -239,20 +239,9 @@ function pilotAsk() {
 // Physics update 2 (2026-11-18): the motors now match BetaFPV's published thrust and spin up 2x faster, so pilots who had
 // lowered Weight (or raised Motor) to make up for it would overshoot. Asked once, only if a feel slider is off 100 %.
 const FEEL_NAMES = { weightFeel: 'Weight', dragFeel: 'Drag', washFeel: 'Prop wash', motorFeel: 'Motor response', sagFeel: 'Battery sag', groundFeel: 'Ground effect' };
-// The Review queue is open to every pilot (owner, 2026-11-21). A shared run is shown to other pilots only when its pilot has
-// said so: new pilots in the first-start prompt, pilots already sharing through this one-time notice (store 'reviewOk': true / false).
-const reviewOkOn = () => store.get('reviewOk', null) === true;
-function reviewAsk() {
-  if (!tel.on || anonOn() || store.get('reviewOk', null) != null || !$('#pilotModal').classList.contains('hide')) return false;
-  const el = $('#pilotModal'); el.classList.remove('hide');
-  el.innerHTML = `<div class="fbPanel"><h3>New: every pilot can help review</h3>
-    <p>The <b>Review queue</b> in the Review Hub is now open to all pilots: it shows the moments the game was least sure of in shared runs, and pilots say what the trick really was. Three pilots agreeing settles a moment.</p>
-    <p>May moments from <b>your</b> shared runs be shown there? Other pilots would see the replay, your pilot name and the game's calls. Nothing else changes about what you share.</p>
-    <p class="note">You can change this any time in Options.</p>
-    <div class="row"><button data-revok="yes" class="primary">Yes, include my runs</button><button data-revok="no">Keep mine out</button></div></div>`;
-  return true;
-}
-document.addEventListener('click', e => { const b = e.target.closest('[data-revok]'); if (!b) return; store.set('reviewOk', b.dataset.revok === 'yes'); $('#pilotModal').classList.add('hide'); });
+// The Review queue is open to every pilot (owner, 2026-11-21) and shows moments from every shared run of the last 7 days, except
+// a pilot's who unticked "Let other pilots review…" in Options (store 'reviewOk' false -> summary.reviewOk false on their flights).
+const reviewOkOn = () => store.get('reviewOk', null) !== false;   // on unless the pilot unticks it in Options (owner, 2026-11-21: no asking; the queue only shows brief moments)
 document.addEventListener('change', e => { if (e.target && e.target.id === 'reviewOkOn') store.set('reviewOk', !!e.target.checked); });
 function physAsk() {
   if (store.get('phys2Asked', false)) return;
@@ -315,7 +304,7 @@ addEventListener('pagehide', () => telCapture('closed'));
 // anything still waiting is tried again now and then (telPump keeps to its back-off)
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { pilotShowName(); if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); if ($('#pilotModal').classList.contains('hide')) reviewAsk(); } telPump(); }, 1200);
+setTimeout(async () => { pilotShowName(); if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
 
