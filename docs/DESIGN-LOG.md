@@ -117,3 +117,23 @@ inverted, a wait (if that), then a pitch back to upright."
 The owner: "hide the training mode for anyone but heyheykoolaid, rodfpv and autismo". Done by pilot name, like the Tricktionary's
 watch button. It comes back for everyone when the owner says the mode is ready.
 
+### Train: examples, connect it, stick modes, the ladder (2026-11-21)
+The owner picked the rest of the presentation pass ("4. for sure. spent extra time getting it right").
+- **Examples** come after the slow pass and before the pilot's turn: up to three other flights of the trick, each once at full speed,
+  with nothing on screen but who flew it and where. Real pilots' confirmed flights first, a different pilot each where there are
+  several, then the bot's on other objects. The intro already showed one flight; the examples are never that one again.
+- **What may be shown as an example**: the game calls it in the room, no other trick is called in it, it touches nothing. Unlike THE
+  example of the intro it may turn further on the trick's own axes (a real loop comes in pieces); never on another axis. A pilot's
+  flight that touches something is tried once more on the next object before it is dropped. Why: with the intro's strict rule almost
+  no real flight passed, and the stage would have been the bot three times.
+- **Connect it** is a fifth try: the trick and any DIFFERENT trick called within 3 s of each other, either order. The game's own calls
+  decide; there is no "was it really one?" here (nothing from the room is kept anyway). Q still says "I did it".
+- **The ladder**: three rungs per trick, walked (a step-by-step try), landed (a live try), learned (connected). A rung is never lost.
+  The Tricktionary shows the rung by each trick and a box on top: how many are learned and the next four to train, easiest first by
+  the book's difficulty, ones already started first. Kept in the browser only: it is progress, not flight data, and nothing from the
+  Training Room is shared.
+- **Stick modes 1-4** change how sticks are DRAWN everywhere (Train's big radio, the small stick view while flying and in every
+  player) and the words "left stick / right stick" in Show me. They do not remap the radio. Set in the sticks-big view or in Controls.
+  The yaw cue now says "keep pitch and roll still" instead of naming a stick.
+- **Open**: three examples or more; whether 3 s is the right gap for "connected"; the ladder's order; whether learned should need a
+  clean grade on the live try.

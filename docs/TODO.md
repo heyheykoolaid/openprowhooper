@@ -4,11 +4,10 @@ How this file works: one list, in the order to do things. When an item is done, 
 line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LOG.md (the rolling design doc) on the day they are made.
 
 ## Now
-1. **Train mode, presentation pass** (owner, 2026-11-21). Built 2026-11-21: the intro (the trick at full speed twice, then one slow
-   pass), a coaching cue per step, arrows only on the moving stick, the sticks-big view, a scrubbable player. Still to do from the nine:
-   an **Examples stage** (confirmed flights on other maps and objects), **"connect it"** as the last try (chain it into anything),
-   **stick display in Mode 1 / 3 / 4**, and a **ladder** with a "learned" mark in the Tricktionary. The cues are drafts: owner to edit
-   the wording (`COACH_CUES` in src/coach.js).
+1. ~~**Train mode, presentation pass**~~ (owner, 2026-11-21). All nine built 2026-11-21: the intro (full speed twice, one slow pass,
+   then **examples**), a cue per step, arrows only on the moving stick, the sticks-big view, a scrubbable player, **"connect it"** as
+   try 5, the **stick view in Mode 1-4**, and the **ladder** (walked / landed / learned) in the Tricktionary. Left: the owner's edit of
+   the cue wording (`COACH_CUES` in src/coach.js), and Train is still shown to three pilots only.
 2. **Daily K.W.A.D.** (agreed 2026-11-20): four daily tricks per map, the same for everyone, from the date (the board's UTC day): K and W
    easy and anywhere, A and D on a named object. Letters on the HUD, a bonus for all four, shown on the main menu and the board. Only
    tricks the game calls reliably; obstacle letters on objects the bot already flies well on that map. Keep 250 a letter + 2000.
@@ -62,3 +61,5 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - Decide whether to retire the old review screens (Flight desk, Judge the community) now that the Hub covers them.
 - Set real points for Half Matty Pendulum (1050), Juicy Tornado (350) and Wall Stick (200): placeholders today.
 - Edit the coaching cues' wording.
+- Train's new parts: is three examples the right number, should "connect it" need the two tricks in one combo by a tighter gap than
+  3 s, and should the ladder's order follow the book's difficulty or an order of your own?

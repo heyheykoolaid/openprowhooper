@@ -19,7 +19,20 @@ const COACH_HAND = {
   'Blindflip': { cross: 'OU', steps: [{ rot: 'Y*~180', text: 'Just before the object, a half yaw spin so you face away from it' }, { rot: 'P+~360', during: ['O'], text: 'Throttle up and pitch back into a blind loop over it' }, { pass: 'U', text: 'Finish the loop back under it' }] },
   'Cinnamon Roll': { cross: 'OU', steps: [{ pass: 'O', text: 'Hop sideways over it, upright' }, { rot: 'Y*~360', text: 'A slow full yaw spin as you come down, staying upright' }, { pass: 'U', text: 'Finish the spin as you pass back under' }] },
 };
-const COACH_TRIES = 4, COACH_PARTS = 2;
+const COACH_TRIES = 5, COACH_PARTS = 2;   // 1-2 step by step, 3-4 live, 5 "connect it" (owner, 2026-11-21: the tutorial's last step)
+const coachPhaseOf = n => n <= COACH_PARTS ? 'parts' : n >= COACH_TRIES ? 'connect' : 'live';
+// ---- The ladder (owner, 2026-11-21: "a ladder, with a learned mark in the Tricktionary"). Three rungs per trick, from the tries
+// passed: 1 walked it (a step-by-step try), 2 landed it (a live try), 3 connected it (into or out of another trick) = learned.
+// Kept in this browser only (store 'coachRungs': { trick: { r, at } }): it is the pilot's own progress, not flight data.
+const COACH_RUNGS = ['', 'walked', 'landed', 'learned'], COACH_DIFF = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Master'];
+const coachRungOf = log => (log || []).reduce((r, l) => l && l.ok ? Math.max(r, l.phase === 'connect' ? 3 : l.phase === 'live' ? 2 : 1) : r, 0);
+// what to learn next: the trainable tricks not yet learned, easiest first (the book's difficulty, then its points), ones already
+// started before untouched ones of the same difficulty
+function coachLadder(tricks, rungs, can) {
+  const d = t => { const i = COACH_DIFF.indexOf(String(t.diff || '').trim()); return i < 0 ? 9 : i; }, r = t => ((rungs || {})[t.name.trim()] || {}).r || 0;
+  const all = tricks.filter(t => t.pts > 0 && can(t.name.trim())), todo = all.filter(t => r(t) < 3).sort((a, b) => d(a) - d(b) || r(b) - r(a) || a.pts - b.pts || a.name.localeCompare(b.name));
+  return { total: all.length, learned: all.length - todo.length, next: todo };
+}
 // owner, 2026-11-20: "the trick trainer should understand that a lot of beginners will be sloppy at first". The steps take
 // rotations well off the mark (a half flip from ~95° to ~265°, a full one from ~250° to ~470°), pieces of one rotation with a
 // pause between them, and passes a good second either side of it; each says how clean it was. The live tries go by the
@@ -122,7 +135,7 @@ const COACH_CUES = {
   'Flip': ['Blip the throttle, then stick all the way back (or forward) and hold. Stop it as the horizon comes level.'],
   'Invert Rewind': ['Half a flip to upside-down, and stop it there.', 'Flip straight back the way you came, to upright.'],
   'Roll': ['Blip the throttle, then stick hard left or right. Stop it as the horizon comes level.'],
-  'Yaw Spin': ['Hold the throttle steady and push yaw all the way: one flat turn. Keep the right stick still.'],
+  'Yaw Spin': ['Hold the throttle steady and push yaw all the way: one flat turn. Keep pitch and roll still.'],
   'Double Flip': ['A bigger throttle blip, stick all the way back (or forward), and keep holding through two turns.'],
   'Double Roll': ['A bigger throttle blip, stick hard over, and keep holding through two turns.'],
   'Powerloop': ['Fly low and straight under it.', 'Punch the throttle and pull back. Ease the throttle off as you go upside-down over the top.', 'Keep pulling until you see the ground, then catch it and fly back under.'],
@@ -148,7 +161,7 @@ function coachCue(name, steps, k, sk) {   // sk: the bot's sticks during this st
   let out;
   if (p.ax === 'P') out = `${p.dir === '+' ? 'Pull back' : p.dir === '-' ? 'Push forward' : 'Stick forward or back'}: ${turns}${p.deg === 180 ? ', to upside-down' : ''}. ${p.deg >= 360 ? 'Hold it, and stop it as the horizon comes level.' : 'Stop it there.'}`;
   else if (p.ax === 'R') out = `Roll ${turns}${p.deg === 180 ? ', to the other way up' : ''}: stick hard over, then stop it level.`;
-  else out = `${p.inv ? 'While upside-down, yaw' : 'Yaw'} ${turns}. Keep the right stick still.`;
+  else out = `${p.inv ? 'While upside-down, yaw' : 'Yaw'} ${turns}. Keep pitch and roll still.`;
   if (s.during && s.during.includes('O')) out += ' Over the top of it.';
   if (sk && Number.isFinite(sk.T)) { if (sk.dT < -0.6 || sk.T < 0.15) out += ' Cut the throttle.'; else if (sk.dT > 0.6 || sk.T > 0.8) out += ' Punch the throttle.'; }
   return out;
@@ -260,11 +273,11 @@ function coachStart(name) {
   coach.spots = [COACH_SPOTS[stn][0]]; coachNewTry();
   drone.reset(world.spawn); coach.sticks = coachStepSticks(); coach.entry = coachEntry(stn, coach.sticks && coach.sticks.bot);   // the bot's flight from this station: the pause arrows and the rolling start
   coachHoldStart(); renderCoach();
-  flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, judged live</small>`);
+  flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, live · 5 connect it</small>`);
   if (store.get('coachIntro', true) && coach.fly && coachIntroSeen !== name) { coachIntroSeen = name; coachDemo(true); }   // the payoff first: the trick at full speed, then one slow pass with the cues
 }
 function coachNewTry() {
-  coach.phase = coach.tryN <= COACH_PARTS ? 'parts' : 'live'; coach.since = detector.time; coach.steps = coach.alts[0]; coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.result = null; coach.last = null;
+  coach.phase = coachPhaseOf(coach.tryN); coach.chain = []; coach.since = detector.time; coach.steps = coach.alts[0]; coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.result = null; coach.last = null;
   coach.ck = null; coach.bank = null; coach.pauseSnap = null; coach.atCk = false; coach.msg = '';
   coachCollect(); coach.since = detector.time;
 }
@@ -274,7 +287,7 @@ function coachClock(start) {
   const ck = !start && coach.on && coach.phase === 'parts' && !coach.result && !coach.done && coach.ck && !coach.atCk ? coach.ck : null;   // R at a checkpoint: back to the start
   if (!ck) { coach.ck = null; coach.pauseSnap = null; } coach.bank = ck ? ck.bank : null; coach.atCk = !!ck;
   if (coach.freeze) coachFreezeEnd(); coachHoldStart(ck); coach.doneN = ck ? ck.bank.n : 0; coach.live = null; coach.preFroze = null;
-  coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; if (coach.ask) coach.ask = null;
+  coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; coach.chain = []; if (coach.ask) coach.ask = null;
   if (ck) { coach.steps = ck.steps; if (store.get('coachPauses', true)) { coachFreezeStart(ck.bank.n); if (coach.freeze) { coach.hold = null; coach.scale = 0; coach.preFroze = ck.bank.n; } } }   // back in the pause before the part
 }
 // back to the checkpoint (or the start), with a fresh detector: a part flown wrong, a crash, the next try
@@ -285,7 +298,9 @@ function coachStop(save = true) {
   if (save && recap.dirty && !recap.guest) recapSave();
 }
 function coachTryDone(ok, how) {
-  coach.log.push({ n: coach.tryN, phase: coach.phase, ok, how }); coach.result = { ok, how };
+  coach.log.push({ n: coach.tryN, phase: coach.phase, ok, how }); coach.result = { ok, how }; coach.msg = '';
+  if (ok) { const R = store.get('coachRungs', {}), was = (R[coach.name] || {}).r || 0, now = Math.max(was, coachRungOf(coach.log));   // the ladder: this browser only
+    if (now > was) { R[coach.name] = { r: now, at: Date.now() }; store.set('coachRungs', R); if (now === 3) flash(`<b>★ ${esc(coach.name).toUpperCase()} LEARNED</b><small>walked it, landed it, connected it</small>`); } }
   if (coach.tryN >= COACH_TRIES) { coach.done = true; renderCoach(); return; }
   coach.tryN++; setTimeout(() => { if (coach.on && !coach.done) { if (mode === 'fly') coachAgain(); else { coachNewTry(); renderCoach(); } } }, ok ? 1600 : 0);   // every try from the rolling start
   renderCoach();
@@ -294,6 +309,11 @@ function coachTryDone(ok, how) {
 function coachEvent(ev) {
   if (!coach.on || coach.done || mode !== 'fly' || ev.name === 'near') return;
   if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (coach.phase === 'live' && !coach.ask && !store.get('coachRetry', true)) { coach.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
+  // the last try, "connect it": the trick and any other trick within a combo's breath of each other (either order)
+  if (coach.phase === 'connect') { if (coach.result || ev.maybe) return; const t = detector.time; coach.chain = (coach.chain || []).filter(c => t - c.t < COACH_LINK + 1.5); coach.chain.push({ name: ev.name, t });
+    const me = coach.chain.filter(c => c.name === coach.name), pair = me.map(m => [m, coach.chain.find(c => c.name !== coach.name && Math.abs(c.t - m.t) <= COACH_LINK)]).find(x => x[1]);
+    if (pair) { const [m, o] = pair; coachTryDone(true, coach.chain.indexOf(o) < coach.chain.indexOf(m) ? `${o.name} into ${coach.name}` : `${coach.name} into ${o.name}`); return; }
+    coach.msg = ev.name === coach.name ? 'That was it. Now straight into a different trick: any one counts.' : `${ev.name}: now the ${coach.name}, straight after.`; renderCoach(); return; }
   if (coach.phase !== 'live' || coach.ask) return;
   const i = recap.events.length - 1, e = recap.events[i]; if (!e || e.name !== ev.name) return;
   if (ev.name === coach.name) { coach.ask = { i, ok: true, exec: ev.exec, clean: ev.clean }; coach.msg = ''; }
@@ -311,7 +331,7 @@ function coachAnswer(a) {
   }
 }
 function coachMissed() {   // "I did it, the game missed it" (Q)
-  if (!coach.on || coach.phase !== 'live' || coach.ask) return; const t = drone.time;
+  if (!coach.on || (coach.phase !== 'live' && coach.phase !== 'connect') || coach.ask || coach.result) return; const t = drone.time;
   recap.flags.push({ t0: +Math.max(0, t - 3).toFixed(3), t: +t.toFixed(3), actual: coach.name, added: true }); recap.dirty = true;
   coachTryDone(true, 'your call: the game missed it');
 }
@@ -338,22 +358,29 @@ setInterval(() => {
 // the caption bar (bottom centre): STEP k OF n and the cue, like the tutorial's captions
 function coachCaption(c, text) {
   const el = $('#coachCue'); if (!el) return; if (!c || c.k >= c.n) { el.classList.add('hide'); return; }
-  const cue = text != null ? text : coachCueAt(c.k), html = `<small>STEP ${c.k + 1} OF ${c.n}</small>${esc(cue)}`;
+  const cue = text != null ? text : coachCueAt(c.k), html = `<small>${c.label ? esc(c.label) : `STEP ${c.k + 1} OF ${c.n}`}</small>${esc(cue)}`;
   if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide');
 }
 function renderCoach() {
   const box = $('#coachBox'); if (!coach.on || mode !== 'fly') { box.classList.add('hide'); if (!(judge.demo && mode === 'judge')) coachCaption(null); return; } box.classList.remove('hide');
-  const vars = new Set(), dots = Array.from({ length: COACH_TRIES }, (_, k) => { const L = coach.log[k]; return `<i class="${L ? (L.ok ? 'ok' : 'no') : k + 1 === coach.tryN ? 'on' : ''}" title="try ${k + 1}${k < COACH_PARTS ? ': step by step' : ': live'}"></i>`; }).join('');
+  const vars = new Set(), dots = Array.from({ length: COACH_TRIES }, (_, k) => { const L = coach.log[k]; return `<i class="${L ? (L.ok ? 'ok' : 'no') : k + 1 === coach.tryN ? 'on' : ''}" title="try ${k + 1}: ${{ parts: 'step by step', live: 'live', connect: 'connect it' }[coachPhaseOf(k + 1)]}"></i>`; }).join('');
   let body = '';
   if (coach.done) {
     const ok = coach.log.filter(l => l.ok).length;
-    body = `<div class="trLast"><b>Done!</b> ${ok} of ${COACH_TRIES} tries.${coach.log.filter(l => l.phase === 'live').map(l => `<br>Live try ${l.n}: ${esc(l.how)}`).join('')}<br>Now fly it in a Session for points.</div>
+    const rg = coachRungOf(coach.log), best = ((store.get('coachRungs', {})[coach.name]) || {}).r || rg;
+    body = `<div class="trLast"><b>Done!</b> ${ok} of ${COACH_TRIES} tries.${coach.log.filter(l => l.phase !== 'parts').map(l => `<br>${l.phase === 'connect' ? 'Connect it' : 'Live try ' + l.n}: ${esc(l.how)}`).join('')}
+      <div class="coLadder">${[1, 2, 3].map(k => `<i class="${best >= k ? 'ok' : ''}">${best >= k ? '✓' : '○'} ${COACH_RUNGS[k]}</i>`).join('')}</div>${best >= 3 ? 'Learned. Fly it in a Session for points.' : best === 2 ? 'One rung to go: connect it to another trick.' : 'Train it again to climb the next rung.'}</div>
       <div class="trBtns"><button data-co="again">⟲ Train again</button><button data-co="done">✓ Done</button><button data-co="stop" class="ghost">Free fly</button></div>`;
   } else if (coach.phase === 'parts') {
     const j = coach.last || { out: coach.steps.map(() => ({ ok: false, msg: '' })), done: 0 }, cur = (detector.cur || []).filter(Boolean).find(c => c.raw > 30);
     body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>step by step</b>: fly each part; take your time between them. Sloppy counts: close is good enough to move on.${store.get('coachRetry', true) ? ' Miss a part and you are put back just before it.' : ''}${store.get('coachPauses', true) ? ' The game pauses after each part so you can set up the next.' : ''}</div><ol class="coSteps">${coach.steps.map((s, k) => { const o = j.out[k], st = o.ok ? 'ok' : k === j.done ? 'on' : '';
       return `<li class="${st}">${o.ok ? '✓ ' : k === j.done ? '▶ ' : ''}${coachStepText(s, vars)}${o.ok && o.msg ? ` <small class="coGot">${o.msg}</small>` : ''}${k === j.done && o.msg ? `<div class="coWhy">✗ ${o.msg}</div>` : ''}</li>`; }).join('')}</ol>
       ${cur ? `<div class="note">turning: ${{ R: 'roll', P: 'flip', Y: 'yaw' }[cur.ax]} ${Math.round(cur.raw)}°</div>` : ''}`;
+  } else if (coach.phase === 'connect') {
+    const ch = (coach.chain || []).slice(-4);
+    body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>connect it</b>: fly the ${esc(coach.name)} and go straight into another trick, or come out of one straight into it. Any trick counts (a Roll or a Flip is enough), within ${COACH_LINK} seconds.</div>
+      ${ch.length ? `<div class="coChain">${ch.map(c => `<i class="${c.name === coach.name ? 'ok' : ''}">${esc(c.name)}</i>`).join('<b>→</b>')}</div>` : ''}
+      <div class="trBtns"><button data-co="missed" class="ghost" title="You connected it and the game said nothing">I did it, the game missed it <kbd>Q</kbd></button></div>`;
   } else {
     const A = coach.ask;
     body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>live</b>: the whole trick in one go.</div><ol class="coSteps dim">${coach.steps.map(s => `<li>${coachStepText(s, vars)}</li>`).join('')}</ol>
@@ -367,10 +394,18 @@ function renderCoach() {
     <div class="trObs">${coach.obj ? `on <b>${esc(coach.obj)}</b>` : `fly it on: <b>${esc((coach.spots || []).join(', '))}</b>`}${coach.end === 'back' ? ' · ends flying backward' : ''}</div>
     ${coach.result && !coach.done ? `<div class="coRes ${coach.result.ok ? 'ok' : 'no'}">${coach.result.ok ? '✓ Try ' + (coach.tryN - 1) + ' done' : '✗'} <small>${esc(coach.result.how)}</small></div>` : ''}
     ${coach.msg ? `<div class="trMsg">${esc(coach.msg)}</div>` : ''}${body}
-    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${!coach.done ? `<button data-co="retry" class="ghost" title="After a missed part or a crash, put me back just before it (R does it by hand)">${store.get('coachRetry', true) ? '⟲ Auto-retry: on' : '⟲ Auto-retry: off'}</button>` : ''}${!coach.done && coach.fly ? '<button data-co="intro" class="ghost" title="The trick at full speed, then one slow pass with the steps. Shift-click turns it off for new tricks">▶ Intro</button>' : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button></div>`;
-  coachCaption(!coach.done && coach.phase === 'parts' && !coach.freeze ? { k: (coach.last || { done: coach.doneN || 0 }).done, n: coach.steps.length } : null);
+    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${!coach.done ? `<button data-co="retry" class="ghost" title="After a missed part or a crash, put me back just before it (R does it by hand)">${store.get('coachRetry', true) ? '⟲ Auto-retry: on' : '⟲ Auto-retry: off'}</button>` : ''}${!coach.done && coach.fly ? '<button data-co="intro" class="ghost" title="The trick at full speed, then one slow pass with the steps, then examples. Shift-click turns it off for new tricks">▶ Intro</button><button data-co="examples" class="ghost" title="Other flights of it: other pilots, other objects">🎞 Examples</button>' : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}${coach.done ? '' : '<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button>'}</div>`;
+  if (!coach.done && coach.phase === 'connect' && !coach.result) coachCaption({ label: 'CONNECT IT', k: 0, n: 1 }, `${coach.name} + any other trick, back to back.`);
+  else coachCaption(!coach.done && coach.phase === 'parts' && !coach.freeze ? { k: (coach.last || { done: coach.doneN || 0 }).done, n: coach.steps.length } : null);
   if (html !== box.__h) { box.__h = html; box.innerHTML = html; }   // it is checked 7 times a second: rewriting it each time ate clicks (a click needs the same button under the press and the release)
 }
+// the Tricktionary: a mark by each trained trick, and the ladder box on top (what is learned, what to train next)
+function coachMark(name) { const r = ((store.get('coachRungs', {})[name]) || {}).r || 0; return r ? ` <small class="coRung r${r}" title="Train: ${[1, 2, 3].map(k => (r >= k ? '✓ ' : '○ ') + COACH_RUNGS[k]).join(' · ')}">${r >= 3 ? '★ learned' : '▮'.repeat(r) + '▯'.repeat(3 - r) + ' ' + COACH_RUNGS[r]}</small>` : ''; }
+function coachLadderHtml() {
+  const L = coachLadder(window.TPW_TRICKS, store.get('coachRungs', {}), coachCan), nx = L.next.slice(0, 4); if (!L.total) return '';
+  return `<div class="coLadderBox"><b>🎓 Your ladder</b> · ${L.learned} of ${L.total} learned${nx.length ? ` · next up: ${nx.map(t => `<a href="#" class="watch train" data-train="${encodeURIComponent(t.name.trim())}" title="${esc(String(t.diff || '').trim())} · ${t.pts} pts">${esc(t.name.trim())}</a>${coachMark(t.name.trim())}`).join(' ')}` : ' · every one of them. Nice.'}<br><small>Each trick has three rungs: walk it (step by step), land it (live), connect it (into another trick). Kept in this browser only.</small></div>`;
+}
+const COACH_LINK = 3;   // s between the two calls of a connected pair (the combo's own 3 s)
 const esc0 = s => s;
 const coachCueAt = k => { const S0 = coach.sticks, sk = S0 && S0.at && S0.steps && S0.steps.length === coach.steps.length ? S0.at[k] : null; return coachCue(coach.name, coach.steps, k, sk); };   // judge messages are the game's own words (object names already escaped)
 document.addEventListener('click', e => {
@@ -383,6 +418,7 @@ document.addEventListener('click', e => {
   if (a === 'retry') { store.set('coachRetry', !store.get('coachRetry', true)); clearTimeout(coach.retryT); coach.retryT = null; renderCoach(); }
   if (a === 'skip') { coach.ask = null; coachTryDone(false, 'skipped'); }
   if (a === 'ghost') coachDemo();
+  if (a === 'examples') coachDemo('examples');
   if (a === 'intro') { if (e.shiftKey) { store.set('coachIntro', !store.get('coachIntro', true)); flashNote(store.get('coachIntro', true) ? 'Intro before each new trick: on' : 'Intro before each new trick: off'); } else coachDemo(true); }
   if (a === 'stop') { coachStop(); renderCoach(); coachLeave(false); }   // Free fly: back on the pilot's own map
   if (a === 'tricks' || a === 'done') { coachStop(); coachLeave(true); }   // owner: Done goes back to the Tricktionary
@@ -402,7 +438,7 @@ addEventListener('keydown', e => {
 // the stick overlay (the sticks a pilot would need: MV.detect's rows), and a panel follows the flight: the setup (speed,
 // height, what to fly at), then each step as it happens with what the sticks and throttle do there. Loops; Space pauses,
 // S slows it down, C changes the camera, Esc / Back returns to the training (at the start, disarmed).
-const demo = { steps: [], setup: '', cur: -1, view: 'fpv', thrT: -9 };
+const demo = { steps: [], setup: '', cur: -1, view: 'fpv', thrT: -9, why: [] };
 var coachIntroSeen = null;   // the trick whose intro was shown last (once per trick while the page is open; ▶ Intro in the panel plays it again)
 function demoObjects() {
   const P = drone.pos, out = [];
@@ -419,10 +455,36 @@ function demoHits(rows) { let worst = 0; const W = world.prims || [];
   for (const r of rows || []) { const x = r[1], y = r[2], z = r[3]; if (y < DEMO_CLEAR) worst = Math.max(worst, DEMO_CLEAR - y);
     for (const pr of W) { const a = pr.aabb; if (!a || x < a.min.x - DEMO_CLEAR || x > a.max.x + DEMO_CLEAR || y < a.min.y - DEMO_CLEAR || y > a.max.y + DEMO_CLEAR || z < a.min.z - DEMO_CLEAR || z > a.max.z + DEMO_CLEAR) continue; const d = S.primDist(pr, S.v3(x, y, z)); if (d < DEMO_CLEAR) worst = Math.max(worst, DEMO_CLEAR - d); } }
   return worst; }
-function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
-  const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0), objs = open ? [] : demoObjects().map(o => o.name);
+// one candidate flight, flown through its own detector here: null when it cannot be made (or, a pilot's flight, when the game does
+// not call it here or it holds more than the trick); else what it measured, whether it is called, and how far it cuts into the room
+function demoTry(name, T, seed) {
+  const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name]; let m = null;
+  try { m = T.lib ? MV.fromLibrary(name, world, seed, { object: T.obj || undefined, wobble: 0, ...(T.ex != null ? { ex: T.ex } : {}) }) : MV.make(name, world, seed, T.obj ? { object: T.obj, wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) { demo.why.push('no flight'); return null; }
+  if (T.lib && m.source !== 'library') { demo.why.push('not library'); return null; }
+  if (T.lib ? (m.object === 'open air' && !m.inPlace) : open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5 + (T.up || 0), 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
+  const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), bank: null }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass, bank: coach.bank }, orig = S.TrickDetector.prototype.update;
+  let got, j; Object.assign(coach, st);
+  try { S.TrickDetector.prototype.update = function (...a) { const r = orig.apply(this, a); const D = this; for (const kk of D.toks || []) { const id = kk.ax + kk.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: kk.ax, dir: kk.dir, raw: kk.raw, t0: kk.t0, t1: kk.t1, inv: kk.inv > (kk.n || 1) * 0.5 }); } }
+      for (const c of D.crossLog || []) { if (c.kind !== 'U' && c.kind !== 'O') continue; const id = c.kind + c.obj + c.t.toFixed(3); if (!coach.seenPass.has(id)) { coach.seenPass.set(id, 1); coach.passes.push({ kind: c.kind, t: c.t, obj: c.obj, name: c.name }); } } return r; };
+    got = MV.detect(m, world, tune.camTilt, { rows: true }); j = coachJudgeAny(coach.alts, 0, true); }
+  finally { S.TrickDetector.prototype.update = orig; Object.assign(coach, keep); }
+  const ok = got.some(e => e.name === name) || j.done >= j.steps.length;
+  // (an Example, `loose`, may turn further on the trick's own axes: a real flight's loop in two pieces, a flip carried on; never on another axis)
+  // a pilot's flight shown as THE example must hold the trick and nothing else (owner, 2026-11-21: the Invert Rewind example "has a
+  // roll in it at the end"): no other call, and no rotation of 100 deg or more outside the steps
+  if (T.lib && ok) { const axes = new Set(j.steps.filter(x => x.rot).map(x => typeof x.rot === 'string' ? x.rot[0] : x.rot.ax)), extra = st.toks.filter(k => Math.abs(k.raw) >= 100 && !(T.loose && axes.has(k.ax)) && !j.out.some(o => o && o.ok && o.t0 != null && k.t0 >= o.t0 - 0.2 && k.t1 <= o.t + 0.2)); if (extra.length || got.some(e => e.name !== name && e.name !== 'near' && e.name !== 'Crash' && !e.maybe)) { demo.why.push('more than the trick: ' + got.filter(e => e.name !== name).map(e => e.name).join('+') + (extra.length ? ' +rot' : '')); return null; } }
+  if (T.lib && !ok) { demo.why.push('not called: ' + got.map(e => e.name).join('+') + ' on ' + m.object); return null; }   // a learned flight the game does not call here (its reading leaned on the pilot's own object)
+  const R = { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib, ok, hit: demoHits(got.rows) }; demo.why.push((T.lib ? 'lib ' : 'bot ') + (ok ? 'ok' : 'uncalled') + ' hit ' + R.hit.toFixed(2) + ' on ' + R.object); return R;
+}
+// the objects a shown flight may use here: the station's own first (the Big Square for the loops), then the bars near it
+function demoSpots(name) {
+  const open = !coach.cross && !COACH_HAND[name], objs = open ? [] : demoObjects().map(o => o.name);
   if (world.id === ROOM && coach.on && coach.spots) { if (!open && coach.stn === 'big' && !objs.includes(coach.spots[0]) && world.objs.some(o => o.name === coach.spots[0] && o.obstacle)) objs.unshift(coach.spots[0]);   // the Big Square: where the pilot will fly it (owner: loops on large objects)
-    objs.sort((a, b) => (b === coach.spots[0]) - (a === coach.spots[0])); }   // the station's own obstacle first
+    objs.sort((a, b) => (b === coach.spots[0]) - (a === coach.spots[0])); }
+  return { open, objs };
+}
+function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
+  const MV = window.Maneuvers, seed0 = (Date.now() >>> 0), { open, objs } = demoSpots(name);
   // owner, 2026-11-20: real examples first. A confirmed example of the trick from the trick library (pilots' labels and the demo
   // GIFs, rebuilt as labels come in: MV.knowledge's `fromLibrary`), flown on this map; the hand-written script only when no learned
   // flight is called here
@@ -430,36 +492,48 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
   const tries = [...lib, ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o })), ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o }))];   /* the script twice over: a second seed when the first one touches something */
   let spare = null;
   for (let k = 0; k < tries.length; k++) {
-    const T = tries[k]; let m = null;
-    try { m = T.lib ? MV.fromLibrary(name, world, seed0 + k * 977, { object: T.obj || undefined, wobble: 0 }) : MV.make(name, world, seed0 + k * 977, T.obj ? { object: T.obj, wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
-    if (T.lib && m.source !== 'library') continue;
-    if (T.lib ? (m.object === 'open air' && !m.inPlace) : open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5, 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
-    const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), bank: null }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass, bank: coach.bank }, orig = S.TrickDetector.prototype.update, D0 = detector;
-    let got; Object.assign(coach, st);
-    try { S.TrickDetector.prototype.update = function (...a) { const r = orig.apply(this, a); const D = this; for (const kk of D.toks || []) { const id = kk.ax + kk.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: kk.ax, dir: kk.dir, raw: kk.raw, t0: kk.t0, t1: kk.t1, inv: kk.inv > (kk.n || 1) * 0.5 }); } }
-        for (const c of D.crossLog || []) { if (c.kind !== 'U' && c.kind !== 'O') continue; const id = c.kind + c.obj + c.t.toFixed(3); if (!coach.seenPass.has(id)) { coach.seenPass.set(id, 1); coach.passes.push({ kind: c.kind, t: c.t, obj: c.obj, name: c.name }); } } return r; };
-      got = MV.detect(m, world, tune.camTilt, { rows: true }); }
-    finally { S.TrickDetector.prototype.update = orig; }
-    const j = coachJudgeAny(coach.alts, 0, true), ok = got.some(e => e.name === name) || j.done >= j.steps.length;
-    Object.assign(coach, keep); void D0;
-    // a pilot's flight shown as THE example must hold the trick and nothing else (owner, 2026-11-21: the Invert Rewind example "has a
-    // roll in it at the end"): no other call, and no rotation of 100 deg or more outside the steps
-    if (T.lib && ok) { const extra = st.toks.filter(k => Math.abs(k.raw) >= 100 && !j.out.some(o => o && o.ok && o.t0 != null && k.t0 >= o.t0 - 0.2 && k.t1 <= o.t + 0.2)); if (extra.length || got.some(e => e.name !== name && e.name !== 'near' && e.name !== 'Crash' && !e.maybe)) continue; }
-    if (T.lib && !ok) continue;   // a learned flight the game does not call here (its reading leaned on the pilot's own object): next
-    const R = { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib, ok, hit: demoHits(got.rows) };
-    if (ok && !R.hit) return R;
+    const R = demoTry(name, tries[k], seed0 + k * 977); if (!R) continue;
+    if (R.ok && !R.hit) return R;
     if (!spare || (R.hit === 0) > (spare.hit === 0) || ((R.hit === 0) === (spare.hit === 0) && (R.ok > spare.ok || (R.ok === spare.ok && R.hit < spare.hit)))) spare = R;   // nothing clean yet: a clear flight before a called one, then the least touch
   }
   return spare;
+}
+// ---- Examples (owner, 2026-11-21, the tutorial's stage after the walkthrough: "then examples"). Other flights of the same trick, so
+// it is seen more than one way: confirmed flights of different pilots from the trick library (each names its pilot and the map it
+// was flown on; here it is laid over one of the room's objects), then the bot's own on other objects. Every one is called by the
+// game here, holds nothing but the trick and touches nothing. At most DEMO_EX of them, never the flight the intro already showed.
+const DEMO_EX = 3, DEMO_EX_TRIES = 12;
+function demoExamples(name, main) {
+  const MV = window.Maneuvers, seed0 = (Date.now() >>> 0) + 4099, { open, objs } = demoSpots(name), out = [], seen = new Set(); if (!MV) return out; if (demo.why.length > 200) demo.why = [];
+  if (main) seen.add(main.lib ? 'ex' + main.m.ex : 'obj' + main.object);
+  const cands = [], exs = (MV.kbCan && MV.kbCan(name) ? MV.kbExamples(name) : []).slice().sort((a, b) => (b.e.w || 0) - (a.e.w || 0)), byPilot = new Set(), firsts = [], rest = [];
+  for (const x of exs) { const who = (x.e.mo && x.e.mo.by) || x.e.p || '?'; (byPilot.has(who) ? rest : firsts).push(x); byPilot.add(who); }   // a different pilot each, before a second one of anybody's
+  [...firsts, ...rest].slice(0, 6).forEach((x, k) => cands.push({ lib: true, loose: true, ex: x.i, obj: objs.length ? objs[(k + 1) % objs.length] : null, key: 'ex' + x.i }));
+  if (open) cands.push({ lib: false, obj: null, key: 'open' }); else   /* (one of the bot's in open air: a second seed looks the same) */ for (const o of [...objs.slice(1), objs[0]].filter(Boolean)) cands.push({ lib: false, obj: o, key: 'obj' + o });
+  let n = 0;
+  for (const T of cands) { if (out.length >= DEMO_EX || n >= DEMO_EX_TRIES) break; if (seen.has(T.key)) continue; n++;
+    let R = demoTry(name, T, seed0 + n * 1291);
+    if (R && R.ok && R.hit && T.lib && n < DEMO_EX_TRIES) { n++; R = demoTry(name, { ...T, up: 3, obj: objs.length > 1 ? objs[(objs.indexOf(T.obj) + 1) % objs.length] : T.obj }, seed0 + n * 1291); }   // a pilot's flight that touches something here: once more, on the next object (higher up, in open air)
+    if (!R || !R.ok || R.hit) continue;
+    const key = R.lib ? 'ex' + R.m.ex : T.key; if (seen.has(key)) continue; seen.add(key); out.push(R); }
+  return out;
+}
+// "RodFPV, on Moose Knuckle Park. Here: over the Test Bar 2.2 m" (names are other people's text: the caption escapes them)
+function demoExLabel(f) {
+  const M = f.m, where = f.object === 'open air' || (!coach.cross && !COACH_HAND[coach.name]) ? 'in open air' : `on the ${f.object}`;
+  if (!f.lib) return `The bot, ${where}.`;
+  const who = M.by ? String(M.by) : 'A pilot', map = M.map && S.MAPS[M.map] ? S.MAPS[M.map].title || M.map : '';
+  return `${who}${map ? ', flown on ' + map : ''}. Here: ${where}.`;
 }
 const pct = v => Math.round(Math.abs(v) * 100);
 function stickWords(rows, a, b) {   // what the sticks did between a and b (rows: t … thr 11 … roll 24, pitch 25, yaw 26)
   const R = rows.filter(r => r[0] >= a && r[0] <= b); if (!R.length) return '';
   const avg = k => R.reduce((s, r) => s + r[k], 0) / R.length, peak = k => R.reduce((m, r) => Math.abs(r[k]) > Math.abs(m) ? r[k] : m, 0);
+  const side = ax => STICK_MODES[stickMode()].indexOf(ax) < 2 ? 'left' : 'right';   // which stick carries it in the pilot's transmitter mode
   const out = [], P = peak(25), Ro = peak(24), Y = peak(26), t0 = R[0][11], t1 = R[R.length - 1][11], tl = Math.min(...R.map(r => r[11])), th = Math.max(...R.map(r => r[11]));
-  if (Math.abs(P) > 0.15) out.push(`right stick <b>${P < 0 ? 'back' : 'forward'}</b> ${pct(P)}%`);
-  if (Math.abs(Ro) > 0.15) out.push(`right stick <b>${Ro > 0 ? 'right' : 'left'}</b> ${pct(Ro)}%`);
-  if (Math.abs(Y) > 0.15) out.push(`left stick <b>${Y > 0 ? 'right' : 'left'}</b> (yaw) ${pct(Y)}%`);
+  if (Math.abs(P) > 0.15) out.push(`${side('pitch')} stick <b>${P < 0 ? 'back' : 'forward'}</b> ${pct(P)}%`);
+  if (Math.abs(Ro) > 0.15) out.push(`${side('roll')} stick <b>${Ro > 0 ? 'right' : 'left'}</b> ${pct(Ro)}%`);
+  if (Math.abs(Y) > 0.15) out.push(`${side('yaw')} stick <b>${Y > 0 ? 'right' : 'left'}</b> (yaw) ${pct(Y)}%`);
   out.push(th - tl > 0.2 ? `throttle <b>${pct(t0)}% → ${pct(tl === t1 || t1 < t0 ? tl : th)}%${t1 !== tl && t1 !== th ? ' → ' + pct(t1) + '%' : ''}</b>` : `throttle about <b>${pct(avg(11))}%</b>`);
   return out.join(' · ');
 }
@@ -488,16 +562,23 @@ function demoStepAt(k) { const st = demo.steps; if (!st[k] || st[k].t0 == null) 
 function demoStep(d) { const at = demo.steps.map((x, k) => demoStepAt(k)); let now = -1; at.forEach((T, k) => { if (T != null && T <= judge.t + 0.02) now = k; });
   let k = now; if (d > 0) { do k++; while (k < at.length && at[k] == null); if (k >= at.length) return; } else if (now < 0) k = at.findIndex(T => T != null); else if (judge.t <= at[now] + 0.6) { do k--; while (k >= 0 && at[k] == null); if (k < 0) k = now; }
   if (k >= 0 && at[k] != null) demoSeek(at[k]); }
-function coachDemo(intro) {
-  const MV = window.Maneuvers; if (!MV || (!MV.LIB[coach.name] && !(MV.kbCan && MV.kbCan(coach.name) && MV.kbExamples(coach.name).length))) { if (!intro) flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
-  const f = intro && coach.fly ? coach.fly : demoFly(coach.name); if (!f) { if (intro) return; flash(`<b>NO SPOT FOR THE DEMO HERE</b><small>no bar the bot can use on this map: try the playground</small>`, 'near'); return; }
-  demoBuild(f); ghostOff(); drone.armed = false; $('#coachFreeze').classList.add('hide');
-  Object.assign(judge, { demo: coach.name, m: f.m, name: coach.name, events: f.got, rows: f.got.rows || null, t: 0, hold: 0, speed: 1, phase: 'demo', cam: 'fpv', source: f.lib ? 'library' : 'script', ex: f.lib ? f.m.ex : null, from: null, orb: null, keepOrb: false, intro: intro ? { phase: 'payoff', n: 0 } : null });
-  demo.view = 'fpv'; demo.thrT = -9; demo.T = f.m.T; demoView();
-  { const a = demo.steps.length ? Math.max(0, demo.steps[0].t0 - 1.2) : 0, b = demo.steps.length ? Math.min(f.m.T, demo.steps[demo.steps.length - 1].t1 + 1.4) : f.m.T; demo.a = intro ? a : 0; demo.b = intro ? b : f.m.T; judge.t = demo.a; }
+function demoLoad(f, trim) {   // put a flight in the player (trim: only the trick itself, from 1.2 s before its first step to 1.4 s after its last)
+  demoBuild(f);
+  Object.assign(judge, { m: f.m, events: f.got, rows: f.got.rows || null, t: 0, hold: 0, source: f.lib ? 'library' : 'script', ex: f.lib ? f.m.ex : null, from: null, orb: null, keepOrb: false });
+  demo.thrT = -9; demo.T = f.m.T;
+  { const a = demo.steps.length ? Math.max(0, demo.steps[0].t0 - 1.2) : 0, b = demo.steps.length ? Math.min(f.m.T, demo.steps[demo.steps.length - 1].t1 + 1.4) : f.m.T; demo.a = trim ? a : 0; demo.b = trim ? b : f.m.T; judge.t = demo.a; }
   const pts = []; for (let t = 0; t < f.m.T; t += 0.05) pts.push(f.m.at(t).pos); const C = S.mul(pts.reduce((a, p) => S.add(a, p), S.v3()), 1 / pts.length);
-  judge.look = C; judge.camPos = S.add(C, S.v3(4, 1.2, 4)); judge.lookS = null;
-  mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#coachBox').classList.add('hide'); $('#judgeBox').classList.remove('hide'); trailClear(); demoRender();
+  judge.look = C; judge.camPos = S.add(C, S.v3(4, 1.2, 4)); judge.lookS = null; trailClear();
+}
+function coachDemo(intro) {   // intro: true = the whole intro (full speed, slow pass, examples), 'examples' = the examples alone, falsy = Show me
+  const MV = window.Maneuvers; if (!MV || (!MV.LIB[coach.name] && !(MV.kbCan && MV.kbCan(coach.name) && MV.kbExamples(coach.name).length))) { if (!intro) flash('<b>NO DEMO YET</b><small>the bot has no flight of this trick</small>', 'near'); return; }
+  let f = intro && coach.fly ? coach.fly : demoFly(coach.name), I = intro ? { phase: 'payoff', n: 0 } : null;
+  if (intro === 'examples') { const list = demoExamples(coach.name, coach.fly); if (!list.length) { flash('<b>NO OTHER EXAMPLES YET</b><small>none that the game calls cleanly in this room</small>', 'near'); return; } I = { phase: 'examples', list, i: 0, only: true }; f = list[0]; }
+  if (!f) { if (intro) return; flash(`<b>NO SPOT FOR THE DEMO HERE</b><small>no bar the bot can use on this map: try the playground</small>`, 'near'); return; }
+  ghostOff(); drone.armed = false; $('#coachFreeze').classList.add('hide');
+  Object.assign(judge, { demo: coach.name, name: coach.name, speed: 1, phase: 'demo', cam: 'fpv', intro: I });
+  demo.view = 'fpv'; demoLoad(f, !!intro); demoView();
+  mode = 'judge'; show(null); $('#hud').classList.add('hide'); $('#coachBox').classList.add('hide'); $('#judgeBox').classList.remove('hide'); demoRender();
 }
 function demoBack() {
   const was = judge.intro; judge.intro = null; judge.demo = null; demo.view = 'fpv'; demoView(); coachCaption(null); demoArrows(); stopJudge(); mode = 'fly'; show(null); $('#hud').classList.remove('hide');
@@ -511,7 +592,10 @@ function demoLoop() {
   const I = judge.intro; if (!I) return true; I.n++;
   if (I.phase === 'payoff' && I.n < INTRO_PASSES) return true;
   if (I.phase === 'payoff') { I.phase = 'walk'; I.n = 0; judge.speed = INTRO_SLOW; demo.view = 'sticks'; demoView(); demo.cur = -2; demoRender(); return true; }
-  demoBack(); return false;
+  // after the slow pass: the examples, each once at full speed in the plain view, then the pilot's turn
+  if (I.phase === 'walk') { I.phase = 'examples'; I.list = demoExamples(coach.name, coach.fly); I.i = -1; judge.speed = 1; demo.view = 'fpv'; demoView(); }
+  I.i++; if (!I.list || I.i >= I.list.length) { demoBack(); return false; }
+  demoLoad(I.list[I.i], true); demo.cur = -2; demoRender(); return true;
 }
 function demoSeek(t) { judge.t = Math.max(0, Math.min(demo.T || judge.m.T, t)); judge.hold = 0; trailClear(); demo.cur = -2; demoTick(); }
 // sticks big / FPV small (owner, 2026-11-21, the tutorial's layout): the radio fills the screen, the flight is a small picture between
@@ -519,20 +603,22 @@ function demoSeek(t) { judge.t = Math.max(0, Math.min(demo.T || judge.m.T, t)); 
 function demoView() { const on = !!(judge.demo && mode !== 'fly' && demo.view === 'sticks'); document.body.classList.toggle('demoBig', on); const cv = $('#demoRadio'); if (cv) cv.classList.toggle('hide', !on); }
 function demoTick() {
   const I = judge.intro, quiet = I && I.phase === 'payoff';
-  if (demo.view === 'sticks' && !quiet) { $('#demoArrows').classList.add('hide'); demoRadio(); } else if (!quiet) demoArrows(); else $('#demoArrows').classList.add('hide');
+  if (demo.view === 'sticks' && !quiet) { $('#demoArrows').classList.add('hide'); demoRadio(); } else if (!quiet && !(I && I.phase === 'examples')) demoArrows(); else $('#demoArrows').classList.add('hide');   /* the examples are for watching: the small stick view only */
   const k = demo.steps.findIndex(d => judge.t >= d.t0 - 0.5 && judge.t <= d.t1 + 0.25), walk = I && I.phase === 'walk' && demo.steps.length, cur = k >= 0 ? k : (judge.t < ((demo.steps[0] || {}).t0 ?? 0) - 0.5 ? (walk ? 0 : -1) : Math.max(walk ? 0 : -1, demo.cur));   // the cue comes up half a second before its step
   if (cur !== demo.cur) { demo.cur = cur; demoRender(); }
-  coachCaption(!quiet && cur >= 0 ? { k: cur, n: demo.steps.length } : null, cur >= 0 ? demo.steps[cur].cue : '');
+  if (I && I.phase === 'examples' && I.list && I.list[I.i]) coachCaption({ label: `EXAMPLE ${I.i + 1} OF ${I.list.length}`, k: 0, n: 1 }, demoExLabel(I.list[I.i]));
+  else coachCaption(!quiet && cur >= 0 ? { k: cur, n: demo.steps.length } : null, cur >= 0 ? demo.steps[cur].cue : '');
   const bar = $('#demoBarFill'); if (bar) bar.style.width = (100 * judge.t / (demo.T || 1)).toFixed(1) + '%';
 }
 function demoRender() {
   const box = $('#judgeBox'); if (!box || !judge.demo) return; const vars = new Set(), I = judge.intro;
   if (I && I.phase === 'payoff') { box.innerHTML = `<div class="trHead"><small>🎓 THE ${esc(judge.demo).toUpperCase()}</small><span class="jStat">watch</span></div><div class="trLast">This is the trick, at full speed. Then one slow pass with the steps, then it is your turn.</div><div class="trFoot"><button data-demo="back" class="primary">Skip ▸ my turn</button></div>`; return; }
+  if (I && I.phase === 'examples') { const f = I.list[I.i]; box.innerHTML = `<div class="trHead"><small>🎞 EXAMPLES · ${esc(judge.demo)}</small><span class="jStat">${I.i + 1} of ${I.list.length}</span></div><div class="trLast">The same trick, flown other ways: other pilots, other objects. ${f ? esc(demoExLabel(f)) : ''}</div><div class="trFoot"><button data-demo="exnext" class="ghost">Next ▸</button><button data-demo="back" class="primary">${I.only ? '◂ My turn' : 'Skip ▸ my turn'}</button></div>`; return; }
   const cams = Object.entries(JCAMS).map(([k, v]) => `<button data-jcam="${k}" class="${judge.cam === k ? 'on' : 'ghost'}">${v}</button>`).join('');
   const marks = demo.steps.map((d, k) => `<i class="${k === demo.cur ? 'on' : ''}" style="left:${(100 * d.t0 / (demo.T || 1)).toFixed(1)}%" title="Step ${k + 1}"></i>`).join('');
   const sp = v => `<button data-demo="sp${v}" class="${judge.speed === v ? 'on' : 'ghost'}">×${v}</button>`;
   box.innerHTML = `<div class="trHead"><small>${I ? '🎓 STEP BY STEP' : '👻 SHOW ME'} · ${esc(judge.demo)}</small><span class="jStat">${judge.speed === 0 ? 'paused' : 'speed ×' + judge.speed}</span></div>
-    <div class="trRow jCam"><button data-demo="view" class="${demo.view === 'sticks' ? 'on' : 'ghost'}" title="The radio big and the flight small, or the other way round (B)">🎮 Sticks big</button>${demo.view === 'sticks' ? '' : cams}</div>
+    <div class="trRow jCam"><button data-demo="view" class="${demo.view === 'sticks' ? 'on' : 'ghost'}" title="The radio big and the flight small, or the other way round (B)">🎮 Sticks big</button>${demo.view === 'sticks' ? [1, 2, 3, 4].map(m => `<button data-demo="md${m}" class="${stickMode() === m ? 'on' : 'ghost'}" title="Transmitter mode ${m}: which stick carries what (it also sets the stick view while flying)">Mode ${m}</button>`).join('') : cams}</div>
     <div class="demoBar" id="demoBar" title="Click or drag to move through the flight"><b id="demoBarFill"></b>${marks}</div>
     <div class="demoTrans"><button data-demo="t0" title="From the start (Home)">⏮</button><button data-demo="sb" title="The step before (Shift+← or ,)">◂ Step</button><button data-demo="tb" title="Back half a second (←)">◂</button><button data-demo="pp" title="Pause / play (Space)">${judge.speed === 0 ? '▶' : '⏸'}</button><button data-demo="tf" title="On half a second (→)">▸</button><button data-demo="sf" title="The next step (Shift+→ or .)">Step ▸</button>${sp(0.25)}${sp(0.5)}${sp(1)}</div>
     ${demo.view === 'sticks' ? '' : `<div class="trLast ${demo.cur < 0 ? 'demoOn' : ''}"><b>Setup</b> · ${demo.setup}</div>`}
@@ -548,10 +634,11 @@ function demoRadio() {
   const W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d'), dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1), at = t => rows[Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / dtR)))];
   g.clearRect(0, 0, W, H); g.fillStyle = '#0d0e12'; g.fillRect(0, 0, W, H);
-  const rad = Math.min(W * 0.15, H * 0.26), cy = H * 0.56, pads = [[W * 0.2, cy, 'THROTTLE · YAW'], [W * 0.8, cy, 'PITCH · ROLL']];
+  const SM = STICK_MODES[stickMode()], NM = { thr: 'THROTTLE', yaw: 'YAW', pitch: 'PITCH', roll: 'ROLL' }, COL = { thr: 11, yaw: 26, pitch: 25, roll: 24 }, val = (q, a) => a === 'thr' ? q[11] * 2 - 1 : q[COL[a]];   // the pilot's transmitter mode (1-4)
+  const rad = Math.min(W * 0.15, H * 0.26), cy = H * 0.56, pads = [[W * 0.2, cy, `${NM[SM[1]]} · ${NM[SM[0]]}`], [W * 0.8, cy, `${NM[SM[3]]} · ${NM[SM[2]]}`]];
   // the body of the radio
   g.fillStyle = '#17191f'; g.beginPath(); if (g.roundRect) g.roundRect(W * 0.03, cy - rad * 1.4, W * 0.94, rad * 2.65, rad * 0.5); else g.rect(W * 0.03, cy - rad * 1.4, W * 0.94, rad * 2.65); g.fill(); g.lineWidth = 3; g.strokeStyle = '#000'; g.stroke();
-  const r = at(judge.t), xy = (q, k) => k === 0 ? [q[26], q[11] * 2 - 1] : [q[24], q[25]];
+  const r = at(judge.t), xy = (q, k) => [val(q, SM[k * 2]), val(q, SM[k * 2 + 1])];
   for (let k = 0; k < 2; k++) { const [cx, py, name] = pads[k];
     g.fillStyle = '#08090c'; g.beginPath(); g.arc(cx, py, rad, 0, 7); g.fill(); g.lineWidth = 4; g.strokeStyle = '#2b2e37'; g.stroke();
     g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - rad, py); g.lineTo(cx + rad, py); g.moveTo(cx, py - rad); g.lineTo(cx, py + rad); g.stroke();
@@ -564,7 +651,7 @@ function demoRadio() {
     // an arrow beside the gimbal, only for a stick that is moving (or, on the right stick, pushed well over)
     const r0 = at(judge.t - 0.12), [x1, y1] = xy(r, k), [x0, y0] = xy(r0, k), vx = (x1 - x0) / 0.12, vy = (y1 - y0) / 0.12;
     const big = (v, mv, hold) => Math.abs(mv) > 1.2 ? Math.sign(mv) : hold && Math.abs(v) > 0.45 ? Math.sign(v) : 0;
-    const ax = big(x1, vx, k === 1 || Math.abs(x1) > 0.45), ay = big(y1, vy, k === 1);
+    const ax = big(x1, vx, SM[k * 2] !== 'thr'), ay = big(y1, vy, SM[k * 2 + 1] !== 'thr');   // the throttle only while it moves; the others also while held well over
     const arrow = (dx, dy) => { const L = rad * 0.5, w = rad * 0.16, ox = k === 0 ? cx - rad * 1.2 : cx + rad * 1.2, oy = py, ex = dx ? cx + dx * rad * 0.2 : ox, ey = dx ? py + rad * 1.2 : oy;
       const bx = dx ? ex - dx * L / 2 : ox, by = dx ? ey : oy + dy * L / 2, tx = dx ? ex + dx * L / 2 : ox, ty = dx ? ey : oy - dy * L / 2, ux = (tx - bx) / L, uy = (ty - by) / L, nx = -uy, ny = ux;
       g.beginPath(); g.moveTo(bx + nx * w * 0.45, by + ny * w * 0.45); g.lineTo(tx - ux * w * 1.3 + nx * w * 0.45, ty - uy * w * 1.3 + ny * w * 0.45); g.lineTo(tx - ux * w * 1.3 + nx * w, ty - uy * w * 1.3 + ny * w); g.lineTo(tx, ty); g.lineTo(tx - ux * w * 1.3 - nx * w, ty - uy * w * 1.3 - ny * w); g.lineTo(tx - ux * w * 1.3 - nx * w * 0.45, ty - uy * w * 1.3 - ny * w * 0.45); g.lineTo(bx - nx * w * 0.45, by - ny * w * 0.45); g.closePath();
@@ -585,6 +672,8 @@ document.addEventListener('click', e => {
   const li = e.target.closest('[data-demostep]'); if (li && judge.demo) { const d = demo.steps[+li.dataset.demostep]; if (d) demoSeek(Math.max(0, d.t0 - 0.5)); return; }
   const b = e.target.closest('[data-demo]'); if (!b) return; e.stopPropagation(); b.blur(); const a = b.dataset.demo;
   if (a === 'back') demoBack();
+  if (a === 'exnext' && judge.intro && judge.intro.phase === 'examples') { if (demoLoop()) judge.t = demo.a || 0; return; }
+  if (a.startsWith('md')) { store.set('stickMode', +a.slice(2)); if (judge.rows) demo.steps.forEach(d => { d.sticks = stickWords(judge.rows, d.t0, d.t1); }); demoRender(); return; }
   if (a === 'view') { demo.view = demo.view === 'sticks' ? 'fpv' : 'sticks'; demoView(); demoRender(); }
   if (a === 'sb') demoStep(-1); if (a === 'sf') demoStep(1);
   if (a === 't0') demoSeek(0); if (a === 'tb') demoSeek(judge.t - 0.5); if (a === 'tf') demoSeek(judge.t + 0.5);
@@ -764,4 +853,4 @@ setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' |
   const F = coach.freeze, now = performance.now(), dt = Math.min(0.5, (now - F.last) / 1000); F.last = now; F.waited += dt;   // a long hitch counts at most half a second
   F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
   if (F.held >= COACH_HOLD) { coach.pauseSnap = { k: F.k, st: coachSnap() }; coach.atCk = false; coachFreezeEnd(); } else coachFreezeDraw(); }, 100);
-window.__pwCoach = { demoHit: () => coach.fly ? { hit: coach.fly.hit, ok: coach.fly.ok, lib: coach.fly.lib, object: coach.fly.object } : null, freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+window.__pwCoach = { exWhy: () => { demo.why = []; const l = demoExamples(coach.name, coach.fly); return { n: l.length, lib: l.filter(f => f.lib).length, why: demo.why.slice() }; }, st4: () => ({ tryN: coach.tryN, phase: coach.phase, done: coach.done, log: coach.log, chain: coach.chain, intro: judge.intro ? { phase: judge.intro.phase, i: judge.intro.i, n: judge.intro.list ? judge.intro.list.length : 0, list: (judge.intro.list || []).map(f => ({ lib: f.lib, ok: f.ok, hit: f.hit, object: f.object, label: demoExLabel(f) })) } : null }), tryDone: (ok, how) => coachTryDone(ok, how), event: n => coachEvent({ name: n }), demoHit: () => coach.fly ? { hit: coach.fly.hit, ok: coach.fly.ok, lib: coach.fly.lib, object: coach.fly.object } : null, freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)

@@ -396,6 +396,7 @@ function renderControls() {
       ${AX4.map(a => `<tr><td>${a}</td><td><select data-ax="${a}">${chOpt(P.axes[a].i)}</select></td><td><input type=checkbox data-inv="${a}" ${P.axes[a].inv ? 'checked' : ''}></td><td><div class="bar"><i id="lv_${a}"></i></div></td><td><button data-detect="${a}">Detect</button></td></tr>`).join('')}
       ${swRow('arm', P.arm)}${P.reset && P.reset.enabled === true ? swRow('reset', P.reset) : ''}
       <tr><td colspan="6"><label class="chk"><input type="checkbox" id="autoArmOn" ${autoArmOn() ? 'checked' : ''}> Take off without arming <small>(off by default: arm first, like a real quad. On: raising the throttle from rest arms it)</small></label></td></tr>
+      <tr><td colspan="6">Stick view <select id="stickModeSel">${[1, 2, 3, 4].map(m => `<option value="${m}" ${stickMode() === m ? 'selected' : ''}>Mode ${m}${m === 2 ? ' (throttle left)' : m === 1 ? ' (throttle right)' : ''}</option>`).join('')}</select> <small>(how the on-screen sticks and Train's radio are drawn; it does not change which channel does what)</small></td></tr>
       <tr><td colspan="6"><label class="chk"><input type="checkbox" id="resetSwOn" ${P.reset && P.reset.enabled === true ? 'checked' : ''}> Use a switch to reset to the start <small>(off: only the <kbd>R</kbd> key resets, and disarming just stops the motors)</small></label></td></tr>
       </table>
       ${!isR ? `<label class="chk"><input type=checkbox id="cThrC" ${P.thrCentered ? 'checked' : ''}> Spring-centred throttle (stick up from centre = throttle)</label>` : ''}
@@ -448,6 +449,7 @@ document.addEventListener('change', e => {
   if (t.dataset.swi) P[t.dataset.swi].i = +t.value;
   if (t.dataset.swtog !== undefined && t.matches('[data-swtog]')) P.arm.toggle = t.checked;
   if (t.id === 'autoArmOn') { store.set('autoArm', t.checked); return; }
+  if (t.id === 'stickModeSel') { store.set('stickMode', +t.value); return; }
   if (t.id === 'kbAssistOn') { store.set('kbAssist', t.checked); return; }
   if (t.id === 'resetSwOn') { P.reset = P.reset || { type: 'axis', i: 5, th: 0.5 }; P.reset.enabled = t.checked; saveInput(); renderControls(); return; }
   if (t.id === 'cThrC') P.thrCentered = t.checked;
@@ -479,9 +481,9 @@ function openTricks() {
   show('#tricksScreen'); const det = new Set(S.DETECTABLE), dr = S.DRAFT, watchOk = TRICK_WATCHERS.includes((pilotName() || '').trim().toLowerCase()), trainOk = TRICK_TRAINERS.includes((pilotName() || '').trim().toLowerCase());
   const cats = {}; for (const t of window.TPW_TRICKS) (cats[t.cat.trim()] = cats[t.cat.trim()] || []).push(t);
   const all = window.TPW_TRICKS.filter(t => t.pts > 0), nDet = all.filter(t => det.has(t.name.trim())).length, nDraft = all.filter(t => dr.has(t.name.trim())).length;
-  $('#tBody').innerHTML = `<p class="note">${nDet} of ${all.length} tricks have detection rules. <b>●</b> tested rule · <b>◐</b> new draft rule written from the TPW description — fly it in Trick Training so it can be confirmed. Points and execution rules come from the TPW calculator. Trick of the Week: Split-S, Powerloop, Matty Flip (first landing ×2, then ×1.5, then ×1).</p>` +
+  $('#tBody').innerHTML = `<p class="note">${nDet} of ${all.length} tricks have detection rules. <b>●</b> tested rule · <b>◐</b> new draft rule written from the TPW description — fly it in Trick Training so it can be confirmed. Points and execution rules come from the TPW calculator. Trick of the Week: Split-S, Powerloop, Matty Flip (first landing ×2, then ×1.5, then ×1).</p>` + (trainOk ? coachLadderHtml() : '') +
     Object.entries(cats).map(([c, ts]) => `<h3>${c}</h3><table class="tt">${ts.map(t => { const n = t.name.trim(), has = det.has(n), d = dr.has(n);
-      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${trainOk && coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then twice for real">🎓 train</a>` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
+      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${trainOk && coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then for real, then connected to another trick">🎓 train</a>${coachMark(n)}` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
 }
 
 

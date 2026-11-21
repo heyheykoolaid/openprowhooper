@@ -147,10 +147,14 @@ let lastRC = { thr: 0, roll: 0, pitch: 0, yaw: 0 };
 // ---- stick overlay (Mode 2: left = throttle/yaw, right = pitch/roll), with a short fading trail ("ghost" of the last
 // half second) so you can see how the sticks moved through a trick. Shared by the fly HUD, Video Review and Blackbox Replay.
 const stickUI = { on: store.get('ui.sticks', true), trail: [] };
+// which axis each stick carries, by transmitter mode (owner, 2026-11-21: "stick modes 1 / 3 / 4"): [left x, left y, right x, right y].
+// Only how the sticks are DRAWN (the stick view, Train's big radio): the radio's own channel mapping is set in Controls.
+const STICK_MODES = { 1: ['yaw', 'pitch', 'roll', 'thr'], 2: ['yaw', 'thr', 'roll', 'pitch'], 3: ['roll', 'pitch', 'yaw', 'thr'], 4: ['roll', 'thr', 'yaw', 'pitch'] };
+const stickMode = () => { const m = +store.get('stickMode', 2); return STICK_MODES[m] ? m : 2; };
 function drawSticks(cv, rc, trail, opts = {}) {
   if (!cv) return; const g = cv.getContext('2d'), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
   const s = Math.min(H - 12, W / 2 - 18), pads = [[W / 4, H / 2], [W * 3 / 4, H / 2]];
-  const xy = (r, k) => k === 0 ? [r.yaw, (r.thr ?? 0) * 2 - 1] : [r.roll, r.pitch];
+  const SM = STICK_MODES[stickMode()], val = (r, a) => a === 'thr' ? (r.thr ?? 0) * 2 - 1 : r[a], xy = (r, k) => [val(r, SM[k * 2]), val(r, SM[k * 2 + 1])];
   for (let k = 0; k < 2; k++) {
     const [cx, cy] = pads[k];
     g.fillStyle = 'rgba(8,10,14,0.55)'; g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5;
@@ -162,7 +166,9 @@ function drawSticks(cv, rc, trail, opts = {}) {
     const [px, py] = P(rc); g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill(); g.strokeStyle = '#111'; g.lineWidth = 1.5; g.stroke();
   }
   g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '10px ui-monospace, monospace'; g.textAlign = 'center';
-  g.fillText(opts.label || `THR ${Math.round((rc.thr ?? 0) * 100)}%`, W / 4, H - 1); g.fillText(opts.label2 || 'P/R', W * 3 / 4, H - 1);
+  if (stickMode() === 2) { g.fillText(opts.label || `THR ${Math.round((rc.thr ?? 0) * 100)}%`, W / 4, H - 1); g.fillText(opts.label2 || 'P/R', W * 3 / 4, H - 1); }
+  else { const nm = { thr: `THR ${Math.round((rc.thr ?? 0) * 100)}%`, yaw: 'YAW', pitch: 'PITCH', roll: 'ROLL' }, tail = (/\(.*\)/.exec(opts.label2 || '') || [''])[0];   // other transmitter modes: say what each stick carries
+    g.fillText(`${nm[SM[1]]} · ${nm[SM[0]]}`, W / 4, H - 1); g.fillText(`${nm[SM[3]]} · ${nm[SM[2]]}${tail ? ' ' + tail : ''}`, W * 3 / 4, H - 1); }
 }
 function stickHud(rc) {
   const cv = $('#stickView'); cv.classList.toggle('off', !stickUI.on); if (!stickUI.on) return;
