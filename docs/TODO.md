@@ -47,5 +47,6 @@ the video reference. Needs: a new relay kind (`challenge`), a board screen, the 
 8. **Stick display in Mode 1 / 3 / 4** for pilots who do not fly Mode 2.
 9. **A ladder**: tricks in an order, something earned per rung (RealFlight's lessons with unlockable rewards); a "learned" mark in the Tricktionary.
 Order to build: 1, 3, 4 (small), then 2 and 5 (the player), then 6, 7, 9; 8 with the stick view.
-- Split-S in open air: 5 confirmed labels have no object under it. Owner to decide: count it (a new open-air variant) or leave it to the book.
-- Review queue for every pilot (owner, 2026-11-21: "it makes sense"): needs a public, read-only relay route for a short list of moments (see the plan given in chat), a relay redeploy, and the sharing prompt's wording checked.
+- Learned witness: owner said hold another week (2026-11-21). Revisit after 2026-11-28 with a like-for-like comparison against the library on call windows.
+- Review queue for everyone: built 2026-11-21; needs the relay redeployed, then one check with a second pilot's account that a queue item opens and its verdict arrives as a vote.
+- Open-air Split-S: watch the first week's calls in the Review queue for false ones (a half roll then a dive).

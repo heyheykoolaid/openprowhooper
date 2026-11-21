@@ -19,4 +19,10 @@ r = det({ noTurn: true }).matchObstacle([tok('R', 1, 160, 0, 0.5), tok('P', 1, 7
 r = det({}).matchObstacle([tok('R', 1, 160, 0, 0.5), tok('P', -1, 120, 0.6, 1.4)], OU); ok('nose pushed down: not a Split-S', !r || r.name !== 'Split-S');
 r = det({}).matchObstacle([tok('R', 1, 160, 0, 0.5), tok('Y', 1, 150, 0.6, 1.4)], OU); ok('a big yaw in it: not a Split-S', !r || r.name !== 'Split-S');
 r = det({}).matchObstacle([tok('R', 1, 160, 0, 0.5), tok('P', 1, 70, 0.6, 1.4)], [OU[0], { ...OU[1], fwdDot: -0.8 }]); ok('ends flying backward: not a Split-S', !r || r.name !== 'Split-S');
+// open-air Split-S (owner, 2026-11-21: it counts): the bot's Split-S lifted 12 m clear of its object is called in open air; on the object it keeps the object
+require('../src/maneuvers.js'); { const MV = globalThis.Maneuvers, W = S.buildPlayground(); let open = 0, onObj = 0, N = 8;
+  for (let k = 1; k <= N; k++) { const m = MV.make('Split-S', W, k * 31 + 5, {}), at = m.at;
+    const up = MV.detect({ ...m, at: t => { const x = at(t); return { ...x, pos: S.v3(x.pos.x, x.pos.y + 12, x.pos.z) }; } }, W, 25); if (up.some(e => e.name === 'Split-S' && e.obstacle === 'open air')) open++;
+    const g = MV.detect(m, W, 25); if (g.some(e => e.name === 'Split-S' && e.obstacle && e.obstacle !== 'open air')) onObj++; }
+  ok(`open-air Split-S called (${open}/${N})`, open >= N - 1); ok(`on its object it is the object's (${onObj}/${N})`, onObj >= N - 1); }
 console.log(`splits: ${pass}/${pass + fail}`); process.exit(fail ? 1 : 0);

@@ -100,3 +100,8 @@ of a GitHub token in the browser. The relay commits `maps/official/<map>.json` t
 4. In the game: Map Editor → Official map → paste the same passphrase in "Owner key" → Save key → Publish for everyone.
 The key is checked by hash in constant time; five wrong keys make an address wait an hour. It is kept only in your
 browser (store 'ownerKey'). If it ever leaks, change the secret in Cloudflare (old key stops working at once).
+
+## The Review queue for every pilot (2026-11-21)
+`POST /review` is the desk's reading without a key, for any pilot's Review Hub: only shared flights whose pilot agreed to it
+(`summary.reviewOk`) and review labels, only the last 7 days, 240 requests an hour per address, never feedback, never writing.
+Nothing to set up: redeploy the worker. To close it, add the variable `REVIEW` = `0`.

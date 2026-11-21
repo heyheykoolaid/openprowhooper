@@ -771,6 +771,17 @@ run waits 10 s** (`hubDefer`: `reviewerBuild` now, `reviewerSend(pkg, quiet)` la
 sent); own runs save as before. "You judged N today" (`store 'hubDay'`), judged items marked (`store 'hubDone'`). The old screens
 (Flight desk, Judge the community, the board's ▶, Quick check, SKITTLES) all still work. `window.__pw.hub` for tests.
 
+**The Review queue is for every pilot** (owner, 2026-11-21: "it makes sense"; `deskVia()` 'guest', `deskRelayOn`, `reviewOkOn` / `reviewAsk` in
+dropoff.js; `POST /review` in tools/dropoff-worker.mjs; test/dropoff.js): any named pilot's hub lists the queue through the relay's
+`/review`: the desk's reading with no key and much less to read: shared flights and review labels only (never feedback), the last
+`REVIEW_DAYS` 7 days, `REVIEW_PER_HOUR` 240 requests an address, the flight's error log removed, and **only flights whose pilot agreed**
+(`summary.reviewOk`, sent when `store 'reviewOk'` is true: new pilots by the first-start prompt's wording and yes, pilots already
+sharing by a one-time notice, both by a checkbox under Share flight telemetry in Options). Flights sent before that carry no yes and are
+never served to guests. A guest never gets their own runs in the queue. Their verdicts are reviewer labels without the owner's
+signature, so tools/evidence.js counts them as votes, pooled three deep. `REVIEW=0` on the relay closes it; an older relay answers
+/review as a bad upload and the hub says the queue opens once the relay is updated. **Redeploy the relay.** Not checked end to end
+against a live relay with real flights (the relay's rules and the hub's rendering are tested separately).
+
 **Review badges** (owner, 2026-11-20; `BADGE_TIERS` / `badgeHtml` / `badgesLoad` in hub.js, `badgeAdd` / `reviewMoments` in
 tools/dropoff-worker.mjs, tools/badges.js, test/badges.js): a pixel Skittle next to a pilot's name by reviews made: 25 Red, 50 Orange,
 100 Yellow, 250 Green, 500 Purple, 1000 Taste the Rainbow (a striped Skittle that shimmers). One review per decided moment sent (✓,
@@ -911,6 +922,10 @@ pull, over then under ONE object, upside-down on the way, upright and flying for
 (`splitWitness`). 20 -> 22 of 34 found, bench 96.7 %, stress unchanged. The other 12 are not tolerance: 5 have no over-then-under of one
 object (flown in open air or only over something: by the book a Split-S needs the object; **owner to decide whether an open-air Split-S
 counts**), 2 are read as Double Dutch (under, over, under of the swing set), the rest sit beside a Matty, a 540 Split S, a Dive or a Perch.
+**Open-air Split-S counts** (owner, 2026-11-21: "yup"; `matchOpenSplit`, `SPLIT_DROP` 1 m): one half roll (120-250) to upside-down, a nose-up
+pull, out upright flying forward the other way at least 1 m lower, no hit, no other big rotation; called Split-S on 'open air' (`openAir`),
+like open loops and Mattys. An over-then-under of one object stays that object's. Confirmed labels found 22 -> 25 of 34 (two more are
+called just outside the label); the bot's Split-S lifted clear of its object 20/20; bench 96.7 %, stress unchanged. test/splits.js.
 **tools/probe-label.js printed calls at the wrong time** on flights whose trace does not start at 0 (it added the start twice): fixed.
 
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
@@ -928,6 +943,7 @@ community/witness-train.json (derived numbers only). tools/witness.py trains on 
 examples, 47 tricks; names the trick 78 % (every pilot in training) / 57 % (a pilot it never saw); confirmed vs rejected calls AUC
 0.75 / 0.70; the bot's clean Rolls held out score 40-47 % (14 % before; chance is ~2 %); a call it gives under 10 % is 36 % of the
 rejected and 10 % of the confirmed; bench with it voting 96.7 % (unchanged). **Still off: the owner decides** (a retrain never sets `live`).
+**Owner, 2026-11-21: hold off another week or so.** Do not turn it on; bring it up again with fresh numbers after 2026-11-28.
 **It does not vote yet** (`WITNESS.live` false; build.py ships the model only when `live` is true): the library's pilot examples
 are measured over whole label tiles (a Roll example runs 1.8-3.8 s), a live call over the detector's tight window, and a clean 360
 roll measured that way gets 14 %. Next: train on call-window signatures (the bot's flights and the shared flights' calls re-flown,

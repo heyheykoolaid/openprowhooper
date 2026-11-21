@@ -268,32 +268,46 @@ const DESK_DAY = '\\d{4}-\\d\\d-\\d\\d';
 const DESK_LIST = new RegExp(`^(telemetry/inbox/(flight|labels|feedback)(/${DESK_DAY})?|leaderboard(/${DESK_DAY})?)$`);
 const DESK_FILE = new RegExp(`^telemetry/inbox/(flight|labels|feedback)/${DESK_DAY}/\\d{10,16}-[0-9a-f]{8,32}\\.json$`);
 const DESK_RUN = new RegExp(`^leaderboard/${DESK_DAY}/\\d{8}-[a-z0-9-]{1,24}-[A-Za-z0-9_-]{1,40}-[a-z0-9]{6,40}-\\d{10,16}\\.json$`);
-async function deskApi(request, env, fetchImpl, reply, origin, allowed) {
+// POST /review { op, path | paths }: the same reading for EVERY pilot's Review queue (owner, 2026-11-21), with no key and much less
+// to read: only shared flights and review labels (never feedback), only the last REVIEW_DAYS days, only flights whose pilot agreed
+// to other pilots reviewing them (`summary.reviewOk`, set by the game after asking), without the flight's error log, and
+// REVIEW_PER_HOUR requests an address. Read-only like the desk; every file cleaned again. REVIEW=0 closes it.
+const REVIEW_DAYS = 7, REVIEW_PER_HOUR = 240;
+const REVIEW_LIST = new RegExp(`^telemetry/inbox/(flight|labels)(/(${DESK_DAY}))?$`), REVIEW_FILE = new RegExp(`^telemetry/inbox/(flight|labels)/(${DESK_DAY})/\\d{10,16}-[0-9a-f]{8,32}\\.json$`);
+const reviewDayOk = day => { const t = Date.parse(day + 'T00:00:00Z'); return Number.isFinite(t) && Date.now() - t < (REVIEW_DAYS + 1) * 86400000 && t - Date.now() < 2 * 86400000; };
+async function deskApi(request, env, fetchImpl, reply, origin, allowed, guest) {
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
-  if (!env.OWNER_KEY) return reply(503, 'owner key not set up: add the secret OWNER_KEY in Cloudflare');
+  if (guest && env.REVIEW === '0') return reply(503, 'the review queue is closed');
+  if (!guest && !env.OWNER_KEY) return reply(503, 'owner key not set up: add the secret OWNER_KEY in Cloudflare');
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000), text = await request.text();
   if (text.length > 20000) return reply(413, 'too large');
   let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
-  if (!j || typeof j.key !== 'string' || !j.key || j.key.length > 200 || !['list', 'get', 'getMany'].includes(j.op)) return reply(400, 'bad request');
-  const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
-  if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
-  if (!(await bump(env, `desk:${ip}:${hour}`, 3600, 3000))) return reply(429, 'slow down');
+  if (!j || typeof j !== 'object' || !['list', 'get', 'getMany'].includes(j.op)) return reply(400, 'bad request');
+  if (guest) { if (!(await bump(env, `review:${ip}:${hour}`, 3600, REVIEW_PER_HOUR))) return reply(429, 'slow down'); }
+  else { if (typeof j.key !== 'string' || !j.key || j.key.length > 200) return reply(400, 'bad request');
+    const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
+    if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
+    if (!(await bump(env, `desk:${ip}:${hour}`, 3600, 3000))) return reply(429, 'slow down'); }
+  const listOk = p => typeof p === 'string' && (guest ? (m => !!m && (!m[3] || reviewDayOk(m[3])))(REVIEW_LIST.exec(p)) : DESK_LIST.test(p));
+  const fileOk = p => typeof p === 'string' && (guest ? (m => !!m && reviewDayOk(m[2]))(REVIEW_FILE.exec(p)) : DESK_FILE.test(p) || DESK_RUN.test(p));
   const H = { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' }, ref = `?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`;
   const json = body => reply(200, JSON.stringify(body), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   if (j.op === 'list') {
-    if (typeof j.path !== 'string' || !DESK_LIST.test(j.path)) return reply(400, 'not a place the desk can list');
+    if (!listOk(j.path)) return reply(400, 'not a place the desk can list');
     try { const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${j.path}${ref}`, { headers: { ...H, 'Accept': 'application/vnd.github+json' } });
       if (r.status === 404) return json([]); if (!r.ok) return reply(502, `GitHub said ${r.status}`);
-      const L = await r.json(); return json(Array.isArray(L) ? L.filter(x => x && (x.type === 'file' || x.type === 'dir') && typeof x.name === 'string' && /^[A-Za-z0-9_.-]{1,160}$/.test(x.name)).map(x => ({ name: x.name, type: x.type, size: +x.size || 0 })) : []); }
+      const L = await r.json(); return json(Array.isArray(L) ? L.filter(x => x && (x.type === 'file' || x.type === 'dir') && typeof x.name === 'string' && /^[A-Za-z0-9_.-]{1,160}$/.test(x.name) && !(guest && x.type === 'dir' && !reviewDayOk(x.name))).map(x => ({ name: x.name, type: x.type, size: +x.size || 0 })) : []); }
     catch { return reply(502, 'could not reach GitHub'); }
   }
   const one = async path => {   // one file, cleaned again as what its folder says it is (null when it is not)
-    if (typeof path !== 'string') return null; const m = DESK_FILE.exec(path), kind = m ? m[1] : DESK_RUN.test(path) ? 'score' : null; if (!kind) return null;
+    if (!fileOk(path)) return null; const m = DESK_FILE.exec(path), kind = m ? m[1] : DESK_RUN.test(path) ? 'score' : null; if (!kind) return null;
     const r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}${ref}`, { headers: { ...H, 'Accept': 'application/vnd.github.raw+json' } });
     if (!r.ok) return null; let p; try { p = JSON.parse(await r.text()); } catch { return null; }
-    const verified = kind === 'labels' && p && p.ownerVerified === true, c = clean(kind, p); if (c && verified) c.ownerVerified = true; return c;
+    const verified = kind === 'labels' && p && p.ownerVerified === true, c = clean(kind, p); if (c && verified) c.ownerVerified = true;
+    if (guest && c && kind === 'flight') { if (!(c.summary && c.summary.reviewOk === true)) return null; delete c.summary.errors; }   // only flights whose pilot said other pilots may review them
+    return c;
   };
-  if (j.op === 'get') { if (typeof j.path !== 'string' || !(DESK_FILE.test(j.path) || DESK_RUN.test(j.path))) return reply(400, 'not a file the desk can read');
+  if (j.op === 'get') { if (!fileOk(j.path)) return reply(400, 'not a file the desk can read');
     try { const c = await one(j.path); return c ? json(c) : reply(404, 'no such file'); } catch { return reply(502, 'could not reach GitHub'); } }
   if (!Array.isArray(j.paths) || !j.paths.length || j.paths.length > 40) return reply(400, 'give 1 to 40 paths');   // a Worker may make 50 requests per call
   const out = {}; await Promise.all(j.paths.map(async path => { try { out[path] = await one(path); } catch { out[path] = null; } }));
@@ -331,6 +345,7 @@ async function handle(request, env, fetchImpl = fetch) {
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/owner')) return ownerCheck(request, env, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/desk')) return deskApi(request, env, fetchImpl, reply, origin, allowed);
+  if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/review')) return deskApi(request, env, fetchImpl, reply, origin, allowed, true);
   if (!allowed.includes(origin)) return reply(403, 'not from the game');
   if (+(request.headers.get('Content-Length') || 0) > MAX_BYTES) return reply(413, 'too large');
   const text = await request.text(); if (text.length > MAX_BYTES) return reply(413, 'too large');

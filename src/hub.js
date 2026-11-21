@@ -10,7 +10,7 @@ const HUB_SECS = [
   { id: 'mine', name: 'My runs', who: 'all', hint: 'Your own runs, newest first. Open one to say what the game got right and wrong.' },
   { id: 'quick', name: 'Quick check', who: 'all', hint: "The calls in your last run most worth an answer: ones you flagged, the trick library's guesses, the ones the game was least sure of." },
   { id: 'board', name: 'Board runs', who: 'all', hint: "Today's posted runs from other pilots. Watch one and say what each trick really was: your vote is pooled with everyone else's on that moment (it counts in full once three people agree)." },
-  { id: 'queue', name: 'Review queue', who: 'owner', hint: 'The most pressing unanswered moments in the shared flights: F flags, Q presses, the library\'s guesses, unsure calls, and moments other pilots voted on.' },
+  { id: 'queue', name: 'Review queue', who: 'all', hint: 'The moments in other pilots\' shared flights the game most needs a second opinion on: calls a pilot flagged, tricks it missed, its guesses and unsure calls, and moments other pilots voted on. Three pilots agreeing settles one.' },
   { id: 'flights', name: 'All flights', who: 'owner', hint: 'Every shared flight, newest first, with what was already said about it.' },
   { id: 'community', name: 'Community', who: 'owner', hint: 'Moments in recent board runs where today\'s detector disagrees with what was called then, or is unsure.' },
   { id: 'disagree', name: 'Disagreements', who: 'owner', hint: 'Moments where pilots\' labels do not agree. Each answer is shown; yours is pooled with theirs (the hub never picks a winner).' },
@@ -119,7 +119,7 @@ async function hubLoad(sec) {
   try {
     if (sec === 'mine' || sec === 'trick') { await hubKeepRun(); await hubLoadMine(); }
     if (sec === 'board' && (!LB.runs || LB.day !== lbToday())) { await lbLoad(lbToday()); if (!LB.runs) HUB.msg.board = LB.msg || 'The board could not be reached.'; }
-    if (['queue', 'flights', 'disagree', 'trick'].includes(sec) && hubOwner()) { if (!deskVia()) HUB.msg[sec] = 'Save your owner key in Options → Owner.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) { await deskDetails(); await deskLabels(); } if (desk.msg) HUB.msg[sec] = desk.msg; }
+    if (sec === 'queue' || (['flights', 'disagree', 'trick'].includes(sec) && hubOwner())) { if (!deskVia()) HUB.msg[sec] = hubOwner() ? 'Save your owner key in Options → Owner.' : anonOn() || !pilotName() ? 'The review queue needs a pilot name (Options).' : desk.noGuest ? 'The review queue opens for everyone once the game\'s relay is updated. Check back soon.' : 'The review queue could not be reached just now.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) { await deskDetails(); await deskLabels(); } if (desk.msg) HUB.msg[sec] = desk.msg; }
     if (sec === 'community' && hubOwner() && !JG.byMap[MAP_ID]) await judgeLoad(MAP_ID);
     if (sec === 'feedback' && hubOwner() && !desk.fb && deskVia()) await deskFeedback();
   } catch { HUB.msg[sec] = 'Could not load this just now.'; }
@@ -130,7 +130,7 @@ async function hubLoad(sec) {
 function hubOpen(sec) {
   if (sec && hubSecs().some(s => s.id === sec)) HUB.sec = sec; if (!hubSecs().some(s => s.id === HUB.sec)) HUB.sec = 'mine';
   HUB.nav = null; mode = 'menu'; show('#hubScreen'); hubRender(); hubLoad(HUB.sec);
-  if (hubOwner() && deskVia() && !desk.list && HUB.sec !== 'queue') hubLoad('queue');   // the queue's count shows in the side bar
+  if (deskVia() && !desk.list && HUB.sec !== 'queue') hubLoad('queue');   // the queue's count shows in the side bar
   if (!LB.runs && HUB.sec !== 'board') hubLoad('board');
 }
 function hubCount(id) { if (id === 'bot' || id === 'feedback' || id === 'trick') return id === 'feedback' && desk.fb ? desk.fb.length : null;

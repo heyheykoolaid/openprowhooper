@@ -133,6 +133,30 @@
     r = await desk({ key: KEY, op: 'list', path: 'leaderboard' }, '7.7.0.5', { origin: 'https://evil.example' }); check('other websites cannot use the desk', r.status === 403);
     r = await desk({ key: KEY, op: 'list', path: 'leaderboard' }, '7.7.0.6', { env: env() }); check('without OWNER_KEY the desk is closed', r.status === 503);
     check('the desk never writes', seen.every(c => !c.init || !c.init.method || c.init.method === 'GET')); }
+  { // every pilot's Review queue (POST /review, 2026-11-21): no key; flights whose pilot agreed and labels only, recent days only
+    const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10), D = day(1), OLD = day(30), seen = [];
+    const F = (d, n) => `telemetry/inbox/flight/${d}/179500000000${n}-0123456789abcdef.json`;
+    const files = { [F(D, 0)]: flight({ id: 'ok', summary: { reviewOk: true, errors: [{ m: 'boom' }], feel: { w: 1 } } }), [F(D, 1)]: flight({ id: 'private', summary: { feel: { w: 1 } } }), [F(D, 2)]: flight({ id: 'nosum' }),
+      [F(OLD, 3)]: flight({ id: 'old', summary: { reviewOk: true } }),
+      [`telemetry/inbox/labels/${D}/1795000000005-0123456789abcdef.json`]: { format: 'pro-whooper-flight-labels/1', flight: 'ok', pilot: 'p1', name: 'Rod', labels: [{ t: 1, actual: 'Flip', verdict: 'yes' }] },
+      [`telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json`]: { format: 'pro-whooper-feedback/1', at: 'now', text: 'private words', name: 'Rod' } };
+    const ghd = async (url, init) => { seen.push({ url, init }); const path = decodeURIComponent(url.split('/contents/')[1].split('?')[0]);
+      if (files[path]) return { ok: true, status: 200, text: async () => JSON.stringify(files[path]), json: async () => files[path] };
+      if (path === 'telemetry/inbox/flight') return { ok: true, status: 200, json: async () => [{ name: D, type: 'dir', size: 0 }, { name: OLD, type: 'dir', size: 0 }] };
+      return { ok: false, status: 404 }; };
+    const rev = (body, ip, o = {}) => handle(new Request('https://drop/review', { method: 'POST', headers: { Origin: o.origin ?? GAME, 'CF-Connecting-IP': ip }, body: JSON.stringify(body) }), o.env || env(), ghd);
+    let r = await rev({ op: 'list', path: 'telemetry/inbox/flight' }, '7.8.0.1'), L = await r.json(); check('review: recent days are listed with no key, old ones are not', r.status === 200 && L.length === 1 && L[0].name === D);
+    r = await rev({ op: 'get', path: F(D, 0) }, '7.8.0.1'); L = await r.json(); check('review: a flight whose pilot agreed is served, without its error log', r.status === 200 && L.id === 'ok' && L.summary.reviewOk === true && !L.summary.errors && L.summary.feel);
+    r = await rev({ op: 'getMany', paths: [F(D, 0), F(D, 1), F(D, 2), F(OLD, 3), `telemetry/inbox/labels/${D}/1795000000005-0123456789abcdef.json`, `telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json`] }, '7.8.0.1'); L = await r.json();
+    check('review: flights without the pilot\'s yes are not served', L[F(D, 0)] && L[F(D, 1)] === null && L[F(D, 2)] === null);
+    check('review: old flights and feedback are not served, labels are', L[F(OLD, 3)] === null && Object.values(L).filter(Boolean).length === 2 && !JSON.stringify(L).includes('private words'));
+    r = await rev({ op: 'get', path: `telemetry/inbox/feedback/${D}/1795000000006-0123456789abcdef.json` }, '7.8.0.2'); check('review: feedback cannot be read', r.status === 400);
+    r = await rev({ op: 'list', path: 'telemetry/inbox/feedback' }, '7.8.0.2'); const r2 = await rev({ op: 'list', path: 'leaderboard' }, '7.8.0.2'), r3 = await rev({ op: 'list', path: 'telemetry/inbox/flight/' + OLD }, '7.8.0.2'), r4 = await rev({ op: 'get', path: 'maps/official/moose.json' }, '7.8.0.2');
+    check('review: nothing else can be listed or read', r.status === 400 && r2.status === 400 && r3.status === 400 && r4.status === 400);
+    r = await rev({ op: 'list', path: 'telemetry/inbox/flight' }, '7.8.0.3', { origin: 'https://evil.example' }); check('review: other websites cannot use it', r.status === 403);
+    r = await rev({ op: 'list', path: 'telemetry/inbox/flight' }, '7.8.0.4', { env: { ...env(), REVIEW: '0' } }); check('review: REVIEW=0 closes it', r.status === 503);
+    let last; for (let i = 0; i < 245; i++) last = await rev({ op: 'list', path: 'telemetry/inbox/labels' }, '7.8.0.5'); check('review: an address is slowed after 240 requests an hour', last.status === 429);
+    check('review never writes', seen.every(c => !c.init || !c.init.method || c.init.method === 'GET')); }
 
   { // RaceGOW: shared tracks, best laps and their ghosts
     require('../src/tricks.js'); require('../src/sim.js'); const RG = require('../src/racegow.js');

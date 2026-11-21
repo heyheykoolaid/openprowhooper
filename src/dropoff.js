@@ -49,7 +49,7 @@ function telCapture(reason) {
     missed: recap.flags.filter(f => !sq.rows.length || f.t >= sq.rows[0][0] - 1).map(f => ({ t: f.t })) };
   const stamp = telStamp(recap); rows = sq.rows; recap.telUpTo = rows.length ? rows[rows.length - 1][0] : recap.telUpTo;
   // returns a promise that settles when the flight is packed, stored and has had its first try at a drop-off
-  return (async () => { try { await new Promise(r => setTimeout(r, 30)); for (const pc of pend) await telPieceSend(pc); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (sq.gaps.length) head.summary.gaps = sq.gaps; if (recap.pieceN) head.summary.pieces = recap.pieceN; try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
+  return (async () => { try { await new Promise(r => setTimeout(r, 30)); for (const pc of pend) await telPieceSend(pc); head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); if (sq.gaps.length) head.summary.gaps = sq.gaps; if (recap.pieceN) head.summary.pieces = recap.pieceN; try { const fe = feelSnap(); if (recap.feel0 && JSON.stringify(recap.feel0) !== JSON.stringify(fe)) fe.atStart = recap.feel0; head.summary.feel = fe; } catch {} if (errLog.length) head.summary.errors = errLog.map(e => ({ ...e })); if (reviewOkOn()) head.summary.reviewOk = true; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);   /* flown on the pilot's own layout: re-flies must use it */ head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); await telQueue('flight', stamp, head); const it = (await telList()).find(x => x.id === 'flight/' + stamp); return it && it.sent ? 'sent' : 'queued'; } catch (err) { telState.last = 'could not pack the last flight'; telRenderStatus(); return false; } })();
 }
 
 // ---- Long runs and walking away (owner, 2026-11-19). The replay keeps the last 8 minutes; with sharing on, what falls out of it
@@ -91,7 +91,7 @@ async function telPieceSend(pc) {
       events: recap.events.filter(e => e.t >= t0 && e.t <= t1 + 0.5).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec, clean: e.clean, obstacle: e.obstacle, conf: e.conf, flagged: e.flag ? true : undefined, maybe: e.maybe ? true : undefined })),
       missed: recap.flags.filter(f => f.t >= t0 && f.t <= t1).map(f => ({ t: f.t })) };
     head.summary = FlightLog.summary(rows, TRACE_COLS, TRACE_HZ); head.summary.piece = { of: pc.id, n: pc.n, t0, t1, gaps: pc.gaps };
-    try { head.summary.feel = feelSnap(); } catch {} if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);
+    try { head.summary.feel = feelSnap(); } catch {} if (store.get('reviewOk', null) === true) head.summary.reviewOk = true; if (MAP_EDITS) head.summary.layout = MAP_EDITS; if (S.officialEdits(MAP_ID)) head.summary.official = S.officialEdits(MAP_ID);
     head.trace = await FlightLog.pack(rows, TRACE_COLS, TRACE_HZ); pc.rows = null; await telQueue('flight', telStamp(pc) + '-p' + pc.n, head); return true;
   } catch { return false; }
 }
@@ -206,6 +206,7 @@ async function telPump(force) {
 function telOptionsHtml() {
   return `<label>Pilot name<input id="optPilotName" maxlength="24" value="${esc(pilotName())}" onkeydown="event.stopPropagation()"></label>
     <label class="chk big"><input type="checkbox" id="telOn" ${tel.on ? 'checked' : ''}> Share flight telemetry</label>
+    <label class="chk"><input type="checkbox" id="reviewOkOn" ${reviewOkOn() ? 'checked' : ''}> Let other pilots review moments from my shared runs <span class="note">(the Review queue: they see the replay, your pilot name and the game's calls, and say what the trick was)</span></label>
     <details class="optExplain"><summary>What it does, why, and what is not sent</summary>
       <p><b>What it does:</b> when a Free Fly or Session run ends, the game sends that run to the project: the flight path and attitude, your stick and throttle movements, every trick the game called (with how sure it was), your F / Q flags, and your craft, rates and camera tilt. About 30–80 KB a minute; runs under ${TEL.minSeconds} seconds and RaceGOW laps are skipped.</p>
       <p><b>Why:</b> real flying is what the trick rules are tuned against. Each flight can be re-flown through new versions of the detector to see which calls change, and the unsure calls show which rules need work. Tricks you confirm in Review also become examples in the game's trick library, which everyone's game compares moves against: only measurements of how the quad turned go in, never your name, id or the flight itself.</p>
@@ -228,7 +229,7 @@ function pilotAsk() {
   const el = $('#pilotModal'); el.classList.remove('hide');
   el.innerHTML = `<div class="fbPanel"><h3>Welcome, pilot. What's your name?</h3>
     <input type="text" id="pilotNameIn" maxlength="24" placeholder="your pilot name or handle" value="${esc(pilotName())}" onkeydown="event.stopPropagation()" autocomplete="off">
-    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Tricks you confirm may go into the game's trick library for everyone (how the quad moved, where and when on the map, and your pilot name, which Judge the Bot shows). You can change it any time in Options.</p><p class="note">Enabling telemetry will help us make this sim better for everyone, but will also cause a brief progress bar to appear when submitting data. Your contributions to the project would be greatly appreciated! Everyone benefits!</p>`}
+    ${tel.asked ? '' : `<p><b>Help make the trick detection better?</b> If you say yes, the game shares each run with the project when it ends: flight path, sticks, the tricks it called, your flags, and this name. No e-mail, nothing about your device. Tricks you confirm may go into the game's trick library for everyone (how the quad moved, where and when on the map, and your pilot name, which Judge the Bot shows). Other pilots can be shown moments from your shared runs in the Review queue (the replay, your name, the game's calls) to confirm what the trick was. You can change either any time in Options.</p><p class="note">Enabling telemetry will help us make this sim better for everyone, but will also cause a brief progress bar to appear when submitting data. Your contributions to the project would be greatly appreciated! Everyone benefits!</p>`}
     <p class="note" id="pilotMsg"></p>
     <div class="row">${tel.asked ? '<button data-pilot="go" class="primary">Let\'s fly</button>' : '<button data-pilot="yes" class="primary">Share my flights &amp; start</button><button data-pilot="no">Start without sharing</button>'}</div>
     <p class="note"><button data-pilot="anon" class="ghost">Continue without a name</button> nothing is collected or shared (no flights, reviews, votes or feedback). You can add a name or turn sharing on later in Options.</p></div>`;
@@ -238,6 +239,21 @@ function pilotAsk() {
 // Physics update 2 (2026-11-18): the motors now match BetaFPV's published thrust and spin up 2x faster, so pilots who had
 // lowered Weight (or raised Motor) to make up for it would overshoot. Asked once, only if a feel slider is off 100 %.
 const FEEL_NAMES = { weightFeel: 'Weight', dragFeel: 'Drag', washFeel: 'Prop wash', motorFeel: 'Motor response', sagFeel: 'Battery sag', groundFeel: 'Ground effect' };
+// The Review queue is open to every pilot (owner, 2026-11-21). A shared run is shown to other pilots only when its pilot has
+// said so: new pilots in the first-start prompt, pilots already sharing through this one-time notice (store 'reviewOk': true / false).
+const reviewOkOn = () => store.get('reviewOk', null) === true;
+function reviewAsk() {
+  if (!tel.on || anonOn() || store.get('reviewOk', null) != null || !$('#pilotModal').classList.contains('hide')) return false;
+  const el = $('#pilotModal'); el.classList.remove('hide');
+  el.innerHTML = `<div class="fbPanel"><h3>New: every pilot can help review</h3>
+    <p>The <b>Review queue</b> in the Review Hub is now open to all pilots: it shows the moments the game was least sure of in shared runs, and pilots say what the trick really was. Three pilots agreeing settles a moment.</p>
+    <p>May moments from <b>your</b> shared runs be shown there? Other pilots would see the replay, your pilot name and the game's calls. Nothing else changes about what you share.</p>
+    <p class="note">You can change this any time in Options.</p>
+    <div class="row"><button data-revok="yes" class="primary">Yes, include my runs</button><button data-revok="no">Keep mine out</button></div></div>`;
+  return true;
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-revok]'); if (!b) return; store.set('reviewOk', b.dataset.revok === 'yes'); $('#pilotModal').classList.add('hide'); });
+document.addEventListener('change', e => { if (e.target && e.target.id === 'reviewOkOn') store.set('reviewOk', !!e.target.checked); });
 function physAsk() {
   if (store.get('phys2Asked', false)) return;
   const off = Object.keys(S.FEEL_KEYS).filter(k => Number.isFinite(+tune[k]) && Math.abs(+tune[k] - (k === 'weightFeel' ? WEIGHT_DEF : 1)) > 0.001);
@@ -271,7 +287,7 @@ document.addEventListener('click', async e => {
     if (n.length < 2) { $('#pilotMsg').textContent = 'Pick a name with at least 2 characters.'; $('#pilotNameIn').focus(); return; }
     store.set('pilotName', n); pilotShowName(); $('#pilotModal').classList.add('hide');
     if (pb.dataset.pilot === 'warm') { startWarmup(); return; } if (pb.dataset.pilot === 'later') { store.set('warmAsked', true); return; }
-    if (pb.dataset.pilot !== 'go') { telSet(pb.dataset.pilot === 'yes'); if (tel.on) flashNote('Sharing is on — thank you! (Options to change)'); }
+    if (pb.dataset.pilot !== 'go') { if (pb.dataset.pilot === 'yes') store.set('reviewOk', true); telSet(pb.dataset.pilot === 'yes'); if (tel.on) flashNote('Sharing is on — thank you! (Options to change)'); }
     if (!store.get('fb.name', '')) store.set('fb.name', n); pilotWarmAsk(); return; }
   if (e.target.id === 'telExport') { const items = (await telList()).filter(x => x.body); if (!items.length) { telState.last = 'nothing waiting'; telRenderStatus(); return; }
     const ok = await saveFile(`pro-whooper-telemetry-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, JSON.stringify({ format: 'pro-whooper-telemetry-bundle/1', exported: new Date().toISOString(), items: items.map(x => ({ kind: x.kind, name: x.name, at: x.at, payload: JSON.parse(x.body) })) }));
@@ -299,7 +315,7 @@ addEventListener('pagehide', () => telCapture('closed'));
 // anything still waiting is tried again now and then (telPump keeps to its back-off)
 setInterval(async () => { if (document.hidden) return; if ((await telList()).some(x => !x.sent && (x.kind === 'feedback' || tel.on))) telPump(); }, 30000);
 pilotShowName();
-setTimeout(async () => { pilotShowName(); if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); } telPump(); }, 1200);
+setTimeout(async () => { pilotShowName(); if (!pilotName() && !anonOn()) pilotAsk(); else { pilotWarmAsk(); if ($('#pilotModal').classList.contains('hide')) physAsk(); if ($('#pilotModal').classList.contains('hide')) reviewAsk(); } telPump(); }, 1200);
 window.__pw.pilot = { get name() { return pilotName(); }, ask: () => pilotAsk(), get farts() { return isRidgeRipper(); }, crashSound: () => (isRidgeRipper() ? crashFart() : crashThud()) };
 window.__pw.tel = { get state() { return { ...tel, ...telState }; }, set: on => telSet(on), capture: r => telCapture(r), list: () => telList(), pump: () => telPump() };
 
@@ -514,21 +530,22 @@ async function lbWatch() {
 // Tabs: shared flights (with the labels already given on each) and pilots' feedback. Reviewing a flight sends reviewer
 // labels through the drop-off as before.
 const desk = { repo: store.get('deskRepo', 'heyheykoolaid/openprowhooper-data'), list: null, msg: '', busy: false, info: {}, tab: 'flights', labs: store.get('deskLabs3', {}), labDays: {}, fb: null, fbMsg: '', oldRelay: false };
-const deskVia = () => lbBase() && store.get('ownerKey', '') && (store.get('ownerOk', null) || {}).k && !desk.oldRelay ? 'relay' : gh.token ? 'github' : null;
+const deskVia = () => lbBase() && store.get('ownerKey', '') && (store.get('ownerOk', null) || {}).k && !desk.oldRelay ? 'relay' : gh.token ? 'github' : lbBase() && pilotName() && !anonOn() && !desk.noGuest ? 'guest' : null;   // 'guest': any named pilot, through the relay's public /review (flights whose pilots agreed, and labels; nothing else)
+const deskRelayOn = () => deskVia() === 'relay' || deskVia() === 'guest';
 async function deskRelay(body) {
-  const r = await fetch(`${lbBase()}/desk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: store.get('ownerKey', ''), ...body }) });
-  if (r.status === 400) { const t = await r.text(); if (/not a Pro Whooper upload/.test(t)) { desk.oldRelay = true; throw new Error('old'); } throw new Error('400'); }
+  const guest = deskVia() === 'guest', r = await fetch(`${lbBase()}/${guest ? 'review' : 'desk'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guest ? body : { key: store.get('ownerKey', ''), ...body }) });
+  if (r.status === 400) { const t = await r.text(); if (/not a Pro Whooper upload/.test(t)) { if (guest) { desk.noGuest = true; throw new Error('noguest'); } desk.oldRelay = true; throw new Error('old'); } throw new Error('400'); }
   if (!r.ok) throw new Error(String(r.status)); return r.json(); }
 async function deskGh(path, raw) { const r = await fetch(`https://api.github.com/repos/${desk.repo}/contents/${path}`, { headers: { 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'Authorization': `Bearer ${gh.token}`, 'X-GitHub-Api-Version': '2022-11-28' } }); if (!r.ok) throw new Error(String(r.status)); return raw ? r.text() : r.json(); }
 // a folder's entries ([{ name, type, size }]) or one file (raw: its text)
 const deskGet = async (path, raw) => {
-  if (deskVia() === 'relay') { try { const j = await deskRelay(raw ? { op: 'get', path } : { op: 'list', path }); return raw ? JSON.stringify(j) : j; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
+  if (deskRelayOn()) { try { const j = await deskRelay(raw ? { op: 'get', path } : { op: 'list', path }); return raw ? JSON.stringify(j) : j; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
   if (!gh.token) throw new Error('none'); return deskGh(path, raw); };
 // many files at once: { path: parsed file or null }
 async function deskGetMany(paths) { const out = {};
-  if (deskVia() === 'relay') { try { for (let i = 0; i < paths.length; i += 40) Object.assign(out, await deskRelay({ op: 'getMany', paths: paths.slice(i, i + 40) })); return out; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
+  if (deskRelayOn()) { try { for (let i = 0; i < paths.length; i += 40) Object.assign(out, await deskRelay({ op: 'getMany', paths: paths.slice(i, i + 40) })); return out; } catch (e) { if (e.message !== 'old' || !gh.token) throw e; } }
   for (const p of paths) { try { out[p] = JSON.parse(await deskGh(p, true)); } catch { out[p] = null; } } return out; }
-const deskErr = err => err.message === 'old' ? 'The drop-off relay is an older version: redeploy it in Cloudflare (docs/DROPOFF-SETUP.md) to read this with your owner key.' : err.message === 'none' ? 'Save your owner key in Options → Owner (or a GitHub token that can read the data repo).'
+const deskErr = err => err.message === 'noguest' ? 'The review queue opens for everyone once the game\'s relay is updated. Check back soon.' : deskVia() === 'guest' ? (err.message === '429' ? 'That is a lot of reviewing: give it a few minutes.' : 'The review queue could not be reached just now.') : err.message === 'old' ? 'The drop-off relay is an older version: redeploy it in Cloudflare (docs/DROPOFF-SETUP.md) to read this with your owner key.' : err.message === 'none' ? 'Save your owner key in Options → Owner (or a GitHub token that can read the data repo).'
   : err.message === '403' && deskVia() !== 'github' ? 'The relay did not accept your owner key.' : err.message === '429' ? 'Too many requests (or wrong keys) from here: wait a little.' : err.message === '401' ? 'GitHub rejected the token (expired or mistyped).' : err.message === '404' && deskVia() === 'github' ? `That token cannot see ${desk.repo}. It needs "Contents: Read" on that repository.` : 'Could not read the shared data just now.';
 function deskOpen() { if (!ghMenus()) return; show('#deskScreen'); deskRender(); if (desk.tab === 'feedback') { if (!desk.fb && deskVia()) deskFeedback(); } else if (!desk.list && deskVia()) deskLoad(); }
 async function deskLoad() {
@@ -578,7 +595,8 @@ function deskQueue() {
   // tricks other pilots have labelled (owner, 2026-11-19: "if tricks require multiple verifications, prioritize tricks that other
   // pilots have labelled"): a change to the detector needs evidence from 2+ pilots, so a verdict on such a trick can complete it
   const others = {}; for (const x of Object.values(desk.labs)) for (const T of (x && x.T) || []) if (T[3] && T[3] !== 'not a trick' && !mine(T[4])) (others[T[3]] = others[T[3]] || new Set()).add(String(T[4]).toLowerCase());
-  for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
+  const guestQ = deskVia() === 'guest';
+  for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; if (guestQ && mine(i.p.name)) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
     const near = (t, T) => t >= T[0] - 1.5 && t <= T[1] + 2.5, answered = t => spans.some(T => near(t, T) && !(T[2] && !mine(T[4]))), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
     const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), `; ${k} other pilot${k === 1 ? ' has' : 's have'} labelled ${n}`] : [0, '']; };
     for (const e of Array.isArray(p.events) ? p.events : []) { if (!e || !Number.isFinite(e.t) || typeof e.name !== 'string' || e.name === 'Crash' || e.name === 'near') continue;

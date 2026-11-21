@@ -1173,6 +1173,7 @@ function mergeProfiles(c, p) {
   if (c.air) o.air = Math.max(o.air || 0, c.air);
   return o;
 }
+const SPLIT_DROP = 1.0;   // m an open-air Split-S comes out below where its half roll began
 const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
 let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
 function matchTokens(pat, toks) {
@@ -2146,6 +2147,25 @@ class StreamDetector extends TrickDetector {
     }
     return best;
   }
+  // Open-air Split-S (owner, 2026-11-21: "yup", it counts; 5 confirmed labels had no object under them): one half roll to upside-down,
+  // a nose-up pull through, out upright and flying forward the other way, at least SPLIT_DROP lower than where the roll began. No
+  // other big rotation in it. An over-then-under of one object is that object's own Split-S (matchObstacle), and a pass over
+  // something gets a moment for the way back under it to show up.
+  matchOpenSplit(toks) {
+    const big = toks.filter(x => x.raw >= 90), R = big.filter(x => x.ax === 'R'); if (R.length !== 1) return null;
+    const r = R[0], P = toks.filter(x => x.ax === 'P' && x.dir > 0 && x.raw >= 45 && x.t0 >= r.t0 - 0.1);
+    if (r.raw < 120 || r.raw > 250 || !P.length || big.some(x => x !== r && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < r.t0 - 0.1))) return null;
+    const t1 = Math.max(r.t1, ...P.map(x => x.t1)); if (t1 - r.t0 > SPLIT_LOOK || this.time - t1 > 1.2) return null;
+    const near = this.crossLog.filter(c => (c.kind === 'U' || c.kind === 'O') && c.t > r.t0 - 0.6 && c.t < this.time + 0.1);
+    if (near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t))) return null;
+    if (near.some(o => o.kind === 'O' && !(o.hOver > 2.5)) && this.time - t1 < 0.6) return null;
+    const W = this.fbIn(r.t0 - 0.1, this.time); if (W.length < 6) return null;
+    const a = W[0], b = W[W.length - 1]; if (Math.min(...W.map(x => x.up.y)) > -0.5 || b.up.y < 0.6 || a.up.y < 0.5 || a.p.y - b.p.y < SPLIT_DROP) return null;
+    const h0 = Math.hypot(a.f.x, a.f.z), h1 = Math.hypot(b.f.x, b.f.z), sp = Math.hypot(b.v.x, b.v.z); if (h0 < 0.3 || h1 < 0.3 || sp < 1.2) return null;
+    if ((a.f.x * b.f.x + a.f.z * b.f.z) / (h0 * h1) > -0.5 || (b.v.x * b.f.x + b.v.z * b.f.z) / (sp * h1) < 0.3) return null;
+    if (this.contacts.some(c => c.t >= r.t0 && c.t <= this.time && (c.impact || 0) > 0.8)) return null;
+    return { name: 'Split-S', toks: toks.filter(x => x === r || P.includes(x)), err: 0.3, clen: 0.5, obstacle: 'open air', openAir: true };
+  }
   keptInView(pt, a, b, frac) { if (!pt) return true; const W = this.fbIn(a, b); if (!W.length) return false;
     return W.filter(x => this.viewOf(x.p, x.up, x.f, pt).ang < 75).length / W.length >= frac; }
   // fraction of frames with some part of the pole (from 1.5 m below you to 3 m above, within its length) near the middle of the picture
@@ -2452,7 +2472,7 @@ class StreamDetector extends TrickDetector {
         const orbit = this.orbiting();
         const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
         if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (tr.name === 'Yaw Spin' && suf[0].inv) continue;   /* a yaw spin flown upside-down is the Inverted Yaw Spin's middle, never the beginner trick */ if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
-        if (!orbit) { const ol = this.matchOpenLoop(suf); if (ol) out.push(ol); }
+        if (!orbit) { const ol = this.matchOpenLoop(suf) || this.matchOpenSplit(suf); if (ol) out.push(ol); }
         if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
           const m = matchTokens(pp, suf); if (!m) continue;
           const ok = this.reqOK(tr.req, suf); if (!ok) continue;
