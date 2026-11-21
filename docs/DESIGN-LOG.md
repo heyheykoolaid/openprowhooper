@@ -113,3 +113,7 @@ inverted, a wait (if that), then a pitch back to upright."
 - **Open**: the TPW book says "a 180 roll or flip", and the game still calls an Invert Rewind for the roll version. Should the roll
   version stop counting? Not changed without the owner's say (scoring follows the book).
 
+### Train hidden from most pilots (2026-11-21)
+The owner: "hide the training mode for anyone but heyheykoolaid, rodfpv and autismo". Done by pilot name, like the Tricktionary's
+watch button. It comes back for everyone when the owner says the mode is ready.
+

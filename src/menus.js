@@ -473,13 +473,15 @@ function updateMenuDevice() {
 // ---------------- trick list
 // "▶ watch" (the bot flies the trick for the pilot to judge) shows only for these pilots for now (owner, 2026-11-19)
 const TRICK_WATCHERS = ['heyheykoolaid', 'rodfpv'];
+// Train a trick is still being worked on: only these pilots see its button for now (owner, 2026-11-21)
+const TRICK_TRAINERS = ['heyheykoolaid', 'rodfpv', 'autismo'];
 function openTricks() {
-  show('#tricksScreen'); const det = new Set(S.DETECTABLE), dr = S.DRAFT, watchOk = TRICK_WATCHERS.includes((pilotName() || '').trim().toLowerCase());
+  show('#tricksScreen'); const det = new Set(S.DETECTABLE), dr = S.DRAFT, watchOk = TRICK_WATCHERS.includes((pilotName() || '').trim().toLowerCase()), trainOk = TRICK_TRAINERS.includes((pilotName() || '').trim().toLowerCase());
   const cats = {}; for (const t of window.TPW_TRICKS) (cats[t.cat.trim()] = cats[t.cat.trim()] || []).push(t);
   const all = window.TPW_TRICKS.filter(t => t.pts > 0), nDet = all.filter(t => det.has(t.name.trim())).length, nDraft = all.filter(t => dr.has(t.name.trim())).length;
   $('#tBody').innerHTML = `<p class="note">${nDet} of ${all.length} tricks have detection rules. <b>●</b> tested rule · <b>◐</b> new draft rule written from the TPW description — fly it in Trick Training so it can be confirmed. Points and execution rules come from the TPW calculator. Trick of the Week: Split-S, Powerloop, Matty Flip (first landing ×2, then ×1.5, then ×1).</p>` +
     Object.entries(cats).map(([c, ts]) => `<h3>${c}</h3><table class="tt">${ts.map(t => { const n = t.name.trim(), has = det.has(n), d = dr.has(n);
-      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then twice for real">🎓 train</a>` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
+      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${trainOk && coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then twice for real">🎓 train</a>` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
 }
 
 

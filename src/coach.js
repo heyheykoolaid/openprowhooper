@@ -374,7 +374,7 @@ function renderCoach() {
 const esc0 = s => s;
 const coachCueAt = k => { const S0 = coach.sticks, sk = S0 && S0.at && S0.steps && S0.steps.length === coach.steps.length ? S0.at[k] : null; return coachCue(coach.name, coach.steps, k, sk); };   // judge messages are the game's own words (object names already escaped)
 document.addEventListener('click', e => {
-  const b = e.target.closest('[data-co]'); if (!b) { const tb = e.target.closest('[data-train]'); if (tb) { e.preventDefault(); coachStart(decodeURIComponent(tb.dataset.train)); } return; }
+  const b = e.target.closest('[data-co]'); if (!b) { const tb = e.target.closest('[data-train]'); if (tb) { e.preventDefault(); if (TRICK_TRAINERS.includes((pilotName() || '').trim().toLowerCase())) coachStart(decodeURIComponent(tb.dataset.train)); } return; }
   e.stopPropagation(); b.blur(); const a = b.dataset.co;
   if (a === 'yes' || a === 'no' || a === 'mine') coachAnswer(a);
   if (a === 'again') { if (coach.done) coachStart(coach.name); else coachAnswer('again'); }

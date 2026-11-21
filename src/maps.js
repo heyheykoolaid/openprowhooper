@@ -262,7 +262,7 @@
         box(r, v3(hx, H + 0.1, -4), v3(SW, 0.03, 0.08), 'galv', 0, 0, 0, { noCollide: true });
         for (const zc of [-6.45, -1.55]) O('Skylight', 'gap', { gap: { c: v3(hx, H + 0.15, zc), n: v3(0, 1, 0), hu: SW - 0.1, hv: SL / 2 - 0.05, u: v3(1, 0, 0) } }); void SL; } }
     // ---- steel columns (the roof's), lights on the roof trusses
-    const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); neon(col, v3(x, 1.2, z), v3(0.21, 0.08, 0.21), 'plasticYellow'); }
+    const col = O('Steel Column', 'pole'); for (const x of [-20, -10, 0, 10, 20]) for (const z of [-10, 0, 10]) { if (x === 0 && z === 0) continue; pipe(col, v3(x, 0, z), v3(x, H, z), 0.2, 'paintBlue'); pipe(col, v3(x, 1.12, z), v3(x, 1.28, z), 0.215, 'plasticYellow', { noCollide: true, glow: true }); }   /* a round band on a round column (it was a square block) */
     // lights: three rows of high-bay fittings under the trusses (strong: the pilot found the first version far too dark)
     for (const x of [-25, -15, -5, 5, 15, 25]) for (const z0 of [-13, -1, 11]) { const z = Math.abs(x) === 15 && z0 === -1 ? 2.2 : z0, l = O('High-bay Light', 'deco', (x + z0) % 2 === 0 || z0 === -1 ? { light: v3(x, H - 1.0, z), lightColor: 0xeef5ff, lightPower: 60, lightRange: 30 } : {});   /* two hung in a skylight opening, from nothing: now just south of it */
       box(l, v3(x, H - 0.75, z), v3(1.3, 0.05, 0.18), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, H - 0.69, z), v3(1.35, 0.03, 0.24), 'metal'); for (const dx of [-1, 1]) pipe(l, v3(x + dx, H - 0.66, z), v3(x + dx, H, z), 0.01, 'chain', { noCollide: true }); }
