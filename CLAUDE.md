@@ -708,6 +708,19 @@ throttle), and play.js skips the physics while it is held; it is released (YOUR 
 the throttle moves 12 %. **The pause card** is a centred rounded card (next step, the axes as ✓ / ○ chips, a hold bar that counts
 down), and in the pauses the arrows are outlines that fill from the crosshair as far as the pilot's own stick pushes (green when
 there; `drawStickArrows(…, live)`), kept clear of the card and the stick view; no throttle gauge when the throttle is not asked for.
+**Rolling starts and instant retry** (owner, 2026-11-21; `coachEntry`, `coachPut`, `coach.ck` / `coach.bank`, `coachRetry`, `coachAgain`):
+every start and every new try puts the quad level at its station, already moving at the speed the bot brings into the first part
+(2-4.5 m/s at a bar, up to 6 in open air; `coachStepSticks().bot`), at the height that part needs (under the bar: 0.55 × its height; over: 0.7 m above; a gap: its
+middle; open air: 2.5-6 m, from 4 m further back); wall, tower, slab and pilot stations keep the hover. The same place every time
+(the bot's own position varies by seed and library example: only its speed, height and throttle are used). Held until a stick
+moves or the throttle sits within 0.12 of the bot's for 0.6 s (keyboard: a stick, W or S); a card says so (`#coachFreeze`). In the
+step-by-step tries each part the judge confirms leaves a **checkpoint**: the quad as it sat in the pause after that part (`pauseSnap`;
+as it is at that moment with the pauses off) and the parts done (`bank`: `coachJudge` takes them as done when the alternative's
+first steps match `bank.key`). A part flown wrong on its own axis (`out[i].retry`, once the rotation has had `COACH_JOIN` + 0.1 s to be
+carried on, or a missed over/under 1.6 s), a crash (0.8 s) or R goes back there with a fresh detector, into the pause before that
+part (pauses off: held until a stick moves); R at a checkpoint goes back to the start. A turn on another axis or the wrong object
+never rewinds. Live tries: a crash, "Not really" and "Go again" go back to the rolling start. ⟲ Auto-retry on / off in the panel
+(`store 'coachRetry'`, on; off, R still does it). test/coach.js (100 checks).
 **✓ Done** (owner, 2026-11-20) in the training panel goes back to the Tricktionary (Free fly stays on the finished panel). The panel is
 re-checked 7 times a second and only rewritten when it changed (`box.__h`; rewriting it each time ate clicks), and so is the main
 menu's device note (`updateMenuDevice`, every 2 s).

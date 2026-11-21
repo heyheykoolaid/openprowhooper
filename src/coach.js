@@ -75,7 +75,10 @@ function coachCollect() {
 // A rotation step takes the next finished token on its axis; a wrong one (too short, too long, wrong way) is reported
 // and the step keeps waiting for a better one (parts mode), so a step can be tried again without starting over.
 function coachJudge(steps, t0, strictObj) {
-  const out = steps.map(() => ({ ok: false, msg: '' })); let since = t0, i = 0, obj = null; const vars = {};
+  const out = steps.map(() => ({ ok: false, msg: '' }));
+  const B = coach.bank && coach.bank.key === JSON.stringify(steps.slice(0, coach.bank.n)) ? coach.bank : null;   // steps kept from before a retry
+  let since = t0, i = B ? B.n : 0, obj = B ? B.obj : null; const vars = B ? { ...B.vars } : {};
+  if (B) B.out.forEach((o, k) => { out[k] = { ...o }; });
   for (; i < steps.length; i++) {
     const s = steps[i];
     if (s.pass) {
@@ -95,16 +98,16 @@ function coachJudge(steps, t0, strictObj) {
       if (Math.abs(k.raw - p.deg) <= tol && dirOk && (!p.inv || k.inv)) { hit = k; break; }
       last = { k, why: !dirOk ? (p.ax === 'P' ? `wrong way: this part pitches ${p.dir.includes('+') ? 'back' : 'forward'}` : 'the other way round this time') : p.inv && !k.inv ? 'this one is done upside-down' : `yours was ${Math.round(k.raw)}°, aim for ${p.loose ? 'about ' : ''}${p.deg}°` };
     }
-    if (!hit) { if (last || other) out[i].msg = (last || other).why; break; }
+    if (!hit) { if (last || other) { out[i].msg = (last || other).why; out[i].retry = !!last; if (last) out[i].at = last.k.t1 + 1.0; } break; }
     if (/[ab]/.test(p.dir)) { const v = p.dir.slice(-1), w = p.dir[0] === '-' ? -1 : 1; if (vars[v] === undefined) vars[v] = hit.dir * w; }
     // the passes made during this rotation
     const miss = (s.during || []).filter(kd => !coach.passes.some(c => c.kind === kd && c.t >= hit.t0 - 1.0 && c.t <= hit.t1 + 1.5 && (obj == null || c.obj === obj)));
-    if (miss.length) { out[i].msg = `the ${coachDeg(p.deg)} ${{ R: 'roll', P: 'flip', Y: 'yaw spin' }[p.ax]} was good (${Math.round(hit.raw)}°) but it didn't go ${miss[0] === 'O' ? 'over' : 'under'} the object`; break; }
+    if (miss.length) { out[i].msg = `the ${coachDeg(p.deg)} ${{ R: 'roll', P: 'flip', Y: 'yaw spin' }[p.ax]} was good (${Math.round(hit.raw)}°) but it didn't go ${miss[0] === 'O' ? 'over' : 'under'} the object`; out[i].retry = true; out[i].at = hit.t1 + 1.6; break; }
     if (obj == null) { const c = coach.passes.find(c => (s.during || []).includes(c.kind) && c.t >= hit.t0 - 1.0 && c.t <= hit.t1 + 1.5); if (c) obj = c.obj; }
     const off = Math.abs(hit.raw - p.deg), grade = off <= 30 && !hit.pieces ? 'clean' : off <= tol * 0.6 && !hit.pieces ? 'a bit off' : 'sloppy, still counts';
     out[i] = { ok: true, msg: `${Math.round(hit.raw)}° · ${grade}${hit.pieces ? ' (in ' + hit.pieces + ' pieces: try it in one go next)' : ''}`, t: hit.t1, t0: hit.t0 }; since = hit.t0 + Math.min(0.5, (hit.t1 - hit.t0) * 0.5);
   }
-  return { out, done: i, objName: obj != null ? (coach.passes.find(c => c.obj === obj) || {}).name : null };
+  return { out, done: i, obj, vars, objName: obj != null ? (coach.passes.find(c => c.obj === obj) || {}).name : null };
 }
 // ---- the session
 // ---- The Training Room (owner, 2026-11-20): Train always happens there. From any other map it stores the trick and where
@@ -141,49 +144,105 @@ setTimeout(() => {   // arriving: start the trick that brought us here, or reope
 // owner, 2026-11-20: "you should always start in the air armed, and moving the sticks takes control". In the Training Room
 // every start (Train, R, back from Show me) puts the quad 1.5 m up at its station, armed, and holds it there (play.js skips
 // the physics like a pause) until it is armed and a stick moves: then it is all yours.
-function coachHoldStart() {
-  if (!coach.on || world.id !== ROOM) return; const sp = activeWorld.spawn;
-  drone.reset(sp); drone.pos = S.v3(sp.pos.x, sp.pos.y + 1.5, sp.pos.z); coach.hold = { thr0: null, at: performance.now() };
+// owner, 2026-11-21: "rolling starts" and "instant retry". (1) Every start puts the quad where the bot's own flight of the trick
+// on this station is ~0.8 s before its first part, at the bot's speed and attitude (`coach.entry`, from `coachStepSticks`), held
+// until the throttle is set near the bot's or a stick moves: the pilot flies the trick, not the run-up. No usable flight: the
+// old hover, 1.5 m up. (2) In the step-by-step tries every confirmed part leaves a checkpoint (`coach.ck`: the quad as it was in
+// the pause after that part, and the parts done so far as `bank`); a part flown wrong, a crash or R goes back to it (the
+// detector starts fresh; the judge takes the banked parts as done), R again goes back to the start.
+const coachSnap = () => ({ pos: { ...drone.pos }, vel: { ...drone.vel }, q: { ...drone.q }, w: { ...drone.w }, motorW: drone.motorW.slice() });
+function coachPut(s, keep) {
+  drone.reset(activeWorld.spawn, keep); drone.pos = S.v3(s.pos.x, s.pos.y, s.pos.z); drone.vel = S.v3(s.vel.x, s.vel.y, s.vel.z);
+  drone.q = { w: s.q.w, x: s.q.x, y: s.q.y, z: s.q.z }; drone.w = S.v3(s.w.x, s.w.y, s.w.z); if (s.motorW) drone.motorW = s.motorW.slice();
+}
+// the rolling start: level, at the station, heading for its obstacle, at the speed the bot brings into the first part and the
+// height that part needs (under the bar: a little over half way up to it; over it: 0.7 m above; a gap: its middle; open air:
+// the bot's height, at least 2.5 m, from 4 m further back). The same place every time. Wall, tower, slab and pilot stations
+// keep the hover start.
+function coachEntry(stn, bot) {
+  const sp = world.spawn, yaw = sp.yaw || 0, fw = S.qrot(S.qaxis(S.v3(0, 1, 0), yaw), S.v3(0, 0, -1)), name = COACH_SPOTS[stn][0], cl = (x, a, b) => Math.max(a, Math.min(b, x));
+  const o = world.objs.find(x => x.name === name), gap = world.objs.find(x => x.name === name + ' opening' && x.gap), bv = bot ? bot.v : null;
+  let y, v, back = 0, obj = name;
+  if (stn === 'bar' && o && o.obstacle) { let first = null; for (const st of coach.steps) { first = st.pass || (st.during && st.during[0]) || null; if (first) break; }
+    y = first === 'O' ? o.obstacle.over + 0.7 : Math.max(0.6, o.obstacle.under * 0.55); v = cl(bv ?? 3.5, 2, 4.5); }
+  else if (stn === 'gap' && gap) { y = gap.gap.c.y; v = cl(bv ?? 3, 2, 4); }
+  else if (stn === 'pole') { y = 1.5; v = cl(bv ?? 3, 2, 5); }
+  else if (stn === 'open') { y = cl(bot ? bot.y : 3, 2.5, 6); v = cl(bv ?? 4, 0, 6); back = 4; obj = 'open air'; }
+  else return null;
+  return { pos: { x: sp.pos.x - fw.x * back, y, z: sp.pos.z - fw.z * back }, q: S.qaxis(S.v3(0, 1, 0), yaw), vel: { x: fw.x * v, y: 0, z: fw.z * v }, w: { x: 0, y: 0, z: 0 }, thr: bot ? bot.thr : 0, obj };
+}
+function coachHoldStart(ck) {
+  if (!coach.on || world.id !== ROOM) return; const sp = activeWorld.spawn, E = coach.entry || null;
+  if (ck) coachPut(ck.st, true); else if (E) coachPut(E, false); else { drone.reset(sp); drone.pos = S.v3(sp.pos.x, sp.pos.y + 1.5, sp.pos.z); }
+  coach.hold = { thr0: null, at: performance.now(), roll: ck ? null : E, ck: ck || null, near: null };
   if (!drone.armed) setArmed(true, true);   // armed whatever the throttle says: the hold keeps it still until a stick moves
 }
 function coachHeld(rc) {
   const H = coach.hold; if (!H || !coach.on || mode !== 'fly') return false;
   if (H.thr0 == null) H.thr0 = rc.thr;
-  const moved = Math.max(Math.abs(rc.roll || 0), Math.abs(rc.pitch || 0), Math.abs(rc.yaw || 0)) > 0.2 || Math.abs((rc.thr || 0) - H.thr0) > 0.12;
-  if (drone.armed && moved && performance.now() - H.at > 400) { coach.hold = null; flash('<b>YOUR CONTROL</b>'); return false; }
+  const now = performance.now(), E = H.roll, thrSet = E && E.thr > 0.15 && inputCfg.mode !== 'keyboard';
+  let moved = Math.max(Math.abs(rc.roll || 0), Math.abs(rc.pitch || 0), Math.abs(rc.yaw || 0)) > 0.2;
+  if (thrSet) { H.thrOk = Math.abs((rc.thr || 0) - E.thr) <= 0.12; if (!H.thrOk) H.near = null; else if (H.near == null) H.near = now; moved = moved || (H.near != null && now - H.near > 600); }   // a rolling start: set the throttle and you are off
+  else if (inputCfg.mode === 'keyboard' && E) moved = moved || !!(keys.KeyW || keys.KeyS);   // the keyboard's height hold moves the throttle by itself
+  else moved = moved || Math.abs((rc.thr || 0) - H.thr0) > 0.12;
+  if (drone.armed && moved && now - H.at > 400) { coach.hold = null; coach.atCk = false; if (!coach.freeze) $('#coachFreeze').classList.add('hide'); flash(E ? '<b>GO!</b>' : '<b>YOUR CONTROL</b>'); return false; }
   return true;
 }
+setInterval(() => {   // the card while the quad is held at a start or a checkpoint
+  const H = coach.hold, el = $('#coachFreeze'); if (!H || !coach.on || mode !== 'fly' || coach.freeze) return;
+  const E = H.roll, n = H.ck ? H.ck.bank.n : 0, st = H.ck ? coach.steps[n] : null, kb = inputCfg.mode === 'keyboard';
+  const pctN = H.near != null ? Math.min(100, Math.round((performance.now() - H.near) / 6)) : 0;
+  const html = H.ck && st ? `<small>BACK BEFORE STEP ${n + 1} OF ${coach.steps.length}</small><b>${coachStepText(st, new Set())}</b><div class="cfBar"><em>move a stick to go · R: back to the start</em></div>`
+    : E ? `<small>READY · ROLLING START</small><b>${Math.hypot(E.vel.x, E.vel.z) < 0.5 ? `You start hovering ${E.pos.y.toFixed(1)} m up` : `You start at ${Math.hypot(E.vel.x, E.vel.z).toFixed(1)} m/s${E.obj !== 'open air' ? `, lined up on the ${esc(E.obj)}` : `, ${E.pos.y.toFixed(1)} m up`}`}</b>
+      ${E.thr > 0.15 && !kb ? `<div class="cfSticks"><i class="${H.thrOk ? 'ok' : ''}">${H.thrOk ? '✓' : '○'} throttle ~${Math.round(E.thr * 100)}%</i></div>` : ''}<div class="cfBar"><i style="width:${pctN}%"></i><em>${E.thr > 0.15 && !kb ? 'set the throttle, or move a stick, to go' : 'move a stick to go'}</em></div>`
+    : `<small>READY</small><b>Move a stick to take control</b>`;
+  if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide');
+}, 100);
 function coachStart(name) {
   const plan = coachPlan(name); if (!plan) return;
   const t = window.TPW_TRICKS.find(x => x.name.trim() === name) || { name, cat: '', desc: '' };
   if (world.id !== ROOM) { coachGoRoom(name); return; }
   const stn = coachStation(name, t.cat, plan), sp = COACH_SPOTS[stn];
   world.spawn = { pos: S.v3(sp[1], 0.03, sp[2]), yaw: sp[3] }; coach.room = true;
+  coach.ck = null; coach.bank = null; coach.entry = null; clearTimeout(coach.retryT); coach.retryT = null;
   startFly(false);
-  Object.assign(coach, { on: true, sticks: undefined, freeze: null, doneN: 0, name, t, steps: plan.steps, alts: plan.alts, cross: plan.cross, end: plan.end, tryN: 1, phase: 'parts', msg: '', result: null, ask: null, log: [], toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), obj: null, done: false });
-  coach.spots = [COACH_SPOTS[stn][0]]; coachNewTry(); coachHoldStart(); renderCoach();
+  Object.assign(coach, { on: true, stn, sticks: undefined, entry: null, ck: null, bank: null, pauseSnap: null, atCk: false, freeze: null, doneN: 0, name, t, steps: plan.steps, alts: plan.alts, cross: plan.cross, end: plan.end, tryN: 1, phase: 'parts', msg: '', result: null, ask: null, log: [], toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), obj: null, done: false });
+  coach.spots = [COACH_SPOTS[stn][0]]; coachNewTry();
+  drone.reset(world.spawn); coach.sticks = coachStepSticks(); coach.entry = coachEntry(stn, coach.sticks && coach.sticks.bot);   // the bot's flight from this station: the pause arrows and the rolling start
+  coachHoldStart(); renderCoach();
   flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, judged live</small>`);
 }
 function coachNewTry() {
   coach.phase = coach.tryN <= COACH_PARTS ? 'parts' : 'live'; coach.since = detector.time; coach.steps = coach.alts[0]; coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.result = null; coach.last = null;
+  coach.ck = null; coach.bank = null; coach.pauseSnap = null; coach.atCk = false; coach.msg = '';
   coachCollect(); coach.since = detector.time;
 }
 // the detector's clock restarts with a reset (R, a new flight): start the try's window again and forget what was measured
-function coachClock() { coachHoldStart(); coach.doneN = 0; coach.live = null; coach.preFroze = null; if (coach.freeze) coachFreezeEnd(); coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; if (coach.ask) coach.ask = null; }
+function coachClock(start) {
+  clearTimeout(coach.retryT); coach.retryT = null;
+  const ck = !start && coach.on && coach.phase === 'parts' && !coach.result && !coach.done && coach.ck && !coach.atCk ? coach.ck : null;   // R at a checkpoint: back to the start
+  if (!ck) { coach.ck = null; coach.pauseSnap = null; } coach.bank = ck ? ck.bank : null; coach.atCk = !!ck;
+  if (coach.freeze) coachFreezeEnd(); coachHoldStart(ck); coach.doneN = ck ? ck.bank.n : 0; coach.live = null; coach.preFroze = null;
+  coach.toks = []; coach.passes = []; coach.seenTok = new Map(); coach.seenPass = new Map(); coach.since = 0; coach.last = null; if (coach.ask) coach.ask = null;
+  if (ck) { coach.steps = ck.steps; if (store.get('coachPauses', true)) { coachFreezeStart(ck.bank.n); if (coach.freeze) { coach.hold = null; coach.scale = 0; coach.preFroze = ck.bank.n; } } }   // back in the pause before the part
+}
+// back to the checkpoint (or the start), with a fresh detector: a part flown wrong, a crash, the next try
+function coachRetry(start) { if (!coach.on || coach.done || mode !== 'fly') return; detector.reset(); crashLock = false; coachClock(start); renderCoach(); }
+function coachAgain() { coachRetry(true); coachNewTry(); renderCoach(); }
 function coachStop(save = true) {
-  if (!coach.on) return; coach.on = false; coach.hold = null; if (coach.freeze) coachFreezeEnd(); $('#coachBox').classList.add('hide');
+  if (!coach.on) return; coach.on = false; coach.hold = null; clearTimeout(coach.retryT); coach.retryT = null; coachFreezeEnd(); $('#coachBox').classList.add('hide');
   if (save && recap.dirty && !recap.guest) recapSave();
 }
 function coachTryDone(ok, how) {
   coach.log.push({ n: coach.tryN, phase: coach.phase, ok, how }); coach.result = { ok, how };
   if (coach.tryN >= COACH_TRIES) { coach.done = true; renderCoach(); return; }
-  coach.tryN++; setTimeout(() => { if (coach.on && !coach.done) { coachNewTry(); renderCoach(); } }, ok ? 1600 : 0);
+  coach.tryN++; setTimeout(() => { if (coach.on && !coach.done) { if (mode === 'fly') coachAgain(); else { coachNewTry(); renderCoach(); } } }, ok ? 1600 : 0);   // every try from the rolling start
   renderCoach();
 }
 // live tries: the detector's own calls
 function coachEvent(ev) {
   if (!coach.on || coach.done || mode !== 'fly' || ev.name === 'near') return;
-  if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (coach.phase === 'live' && !coach.ask) { coach.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
+  if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (coach.phase === 'live' && !coach.ask && !store.get('coachRetry', true)) { coach.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
   if (coach.phase !== 'live' || coach.ask) return;
   const i = recap.events.length - 1, e = recap.events[i]; if (!e || e.name !== ev.name) return;
   if (ev.name === coach.name) { coach.ask = { i, ok: true, exec: ev.exec, clean: ev.clean }; coach.msg = ''; }
@@ -194,10 +253,10 @@ function coachAnswer(a) {
   const A = coach.ask; if (!A) return; const e = recap.events[A.i];
   if (A.ok) {
     if (a === 'yes') { if (e) recapSetCall(A.i, coach.name); coach.ask = null; coachTryDone(true, `the game called it${A.exec ? ' (' + A.exec + (A.clean != null ? ' ' + A.clean + '%' : '') + ')' : ''}, you agreed`); return; }
-    if (a === 'no') { if (e) { e.verdict = 'no'; e.actual = null; recap.dirty = true; } coach.ask = null; coach.msg = 'Not counted: go again.'; coachNewTry(); renderCoach(); return; }
+    if (a === 'no') { if (e) { e.verdict = 'no'; e.actual = null; recap.dirty = true; } coach.ask = null; coachAgain(); coach.msg = 'Not counted: go again.'; renderCoach(); return; }
   } else {
     if (a === 'mine') { if (e) recapSetCall(A.i, coach.name); coach.ask = null; coachTryDone(true, `your call: the game said ${A.called}`); return; }
-    if (a === 'again') { coach.ask = null; coach.msg = ''; coachNewTry(); renderCoach(); return; }
+    if (a === 'again') { coach.ask = null; coachAgain(); coach.msg = ''; renderCoach(); return; }
   }
 }
 function coachMissed() {   // "I did it, the game missed it" (Q)
@@ -209,11 +268,19 @@ setInterval(() => {
   if (!coach.on) return;
   if (mode !== 'fly') { $('#coachBox').classList.add('hide'); return; }
   coachCollect();
+  const auto = store.get('coachRetry', true) && !coach.retryT && !coach.hold && !coach.done && !coach.result;
+  if (auto && drone.crashed && !coach.ask) { coach.retryT = setTimeout(() => { coach.retryT = null; const back = coach.phase === 'parts' && coach.ck; coachRetry(); coach.msg = back ? 'Crashed: back before that part.' : 'Crashed: back at the start.'; renderCoach(); }, 800); }
   if (coach.phase === 'parts' && !coach.result) {
     if (coach.freeze) return;
     const j = coachJudgeAny(coach.alts, coach.since, true); coach.last = j; if (j.objName) coach.obj = j.objName; coach.steps = j.steps;
     if (j.done >= j.steps.length) { coach.doneN = 0; coachTryDone(true, 'every part'); return; }
-    if (j.done > (coach.doneN || 0)) { coach.doneN = j.done; if (coach.preFroze !== j.done) coachFreezeStart(j.done); coach.preFroze = null; }   // already paused there as the rotation came round (coachLive)
+    const o = j.out[j.done];
+    if (auto && !coach.retryT && o && o.retry && !drone.crashed && detector.time >= o.at) {   // (a beginner's rotation in pieces, or a late pass, still has its time)   // a part flown wrong: say why, then back to just before it
+      const why = o.msg; flash(`<b>✗ ${why.toUpperCase()}</b><small>back before that part</small>`, 'near');
+      coach.retryT = setTimeout(() => { coach.retryT = null; coachRetry(); coach.msg = `Step ${j.done + 1}: ${why}. Go again.`; renderCoach(); }, 500); }
+    if (j.done > (coach.doneN || 0)) { coach.doneN = j.done; coach.msg = '';
+      const P = coach.pauseSnap;   // the checkpoint: the quad as it sat in the pause after this part (or as it is now, with the pauses off)
+      coach.ck = { bank: { n: j.done, obj: j.obj, vars: j.vars, out: j.out.slice(0, j.done).map(x => ({ ok: true, msg: x.msg })), key: JSON.stringify(j.steps.slice(0, j.done)) }, steps: j.steps, st: P && P.k === j.done ? P.st : coachSnap() }; if (coach.preFroze !== j.done) coachFreezeStart(j.done); coach.preFroze = null; }   // already paused there as the rotation came round (coachLive)
   }
   renderCoach();
 }, 150);
@@ -227,7 +294,7 @@ function renderCoach() {
       <div class="trBtns"><button data-co="again">⟲ Train again</button><button data-co="done">✓ Done</button><button data-co="stop" class="ghost">Free fly</button></div>`;
   } else if (coach.phase === 'parts') {
     const j = coach.last || { out: coach.steps.map(() => ({ ok: false, msg: '' })), done: 0 }, cur = (detector.cur || []).filter(Boolean).find(c => c.raw > 30);
-    body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>step by step</b>: fly each part; take your time between them. Sloppy counts: close is good enough to move on.${store.get('coachPauses', true) ? ' The game pauses after each part so you can set up the next.' : ''}</div><ol class="coSteps">${coach.steps.map((s, k) => { const o = j.out[k], st = o.ok ? 'ok' : k === j.done ? 'on' : '';
+    body = `<div class="trLast">Try ${coach.tryN} of ${COACH_TRIES} · <b>step by step</b>: fly each part; take your time between them. Sloppy counts: close is good enough to move on.${store.get('coachRetry', true) ? ' Miss a part and you are put back just before it.' : ''}${store.get('coachPauses', true) ? ' The game pauses after each part so you can set up the next.' : ''}</div><ol class="coSteps">${coach.steps.map((s, k) => { const o = j.out[k], st = o.ok ? 'ok' : k === j.done ? 'on' : '';
       return `<li class="${st}">${o.ok ? '✓ ' : k === j.done ? '▶ ' : ''}${coachStepText(s, vars)}${o.ok && o.msg ? ` <small class="coGot">${o.msg}</small>` : ''}${k === j.done && o.msg ? `<div class="coWhy">✗ ${o.msg}</div>` : ''}</li>`; }).join('')}</ol>
       ${cur ? `<div class="note">turning: ${{ R: 'roll', P: 'flip', Y: 'yaw' }[cur.ax]} ${Math.round(cur.raw)}°</div>` : ''}`;
   } else {
@@ -243,7 +310,7 @@ function renderCoach() {
     <div class="trObs">${coach.obj ? `on <b>${esc(coach.obj)}</b>` : `fly it on: <b>${esc((coach.spots || []).join(', '))}</b>`}${coach.end === 'back' ? ' · ends flying backward' : ''}</div>
     ${coach.result && !coach.done ? `<div class="coRes ${coach.result.ok ? 'ok' : 'no'}">${coach.result.ok ? '✓ Try ' + (coach.tryN - 1) + ' done' : '✗'} <small>${esc(coach.result.how)}</small></div>` : ''}
     ${coach.msg ? `<div class="trMsg">${esc(coach.msg)}</div>` : ''}${body}
-    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button></div>`;
+    <div class="trFoot">${!coach.done ? `<button data-co="pauses" class="ghost" title="Freeze the game between the parts of the step-by-step tries">${store.get('coachPauses', true) ? '⏸ Pauses: on' : '⏸ Pauses: off'}</button>` : ''}${!coach.done ? `<button data-co="retry" class="ghost" title="After a missed part or a crash, put me back just before it (R does it by hand)">${store.get('coachRetry', true) ? '⟲ Auto-retry: on' : '⟲ Auto-retry: off'}</button>` : ''}${show && !coach.done ? '<button data-co="ghost" class="ghost" title="Watch the bot fly it from its own camera, with its sticks and every step explained">👻 Show me</button>' : ''}${!coach.done ? '<button data-co="skip" class="ghost" title="K">Skip this try</button>' : ''}<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button></div>`;
   if (html !== box.__h) { box.__h = html; box.innerHTML = html; }   // it is checked 7 times a second: rewriting it each time ate clicks (a click needs the same button under the press and the release)
 }
 const esc0 = s => s;   // judge messages are the game's own words (object names already escaped)
@@ -254,6 +321,7 @@ document.addEventListener('click', e => {
   if (a === 'again') { if (coach.done) coachStart(coach.name); else coachAnswer('again'); }
   if (a === 'missed') coachMissed();
   if (a === 'pauses') { store.set('coachPauses', !store.get('coachPauses', true)); if (coach.freeze) coachFreezeEnd(); renderCoach(); }
+  if (a === 'retry') { store.set('coachRetry', !store.get('coachRetry', true)); clearTimeout(coach.retryT); coach.retryT = null; renderCoach(); }
   if (a === 'skip') { coach.ask = null; coachTryDone(false, 'skipped'); }
   if (a === 'ghost') coachDemo();
   if (a === 'stop') { coachStop(); renderCoach(); coachLeave(false); }   // Free fly: back on the pilot's own map
@@ -284,6 +352,7 @@ function demoObjects() {
 }
 function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
   const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0), objs = open ? [] : demoObjects().map(o => o.name);
+  if (world.id === ROOM && coach.on && coach.spots) objs.sort((a, b) => (b === coach.spots[0]) - (a === coach.spots[0]));   // the station's own obstacle first
   // owner, 2026-11-20: real examples first. A confirmed example of the trick from the trick library (pilots' labels and the demo
   // GIFs, rebuilt as labels come in: MV.knowledge's `fromLibrary`), flown on this map; the hand-written script only when no learned
   // flight is called here
@@ -294,7 +363,7 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
     try { m = T.lib ? MV.fromLibrary(name, world, seed0 + k * 977, { object: T.obj || undefined, wobble: 0 }) : MV.make(name, world, seed0 + k * 977, T.obj ? { object: T.obj, wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
     if (T.lib && m.source !== 'library') continue;
     if (T.lib ? (m.object === 'open air' && !m.inPlace) : open) { const P0 = m.at(0).pos, off = S.sub(S.add(drone.pos, S.v3(0, 3.5, 0)), P0), base = m; m = { ...base, at: t => { const s = base.at(t); return { pos: S.add(s.pos, off), q: s.q }; } }; }
-    const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map() }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass }, orig = S.TrickDetector.prototype.update, D0 = detector;
+    const st = { toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), bank: null }, keep = { toks: coach.toks, passes: coach.passes, seenTok: coach.seenTok, seenPass: coach.seenPass, bank: coach.bank }, orig = S.TrickDetector.prototype.update, D0 = detector;
     let got; Object.assign(coach, st);
     try { S.TrickDetector.prototype.update = function (...a) { const r = orig.apply(this, a); const D = this; for (const kk of D.toks || []) { const id = kk.ax + kk.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: kk.ax, dir: kk.dir, raw: kk.raw, t0: kk.t0, t1: kk.t1, inv: kk.inv > (kk.n || 1) * 0.5 }); } }
         for (const c of D.crossLog || []) { if (c.kind !== 'U' && c.kind !== 'O') continue; const id = c.kind + c.obj + c.t.toFixed(3); if (!coach.seenPass.has(id)) { coach.seenPass.set(id, 1); coach.passes.push({ kind: c.kind, t: c.t, obj: c.obj, name: c.name }); } } return r; };
@@ -342,8 +411,8 @@ function coachDemo() {
 }
 function demoBack() {
   judge.demo = null; demoArrows(); stopJudge(); mode = 'fly'; show(null); $('#hud').classList.remove('hide');
-  drone.reset(activeWorld.spawn, true); detector.reset(); coachClock(); renderCoach();
-  flash('<b>YOUR TURN</b><small>back at the start · arm and go</small>');
+  drone.reset(activeWorld.spawn, true); detector.reset(); coachClock(true); renderCoach();
+  flash('<b>YOUR TURN</b><small>back at the start</small>');
 }
 function demoTick() {
   demoArrows();
@@ -485,8 +554,11 @@ function coachLive(simDt) {
   if (c.acc + c.rate * COACH_EASE >= pick.target * 0.97 || (stopped && c.acc >= pick.target * 0.8)) go();
 }
 function coachStepSticks() {   // the bot's sticks for each step, from one flight of the trick on this map (for the pause arrows)
-  try { const f = demoFly(coach.name); if (!f || !f.got.rows) return null; const rows = f.got.rows, j = f.j;
-    return { steps: j.steps, at: j.steps.map((st, k) => { const o = j.out[k] || {}; if (o.t0 == null) return null;
+  try { const f = demoFly(coach.name); if (!f || !f.got.rows || !f.got.rows.length) return null; const rows = f.got.rows, j = f.j;
+    let bot = null; const t0 = (j.out[0] || {}).t0;   // how the bot comes into the first part: its speed, height and throttle (the rolling start)
+    if (t0 != null) { const r = rows.reduce((b, x) => Math.abs(x[0] - t0) < Math.abs(b[0] - t0) ? x : b, rows[0]), pre = rows.filter(x => x[0] >= t0 - 0.8 && x[0] <= t0);
+      bot = { v: Math.hypot(r[21], r[23]), y: r[2], thr: pre.length ? pre.reduce((a, x) => a + x[11], 0) / pre.length : r[11] }; if (![bot.v, bot.y, bot.thr].every(Number.isFinite)) bot = null; }
+    return { bot, steps: j.steps, at: j.steps.map((st, k) => { const o = j.out[k] || {}; if (o.t0 == null) return null;
       const R = rows.filter(r => r[0] >= o.t0 && r[0] <= (o.t ?? o.t0 + 0.6)); if (!R.length) return null;
       const peak = c => R.reduce((m, r) => Math.abs(r[c]) > Math.abs(m) ? r[c] : m, 0);
       return { P: peak(25), R: peak(24), Y: peak(26), T: R[R.length - 1][11], dT: (R[R.length - 1][11] - R[0][11]) / Math.max(0.2, R[R.length - 1][0] - R[0][0]) }; }) }; } catch { return null; }
@@ -534,5 +606,5 @@ function coachFreezeDraw() {
 setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' || coach.phase !== 'parts') { coachFreezeEnd(); return; }
   const F = coach.freeze, now = performance.now(), dt = Math.min(0.5, (now - F.last) / 1000); F.last = now; F.waited += dt;   // a long hitch counts at most half a second
   F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
-  if (F.held >= COACH_HOLD) coachFreezeEnd(); else coachFreezeDraw(); }, 100);
-window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), state: () => JSON.stringify({ ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+  if (F.held >= COACH_HOLD) { coach.pauseSnap = { k: F.k, st: coachSnap() }; coach.atCk = false; coachFreezeEnd(); } else coachFreezeDraw(); }, 100);
+window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)

@@ -4,7 +4,7 @@ Kept in order of priority and feasibility. When one is done, move it to CLAUDE.m
 
 ## Done
 - Review Hub (2026-11-20): see CLAUDE.md "The Review Hub". Next for it: retire the old screens once it has been used a week (owner's call), and a "withdraw a sent verdict" note if wanted.
-- Train in the Tricktionary (2026-11-20): see CLAUDE.md "Train a trick". Next for it: pole, wall and gap tricks (steps by hand), and judging "upright" / "flying backward" in the steps.
+- Train in the Tricktionary (2026-11-20): see CLAUDE.md "Train a trick". Rolling starts and instant retry are in (2026-11-21). Still to try for its flow: slow-mo instead of full stops, tries that adapt to the pilot, a ghost in the live tries, sound per step, a "learned" mark and next trick, no reload into the Training Room. Next for it: pole, wall and gap tricks (steps by hand), and judging "upright" / "flying backward" in the steps.
 
 ## Next, in this order (agreed 2026-11-20)
 1. ~~**Knife Edge only through narrow gaps**~~ (done 2026-11-20): the gap's narrow side about two quad widths or less (measured against the

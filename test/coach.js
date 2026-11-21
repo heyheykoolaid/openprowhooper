@@ -26,6 +26,18 @@ const sloppy = [['Flip', [{ ax: 'P', dir: 1, raw: 280, t0: 1, t1: 2 }], true], [
   ['Flip', [{ ax: 'P', dir: 1, raw: 190, t0: 1, t1: 2 }], false], ['Double Flip', [{ ax: 'P', dir: 1, raw: 360, t0: 1, t1: 2 }], false]];
 for (const [name, toks, want] of sloppy) { Object.assign(C.coach, { toks, passes: [] }); const j = C.coachJudgeAny(C.coachPlan(name).alts, 0, true), pass = j.done >= j.steps.length;
   n++; if (pass === want) ok++; else bad.push(`sloppy ${name} (${toks.map(k => k.raw).join(' + ')}°) ${want ? 'should pass' : 'should not pass'}`); }
+// instant retry (owner, 2026-11-21): parts kept from before a retry are taken as done (`coach.bank`), the rest is judged from a
+// fresh detector; a part flown wrong on its own axis asks for a retry, a turn on another axis does not
+{ const st = C.coachPlan('Rubik\'s Cube').alts[0], bank = k => ({ n: k, obj: null, vars: {}, out: st.slice(0, k).map(() => ({ ok: true, msg: 'kept' })), key: JSON.stringify(st.slice(0, k)) });
+  const chk = (what, pass) => { n++; if (pass) ok++; else bad.push('retry: ' + what); };
+  Object.assign(C.coach, { toks: [{ ax: 'R', dir: 1, raw: 350, t0: 0.4, t1: 1.2 }, { ax: 'P', dir: -1, raw: 180, t0: 1.5, t1: 2.1 }], passes: [], bank: bank(1) });
+  let j = C.coachJudge(st, 0, true); chk('the kept first part plus the other two finish the Rubik\'s Cube', j.done === st.length && j.out[0].msg === 'kept');
+  C.coach.bank = null; j = C.coachJudge(st, 0, true); chk('without the kept part the same tokens do not', j.done < st.length);
+  Object.assign(C.coach, { toks: [{ ax: 'P', dir: 1, raw: 700, t0: 1, t1: 2 }], passes: [], bank: null }); j = C.coachJudge(C.coachPlan('Flip').alts[0], 0, true);
+  chk('a flip twice too long asks for a retry, once it has had its time', j.done === 0 && j.out[0].retry === true && j.out[0].at === 3);
+  Object.assign(C.coach, { toks: [{ ax: 'Y', dir: 1, raw: 200, t0: 1, t1: 2 }], passes: [] }); j = C.coachJudge(C.coachPlan('Flip').alts[0], 0, true);
+  chk('a yaw turn before a flip does not', j.done === 0 && !j.out[0].retry);
+  C.coach.bank = null; }
 S.TrickDetector.prototype.update = orig;
 for (const b of bad) console.log('  ✗ ' + b);
 console.log(`${ok}/${n} scripted flights pass every training step (${names.length} tricks)`);
