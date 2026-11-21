@@ -48,12 +48,16 @@ function coachSteps(pat, ob) {
   if (tail) steps.push({ pass: tail, end: ob.end });
   return steps;
 }
+// the way a trick is taught and shown when its rule allows more than one (owner, 2026-11-21: "inverted rewind is just a 180 pitch to
+// inverted, a wait (if that), then a pitch back to upright"): the pattern that starts on this axis comes first
+const COACH_FIRST = { 'Invert Rewind': 'P' };
 function coachPlan(name) {
   const h = COACH_HAND[name];
   if (h) { const st = h.steps.map(s => s.rot ? { ...s, rot: S.parsePattern(s.rot)[0] } : { ...s }); return { cross: h.cross, end: null, steps: st, alts: [st] }; }
   const obs = S.OBSTACLE_TRICKS.filter(t => t.name === name && !t.tap), op = S.OPEN_TRICKS.find(t => t.name === name);
   if (!obs.length && !op) return null;
   const alts = obs.length ? obs.flatMap(ob => ob.parsed.map(p => coachSteps(p, ob))) : op.parsed.map(p => coachSteps(p, null));
+  { const pf = COACH_FIRST[name]; if (pf) alts.sort((a, b) => ((b[0] && b[0].rot && b[0].rot.ax) === pf) - ((a[0] && a[0].rot && a[0].rot.ax) === pf)); }
   return { cross: obs.length ? obs[0].cross : '', end: obs.length ? obs[0].end || null : null, steps: alts[0], alts };
 }
 // judge every way the rule allows; the one that got furthest is the one shown
@@ -116,6 +120,7 @@ function coachJudge(steps, t0, strictObj) {
 // Drafts: the owner edits the wording.
 const COACH_CUES = {
   'Flip': ['Blip the throttle, then stick all the way back (or forward) and hold. Stop it as the horizon comes level.'],
+  'Invert Rewind': ['Half a flip to upside-down, and stop it there.', 'Flip straight back the way you came, to upright.'],
   'Roll': ['Blip the throttle, then stick hard left or right. Stop it as the horizon comes level.'],
   'Yaw Spin': ['Hold the throttle steady and push yaw all the way: one flat turn. Keep the right stick still.'],
   'Double Flip': ['A bigger throttle blip, stick all the way back (or forward), and keep holding through two turns.'],
@@ -437,6 +442,9 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
     finally { S.TrickDetector.prototype.update = orig; }
     const j = coachJudgeAny(coach.alts, 0, true), ok = got.some(e => e.name === name) || j.done >= j.steps.length;
     Object.assign(coach, keep); void D0;
+    // a pilot's flight shown as THE example must hold the trick and nothing else (owner, 2026-11-21: the Invert Rewind example "has a
+    // roll in it at the end"): no other call, and no rotation of 100 deg or more outside the steps
+    if (T.lib && ok) { const extra = st.toks.filter(k => Math.abs(k.raw) >= 100 && !j.out.some(o => o && o.ok && o.t0 != null && k.t0 >= o.t0 - 0.2 && k.t1 <= o.t + 0.2)); if (extra.length || got.some(e => e.name !== name && e.name !== 'near' && e.name !== 'Crash' && !e.maybe)) continue; }
     if (T.lib && !ok) continue;   // a learned flight the game does not call here (its reading leaned on the pilot's own object): next
     const R = { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib, ok, hit: demoHits(got.rows) };
     if (ok && !R.hit) return R;

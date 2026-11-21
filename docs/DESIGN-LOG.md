@@ -105,3 +105,11 @@ motion, it's just a flatspin while upright. there's an upside down version, call
   for flip, roll and spin; 120 for the loop's top), whether doubles count for more, and the spin drag after trying real ones.
 - Found on the way: a hover with the motors cut for a moment was being called a Perch. Fixed.
 
+### Invert Rewind: the example and the definition (2026-11-21)
+The owner: "the example for the inverted rewind has a roll in it at the end. it should not. inverted rewind is just a 180 pitch to
+inverted, a wait (if that), then a pitch back to upright."
+- **Decided**: Train's steps, cues and the shown flight are pitch: half a flip in, an optional short wait, the flip back. A real
+  pilot's flight is only used as the example when it holds the trick and nothing else.
+- **Open**: the TPW book says "a 180 roll or flip", and the game still calls an Invert Rewind for the roll version. Should the roll
+  version stop counting? Not changed without the owner's say (scoring follows the book).
+

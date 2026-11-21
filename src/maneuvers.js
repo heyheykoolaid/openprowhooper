@@ -298,7 +298,9 @@
     'Double Roll': (w, r, o) => openAir([['R', 720 * R1(r), range(r, 650, 1100)]])(w, r, o),
     'Yaw Spin': (w, r, o) => openAir([['Y', 360 * R1(r), range(r, 330, 700)]])(w, r, o),
     'Segmented Flips/Rolls': (w, r, o) => { const ax = r() < 0.5 ? 'P' : 'R', s = R1(r), rt = range(r, 700, 1000); return openAir([[ax, 180 * s, rt], ['pause', range(r, 0.22, 0.5)], [ax, 180 * s, rt]])(w, r, o); },
-    'Invert Rewind': (w, r, o) => { const ax = r() < 0.5 ? 'P' : 'R', s = R1(r), rt = range(r, 500, 900); return openAir([[ax, 180 * s, rt], [ax, -180 * s, rt]])(w, r, o); },
+    // owner, 2026-11-21: half a flip to upside-down, a wait (if that), the flip back to upright; pitch, not roll (the book allows either, and
+    // the detector still reads both; `roll: true` flies the roll for tests)
+    'Invert Rewind': (w, r, o) => { const ax = o && o.roll ? 'R' : 'P', s = R1(r), rt = range(r, 500, 900), wait = r() < 0.5 ? range(r, 0.1, 0.35) : 0; return openAir([[ax, 180 * s, rt], ...(wait ? [['pause', wait]] : []), [ax, -180 * s, rt]])(w, r, o); },
     'Vanny Roll': (w, r, o) => { const y = R1(r); return openAir([['Y', 180 * y, range(r, 280, 450)], ['R', 360 * R1(r), range(r, 600, 900)], ['Y', 180 * y, range(r, 280, 450)]])(w, r, o); },
     "Rubik's Cube": (w, r, o) => { const p = R1(r); return openAir([['P', 180 * p, range(r, 500, 900)], ['R', 360 * R1(r), range(r, 600, 1000)], ['P', 180 * p, range(r, 450, 900)]])(w, r, o); },
     "Cubik's Rube": (w, r, o) => { const s = R1(r); return openAir([['R', 180 * s, range(r, 600, 1000)], ['P', 360 * R1(r), range(r, 500, 900)], ['R', 180 * s, range(r, 450, 900)]])(w, r, o); },
