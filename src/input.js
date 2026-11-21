@@ -89,7 +89,7 @@ function getRC(dt) {
       // With take-off-without-arming on (the default), switching OFF disarms once (on the flick), so a quad that was
       // armed by raising the throttle is not shut down again just because the switch happens to be off.
       const sw = switchOn(pad, P.arm), fell = armSwWas === true && !sw; armSwWas = sw;
-      if (!sw) { crashLock = false; if (drone.armed && (fell || !autoArmOn())) setArmed(false); armBlock = drone.armed ? '' : autoArmOn() ? 'THROTTLE UP TO TAKE OFF' : 'ARM SWITCH OFF'; }
+      if (!sw) { crashLock = false; if (drone.armed && (fell || !(autoArmOn() || coachArmed()))) setArmed(false); armBlock = drone.armed ? '' : autoArmOn() ? 'THROTTLE UP TO TAKE OFF' : 'ARM SWITCH OFF'; }
       else if (!drone.armed) {
         if (drone.crashed) { crashLock = true; armBlock = tune.flightMode === '3d' ? 'CRASHED · THROTTLE TO THE MIDDLE TO GO AGAIN' : 'CRASHED · THROTTLE TO ZERO TO GO AGAIN'; }
         else if (!thrArmOk(rc.thr)) armBlock = `THROTTLE HIGH (${Math.round(rc.thr * 100)}%) · ${tune.flightMode === '3d' ? 'CENTRE OR LOWER' : 'LOWER'} TO ARM`;

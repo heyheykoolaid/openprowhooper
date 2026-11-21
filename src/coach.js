@@ -115,17 +115,17 @@ function coachJudge(steps, t0, strictObj) {
 // pattern, one cue per step); every other step gets one made from its rule and, where the bot's flight is known, its throttle.
 // Drafts: the owner edits the wording.
 const COACH_CUES = {
-  'Flip': ['Blip the throttle, then stick all the way back (or forward) and hold. Let go as the horizon comes level, and catch it.'],
-  'Roll': ['Blip the throttle, then stick hard left or right. Centre it as the horizon comes level.'],
+  'Flip': ['Blip the throttle, then stick all the way back (or forward) and hold. Stop it as the horizon comes level.'],
+  'Roll': ['Blip the throttle, then stick hard left or right. Stop it as the horizon comes level.'],
   'Yaw Spin': ['Hold the throttle steady and push yaw all the way: one flat turn. Keep the right stick still.'],
   'Double Flip': ['A bigger throttle blip, stick all the way back (or forward), and keep holding through two turns.'],
   'Double Roll': ['A bigger throttle blip, stick hard over, and keep holding through two turns.'],
   'Powerloop': ['Fly low and straight under it.', 'Punch the throttle and pull back. Ease the throttle off as you go upside-down over the top.', 'Keep pulling until you see the ground, then catch it and fly back under.'],
   'Matty Flip': ['Hop over it with a little height to spare.', 'Cut the throttle and push forward: nose down, all the way round.', 'Catch it as it comes level facing the object, and drift back under it, backward.'],
   'Split-S': ['Go over it with height to spare.', 'Half roll to upside-down and cut the throttle.', 'Pull back: half a loop down toward the ground.', 'Catch it level and fly out under it, back the way you came.'],
-  'Barani': ['Fly low and straight to the obstacle.', 'Start the loop right after passing under: throttle up, pull back.', 'Cut the throttle as you go upside-down. Centre the pitch and yaw half a turn.', 'Pull back again to bring the nose round.', 'Catch it before the ground and come back under, backward.'],
+  'Barani': ['Fly low and straight to the obstacle.', 'Start the loop right after passing under: throttle up, pull back.', 'Cut the throttle as you go upside-down. Stop pulling, and yaw half a turn.', 'Pull back again to bring the nose round.', 'Catch it before the ground and come back under, backward.'],
   'Juicy Flick': ['A little throttle, then flick the stick forward: half a front flip to upside-down.', 'Half roll back upright, and catch it.'],
-  "Rubik's Cube": ['Half a flip to upside-down, then let the stick go.', 'A full roll while you are upside-down.', 'The same half flip again to come upright. Catch it.'],
+  "Rubik's Cube": ['Half a flip, and stop it upside-down.', 'A full roll while you are upside-down.', 'The same half flip again to come upright. Catch it.'],
   'Inverted Yaw Spin': ['Half a flip to upside-down and drop the throttle low.', 'Yaw a full turn while upside-down. Right stick still.', 'The same half flip again to come upright. Catch it.'],
   'Immelmann Turn': ['Fly low and straight under it.', 'Throttle up and pull back: half a loop up and over, to upside-down.', 'Half roll upright. You are now flying back the way you came.'],
   'Snapback': ['Fly low and straight under it.', 'Pull back hard: half a flip, so you are upside-down looking back at it.', 'Half roll upright and fly back toward it.'],
@@ -141,8 +141,8 @@ function coachCue(name, steps, k, sk) {   // sk: the bot's sticks during this st
     return k === 0 ? 'Come in level and go over the top of it.' : 'Up and over the top of it.'; }
   const p = s.rot, turns = { 180: 'half a turn', 360: 'one full turn', 540: 'a turn and a half', 720: 'two full turns', 900: 'two and a half turns', 270: 'three quarters of a turn', 90: 'a quarter turn', 135: 'a bit under half a turn' }[p.deg] || p.deg + '°';
   let out;
-  if (p.ax === 'P') out = `${p.dir === '+' ? 'Pull back' : p.dir === '-' ? 'Push forward' : 'Stick forward or back'}: ${turns}${p.deg === 180 ? ', to upside-down' : ''}. ${p.deg >= 360 ? 'Hold it, and let go as the horizon comes level.' : 'Then let the stick go.'}`;
-  else if (p.ax === 'R') out = `Roll ${turns}${p.deg === 180 ? ', to the other way up' : ''}: stick hard over, then centre it.`;
+  if (p.ax === 'P') out = `${p.dir === '+' ? 'Pull back' : p.dir === '-' ? 'Push forward' : 'Stick forward or back'}: ${turns}${p.deg === 180 ? ', to upside-down' : ''}. ${p.deg >= 360 ? 'Hold it, and stop it as the horizon comes level.' : 'Stop it there.'}`;
+  else if (p.ax === 'R') out = `Roll ${turns}${p.deg === 180 ? ', to the other way up' : ''}: stick hard over, then stop it level.`;
   else out = `${p.inv ? 'While upside-down, yaw' : 'Yaw'} ${turns}. Keep the right stick still.`;
   if (s.during && s.during.includes('O')) out += ' Over the top of it.';
   if (sk && Number.isFinite(sk.T)) { if (sk.dT < -0.6 || sk.T < 0.15) out += ' Cut the throttle.'; else if (sk.dT > 0.6 || sk.T > 0.8) out += ' Punch the throttle.'; }
@@ -218,6 +218,9 @@ function coachHoldStart(ck) {
   coach.hold = { thr0: null, at: performance.now(), roll: ck ? null : E, ck: ck || null, near: null };
   if (!drone.armed) setArmed(true, true);   // armed whatever the throttle says: the hold keeps it still until a stick moves
 }
+// the Training Room starts armed whatever the radio's arm switch says (owner, 2026-11-20); with the switch off, input.js used to
+// disarm it again on the next frame and the start never let go (owner, 2026-11-21). There the switch only disarms on its flick off.
+function coachArmed() { return coach.on && world.id === ROOM && mode === 'fly'; }
 function coachHeld(rc) {
   const H = coach.hold; if (!H || !coach.on || mode !== 'fly') return false;
   if (H.thr0 == null) H.thr0 = rc.thr;
@@ -226,6 +229,7 @@ function coachHeld(rc) {
   if (thrSet) { H.thrOk = Math.abs((rc.thr || 0) - E.thr) <= 0.12; if (!H.thrOk) H.near = null; else if (H.near == null) H.near = now; moved = moved || (H.near != null && now - H.near > 600); }   // a rolling start: set the throttle and you are off
   else if (inputCfg.mode === 'keyboard' && E) moved = moved || !!(keys.KeyW || keys.KeyS);   // the keyboard's height hold moves the throttle by itself
   else moved = moved || Math.abs((rc.thr || 0) - H.thr0) > 0.12;
+  if (moved && now - H.at > 400 && !drone.armed && !drone.crashed) setArmed(true, true);
   if (drone.armed && moved && now - H.at > 400) { coach.hold = null; coach.atCk = false; if (!coach.freeze) $('#coachFreeze').classList.add('hide'); flash(E ? '<b>GO!</b>' : '<b>YOUR CONTROL</b>'); return false; }
   return true;
 }
@@ -402,6 +406,14 @@ function demoObjects() {
     const mx = (b.a.x + b.b.x) / 2, mz = (b.a.z + b.b.z) / 2; out.push({ name: o.name, d: Math.hypot(mx - P.x, mz - P.z) }); }
   const seen = new Set(); return out.sort((a, b) => a.d - b.d).filter(x => !seen.has(x.name) && seen.add(x.name)).slice(0, 8);
 }
+// how far a shown flight cuts into the room (owner, 2026-11-21: "no trick examples … collide with an object or obstacle in the
+// training room"): the bot's flights are drawn along a path, nothing stops them, and a pilot's library flight laid over another
+// object (or an open-air one set down near the trick bay) could pass through a bar. 0 = clear by DEMO_CLEAR all the way
+const DEMO_CLEAR = 0.09;
+function demoHits(rows) { let worst = 0; const W = world.prims || [];
+  for (const r of rows || []) { const x = r[1], y = r[2], z = r[3]; if (y < DEMO_CLEAR) worst = Math.max(worst, DEMO_CLEAR - y);
+    for (const pr of W) { const a = pr.aabb; if (!a || x < a.min.x - DEMO_CLEAR || x > a.max.x + DEMO_CLEAR || y < a.min.y - DEMO_CLEAR || y > a.max.y + DEMO_CLEAR || z < a.min.z - DEMO_CLEAR || z > a.max.z + DEMO_CLEAR) continue; const d = S.primDist(pr, S.v3(x, y, z)); if (d < DEMO_CLEAR) worst = Math.max(worst, DEMO_CLEAR - d); } }
+  return worst; }
 function demoFly(name) {   // a flight of the trick on this map whose own detector calls it, with what it measured
   const MV = window.Maneuvers, open = !coach.cross && !COACH_HAND[name], seed0 = (Date.now() >>> 0), objs = open ? [] : demoObjects().map(o => o.name);
   if (world.id === ROOM && coach.on && coach.spots) { if (!open && coach.stn === 'big' && !objs.includes(coach.spots[0]) && world.objs.some(o => o.name === coach.spots[0] && o.obstacle)) objs.unshift(coach.spots[0]);   // the Big Square: where the pilot will fly it (owner: loops on large objects)
@@ -410,7 +422,8 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
   // GIFs, rebuilt as labels come in: MV.knowledge's `fromLibrary`), flown on this map; the hand-written script only when no learned
   // flight is called here
   const lib = MV.kbCan && MV.kbCan(name) && MV.kbExamples(name).length ? [0, 1, 2, 3].map(k => ({ lib: true, obj: objs.length ? objs[k % objs.length] : null })) : [];
-  const tries = [...lib, ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o }))];
+  const tries = [...lib, ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o })), ...(open ? [null, null, null] : objs).map(o => ({ lib: false, obj: o }))];   /* the script twice over: a second seed when the first one touches something */
+  let spare = null;
   for (let k = 0; k < tries.length; k++) {
     const T = tries[k]; let m = null;
     try { m = T.lib ? MV.fromLibrary(name, world, seed0 + k * 977, { object: T.obj || undefined, wobble: 0 }) : MV.make(name, world, seed0 + k * 977, T.obj ? { object: T.obj, wobble: 0 } : { wobble: 0 }); } catch { m = null; } if (!m) continue;
@@ -425,9 +438,11 @@ function demoFly(name) {   // a flight of the trick on this map whose own detect
     const j = coachJudgeAny(coach.alts, 0, true), ok = got.some(e => e.name === name) || j.done >= j.steps.length;
     Object.assign(coach, keep); void D0;
     if (T.lib && !ok) continue;   // a learned flight the game does not call here (its reading leaned on the pilot's own object): next
-    if (ok || k === tries.length - 1) return { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib };
+    const R = { m, got, j, object: T.lib ? m.object : T.obj || 'open air', lib: T.lib, ok, hit: demoHits(got.rows) };
+    if (ok && !R.hit) return R;
+    if (!spare || (R.hit === 0) > (spare.hit === 0) || ((R.hit === 0) === (spare.hit === 0) && (R.ok > spare.ok || (R.ok === spare.ok && R.hit < spare.hit)))) spare = R;   // nothing clean yet: a clear flight before a called one, then the least touch
   }
-  return null;
+  return spare;
 }
 const pct = v => Math.round(Math.abs(v) * 100);
 function stickWords(rows, a, b) {   // what the sticks did between a and b (rows: t … thr 11 … roll 24, pitch 25, yaw 26)
@@ -497,7 +512,7 @@ function demoView() { const on = !!(judge.demo && mode !== 'fly' && demo.view ==
 function demoTick() {
   const I = judge.intro, quiet = I && I.phase === 'payoff';
   if (demo.view === 'sticks' && !quiet) { $('#demoArrows').classList.add('hide'); demoRadio(); } else if (!quiet) demoArrows(); else $('#demoArrows').classList.add('hide');
-  const k = demo.steps.findIndex(d => judge.t >= d.t0 - 0.5 && judge.t <= d.t1 + 0.25), cur = k >= 0 ? k : (judge.t < ((demo.steps[0] || {}).t0 ?? 0) - 0.5 ? -1 : Math.max(-1, demo.cur));   // the cue comes up half a second before its step
+  const k = demo.steps.findIndex(d => judge.t >= d.t0 - 0.5 && judge.t <= d.t1 + 0.25), walk = I && I.phase === 'walk' && demo.steps.length, cur = k >= 0 ? k : (judge.t < ((demo.steps[0] || {}).t0 ?? 0) - 0.5 ? (walk ? 0 : -1) : Math.max(walk ? 0 : -1, demo.cur));   // the cue comes up half a second before its step
   if (cur !== demo.cur) { demo.cur = cur; demoRender(); }
   coachCaption(!quiet && cur >= 0 ? { k: cur, n: demo.steps.length } : null, cur >= 0 ? demo.steps[cur].cue : '');
   const bar = $('#demoBarFill'); if (bar) bar.style.width = (100 * judge.t / (demo.T || 1)).toFixed(1) + '%';
@@ -741,4 +756,4 @@ setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' |
   const F = coach.freeze, now = performance.now(), dt = Math.min(0.5, (now - F.last) / 1000); F.last = now; F.waited += dt;   // a long hitch counts at most half a second
   F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
   if (F.held >= COACH_HOLD) { coach.pauseSnap = { k: F.k, st: coachSnap() }; coach.atCk = false; coachFreezeEnd(); } else coachFreezeDraw(); }, 100);
-window.__pwCoach = { freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+window.__pwCoach = { demoHit: () => coach.fly ? { hit: coach.fly.hit, ok: coach.fly.ok, lib: coach.fly.lib, object: coach.fly.object } : null, freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)

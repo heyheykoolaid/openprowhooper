@@ -68,3 +68,17 @@ there be next and back buttons arrows for each step?"
   comes up (half a second before it, or just after the step before has finished when two overlap); Back first returns to the start
   of the step playing, then to the one before. Steps the bot's flight did not show (no time) are skipped.
 
+### Train: the start that would not go, cues in the slow pass, clean examples, wording (2026-11-21)
+The owner's first go with the presentation pass:
+- "once i hit this point, it would not proceed": the rolling start with the throttle chip ticked. Cause: his radio's arm switch was
+  off; the room arms the quad at the start (his rule: "always start in the air armed") but the switch disarmed it again a frame
+  later, and the release waited for an armed quad. **Decided**: in the Training Room an arm switch that is off is ignored; only
+  flicking it off disarms. Not tested with a real radio here.
+- "this text should also show on the first phase, where it demos the trick in slow motion": the cue only came up half a second
+  before its step, so a quick trick's slow pass ran mostly bare. Now the slow pass always has a cue up, from its first moment.
+- "can we have no trick examples in the tricktionary collide with an object or obstacle in the training room?": shown flights are
+  drawn along a path and nothing stopped them passing through things. Now a flight is only shown if it stays 9 cm clear of every
+  collider and the floor; otherwise the next candidate (another library example, another seed of the script) is used.
+- "don't tell people to let the stick go": cues now say "stop it as the horizon comes level" / "stop it there". Open: the owner may
+  want different words for the stop; the 15 hand-written cues are still drafts.
+
