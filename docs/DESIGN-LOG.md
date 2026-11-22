@@ -137,3 +137,20 @@ The owner picked the rest of the presentation pass ("4. for sure. spent extra ti
   The yaw cue now says "keep pitch and roll still" instead of naming a stick.
 - **Open**: three examples or more; whether 3 s is the right gap for "connected"; the ladder's order; whether learned should need a
   clean grade on the live try.
+
+### Daily K.W.A.D. (built 2026-11-21; agreed 2026-11-20)
+The owner: "do 1!" (four daily tricks per map, the same for everyone, K and W easy and anywhere, A and D on a named object, 250 a
+letter + 2000 for all four).
+- **Decided**: the set comes from the UTC day and the map alone, so nothing has to be served: every pilot's game works out the same
+  four, and the board can show any map's set. K is one of four basics, W a step up; A is Powerloop / Matty Flip / Split-S on a named
+  object, D a harder obstacle trick on a different object.
+- **Only what the game calls reliably**: open-air tricks the bot's flights are called on 100 %; objects are in only when the bot's
+  flight of every pool trick is called on that object, three seeds of three (28 objects over 7 maps). Clappy Bars and the Murderdome's
+  chain gates fell out (the call names another object there).
+- **The book's fixed four** (Half Matty, Wall Tap, Trippy Switch, Barani) no longer give letters on maps with a daily set. They stay
+  on the hidden maps and in the tests. The bonus amounts are the calculator's, unchanged.
+- **Where it shows**: a list under the letters at the start of a flight and after each letter, the main menu, the pause menu, each
+  map's slide on the board. The board cannot mark who got all four (it only reads file names); the run's sheet shows the K.W.A.D. bonus.
+- **Open**: whether Free Fly should count letters too (it does, like every score); whether the pools are the right tricks and the
+  right difficulty; whether a posted run should carry its letters so the board can show a K.W.A.D. mark (needs a relay change).
+

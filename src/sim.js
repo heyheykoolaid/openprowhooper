@@ -2984,6 +2984,24 @@ const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the sa
 const SWITCH_BONUS = [[21, 2.0], [18, 1.7], [15, 1.5], [12, 1.35], [9, 1.2], [6, 1.1], [3, 1.05]];
 const TOTW_MULT = [2, 1.5, 1];
 const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
+// Daily K.W.A.D. (owner, agreed 2026-11-20): four tricks a day per map, the same for every pilot, from the date (the board's UTC
+// day) and the map. K and W are open-air tricks flown anywhere (K the simplest, W a step up); A and D are obstacle tricks on a NAMED
+// object of that map (A one of the three classics, D a harder one, on another object where the map has two). Only tricks the bot's
+// flights are called on every time (test/stress.js), and only objects where the bot's flight of every pool trick is called on that
+// object (KWAD_SPOTS, made by tools/kwadspots.js: object -> the pool tricks NOT to ask for there; test/kwad.js checks it). The bonus
+// is the calculator's: 250 a letter, 2000 more for all four. A map with no table (the hidden ones) keeps the book's fixed set.
+const KWAD_K = ['Flip', 'Roll', 'Yaw Spin', 'Invert Rewind'], KWAD_W = ['Double Flip', 'Double Roll', 'Juicy Flick', 'Inverted Yaw Spin', 'Vanny Roll', "Rubik's Cube"];
+const KWAD_A = ['Powerloop', 'Matty Flip', 'Split-S'], KWAD_D = ['Power Flip', 'Maverick Loop', 'Matty 360', 'Immelmann Turn', 'Power Roll'], KWAD_OBJ_TRICKS = [...KWAD_A, ...KWAD_D];
+const KWAD_SPOTS = {"playground": {"Test Bar 1.6 m": [], "Test Bar 2.2 m": [], "Swing Set": [], "Monkey Bars": [], "Jungle Gym": [], "Power Lines": []}, "moose": {"Swing Set": [], "Climbing Bars": [], "Power Lines": []}, "clappy": {"Footbridge": [], "Alley Walkway": [], "Overhead Wires": [], "Test Bar 2.2 m": []}, "warehouse": {"Rack Beam": [], "Catwalk": ["Split-S"], "Crane Bridge": [], "Hanging Sign": [], "Cable Tray": [], "Yard Gate": []}, "ship": {"Sawhorse Barricade": [], "Lifeboat": [], "Crime Scene Tape": []}, "slackvegan": {"Bakery Low Gate": [], "Water Tower": [], "Laundry Line": []}, "murderdome": {"Blood Oath Gantry": [], "Witness Me Finish": [], "Ring Truss": []}};
+function dailyKwad(map, day, has) {
+  const T = KWAD_SPOTS[map]; if (!T || !/^\d{4}-\d\d-\d\d$/.test(String(day))) return null;
+  const objs = Object.keys(T).filter(o => !has || has(o)); if (!objs.length) return null;
+  let h = 2166136261; for (const c of day + '|' + map) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+  let z = h >>> 0; const r = () => { z = (z + 0x6D2B79F5) | 0; let t = Math.imul(z ^ (z >>> 15), 1 | z); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }, pick = a => a[Math.floor(r() * a.length) % a.length];
+  const K = pick(KWAD_K), Wt = pick(KWAD_W), oA = pick(objs), okA = KWAD_A.filter(t => !T[oA].includes(t)), A = pick(okA.length ? okA : KWAD_A);
+  const rest = objs.filter(o => o !== oA), oD = rest.length ? pick(rest) : oA, okD = KWAD_D.filter(t => !T[oD].includes(t)), D = pick(okD.length ? okD : KWAD_D);
+  return { day, map, K: { trick: K }, W: { trick: Wt }, A: { trick: A, obj: oA }, D: { trick: D, obj: oD } };
+}
 // Owner's chain bonuses (2026-11-20, not in the TPW calculator; kept apart from the trick score like K.W.A.D.): every 5th of the
 // same trick in a row in one combo is a set: INFINITY LOOPS for Powerloops, BIG BEN for Matty Flips, worth 2000 × the set's
 // number (5 → 2000, 10 → 4000 more, 15 → 6000 more…). Another trick, a crash, a miss or the combo banking starts over.
@@ -3002,7 +3020,7 @@ const GAP_MIN = 25, GAP_MAX = 75;
 function gapLabel(name) { let n = String(name || 'Gap').replace(/\s+opening$/i, '').replace(/\s+(mouth)$/i, '').replace(/\s+\d+(\.\d+)?( m)?$/, '').trim(); return /gap$/i.test(n) ? n : n + ' Gap'; }
 function gapPoints(narrow, qW) { const w = narrow / Math.max(0.05, qW || 0.09), f = Math.max(0, Math.min(1, (15 - w) / 12)); return Math.round(GAP_MIN + (GAP_MAX - GAP_MIN) * f); }
 class ScoreKeeper {
-  constructor(totw) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.reset(); }
+  constructor(totw, kwad) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.kw = kwad || null; this.reset(); }   // kwad: the day's set (dailyKwad); none = the book's fixed four
   reset() {
     this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
     this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
@@ -3031,7 +3049,8 @@ class ScoreKeeper {
     this.last = { i: this.log.length, streak0: streakM, execM };   // for lateBump
     this.prev = ev.name;
     let kwadHit = null;
-    for (const L in KWAD) if (KWAD[L] === ev.name && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; }
+    for (const L in KWAD) { const k = this.kw ? this.kw[L] : KWAD[L], nm = k && (k.trick || k), ob = k && k.obj;   // a daily A / D letter needs its named object
+      if (nm === ev.name && (!ob || ev.obstacle === ob) && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; } }
     let chainHit = null;
     if (CHAIN_BONUS[ev.name] && ev.exec !== 'MISSED') {
       this.chain = this.chain && this.chain.name === ev.name ? { name: ev.name, n: this.chain.n + 1 } : { name: ev.name, n: 1 };
@@ -3298,5 +3317,5 @@ async function learnFromLabels(runs, profile, opts = {}) {
 
 root.Sim = { BUMP_AFTER, BUMP_LATE, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
-  TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
+  TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

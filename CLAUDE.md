@@ -711,6 +711,20 @@ spin in 1.3 s (the stopping props take a bite out of the yaw at once). 0.1 is a 
 flips (a Blackbox log of one would give the real decay). **Perch** now needs the quad resting on something when it disarms (a
 hover with the motors cut for a moment was called a Perch). The bot does not fly these and Train has no steps for them yet.
 
+## Daily K.W.A.D. (owner, agreed 2026-11-20, built 2026-11-21; `dailyKwad`, `KWAD_SPOTS` in sim.js, `newScore` / `kwadShow` / `kwadMenus` in game.js; test/kwad.js)
+Four tricks a day per map, the same for every pilot: `S.dailyKwad(map, day, has)` from the UTC day (the board's) and the map id.
+**K** one of `KWAD_K` (Flip, Roll, Yaw Spin, Invert Rewind) and **W** one of `KWAD_W` (Double Flip, Double Roll, Juicy Flick, Inverted
+Yaw Spin, Vanny Roll, Rubik's Cube), anywhere; **A** one of `KWAD_A` (Powerloop, Matty Flip, Split-S) and **D** one of `KWAD_D` (Power
+Flip, Maverick Loop, Matty 360, Immelmann Turn, Power Roll), each on a NAMED object of the map (different objects where it has two; the
+call's `obstacle` must be that name). `KWAD_SPOTS` (map -> object -> pool tricks not to ask for there) comes from `node
+tools/kwadspots.js`: an object is in when the bot's flight of each pool trick is called on it 3 seeds of 3 (7 maps, 28 objects; the
+hidden school and the Training Room have none and keep the book's fixed set, as do the Node tests: `new ScoreKeeper()` is unchanged).
+The bonus is the calculator's: 250 a letter, 2000 more for all four. `ScoreKeeper(totw, kwad)` takes the set; the game makes its score
+with `newScore()` at each flight start (objects missing from the pilot's own layout are never asked for). Shown: a list under the
+letters for 9 s at the start of a flight and 4.5 s after each letter (`#kwadList`), on the main menu (`#menuKwad`), the pause menu, and
+per map on the daily board; K.W.A.D. COMPLETE call-out; the results line names the letters. The posted sheet is unchanged
+(`totals.kwad`), so the relay needs no redeploy. Add an object: put it in `CAND` in tools/kwadspots.js, run it, paste the table.
+
 ## INFINITY LOOPS and BIG BEN (owner, 2026-11-20; `CHAIN_BONUS` in sim.js, test/chains.js)
 Not in the TPW calculator; kept apart from the trick score like K.W.A.D. (`ScoreKeeper.chainBonus`, added to `total`; the
 results line and the posted sheet's `totals.chain` show it): every 5th Powerloop in a row in one combo is **INFINITY LOOPS**,

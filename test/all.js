@@ -27,6 +27,7 @@ const checks = [
   ['stress: randomised trick variations + near-misses', () => { const o = run('stress.js', ['--quick', '--seed=3']); const m = o.match(/STRESS (\d+)\/(\d+) fooled (\d+)/); return m && m[1] === m[2] && m[3] === '0' ? null : o.split('\n').filter(l => !l.startsWith('✓')).join('\n'); }],
   ['video review tracker (synthetic fisheye footage)', () => { const o = run('vision.js'); const m = o.match(/(\d+)\/(\d+) vision checks/); return m && m[1] === m[2] ? null : o; }],
   ['fast combos the way pilots fly them (ramped rates, 0.1 s gaps, bank-to-bank rolls)', () => { const o = run('fastcombo.js'); const m = o.match(/(\d+)\/(\d+) fast-combo/); return m && m[1] === m[2] ? null : o; }],
+  ['daily K.W.A.D.: the day\'s four per map, named objects the bot is called on, the calculator\'s bonus', () => { const o = run('kwad.js'); const m = o.match(/(\d+)\/(\d+) daily K\.W\.A\.D\. checks/); return m && m[1] === m[2] ? null : o; }],
   ['disarm tricks: Disarm Flip / Roll / Spin, Dead Pirate Spin, Disarm Loop with the real physics', () => { const o = run('disarm.js'); const m = o.match(/(\d+)\/(\d+) disarm checks/); return m && m[1] === m[2] ? null : o; }],
   ['More Warehouse: the conveyor carries a quad, every gap open, nothing floating', () => { const o = run('belt.js'); return /all passed/.test(o) ? null : o; }],
   ['every map (builds, spawn clear, bot tricks on its own objects)', () => { const o = run('maps.js'); const m = o.match(/(\d+)\/(\d+) map checks/); return m && m[1] === m[2] ? null : o; }],

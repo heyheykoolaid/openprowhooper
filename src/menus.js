@@ -78,7 +78,7 @@ document.addEventListener('click', e => { const y = e.target.closest('[data-myma
 document.addEventListener('click', e => { const b = e.target.closest('[data-mapid]'); if (!b || !S.MAPS[b.dataset.mapid]) return; const next = b.dataset.mapid;
   store.set('map', next); store.set('myMap', null); store.set('commMap', null); procFlight(telCapture('map'), () => { $('#loading').textContent = 'Loading ' + S.MAPS[next].title + '…'; show('#loading'); setTimeout(() => location.reload(), 350); }); });
 setTimeout(menuMapLabels, 0);
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { try { hubBadge(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } try { kwadMenus(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { try { hubBadge(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
 // owner-only buttons (owner, 2026-11-18): shown only when the pilot name is heyheykoolaid
 function ownerMenus() { const own = ghMenus(); for (const sel of ['#judgeBtn', '#mainMenu [data-act="tools"]', '#mainMenu [data-act="race"]', '#mainMenu [data-act="mapedit"]']) { const b = $(sel); if (b) b.classList.toggle('hide', !own); } }
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
@@ -87,7 +87,7 @@ function startFlyGo(withSession) {
   combo.names = []; combo.pts = 0; combo.active = false;
   if (!$('#judgeBox').classList.contains('hide')) stopJudge();   // however Judge the Bot was left, its panel, trail and big model go
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
-  if (race.on || activeWorld !== world) raceOff(); score = new S.ScoreKeeper(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
+  if (race.on || activeWorld !== world) raceOff(); score = newScore(); kwadShow(9000); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;
   hubKeepRun(); recapReset(); if (warm.on) stopWarmup(); if (coach.on) coachClock();
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
@@ -99,7 +99,7 @@ function endSession() {
   mode = 'paused'; drone.armed = false; const r = score;
   const best = store.get('best', 0); if (r.total > best) store.set('best', r.total);
   $('#results').innerHTML = `<h2>SESSION OVER</h2><div class="big">${r.total.toLocaleString()}</div>
-    <p>Trick score ${r.trickScore.toLocaleString()} × switch ${r.switchMult()} + K.W.A.D. ${r.kwadBonus}${r.chainBonus ? ` + ${r.chains.map(c => c.title + ' ×' + c.n).join(', ')} ${r.chainBonus.toLocaleString()}` : ''}${r.gapBonus ? ` + ${r.gapN} gap${r.gapN > 1 ? 's' : ''} ${r.gapBonus.toLocaleString()}` : ''}</p>
+    <p>Trick score ${r.trickScore.toLocaleString()} × switch ${r.switchMult()} + K.W.A.D. ${r.kwadBonus}${Object.keys(r.kwad).length ? ' (' + ['K', 'W', 'A', 'D'].filter(L => r.kwad[L]).join(' ') + ')' : ''}${r.chainBonus ? ` + ${r.chains.map(c => c.title + ' ×' + c.n).join(', ')} ${r.chainBonus.toLocaleString()}` : ''}${r.gapBonus ? ` + ${r.gapN} gap${r.gapN > 1 ? 's' : ''} ${r.gapBonus.toLocaleString()}` : ''}</p>
     <p>Biggest trick: <b>${r.biggest ? r.biggest.name + ' (' + r.biggest.net + ')' : '—'}</b> · Max streak ×${r.maxStreak.toFixed(2)} · Obstacles ${r.uniqueObs.size}</p>
     <p>Personal best: <b>${Math.max(best, r.total).toLocaleString()}</b></p>
     <ol>${r.log.filter(x => x.net || x.exec === 'CRASH').map(x => `<li>${x.name} <span class="${x.exec}">${x.exec}</span> +${x.net}</li>`).join('')}</ol>

@@ -30,6 +30,11 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #stickView { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; width: 190px; height: 88px; opacity: 0.9; pointer-events: none; }
 #stickView.off { display: none; }
 #kwad span { font-family: 'Bungee'; font-size: 30px; color: rgba(255,255,255,.18); -webkit-text-stroke: 1.5px rgba(0,0,0,.6); transform: skew(-8deg); }
+#kwadList { position: absolute; right: 22px; top: 104px; min-width: 190px; padding: 6px 10px 7px; background: rgba(0,0,0,.6); border: 1px solid #fff3; font: 12px var(--mono); color: #eee; }
+#kwadList > small, .kwadBox > small { display: block; font: 700 10px var(--mono); letter-spacing: .16em; color: var(--acid); margin-bottom: 3px; }
+.kwRow { display: flex; gap: 8px; align-items: baseline; line-height: 1.55; } .kwRow b { font-family: 'Bungee'; color: var(--hot); width: 14px; } .kwRow small { color: #9aa; } .kwRow.got span { color: var(--acid); } .kwRow.got span::after { content: ' ✓'; }
+.kwadBox { margin: 8px 0; padding: 8px 12px; border: 1px solid #fff3; background: #0006; font: 13px var(--mono); text-align: left; } .kwadBox > b { font-family: 'Bungee'; color: var(--hot); letter-spacing: .04em; }
+#hud.racing #kwadList { display: none; }
 #kwad span.on { color: var(--hot); -webkit-text-stroke: 2px #111; text-shadow: 2px 2px 0 #111; }
 #sessionT { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) skew(-6deg); font-family: 'Bungee'; font-size: 26px; color: #fff; -webkit-text-stroke: 1.5px #111; text-shadow: 2px 2px 0 #111; }
 /* trick call-outs and the combo line share one column above the stick boxes, so they stack and never overlap */
@@ -443,7 +448,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="hud" class="hide"><div id="passFeed"></div>
   <div id="scoreBox"><div id="scoreRow"><div id="score">0</div><button id="hudPause" title="Pause / menu (Esc)" aria-label="Pause">❚❚</button><button id="hudFull" title="Fullscreen (F11)" aria-label="Fullscreen">⛶</button></div><div id="streak">STREAK ×1.00</div><div id="streakTrack"><div id="streakbar"></div></div><div id="switch"></div></div>
   <div id="sessionT">FREE FLY</div>
-  <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div>
+  <div id="kwad"><span id="kwK">K</span><span id="kwW">W</span><span id="kwA">A</span><span id="kwD">D</span></div><div id="kwadList" class="hide"></div>
   <div id="hudStack"><div id="popups"></div><div id="combo" class="hide"></div></div><div id="comboBank"></div>
   <div id="rgHud" class="hide"><div id="rgTime"></div><div id="rgDelta"></div><div id="rgSub"></div><div id="rgSectors"></div><div id="rgMsg"></div><div id="rgBox"></div><div id="rgBat"></div><div id="rgArrow"></div></div>
   <canvas id="stickView" width="260" height="120" title="Stick overlay (V)"></canvas>
@@ -475,6 +480,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div id="menuNews" class="hide"><b>NEWS</b><span id="menuNewsText"></span></div>
   <p id="menuPilot" class="sub" style="margin-top:-6px"></p>
   <p id="quickGoal" class="note" style="margin:-4px 0 0"></p>
+  <div id="menuKwad" class="kwadBox hide"></div>
   </div><div class="panel menuBtnPanel">
   <div class="menuBtns">
     <button class="primary" data-act="session">2:00 Session</button>
@@ -492,7 +498,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <p class="note" id="menuDevice"></p>
 </div></div></div>
 
-<div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div class="menuBtns">
+<div id="pause" class="screen hide"><div class="panel" style="max-width:420px"><h2>Paused</h2><div id="pauseKwad" class="kwadBox hide"></div><div class="menuBtns">
   <button class="primary" data-act="resume">Resume</button><button data-act="mapedit" id="pauseMapEdit" class="hide">Back to Map Editor</button><button data-act="quick" class="hide" title="Say whether the game got its least sure calls right">Quick check</button><button data-act="garage">Garage &amp; Tune</button><button data-act="controls">Controls</button><button data-act="options">Options</button><button data-act="tricks">Tricktionary</button><button data-act="recap" title="Replay your run and say what each trick really was">SKITTLES mode</button><button data-act="map">Change map</button><span id="pauseRace" class="hide" style="display:contents"><button data-act="raceRestart">Restart race</button><button data-act="raceEditor" id="pauseEditorBtn">Back to editor (B)</button><button data-act="raceExit">Exit to tracks</button></span><button data-act="menu">Quit to menu</button></div></div></div>
 
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>

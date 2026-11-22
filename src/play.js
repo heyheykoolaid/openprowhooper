@@ -125,6 +125,7 @@ function onTrick(ev) {
   lateTrick = r.exec === 'CLEAN' || r.exec === 'SLOPPY' ? { until: drone.time + S.BUMP_LATE, name: r.name, i: recap.events.length - 1 } : null;
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
+  if (r.kwadHit) { kwadShow(4500); if (Object.keys(score.kwad).length === 4) setTimeout(() => flash('<b>K.W.A.D. COMPLETE!</b><small>all four letters · +2,000 bonus</small>', 'metal chainBonus'), 350); }
   if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); combo.pts += c.pts; renderCombo(); }
   updateBreakdown();
 }
