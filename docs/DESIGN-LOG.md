@@ -149,8 +149,9 @@ letter + 2000 for all four).
   chain gates fell out (the call names another object there).
 - **The book's fixed four** (Half Matty, Wall Tap, Trippy Switch, Barani) no longer give letters on maps with a daily set. They stay
   on the hidden maps and in the tests. The bonus amounts are the calculator's, unchanged.
-- **Where it shows**: a list under the letters at the start of a flight and after each letter, the main menu, the pause menu, each
-  map's slide on the board. The board cannot mark who got all four (it only reads file names); the run's sheet shows the K.W.A.D. bonus.
+- **Where it shows**: a list under the letters at the start of a flight and after each letter, the pause menu, each map's slide on
+  the board. Not the main menu: it was there in the first build and the owner took it off the same evening ("i don't like kwad
+  being on the main screen"). The board cannot mark who got all four (it only reads file names); the run's sheet shows the K.W.A.D. bonus.
 - **Open**: whether Free Fly should count letters too (it does, like every score); whether the pools are the right tricks and the
   right difficulty; whether a posted run should carry its letters so the board can show a K.W.A.D. mark (needs a relay change).
 

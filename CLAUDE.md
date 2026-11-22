@@ -721,8 +721,8 @@ tools/kwadspots.js`: an object is in when the bot's flight of each pool trick is
 hidden school and the Training Room have none and keep the book's fixed set, as do the Node tests: `new ScoreKeeper()` is unchanged).
 The bonus is the calculator's: 250 a letter, 2000 more for all four. `ScoreKeeper(totw, kwad)` takes the set; the game makes its score
 with `newScore()` at each flight start (objects missing from the pilot's own layout are never asked for). Shown: a list under the
-letters for 9 s at the start of a flight and 4.5 s after each letter (`#kwadList`), on the main menu (`#menuKwad`), the pause menu, and
-per map on the daily board; K.W.A.D. COMPLETE call-out; the results line names the letters. The posted sheet is unchanged
+letters for 9 s at the start of a flight and 4.5 s after each letter (`#kwadList`), the pause menu, and per map on the daily board (not on
+the main menu: owner, 2026-11-21, "i don't like kwad being on the main screen"); K.W.A.D. COMPLETE call-out; the results line names the letters. The posted sheet is unchanged
 (`totals.kwad`), so the relay needs no redeploy. Add an object: put it in `CAND` in tools/kwadspots.js, run it, paste the table.
 
 ## INFINITY LOOPS and BIG BEN (owner, 2026-11-20; `CHAIN_BONUS` in sim.js, test/chains.js)

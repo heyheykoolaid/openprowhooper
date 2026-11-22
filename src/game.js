@@ -88,8 +88,7 @@ function kwadHtml(set, got) {   // the four as rows; `got` = the letters already
 }
 let kwadListT = 0;
 function kwadShow(ms) { const el = $('#kwadList'); if (!el) return; el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); el.classList.remove('hide'); clearTimeout(kwadListT); kwadListT = setTimeout(() => el.classList.add('hide'), ms); }
-function kwadMenus() {   // the main menu's box and the pause menu's list
-  const m = $('#menuKwad'), k = kwadFor(MAP_ID, world); if (m) { m.classList.toggle('hide', !k); if (k) m.innerHTML = `<b>TODAY'S K.W.A.D.</b> <small>${esc((S.MAPS[MAP_ID] || {}).title || MAP_ID)} · all four +3,000 · new at 00:00 UTC</small>${kwadHtml(k)}`; }
+function kwadMenus() {   // the pause menu's list (owner, 2026-11-21: not on the main menu)
   const p = $('#pauseKwad'); if (p) { const on = mode === 'paused' && !race.on; p.classList.toggle('hide', !on); if (on) p.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); }
 }
 let mode = 'menu';           // menu | fly | paused
