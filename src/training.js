@@ -38,7 +38,7 @@ const TRAIN_OBST = {
   'Pole Dancing': ['Lamp Post', 'Tree', 'Hoop Pole', 'Slide Tower', 'the pilot'], 'Jump Roping': ['Swing Set', 'Monkey Bars', 'Picnic Table'],
   'Rewinds': ['Brick Building', 'Lamp Post', 'Tree', 'Slide Tower'], 'Open Air Tricks': ['anywhere'], 'Other Tricks': ['anywhere'],
 };
-const SPECIAL_OBST = { 'Facepunch': 'the pilot', 'Perch': 'Brick Building roof', 'Dive': 'Brick Building', 'Ceiling Tap': 'Slide Tower roof (underside)', 'Slide Disarm': 'the ground', 'Knife Edge': 'Wall Slot', 'Ninja Star': 'Wall Slot', 'Reverse Knife Edge': 'Wall Slot' };
+const SPECIAL_OBST = { 'Face Punch': 'the pilot', 'Perch': 'Brick Building roof', 'Building Dive': 'Brick Building', 'Ceiling Tap': 'Slide Tower roof (underside)', 'Slide Disarm': 'the ground', 'Knife Edge': 'Wall Slot', 'Ninja Star': 'Wall Slot', 'Reverse Knife Edge': 'Wall Slot' };
 const ALL_TRICKS = () => window.TPW_TRICKS.filter(t => t.pts > 0 && !/^Custom/.test(t.name));
 const cal = Object.assign({ round: 1, reps: {}, agree: {}, misses: {}, order: 'checklist-draft' }, store.get('calib', {}));
 const saveCalib = () => store.set('calib', cal);

@@ -4,7 +4,7 @@ require('/home/claude/openprowhooper/src/tricks.js'); require('/home/claude/open
 const S = globalThis.Sim, V = globalThis.Vision, fs = require('fs');
 const CASES = [['3-roll', 43, ['Roll']], ['8-vanny-roll', 31, ['Vanny Roll']], ['5-segmented', 38, ['Segmented Flips/Rolls', 'Segmented Flips/Rolls']], ['13-inverted-yaw-spin', 43, ['Inverted Yaw Spin']],
   ['9-rubiks-cube', 33, ["Rubik's Cube"]], ['10-cubiks-rube', 35, ["Cubik's Rube"]], ['6-yaw-spin', 40, ['Yaw Spin']], ['4-double-roll', 33, ['Double Roll']], ['1-flip', 40, ['Flip']], ['2-double-flip', 40, ['Double Flip']],
-  ['11-juicy-flick', 34, ['Juicy Flick']], ['7-inverted-rewind', 40, ['Invert Rewind', 'Invert Rewind', 'Invert Rewind', 'Invert Rewind']]];
+  ['11-juicy-flick', 34, ['Juicy Flick']], ['7-inverted-rewind', 40, ['Inverted Rewind', 'Inverted Rewind', 'Inverted Rewind', 'Inverted Rewind']]];
 const hfov = +(process.env.HFOV || 130), cleanup = process.env.CLEAN !== '0';
 let ok = 0;
 for (const [c, ms, want] of CASES) {

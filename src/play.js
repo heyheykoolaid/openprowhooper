@@ -82,7 +82,7 @@ function gapScore(c, now) {
 }
 // loops chain like combo trippies: the same loop on the same object again and again shows as one entry, ×N (each one still
 // scores by the TPW calculator, repeats included)
-const CHAIN = new Set(['Powerloop', 'Maverick Loop', 'Matty Flip', 'Beginner Matty', 'Split-S', 'Jump Rope', 'Anti Matty', 'Power Flip', 'Immelmann Turn']);
+const CHAIN = new Set(['Powerloop', 'Maverick Loop', 'Matty Flip', 'Beginner Matty', 'Split S', 'Jump Rope', 'Anti Matty', 'Power Flip', 'Immelmann']);
 function comboAdd(r) {
   const last = combo.chain, now = performance.now() / 1000;
   if (CHAIN.has(r.name) && last && last.name === r.name && last.obstacle === (r.obstacle || null) && now - last.t < 3.5) { last.n++; last.t = now; combo.names[combo.names.length - 1] = `${r.name} ×${last.n}`; }

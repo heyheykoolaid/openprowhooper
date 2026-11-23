@@ -1069,7 +1069,7 @@ video's description. **Main menu → Training ▸** (`#menuTraining`, a `.menuSu
 moved in there.
 
 ## Eject Roll needs a horizontal gap; Mavvelmann by the book (owner, 2026-11-23; test/phase2.js)
-**Eject Roll** (owner: "has to be through a horizontal gap") and **Stellar Eject Roll**: `req.flatGap` in `CONTEXT_TRICKS` (it replaced
+**Superseded the same day (see "Names and rules follow prowhooper.com"): Eject Roll needs no gap; the gap version is Cube Eject.** **Eject Roll** (owner: "has to be through a horizontal gap") and **Stellar Eject Roll**: `req.flatGap` in `CONTEXT_TRICKS` (it replaced
 `nearTall`): a gap whose opening lies flat (`gap.n` within ~45 deg of straight up: a skylight, a hole in a deck; gap crossings carry
 `flat`) crossed from 2.5 s before the flip to just after the roll; the call names the gap. Read as "an opening that lies flat, flown up
 through": the owner did not spell it out, so check with him if it turns out he meant something else. Maps with such gaps today: More
@@ -1078,6 +1078,47 @@ Room has none** (its station for the trick is still the pole): flat gaps are to 
 `P-~180 Ra180` + under-then-over rule): upright from the under pass to the flick (the maverick motion), the over pass travelling backward
 (`MAVVEL_BACK`), the flick starting from 0.5 s before the over pass to 1.5 s after it ("when you're above the object") and lasting 0.8 s
 at most ("quick"), upside-down after it, the roll starting within 0.7 s ("promptly"), level at the end.
+
+## Names and rules follow prowhooper.com (owner, 2026-11-23, after the audit: https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs)
+**Fourteen names changed to the site's**: Immelmann (was Immelmann Turn), Inverted Rewind (Invert Rewind), Split S (Split-S), Splitback
+(Split-Back), Orbits (Orbit x2), Trippy Spin (Trippy Spin x2), Stall Flip / 360 / Matty / Half Matty / 540 Half Matty Rewind (were
+"Flip Stall Rewind" …), Building Dive (Dive), Face Punch (Facepunch), Blind Loop (Blindflip). **Older sections of this file still use
+the old names.** Everything stored before then carries them: `TRICK_ALIAS` / `S.canonTrick` in sim.js, `S.canonReviver` on the tools'
+and tests' `JSON.parse` (a string that IS an old name, under any key but pilot / map / object / free text), `setLibrary` and the
+community profile's floors, stored runs and rungs in the browser (hub.js, dropoff.js `guestOpen`, coach.js). The derived files in
+the repo (calibration/demos, library/, community/) were renamed in place; pilot data (calibration/round-*, the data repo) is untouched.
+**Rules** (test/phase2.js, feedback.js, jumprope.js, knife.js, gaps.js):
+- **Eject Roll** needs no gap again (`climbBefore` + `nearTall` 0.8); **Cube Eject** (owner: "an Eject Roll out of a square gap"; extra,
+  575, the site's Cube value) is the same rotation with a flat SQUARE gap crossed (`req.flatGap: 'square'`; crossings carry `flat`, `sq`);
+  an Eject Roll is not called when one was (`notFlatGap`). Stellar Eject Roll needs no gap.
+- **Inverted Yaw Tracking** ends with a 180 pitch down (the roll exit still counts). **Barani**: the yaw must start with the horizon in
+  view (`horizonAt`: the camera's line at most `HORIZON_VIEW` 55 deg above level), else the same move is a **Power Swap** (`earlyYaw`).
+  **Trippy Switch** needs a whole lap the other way (`SWITCH_LAPS`). **Ninja Star** only through gaps up to `NINJA_X` 3 whoops,
+  **Knife Edge** up to `KNIFE_X` 4 (was 2.75). **Building Dive** and **Beginner Matty** are unchanged (owner, same day: "open air dive
+  counts", "the climb back over is not required"). **Cinnamon Roll** needs its object in view (`trackFrac` at least
+  `CINNAMON_VIEW` 0.35: a turn made looking anywhere reads ~0.2, a flown orbit of the object 0.4-0.6).
+- **Not changed: Segmented Flips/Rolls** keeps its 0.18 s pause (the site's text says 0.5 s, its own demo GIF shows 0.23-0.27 s, and the
+  owner's standing rule is that the GIFs define the tricks). One constant (`SEG_GAP`) if he wants the text's.
+- **Points / labels from the site**: Barani 750, Cubik's Rube 350, Beginner Matty 125; Trippy Spin and Trippy Switch are Intermediate.
+- **New tricks** (`EXTRA_TRICKS`, drafts): **Inverted Uh-uh** (125; `uhTick` / `uhuh`: upside-down for 0.5-4 s with three yaw swings of
+  `UHUH_SWING` 25 deg or more, ending within 70 deg of where it began, no spin; nothing else is read from that stretch), **Loop to Matty**
+  (550; `P+~180` then `P-~180..360`, a flat gap crossed going DOWN, ending backward), **Gaps** as a book entry.
+- **Gap points by size** (`gapPoints`, `GAP_STEP` 6 in): 150 through 6 in (15 cm) or less on the short side, 25 less per 6 in more (125 at
+  12 in, 100 at 18 in: the site's three values), never under 25 (from 3 ft up); halved on repeats in a combo as before.
+- **The Cube** (`trickPark` in maps.js, every Trick Park and the Training Room): `Cube 1.6 m`, a frame of thin bars with a gap on each
+  side and `Cube top opening` lying flat: where Cube Eject and Loop to Matty are flown.
+
+## Rollback and Juicy Rollback (owner, 2026-11-23, from RodFPV's labels; `rollbackTick` / `rollbackWait` in sim.js; test/phase2.js)
+Written from RodFPV's 9 labels of 2026-11-23 (3 Rollback, 6 Juicy Rollback on Clappy's footbridge), re-flown: under an object flying
+on; as it comes out, over onto its back by PITCH (back 136-189 deg = **Rollback**, a Snapback's way in; forward 173-200 deg =
+**Juicy Rollback**, a Juicy Flick's), a roll back upright (114-417 deg as the gyro splits it with yaw), and back under the SAME object
+the other way, upright and travelling backward (fwdDot under -0.4), 0.6 to `ROLLBACK_BACK` 3.2 s after the first pass, no pass over it
+in between, with at least `ROLLBACK_ROLL` 100 deg of roll travel (a Matty that passes under twice comes round on pitch alone: the bot's
+Matty on the school's Hall Beam was first read as a Juicy Rollback). Going over by roll is a Half Matty's way in and is not one. Judged at the pass back under; the tokens of the stretch are
+used up and pending calls dropped, and a Snapback / Juicy Flick / Roll / Yaw Spin read from the way in waits for it (`ROLLBACK_HOLD`,
+`rollbackWait`: only when an under pass came with it, the quad went upside-down, and from `ROLLBACK_SEE` 0.3 s after the turn only while
+it is travelling back toward the object: Rod's rewinds already are; a Snapback that flies on is called without more delay). All 9 labels are called by the right name. Extras,
+drafts, 300 / 350 points (placeholders), credited to RodFPV in the Tricktionary. One pilot's labels: watch the calls on other pilots.
 
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of

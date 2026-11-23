@@ -190,7 +190,7 @@ async function hubOpenMine(r, at) {
   await hubKeepRun();   // the run in hand is kept first
   let rows; try { rows = r.packed ? await FlightLog.unpack(r.packed) : r.trace; } catch { rows = null; } if (!Array.isArray(rows) || rows.length < TRACE_HZ) throw new Error('trace');
   const back = r.mine ? { events: r.events || [], flags: r.flags || [] } : hubFromLabels(r);
-  recapReset(); recap.id = r.mine ? r.run : String(r.id).replace(/^review-/, ''); recap.started = r.started; recap.trace = rows; recap.events = back.events; recap.flags = back.flags; recap.telDone = recap.id; recap.mode = 'free';
+  recapReset(); recap.id = r.mine ? r.run : String(r.id).replace(/^review-/, ''); recap.started = r.started; recap.trace = rows; recap.events = back.events; recap.flags = back.flags; for (const e of [...(recap.events || []), ...(recap.flags || [])]) for (const k of ['name', 'actual', 'target']) if (e && typeof e[k] === 'string') e[k] = S.canonTrick(e[k]);   /* runs kept before the names followed the site */ recap.telDone = recap.id; recap.mode = 'free';
   openRecap('hub'); if (at != null) { const x = recapItems().find(x => Math.abs(x.t - at) < 0.05); if (x) recapPlay(x); renderRecap(); }
 }
 async function hubOpenBoard(e) {

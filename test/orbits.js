@@ -22,11 +22,11 @@ const lap = (c, R, y, speed, laps, how, lean) => t => { const w = speed / R, a =
   const up = norm(v3(toC.x * Math.sin(L), Math.cos(L), toC.z * Math.sin(L))); return { pos, q: basisQ(tan, up) }; };
 const C = S.MAPS.clappy.build(), sak = C.objs.find(o => o.name === 'Sakura Tree' && o.round && o.round.under > 2.5), sc = sak.round.c;
 for (const [speed, lean] of [[11, 66], [13, 72], [16, 76]]) { const got = fly(C, lap(sc, 4.7, 1.9, speed, 3.2, 'pitched', lean), 3.2 * 2 * Math.PI * 4.7 / speed + 2.5);
-  check(`fast orbit round a Clappy sakura (${speed} m/s, nose down ${lean}°) is an Orbit, not a Trippy`, got.includes('Orbit x2') && !got.some(x => /Trippy/.test(x)), got.join(', ') || 'nothing'); }
-{ const got = fly(C, lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 3.2 / 8 + 2.5); check('a rolled trippy round the same sakura is still a Trippy Spin', got.includes('Trippy Spin x2'), got.join(', ') || 'nothing'); }
+  check(`fast orbit round a Clappy sakura (${speed} m/s, nose down ${lean}°) is an Orbit, not a Trippy`, got.includes('Orbits') && !got.some(x => /Trippy/.test(x)), got.join(', ') || 'nothing'); }
+{ const got = fly(C, lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 3.2 / 8 + 2.5); check('a rolled trippy round the same sakura is still a Trippy Spin', got.includes('Trippy Spin'), got.join(', ') || 'nothing'); }
 const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.round && o.prims.some(p => p.type === 'capsule' && p.r > 0.26 && p.r <= 0.6 && Math.abs(p.b.y - p.a.y) > 3));
 { const c = lone.round.c, got = fly(M, lap(c, 3.4, 2.2, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 3.4 / 8 + 2.5);
-  check(`a trippy round a thick Moose tree (${lone.name}, trunk ${lone.prims.find(p => p.type === 'capsule').r.toFixed(2)} m) counts`, got.includes('Trippy Spin x2'), got.join(', ') || 'nothing'); }
+  check(`a trippy round a thick Moose tree (${lone.name}, trunk ${lone.prims.find(p => p.type === 'capsule').r.toFixed(2)} m) counts`, got.includes('Trippy Spin'), got.join(', ') || 'nothing'); }
 // nose up the pole and rolling all the way round (pilot review of RodFPV's flagpole trippies on the playground: nose
 // 55-75° up, rolling ~270°/s, climbing): one Trippy Spin of several laps, not Roll / one-lap trippy / Double Roll
 { const P = S.MAPS.playground.build(), fp = P.objs.find(o => o.name === 'Flagpole'), cap = fp.prims.find(p => p.type === 'capsule'), c = { x: cap.a.x, z: cap.a.z };
@@ -34,7 +34,7 @@ const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.r
   const gen = t => { const a = Math.min(t, T) * w, pos = v3(c.x + R * Math.cos(a), 1.8 + 0.5 * Math.min(t, T), c.z + R * Math.sin(a)), toC = norm(v3(c.x - pos.x, 0, c.z - pos.z)), tan = v3(-Math.sin(a), 0, Math.cos(a));
     const f = norm(v3(tan.x * Math.cos(nose), Math.sin(nose), tan.z * Math.cos(nose))), back = v3(-tan.x * Math.sin(nose), Math.cos(nose), -tan.z * Math.sin(nose));
     return { pos, q: basisQ(f, v3(toC.x * Math.cos(g) + back.x * Math.sin(g), back.y * Math.sin(g), toC.z * Math.cos(g) + back.z * Math.sin(g))) }; };
-  const got = fly(P, gen, T + 2.5), ts = got.filter(x => x === 'Trippy Spin x2').length;
+  const got = fly(P, gen, T + 2.5), ts = got.filter(x => x === 'Trippy Spin').length;
   check('nose-up rolling trippy round the playground flagpole is one Trippy Spin', ts === 1 && !got.some(x => /^(Roll|Double Roll|Triple Roll)$/.test(x)), got.join(', ') || 'nothing'); }
 // a Matty's tumble must be forward: fwdSweptBetween reads a forward (nose-down) flip as positive and a powerloop's way round
 // as negative (pilot review of RodFPV: the tail of a powerloop between an over and an under was called a Matty Flip)
@@ -51,11 +51,11 @@ const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.r
   const flat = lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 50), T = 3.2 * 2 * Math.PI * 3.2 / 8 + 2.5, det45 = W => { const d = new S.TrickDetector(W); return d; };
   const flyTilt = (gen, tilt) => { const o = S.TrickDetector.prototype, was = Object.getOwnPropertyDescriptor(o, 'camTilt'); const got = (() => { const D = S.TrickDetector; S.TrickDetector = class extends D { constructor(w) { super(w); this.camTilt = tilt; } }; try { return fly(C, gen, T); } finally { S.TrickDetector = D; } })(); return got; };
   const a = flyTilt(withRc(flat, { thr: 0.5, roll: 0.4, pitch: 0.05, yaw: -0.4 }), 45), b = flyTilt(flat, 45), c = flyTilt(withRc(flat, { thr: 0.5, roll: 0.4, pitch: 0.05, yaw: 0.4 }), 45);
-  const ea = a.ev.find(e => e.name === 'Trippy Spin x2');
-  check('a flat trippy (leaning 50°, camera 45°) with roll and yaw opposed is a Trippy Spin', a.includes('Trippy Spin x2'), a.join(', ') || 'nothing');
+  const ea = a.ev.find(e => e.name === 'Trippy Spin');
+  check('a flat trippy (leaning 50°, camera 45°) with roll and yaw opposed is a Trippy Spin', a.includes('Trippy Spin'), a.join(', ') || 'nothing');
   check('…with the stick witness on the call (confidence, no "sticks" fail) and how long it lasted', !!ea && ea.watch && ea.watch.conf >= 0.9 && !ea.watch.fails.length && ea.dur > 3, ea ? JSON.stringify({ conf: ea.watch && ea.watch.conf, dur: ea.dur, notes: ea.notes }) : '');
   check('the same flight with no sticks recorded, or with them pushed the same way, is not', !b.some(x => /Trippy/.test(x)) && !c.some(x => /Trippy/.test(x)), `${b.join(', ') || 'nothing'} / ${c.join(', ') || 'nothing'}`);
   // a properly rolled trippy flown with the sticks the same way round still counts (the witness is a vote, never a veto), with low confidence
-  const d2 = flyTilt(withRc(lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), { thr: 0.5, roll: 0.4, pitch: 0, yaw: 0.4 }), 20), ed = d2.ev.find(e => e.name === 'Trippy Spin x2');
+  const d2 = flyTilt(withRc(lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), { thr: 0.5, roll: 0.4, pitch: 0, yaw: 0.4 }), 20), ed = d2.ev.find(e => e.name === 'Trippy Spin');
   check('a rolled trippy with the sticks together still counts, at low confidence with a note', !!ed && ed.watch.conf < 0.5 && ed.watch.fails.includes('sticks'), ed ? JSON.stringify(ed.watch) : d2.join(', ')); }
 console.log(`\n${ok}/${n} orbit checks`); if (ok !== n) process.exit(1);

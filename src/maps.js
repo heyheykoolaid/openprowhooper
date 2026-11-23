@@ -68,6 +68,14 @@
       box(o, v3(x, (yc - sh) / 2, z), v3(t, (yc - sh) / 2, w / 2), M.wall); box(o, v3(x, (yc + sh + PH) / 2, z), v3(t, (PH - yc - sh) / 2, w / 2), M.wall);
       mark(o, v3(x + 0.045, yc + sh + 0.03, z), v3(0.004, 0.02, w / 2));
       O(`Knife Slot ${w.toFixed(1)} m opening`, 'gap', { gap: { c: v3(x, yc, z), n: v3(1, 0, 0), hu: w / 2, hv: sh, u: v3(0, 0, 1) } }); });
+    // the Cube (owner, 2026-11-23: Cube Eject, Loop to Matty): a 1.6 m frame of thin bars open on all four sides and on top, each
+    // opening a gap; the top one lies flat (a horizontal gap)
+    { const o = O('Cube 1.6 m', 'deco'), cx = X(28.5), cz = Zw(13), h = 0.8, t = 0.03, g = h - 0.08;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(o, v3(cx + sx * h, h, cz + sz * h), v3(t, h, t), M.post);
+      for (const y of [t, 2 * h]) for (const s of [-1, 1]) { box(o, v3(cx + s * h, y, cz), v3(t, t, h), M.bar); box(o, v3(cx, y, cz + s * h), v3(h, t, t), M.bar); }
+      for (const s of [-1, 1]) { O(`Cube ${s < 0 ? 'west' : 'east'} opening`, 'gap', { gap: { c: v3(cx + s * h, h, cz), n: v3(1, 0, 0), hu: g, hv: g, u: v3(0, 0, 1) } });
+        O(`Cube ${s < 0 ? 'north' : 'south'} opening`, 'gap', { gap: { c: v3(cx, h, cz + s * h), n: v3(0, 0, 1), hu: g, hv: g, u: v3(1, 0, 0) } }); }
+      O('Cube top opening', 'gap', { gap: { c: v3(cx, 2 * h, cz), n: v3(0, 1, 0), hu: g, hv: g, u: v3(1, 0, 0) } }); }
     // the open-air box: nothing above it, low corner markers only
     { const o = O('Open Air Box', 'deco'); for (const [a, b] of [[2, -4], [20, -4], [2, 8], [20, 8]]) { box(o, v3(X(a), 0.15, Zw(b)), v3(0.12, 0.15, 0.12), M.accent); }
       mark(o, v3(X(11), 0.006, Zw(-4)), v3(9, 0.004, 0.03)); mark(o, v3(X(11), 0.006, Zw(8)), v3(9, 0.004, 0.03)); }

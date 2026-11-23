@@ -33,7 +33,7 @@ run('roll, yaw spin overlapping the roll-out', [roll(450, 0.2), yaw(650, -0.06)]
 run('flip, flip opposite (0.12 s)', [flip(500, 0.2), flip(-500, 0.12)], ['Flip', 'Flip']);
 run('six-move run', [roll(480, 0.2), flip(480, 0.15), roll(-480, 0.12), yaw(-650, 0.15), flip(-480, 0.15), roll(480, 0.12)], ['Roll', 'Flip', 'Roll', 'Yaw Spin', 'Flip', 'Roll']);
 // not tricks: these must stay quiet
-run('half roll and back is an Invert Rewind, not a roll', [roll(400, 0.2, 170), roll(-400, 0.5, 170)], ['Invert Rewind']);
+run('half roll and back is an Invert Rewind, not a roll', [roll(400, 0.2, 170), roll(-400, 0.5, 170)], ['Inverted Rewind']);
 run('banking hard into a turn (120°) is nothing', [roll(350, 0.2, 120)], []);
 run('250° of roll that ends on its side is nothing', [roll(400, 0.2, 250)], []);
 console.log(`\n${pass}/${total} fast-combo flights`);

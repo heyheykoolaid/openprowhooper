@@ -30,10 +30,9 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
    Decided 2026-11-23: one lap counts (it did), the corner climb is its own trick (**Corner Climb**, draft). Open, the owner's calls:
    Corner Climb's real name and points, the cue wording. Corner Climb needs a real flight and labels to set its numbers. To build: Show me
    for the trippy (a bot script or a library replay on the Big Pole), the stall / Matty / perch-drop entries as stages.
-   **Eject Roll** now needs a horizontal gap (2026-11-23): add a flat hatch to every Trick Park and the Training Room (only More
-   Warehouse and Ship Drugs have one), and move Train's station for it there.
-   **Tricktionary audit** (2026-11-23, https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs): the owner picks which of the 11 rule
-   differences, 3 missing tricks, 3 point values and 14 names to bring in line with prowhooper.com.
+   **Tricktionary audit** (2026-11-23): rules, names, points and the three tricks brought in line with prowhooper.com; Rollback and
+   Juicy Rollback from RodFPV's labels. Open: Segmented's stall (0.18 s from the demo vs the text's 0.5 s); points for Cube Eject,
+   Rollback, Juicy Rollback, Corner Climb; the 16 demo clips not on file; per-object point tiers (gate, cube, indoors).
 9. **Proper gap names per map** for the gap call-outs (they use object names today).
 10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);

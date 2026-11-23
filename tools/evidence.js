@@ -53,7 +53,7 @@ function consensus(votes) {
 async function load(files) {
   const grades = [];
   const flights = new Map(), labelFiles = [];
-  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!j || typeof j !== 'object') continue;
+  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; } if (!j || typeof j !== 'object') continue;
     const items = j.format === 'pro-whooper-telemetry-bundle/1' && Array.isArray(j.items) ? j.items.map(x => x && x.payload).filter(Boolean) : [j];
     for (const p of items) {
       if (p.format === 'pro-whooper-flight/1' && str(p.id) && p.trace && !flights.has(p.id) && p.map !== 'training') flights.set(p.id, { id: p.id, layout: p.summary && typeof p.summary === 'object' ? p.summary.layout || null : null, official: p.summary && typeof p.summary === 'object' && p.summary.official ? p.summary.official : undefined, replica: p.mode === 'replica' ? !!(p.summary && p.summary.replica && p.summary.replica.faithful === true) : null, botSrc: p.summary && p.summary.bot && typeof p.summary.bot.source === 'string' ? p.summary.bot.source : null, pilot: who(p.name, p.pilot), name: str(p.name, 30), map: str(p.map, 20), started: str(p.started, 30), camTilt: +p.camTilt || 20, profile: p.profile, trace: p.trace, events: Array.isArray(p.events) ? p.events : [], missed: Array.isArray(p.missed) ? p.missed : [], src: 'flight' });

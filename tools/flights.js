@@ -6,14 +6,14 @@
 const fs = require('fs'), path = require('path');
 const FL = require('../src/flightlog.js'); const { replayTrace } = require('../test/lib.js');
 require('../src/maps.js'); const MAPS = globalThis.Sim.MAPS, worlds = {}, worldOf = (id, layout, official) => { const S = globalThis.Sim, k = id + (layout ? JSON.stringify(layout) : '') + (official ? '|' + JSON.stringify(official) : ''); if (worlds[k]) return worlds[k]; const m = MAPS[id] ? id : 'playground', was = S.officialEdits(m); S.setMapEdits(m, layout && typeof layout === 'object' ? layout : null); if (official !== undefined) S.setOfficialEdits(m, official && typeof official === 'object' ? official : null); try { return (worlds[k] = MAPS[m].build()); } finally { S.setMapEdits(m, null); S.setOfficialEdits(m, was); } };   // each flight is re-flown on the map it was flown on
-try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
-try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'))); } catch { /* no trick library yet */ }
+try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver)); } catch { /* no community profile yet */ }   // re-fly as the game does
+try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver)); } catch { /* no trick library yet */ }
 const args = process.argv.slice(2), verbose = args.includes('--verbose');
 const files = []; const walk = p => { const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); };
 for (const a of args) if (!a.startsWith('--')) walk(a);
 (async () => {
   const flights = [], labels = [];
-  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; }
+  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; }
     const items = j.format === 'pro-whooper-telemetry-bundle/1' ? j.items.map(x => x.payload) : [j];
     for (const p of items) { if (p.format === 'pro-whooper-flight/1') flights.push(p); if (p.format === 'pro-whooper-flight-labels/1') labels.push(p); } }
   if (!flights.length) { console.log('no flights found'); return; }

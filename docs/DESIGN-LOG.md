@@ -286,3 +286,25 @@ https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs. Nothing was changed from it. 
   indoors); the game uses the outdoor value everywhere.
 - **Names**: 14 differ (Immelmann, Inverted Rewind, Splitback, Stall Flip Rewind and the other stall rewinds, Building Dive, Face
   Punch, Blind Loop, Orbits, Trippy Spin).
+
+### Decisions from the audit, and Rollback (owner, 2026-11-23)
+- **"Update eject rolls, so that they can be performed without a gate. A Cube Eject is an Eject Roll out of a square gap."** Done: Eject
+  Roll and Stellar Eject Roll need no gap; Cube Eject is new (575 points, the site's Cube value; placeholder).
+- **"Update the 10 differing rules"**, then row by row: "a trippy switch should require a full lap … add the downgrade … ninja star
+  should also be tight gaps … widen to 4 … open air dive counts … the climb over back is not required … add an in view check". Done:
+  Trippy Switch (a whole lap back), Barani (an early yaw is a Power Swap), Ninja Star (gaps up to 3 whoops), Knife Edge (up to 4),
+  Cinnamon Roll (the object in view), Inverted Yaw Tracking (pitch-down exit), Stellar Eject Roll (no gap). **Kept as they were, by
+  the owner's word**: an open-air dive counts as a Building Dive; a Beginner Matty needs no climb back over. **Segmented Flips/Rolls was left**: the site's
+  text says a 0.5 s stall, its own demo shows 0.23-0.27 s, and the standing rule is that the demos define the tricks; raising it to 0.5 s
+  would also stop calling the demo itself. Open: the owner says if he wants the text's 0.5 s anyway.
+- **"Add the three tricks (come up with a scoring system for how big the gap is)."** Inverted Uh-uh (125), Loop to Matty (550, on the
+  new Cube in every Trick Park), Gaps. Gap scoring: 150 through 6 in or less, 25 less for each 6 in more (so the site's 125 at 12 in and
+  100 at 18 in), never under 25. The site's points: Barani 750, Cubik's Rube 350, Beginner Matty 125.
+- **"Update the names to match."** The 14 names are the site's; old data is read through an alias. Docs older than today keep the old
+  names. Open: the Tricktionary lists the site's three stick-on "x2" tricks without the "x2" (laps show as "×2" in the call-out).
+- **"Rod labelled some tricks as rollbacks … make sure our understanding of rollback is based on these attempts."** Rollback and Juicy
+  Rollback are written from his 9 labels (what was measured is in CLAUDE.md); all 9 are now called by the name he gave. 300 / 350
+  points are placeholders. Open: points; whether another pilot flies them the same way.
+- **Consequences to know**: a Snapback or Juicy Flick made right after passing under something waits a moment longer only when the
+  quad is already coming back toward the object (it may be a Rollback). On a sample of 60 other shared flights the new rule called 6
+  Rollbacks and 4 Juicy Rollbacks nobody has labelled: worth a look in review.

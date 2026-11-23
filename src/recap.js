@@ -83,8 +83,8 @@ function recapClipDelete(i) { if (!recap.clips[i]) return; recap.clips.splice(i,
 // real flying: the loop family and Mattys flown in open air (no object), trippies with nothing in the middle, and
 // single laps (the book's trippy and orbit are two laps). A variant is stored as the book's name plus `openAir` /
 // `laps` on the label, so the benchmark still compares like with like.
-const RECAP_VARIANTS = ['Powerloop (open air)', 'Inverted 360 Powerloop (open air)', 'Matty Flip (open air)', 'Split-S (open air)', 'Immelmann Turn (open air)',
-  'Trippy Spin x1', 'Trippy Spin x1 (open air)', 'Trippy Spin x2 (open air)', 'Double Rolling Trippy Spin (open air)', 'Orbit x1'];
+const RECAP_VARIANTS = ['Powerloop (open air)', 'Inverted 360 Powerloop (open air)', 'Matty Flip (open air)', 'Split S (open air)', 'Immelmann (open air)',
+  'Trippy Spin x1', 'Trippy Spin x1 (open air)', 'Trippy Spin (open air)', 'Double Rolling Trippy Spin (open air)', 'Orbit x1'];
 // Tricks the book does not have (a Rollback, a local move, something new): the pilot types the name once and it is
 // offered from then on (kept in this browser). Labels carry `custom: true`; the detector has no rule for them yet, so
 // they are the raw material for writing one (tools/signatures.js lists what was measured in each).
@@ -97,7 +97,7 @@ const recapChBtn = nm => nm && !recap.guest && recapCustom().includes(nm) ? `<bu
 const recapNewHtml = () => `<span class="rcNew"><input data-rcnew="1" maxlength="40" placeholder="or name a new trick…" onkeydown="event.stopPropagation(); if (event.key === 'Enter') this.nextElementSibling.click()"><button data-rc="newtrick" title="Use this name for the selected trick (it is remembered for next time)">Use</button></span>`;
 function recapVariant(name) { if (name && recapCustom().includes(name)) return { actual: name, custom: true };
   if (!name || !RECAP_VARIANTS.includes(name)) return { actual: name || null };
-  const openAir = / \(open air\)$/.test(name), b = name.replace(/ \(open air\)$/, ''), one = / x1$/.test(b); return { actual: one ? b.replace(/ x1$/, ' x2') : b, variant: name, openAir: openAir || undefined, laps: one ? 1 : undefined }; }
+  const openAir = / \(open air\)$/.test(name), b = name.replace(/ \(open air\)$/, ''), one = / x1$/.test(b); return { actual: one ? (b === 'Orbit x1' ? 'Orbits' : b.replace(/ x1$/, '')) : b, variant: name, openAir: openAir || undefined, laps: one ? 1 : undefined }; }
 // A tile can hold more than one trick: the first is what the block is called, `extra` lists the tricks that follow it
 // inside the same stretch, in order (a combo the pilot does not want to cut into separate blocks).
 const recapExtra = it => (it.kind === 'call' ? it.e.extra : it.f.extra) || [];

@@ -60,15 +60,15 @@ function orbitAt(LP0, laps, lean, rollsPerLap, R, y, drift) {
     if (rollsPerLap) q = qmul(face, rollQ(rollsPerLap * Math.min(t, T) * w));
     return { pos, q }; } };
 }
-run('trippy spin x2 (inverted, leaning 55 into the pole)', orbit(2.1, 55, 0), ['Trippy Spin x2']);
-run('trippy spin x2 (inverted, leaning 25)', orbit(2.1, 25, 0), ['Trippy Spin x2']);
+run('trippy spin x2 (inverted, leaning 55 into the pole)', orbit(2.1, 55, 0), ['Trippy Spin']);
+run('trippy spin x2 (inverted, leaning 25)', orbit(2.1, 25, 0), ['Trippy Spin']);
 // realistic: inverted, facing the pole, nose pitched to look up it (30 deg camera) -> lots of body roll per lap, never upright
 function lookUp(pitchDeg, wob) { const R = 1.6, w = 170 * D, T = 2.1 * 2 * P / w;
   return { T: T + 1.5, at: t => { const a = Math.min(t, T) * w, pos = v3(LP.x + R * Math.cos(a), 2.0, LP.z + R * Math.sin(a)), toP = v3(-Math.cos(a), 0, -Math.sin(a));
     return { pos, q: qmul(faceQ(toP), qmul(rollQ(P), qmul(pitchQ(-pitchDeg * D), rollQ((wob || 0) * D * Math.sin(t * 6))))) }; } }; }
-for (const pd of [40, 55, 65]) run(`trippy spin x2 (inverted, nose up the pole ${pd})`, lookUp(pd, 0), ['Trippy Spin x2']);
-run('trippy spin x2 (nose up 60, wobbling 15)', lookUp(60, 15), ['Trippy Spin x2']);
-run('trippy spin x2 (leaning 65, wobbling)', (() => { const o = orbit(2.1, 65, 0); return { T: o.T, at: t => { const s = o.at(t); return { pos: s.pos, q: qmul(s.q, rollQ(14 * D * Math.sin(t * 7))) }; } }; })(), ['Trippy Spin x2']);
+for (const pd of [40, 55, 65]) run(`trippy spin x2 (inverted, nose up the pole ${pd})`, lookUp(pd, 0), ['Trippy Spin']);
+run('trippy spin x2 (nose up 60, wobbling 15)', lookUp(60, 15), ['Trippy Spin']);
+run('trippy spin x2 (leaning 65, wobbling)', (() => { const o = orbit(2.1, 65, 0); return { T: o.T, at: t => { const s = o.at(t); return { pos: s.pos, q: qmul(s.q, rollQ(14 * D * Math.sin(t * 7))) }; } }; })(), ['Trippy Spin']);
 run('double rolling trippy (1 roll per lap)', orbit(2.1, 0, 1), ['Double Rolling Trippy Spin']);
 // 4. Matty flip at the pilot's rates, split by a hang: over the bar, front flip ~200 at 320/s, hang looking down (slow),
 // then the rest of the pitch while dropping behind and flying backward under the bar
@@ -98,7 +98,7 @@ for (const ang of [35, 55]) {
   run(`split-S crossing at ${ang} deg`, at([line(p0, mul(h, 3.4), 0.71, face),
     { T: rollT, f: t => ({ pos: add(pr, mul(h, 2.0 * t)), q: qmul(face, qmul(rollQ(P * t / rollT), yawQ(20 * D * t / rollT))) }) },
     { T: Th, f: t => { const ps = P * t / Th; return { pos: add(c, add(v3(0, rad * Math.cos(ps), 0), mul(h, rad * Math.sin(ps)))), q: qmul(face, qmul(R1, pitchQ(ps))) }; } },
-    line(v3(c.x, botY, c.z), mul(h, -3), 1.6, qmul(face, qmul(R1, pitchQ(P)))), hold(add(v3(c.x, botY, c.z), mul(h, -4.8)), qmul(face, qmul(R1, pitchQ(P))), 1.2)]), ['Split-S']);
+    line(v3(c.x, botY, c.z), mul(h, -3), 1.6, qmul(face, qmul(R1, pitchQ(P)))), hold(add(v3(c.x, botY, c.z), mul(h, -4.8)), qmul(face, qmul(R1, pitchQ(P))), 1.2)]), ['Split S']);
   void F; void base;
 }
 
@@ -107,10 +107,10 @@ const FP = v3(0, 0, -14.5);
 function flagTrippy(R, y, pitchDeg, rate) { const w = rate * D, T = 2.1 * 2 * P / w;
   return { T: T + 1.5, at: t => { const a = Math.min(t, T) * w, pos = v3(FP.x + R * Math.cos(a), y, FP.z + R * Math.sin(a)), toP = v3(-Math.cos(a), 0, -Math.sin(a));
     return { pos, q: qmul(faceQ(toP), qmul(rollQ(P), pitchQ(-pitchDeg * D))) }; } }; }
-run('flagpole trippy (r 2.0 m, 3 m up, 150/s)', flagTrippy(2.0, 3, 45, 150), ['Trippy Spin x2']);
-run('flagpole trippy (r 3.5 m, 5 m up, 110/s)', flagTrippy(3.5, 5, 50, 110), ['Trippy Spin x2']);
-run('flagpole trippy (r 5.0 m, 6 m up, 80/s)', flagTrippy(5.0, 6, 55, 80), ['Trippy Spin x2']);
-run('flagpole trippy (r 1.5 m, 8 m up, 200/s)', flagTrippy(1.5, 8, 30, 200), ['Trippy Spin x2']);
+run('flagpole trippy (r 2.0 m, 3 m up, 150/s)', flagTrippy(2.0, 3, 45, 150), ['Trippy Spin']);
+run('flagpole trippy (r 3.5 m, 5 m up, 110/s)', flagTrippy(3.5, 5, 50, 110), ['Trippy Spin']);
+run('flagpole trippy (r 5.0 m, 6 m up, 80/s)', flagTrippy(5.0, 6, 55, 80), ['Trippy Spin']);
+run('flagpole trippy (r 1.5 m, 8 m up, 200/s)', flagTrippy(1.5, 8, 30, 200), ['Trippy Spin']);
 // 6b. flagpole trippies as they're really flown (pilot: still not detected): slow wide laps (30-60 deg/s, uneven, with
 // near-stops), rolled just past knife-edge with the belly away from the pole rather than fully inverted, flying along the
 // circle, sinking down the pole or watching its top from low down
@@ -119,10 +119,10 @@ function flagReal(R, y0, sink, rate, rollDeg, uneven, laps = 2.1) { const w = ra
     const toP = v3(-Math.cos(a), 0, -Math.sin(a)), tang = v3(-Math.sin(a), 0, Math.cos(a)), f = faceQ(tang);
     const sg = S.qrot(qmul(f, rollQ(90 * D)), v3(0, 1, 0)), sgn = sg.x * toP.x + sg.z * toP.z > 0 ? 1 : -1;
     return { pos, q: qmul(f, rollQ(sgn * rollDeg * D)) }; } }; }
-run('flagpole trippy, real: r 3 m, 45/s, knife-edge+10, sinking', flagReal(3, 7, 0.25, 45, 100, 0), ['Trippy Spin x2']);
-run('flagpole trippy, real: r 4.5 m, 35/s, uneven speed', flagReal(4.5, 4, 0.05, 35, 105, 0.7), ['Trippy Spin x2']);
-run('flagpole trippy, real: r 2 m low, 70/s, watching the top', flagReal(2, 1.5, 0, 70, 95, 0.3), ['Trippy Spin x2']);
-run('flagpole trippy, real: r 6 m, 30/s', flagReal(6, 5, 0.1, 30, 110, 0.4), ['Trippy Spin x2']);
+run('flagpole trippy, real: r 3 m, 45/s, knife-edge+10, sinking', flagReal(3, 7, 0.25, 45, 100, 0), ['Trippy Spin']);
+run('flagpole trippy, real: r 4.5 m, 35/s, uneven speed', flagReal(4.5, 4, 0.05, 35, 105, 0.7), ['Trippy Spin']);
+run('flagpole trippy, real: r 2 m low, 70/s, watching the top', flagReal(2, 1.5, 0, 70, 95, 0.3), ['Trippy Spin']);
+run('flagpole trippy, real: r 6 m, 30/s', flagReal(6, 5, 0.1, 30, 110, 0.4), ['Trippy Spin']);
 run('banked lap round the flagpole (upright, not a trippy)', flagReal(3, 3, 0, 90, 50, 0), []);
 // 6d. trippy entries, exits, size and shape (pilot): an upright lap in before rolling into it, flying well away upright
 // afterwards while still near the pole, big and egg-shaped/uneven orbits (those score SLOPPY), and a flip straight into one
@@ -137,10 +137,10 @@ function trip(o) { const { R = 3, y = 4, rate = 60, laps = 2.1, pre = 0, post = 
 const names = ev => ev.map(e => e.name + (e.exec === 'SLOPPY' ? ' (sloppy)' : ''));
 function runX(name, path, want) { const ev = M.detect(path, W, 30), got = names(ev), ok = JSON.stringify(got) === JSON.stringify(want); total++; if (ok) pass++;
   console.log(`${ok ? '✓' : '✗'} ${name.padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want ' + want.join(' | ')}`); }
-runX('trippy: upright 3/4 lap in, 2 laps, upright 3/4 lap out', trip({ pre: 0.75, post: 0.75 }), ['Trippy Spin x2']);
-runX('trippy: big 6.3 m orbit of the flagpole, drifting out to 6.9', trip({ R: 6.3, rate: 35, y: 5, ecc: 0.09 }), ['Trippy Spin x2']);
-runX('trippy: egg-shaped orbit, uneven speed (sloppy)', trip({ R: 3.5, ecc: 0.4, wig: 0.6 }), ['Trippy Spin x2 (sloppy)']);
-runX('flip straight into a trippy (combo)', trip({ flip: 520, R: 2.5, rate: 80, y: 5 }), ['Flip', 'Trippy Spin x2']);
+runX('trippy: upright 3/4 lap in, 2 laps, upright 3/4 lap out', trip({ pre: 0.75, post: 0.75 }), ['Trippy Spin']);
+runX('trippy: big 6.3 m orbit of the flagpole, drifting out to 6.9', trip({ R: 6.3, rate: 35, y: 5, ecc: 0.09 }), ['Trippy Spin']);
+runX('trippy: egg-shaped orbit, uneven speed (sloppy)', trip({ R: 3.5, ecc: 0.4, wig: 0.6 }), ['Trippy Spin (sloppy)']);
+runX('flip straight into a trippy (combo)', trip({ flip: 520, R: 2.5, rate: 80, y: 5 }), ['Flip', 'Trippy Spin']);
 runX('one upright lap, half a lap rolled over (no trippy)', trip({ pre: 1.0, laps: 0.5, post: 0.6 }), []);
 // 6e. pilot: Matty flips inside combos were called Beginner Matty (the flip slow and broken up mid-way, no big pitch token)
 { const m0 = M.make('Matty Flip', W, 5100002, { tilt: 30 }), a = 1.1, b = 2.2, k = 0.35, ext = (b - a) * (1 / k - 1), warp = t => t < a ? t : t < a + (b - a) / k ? a + (t - a) * k : t - ext;
@@ -198,7 +198,7 @@ function uPass(P, off, far) { const vOut = 3, vBack = 2, y = Math.min(P.y1 - 0.5
   return { T: T1 + T2 + T3 + 1, at: t => { const p = pos(Math.min(t, T1 + T2 + T3)); return { pos: p, q: faceQ(S.norm(v3(P.x - p.x, 0, P.z - p.z))) }; } }; }
 { const poles = new S.TrickDetector(W).poles;
   for (const nm of ['Flagpole', 'Lamp Post', 'the pilot']) { const Pl = poles.find(p => p.name === nm);
-    for (const [off, far] of [[0.8, 5], [1.2, 5], [1.0, 8]]) { const got = M.detect(uPass(Pl, off, far), W, 30).map(e => e.name), ok = !got.includes('Orbit x2'); total++; if (ok) pass++;
+    for (const [off, far] of [[0.8, 5], [1.2, 5], [1.0, 8]]) { const got = M.detect(uPass(Pl, off, far), W, 30).map(e => e.name), ok = !got.includes('Orbits'); total++; if (ok) pass++;
       console.log(`${ok ? '✓' : '✗'} ${`past the ${nm} and back down the other side (${off} m, ${far} m)`.padEnd(46)} -> ${got.join(' | ') || 'nothing'}${ok ? '' : '   want no Orbit'}`); } } }
 // Pilot (2026-11-17): inverted yaw spins need to work at other camera angles. With a steep camera the half roll in
 // carries a nose-down tip (and the half flip in stops short of 180); the spin may be about the world vertical (A) or the
@@ -225,9 +225,9 @@ for (const c of [{ style: 'A', tilt: 50, entry: 'flip' }, { style: 'C', tilt: 50
 // 2026-11-17, pilot: "open air trippies and powerloops aren't being counted". A trippy with nothing in the middle (high over
 // the playground, well clear of every pole), a wide one, one that drifts; an upright circle in open air stays a turn.
 const AIR = v3(4, 0, 4);
-run('open-air trippy spin (nothing in the middle)', orbit(2.2, 45, 0, AIR, 1.6, 11), ['Trippy Spin x2']);
-run('open-air trippy spin, wide (R 2.8)', orbit(2.2, 35, 0, AIR, 2.8, 12), ['Trippy Spin x2']);
-run('open-air trippy spin, drifting 0.4 m/s', orbit(2.3, 45, 0, AIR, 1.5, 11, 0.4), ['Trippy Spin x2']);
+run('open-air trippy spin (nothing in the middle)', orbit(2.2, 45, 0, AIR, 1.6, 11), ['Trippy Spin']);
+run('open-air trippy spin, wide (R 2.8)', orbit(2.2, 35, 0, AIR, 2.8, 12), ['Trippy Spin']);
+run('open-air trippy spin, drifting 0.4 m/s', orbit(2.3, 45, 0, AIR, 1.5, 11, 0.4), ['Trippy Spin']);
 run('upright circle in open air is just a turn', { T: 6, at: t => { const a = Math.min(t, 4.4) * 170 * D, pos = v3(4 + 1.6 * Math.cos(a), 11, 4 + 1.6 * Math.sin(a)); return { pos, q: qmul(faceQ(v3(-Math.cos(a), 0, -Math.sin(a))), rollQ(0.4)) }; } }, []);
 // open powerloops: in clear air, and in clear air but passing over something low on the way (the Surveyor finds an
 // over/under nearly everywhere on the school map; only a loop that really goes round the object belongs to it)
@@ -250,8 +250,8 @@ function descend(from, to, nose, vz = 2) { const T0 = 0.6, drop = from.y - to, T
   if (t < T0) return { pos: v3(from.x, from.y, from.z + (T0 - t) * 3), q: H.ID };
   const u = t - T0; if (u < Td) { const k = Math.min(1, u / 0.25); return { pos: v3(from.x, from.y - 9 * u * (u < 0.25 ? u / 0.25 : 1), from.z - vz * u), q: pitchQ(-nose * D * k) }; }
   const w = u - Td, k = Math.max(0, 1 - w / Tl); return { pos: v3(from.x, to, from.z - vz * Td - 4 * w), q: pitchQ(-nose * D * k) }; } }; }
-run('dive down the face of the Brick Building (from 13 m, 1.5 m off the wall)', descend(v3(5, 13, -20.5), 2, 60, 0), ['Dive']);
-run('open-air dive from really high up (16 m)', descend(v3(8, 16, 6), 2, 65), ['Dive']);
+run('dive down the face of the Brick Building (from 13 m, 1.5 m off the wall)', descend(v3(5, 13, -20.5), 2, 60, 0), ['Building Dive']);
+run('open-air dive from really high up (16 m)', descend(v3(8, 16, 6), 2, 65), ['Building Dive']);
 run('coming down from 9 m in the open is not a dive (not high enough, nothing beside it)', descend(v3(8, 9, 6), 2, 60), []);
 run('sinking from 16 m with the nose level is not a dive (no dive attitude)', descend(v3(8, 16, 6), 2, 5), []);
 console.log(`\n${pass}/${total} pilot-feedback flights`);

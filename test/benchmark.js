@@ -4,15 +4,15 @@
 // pilot-confirmed sim calibration 0.9, demo GIFs 0.8, Judge-the-Bot verdicts 0.7, the bot's own flights 0.4.
 //   node test/benchmark.js [--bot=3] [--json=report.json] [files or folders…]   (default: calibration/, test/fixtures/)
 const U = require('../tools/unify.js'), fs = require('fs'), path = require('path');
-if (process.env.PW_WITNESS) globalThis.Sim.setWitness(JSON.parse(fs.readFileSync(process.env.PW_WITNESS, 'utf8')));   // the learned witness's vote
-if (process.env.PW_LIBRARY) globalThis.Sim.setLibrary(JSON.parse(fs.readFileSync(process.env.PW_LIBRARY, 'utf8')));   // the trick library's votes in the Watcher
-if (process.env.PW_COMMUNITY) globalThis.Sim.setCommunity(JSON.parse(fs.readFileSync(process.env.PW_COMMUNITY, 'utf8')));   // tools/community.js checks a candidate profile here
+if (process.env.PW_WITNESS) globalThis.Sim.setWitness(JSON.parse(fs.readFileSync(process.env.PW_WITNESS, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver));   // the learned witness's vote
+if (process.env.PW_LIBRARY) globalThis.Sim.setLibrary(JSON.parse(fs.readFileSync(process.env.PW_LIBRARY, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver));   // the trick library's votes in the Watcher
+if (process.env.PW_COMMUNITY) globalThis.Sim.setCommunity(JSON.parse(fs.readFileSync(process.env.PW_COMMUNITY, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver));   // tools/community.js checks a candidate profile here
 const args = process.argv.slice(2), opt = k => (args.find(a => a.startsWith('--' + k + '=')) || '').split('=')[1];
 const roots = args.filter(a => !a.startsWith('--')); if (!roots.length) roots.push(path.join(__dirname, '..', 'calibration'), path.join(__dirname, 'fixtures'));
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) { for (const f of fs.readdirSync(p)) if (f !== 'demos') walk(path.join(p, f)); } else if (p.endsWith('.json')) files.push(p); };
 roots.forEach(walk);
 const eps = [];
-for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } eps.push(...U.episodes(j, path.relative(process.cwd(), f))); }
+for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; } eps.push(...U.episodes(j, path.relative(process.cwd(), f))); }
 const demoDir = path.join(__dirname, '..', 'calibration', 'demos'); if (fs.existsSync(path.join(demoDir, 'cases.json'))) eps.push(...U.demoEpisodes(demoDir));
 const nBot = +(opt('bot') ?? 2); if (nBot > 0) eps.push(...U.botEpisodes(nBot));
 const T = {}, conf = {}, bySrc = {}; const tr = n => T[n] || (T[n] = { tp: 0, fn: 0, fp: 0, w: 0 });

@@ -16,7 +16,7 @@ const COACH_HAND = {
   'Jump Rope': { cross: 'OU', steps: [{ pass: 'O', text: 'Turn side-on and hop sideways over it, upright' }, { pass: 'U', text: 'Drop down the far side and swing back sideways under it' }] },
   'Side Loop': { cross: 'UOU', steps: [{ pass: 'U', text: 'Turn side-on under it' }, { rot: 'R*~360', during: ['O'], text: 'Roll toward it all the way round: over the top upside-down' }, { pass: 'U', text: 'Back under, level again' }] },
   'Double Dutch': { cross: 'UOU', steps: [{ pass: 'U', text: 'Turn side-on under it' }, { rot: 'R*360', during: ['O'], text: 'Jump over it sideways and flick a quick full roll at the top' }, { pass: 'U', text: 'Drop back under, upright' }] },
-  'Blindflip': { cross: 'OU', steps: [{ rot: 'Y*~180', text: 'Just before the object, a half yaw spin so you face away from it' }, { rot: 'P+~360', during: ['O'], text: 'Throttle up and pitch back into a blind loop over it' }, { pass: 'U', text: 'Finish the loop back under it' }] },
+  'Blind Loop': { cross: 'OU', steps: [{ rot: 'Y*~180', text: 'Just before the object, a half yaw spin so you face away from it' }, { rot: 'P+~360', during: ['O'], text: 'Throttle up and pitch back into a blind loop over it' }, { pass: 'U', text: 'Finish the loop back under it' }] },
   'Cinnamon Roll': { cross: 'OU', steps: [{ pass: 'O', text: 'Hop sideways over it, upright' }, { rot: 'Y*~360', text: 'A slow full yaw spin as you come down, staying upright' }, { pass: 'U', text: 'Finish the spin as you pass back under' }] },
 };
 const COACH_TRIES = 5, COACH_PARTS = 2;   // 1-2 step by step, 3-4 live, 5 "connect it" (owner, 2026-11-21: the tutorial's last step)
@@ -63,7 +63,7 @@ function coachSteps(pat, ob) {
 }
 // the way a trick is taught and shown when its rule allows more than one (owner, 2026-11-21: "inverted rewind is just a 180 pitch to
 // inverted, a wait (if that), then a pitch back to upright"): the pattern that starts on this axis comes first
-const COACH_FIRST = { 'Invert Rewind': 'P' };
+const COACH_FIRST = { 'Inverted Rewind': 'P' };
 function coachPlan(name) {
   const h = COACH_HAND[name];
   if (h) { const st = h.steps.map(s => s.rot ? { ...s, rot: S.parsePattern(s.rot)[0] } : { ...s }); return { cross: h.cross, end: null, steps: st, alts: [st] }; }
@@ -82,12 +82,13 @@ function coachStepText(s, vars) {
   return coachRotText(s.rot, vars) + (s.during && s.during.length ? ` <small>— ${s.during.map(k => k === 'O' ? 'over ' + where : 'under ' + where).join(', ')} on the way</small>` : '');
 }
 // tricks taught as stages rather than steps (laps round a pole): see the Trippy Spin trainer at the end of this file
-const LAP_TRAIN = { 'Trippy Spin x2': [
+const LAP_TRAIN = { 'Trippy Spin': [
   { id: 'cradle', title: 'The Cradle', cue: 'Fly past the pole, pitch back and keep it in view.', tip: 'The way in. Pass close beside the pole, then pull the nose back so you look up at it as you go by, and keep it in the picture. You are already making the trippy\'s motion.' },
   { id: 'one', title: 'One lap', cue: 'Wonky nips: roll one way, yaw the other. Pole at the top of the screen.', tip: 'From the Cradle, keep going round. Push roll and yaw OPPOSITE ways (in an ordinary orbit they go the same way) and hold the pole at the top centre of the picture. Camera tilt does not matter: a higher one just flies it flatter.' },
   { id: 'two', title: 'Two laps, locked in', cue: 'Keep it at the top of the screen. Small corrections only.', tip: 'Locked in means the pole never leaves the top of the screen. Less throttle makes a slower, smoother circle; more throttle spins you round faster and throws you wide.' },
   { id: 'height', title: 'Climb with pitch', cue: 'Leave the throttle alone. A touch of pitch to climb, a touch to sink.', tip: 'Height comes from PITCH, not throttle. Keep tripping, hold the throttle where it is, and move up the pole and back down with the pitch stick alone, ever so slightly.' },
   { id: 'switch', title: 'The switchback', cue: 'Over-rotate, then sling back the other way.', tip: 'After a lap, turn a little further than you need, then swap both sticks and come back round the other way. It is the best practice there is for tripping in both directions.' } ] };
+try { const R = store.get('coachRungs', null); if (R && Object.keys(R).some(k => S.canonTrick(k) !== k)) { const N = {}; for (const [k, v] of Object.entries(R)) { const c = S.canonTrick(k); if (!N[c] || (v && v.r > N[c].r)) N[c] = v; } store.set('coachRungs', N); } } catch { /* no store here (Node tests) */ }   // rungs earned under the old names
 const coachCan = name => !!coachPlan(name) || !!LAP_TRAIN[name];
 // ---- what the detector measured, kept here (the detector forgets tokens after 6 s and passes after a while)
 function coachCollect() {
@@ -140,19 +141,19 @@ function coachJudge(steps, t0, strictObj) {
 // Drafts: the owner edits the wording.
 const COACH_CUES = {
   'Flip': ['Blip the throttle, then stick all the way back (or forward) and hold. Stop it as the horizon comes level.'],
-  'Invert Rewind': ['Half a flip to upside-down, and stop it there.', 'Flip straight back the way you came, to upright.'],
+  'Inverted Rewind': ['Half a flip to upside-down, and stop it there.', 'Flip straight back the way you came, to upright.'],
   'Roll': ['Blip the throttle, then stick hard left or right. Stop it as the horizon comes level.'],
   'Yaw Spin': ['Hold the throttle steady and push yaw all the way: one flat turn. Keep pitch and roll still.'],
   'Double Flip': ['A bigger throttle blip, stick all the way back (or forward), and keep holding through two turns.'],
   'Double Roll': ['A bigger throttle blip, stick hard over, and keep holding through two turns.'],
   'Powerloop': ['Fly low and straight under it.', 'Punch the throttle and pull back. Ease the throttle off as you go upside-down over the top.', 'Keep pulling until you see the ground, then catch it and fly back under.'],
   'Matty Flip': ['Hop over it with a little height to spare.', 'Cut the throttle and push forward: nose down, all the way round.', 'Catch it as it comes level facing the object, and drift back under it, backward.'],
-  'Split-S': ['Go over it with height to spare.', 'Half roll to upside-down and cut the throttle.', 'Pull back: half a loop down toward the ground.', 'Catch it level and fly out under it, back the way you came.'],
+  'Split S': ['Go over it with height to spare.', 'Half roll to upside-down and cut the throttle.', 'Pull back: half a loop down toward the ground.', 'Catch it level and fly out under it, back the way you came.'],
   'Barani': ['Fly low and straight to the obstacle.', 'Start the loop right after passing under: throttle up, pull back.', 'Cut the throttle as you go upside-down. Stop pulling, and yaw half a turn.', 'Pull back again to bring the nose round.', 'Catch it before the ground and come back under, backward.'],
   'Juicy Flick': ['A little throttle, then flick the stick forward: half a front flip to upside-down.', 'Half roll back upright, and catch it.'],
   "Rubik's Cube": ['Half a flip, and stop it upside-down.', 'A full roll while you are upside-down.', 'The same half flip again to come upright. Catch it.'],
   'Inverted Yaw Spin': ['Half a flip to upside-down and drop the throttle low.', 'Yaw a full turn while upside-down. Right stick still.', 'The same half flip again to come upright. Catch it.'],
-  'Immelmann Turn': ['Fly low and straight under it.', 'Throttle up and pull back: half a loop up and over, to upside-down.', 'Half roll upright. You are now flying back the way you came.'],
+  'Immelmann': ['Fly low and straight under it.', 'Throttle up and pull back: half a loop up and over, to upside-down.', 'Half roll upright. You are now flying back the way you came.'],
   'Snapback': ['Fly low and straight under it.', 'Pull back hard: half a flip, so you are upside-down looking back at it.', 'Half roll upright and fly back toward it.'],
   'Anti Matty': ['Hop over it with a little height to spare.', 'Cut the throttle and pull back: a full backflip.', 'Catch it as it comes level, and drift back under it, backward.'],
 };
@@ -182,8 +183,8 @@ const ROOM = 'training';
 const COACH_CAT_ST = { 'Open Air Tricks': 'open', 'Other Tricks': 'open', Powerloops: 'big', 'Maverick Loops': 'big',   // loops on the big square (owner, 2026-11-21: "the small object just isn't gonna work")
   'Matty Flips': 'bar', SplitS: 'bar', 'Jump Roping': 'bar',
   'Pole Dancing': 'pole', Rewinds: 'pole', 'Wall Tricks': 'wall', Gaps: 'gap' };
-const COACH_ST_OVR = { Dive: 'tower', Perch: 'tower', 'Ceiling Tap': 'slab', 'Slide Disarm': 'open', Facepunch: 'pilot', 'Stall Rewind': 'wall', 'Wall Stick': 'wall', 'Juicy Flick': 'open', 'Juicy Tornado': 'open',
-  'Inverted Yaw Tracking': 'pole', 'Eject Roll': 'pole', 'Stellar Eject Roll': 'pole', 'Maverick Tap Rewind': 'bar', 'Power Switch Tap': 'bar', Snapback: 'bar', Forani: 'bar', 'True Barani': 'bar', Blindflip: 'bar' };
+const COACH_ST_OVR = { 'Building Dive': 'tower', Perch: 'tower', 'Ceiling Tap': 'slab', 'Slide Disarm': 'open', 'Face Punch': 'pilot', 'Stall Rewind': 'wall', 'Wall Stick': 'wall', 'Juicy Flick': 'open', 'Juicy Tornado': 'open',
+  'Inverted Yaw Tracking': 'pole', 'Eject Roll': 'pole', 'Stellar Eject Roll': 'pole', 'Maverick Tap Rewind': 'bar', 'Power Switch Tap': 'bar', Snapback: 'bar', Forani: 'bar', 'True Barani': 'bar', 'Blind Loop': 'bar' };
 function coachStation(name, cat, plan) {
   let st = COACH_ST_OVR[name] || COACH_CAT_ST[(cat || '').trim()] || 'open';
   if (st === 'open' && plan && plan.cross) st = 'bar';
@@ -269,6 +270,7 @@ setInterval(() => {   // the card while the quad is held at a start or a checkpo
   if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide');
 }, 100);
 function coachStart(name) {
+  name = S.canonTrick(name);   // a trick asked for under its old name (a reload begun before the rename)
   if (LAP_TRAIN[name]) { tripStart(name); return; }   // lap tricks have their own ladder (the Trippy Spin)
   const plan = coachPlan(name); if (!plan) return;
   const t = window.TPW_TRICKS.find(x => x.name.trim() === name) || { name, cat: '', desc: '' };
@@ -914,8 +916,8 @@ function tripEvent(ev) {
   if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (!store.get('coachRetry', true)) { L.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
   if (id === 'cradle' && ev.name === 'Cradle') tripPass('the game called the Cradle');
   else if (id === 'switch' && ev.name === 'Trippy Switch') tripPass('round one way, and back the other');
-  else if ((id === 'one' || id === 'two') && ev.name === 'Trippy Spin x2' && (ev.laps || 0) >= (id === 'one' ? 1 : 2)) tripPass(`${ev.laps} laps${ev.notes && ev.notes.includes('locked in') ? ', locked in' : ''}`);
-  else if (ev.name === 'Orbit x2' && id !== 'cradle') { L.msg = 'That was an orbit: roll and yaw went the same way. Push them opposite ways and look UP at the pole.'; renderCoach(); }
+  else if ((id === 'one' || id === 'two') && ev.name === 'Trippy Spin' && (ev.laps || 0) >= (id === 'one' ? 1 : 2)) tripPass(`${ev.laps} laps${ev.notes && ev.notes.includes('locked in') ? ', locked in' : ''}`);
+  else if (ev.name === 'Orbits' && id !== 'cradle') { L.msg = 'That was an orbit: roll and yaw went the same way. Push them opposite ways and look UP at the pole.'; renderCoach(); }
 }
 // every 150 ms (from the coach's own timer, through renderCoach): the live lap count and the height drill
 function tripTick() {

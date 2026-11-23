@@ -21,7 +21,7 @@ check('has over/unders, poles, gaps and walls for the detector', count(o => o.ob
 const H = M._h, { faceQ } = H, D = Math.PI / 180;
 { const P = det.poles.find(p => p.name === 'Broken Column' && p.y1 > 4), R = 1.6, w = 150 * D, T = 2.1 * 2 * Math.PI / w, y = Math.min(P.y1 - 0.6, 3);
   const path = { T: T + 1.2, at: t => { const a = Math.min(t, T) * w, pos = v3(P.x + R * Math.cos(a), y, P.z + R * Math.sin(a)); return { pos, q: faceQ(v3(-Math.cos(a), 0, -Math.sin(a))) }; } };
-  const got = M.detect(path, W, 30).map(e => e.name); check('two laps round a broken column, facing it → Orbit', got.includes('Orbit x2'), got.join(' | ') || 'nothing'); }
+  const got = M.detect(path, W, 30).map(e => e.name); check('two laps round a broken column, facing it → Orbit', got.includes('Orbits'), got.join(' | ') || 'nothing'); }
 { // a powerloop over a hall beam: under it forward, loop up and over inverted, back under
   const o = W.objs.find(x => x.name === 'Hall Beam'), ob = o.obstacle, mx = (ob.a.x + ob.b.x) / 2, mz = (ob.a.z + ob.b.z) / 2, yb = (ob.under + ob.over) / 2, R = 0.9, w = 300 * D, Tl = 2 * Math.PI / w;
   const along = Math.abs(ob.b.x - ob.a.x) > Math.abs(ob.b.z - ob.a.z) ? v3(0, 0, -1) : v3(1, 0, 0), y0 = yb - R, lead = 3;

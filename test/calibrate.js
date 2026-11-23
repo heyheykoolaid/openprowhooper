@@ -2,7 +2,7 @@
 // taps, stalls, rewinds, orbits) and what it decided — then per-trick ranges to tune the rules against.
 // usage: node test/calibrate.js <session.json | all-reps.json> [trick name filter]
 const { replayTrace, loadLabels } = require('./lib.js'); const fs = require('fs');
-const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); const only = process.argv[3];
+const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); const only = process.argv[3];
 const labels = loadLabels(data).filter(l => l.verdict === 'yes' && (!only || l.target.toLowerCase().includes(only.toLowerCase())));
 const byTrick = {};
 for (const l of labels) {

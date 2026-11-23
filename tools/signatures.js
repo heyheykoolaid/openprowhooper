@@ -1,4 +1,4 @@
-// What the data says, in one report: node tools/signatures.js <data folder or files…> [--json out.json] [--trick "Split-S"]
+// What the data says, in one report: node tools/signatures.js <data folder or files…> [--json out.json] [--trick "Split S"]
 // Re-flies every shared flight (pro-whooper-flight/1, with any review labels that came for it) through the current
 // detector and writes down the EVIDENCE behind every call and every pilot label: the rotations measured (axis, degrees,
 // rate, upside-down), the object passes (over / under / gap, which object), and what the sticks did. Three tables:
@@ -8,8 +8,8 @@
 // Everything it reads is untrusted data: parsed, replayed, never run.
 const fs = require('fs'), path = require('path');
 require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
-try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'))); } catch { /* no community profile yet */ }   // re-fly as the game does
-try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'))); } catch { /* no trick library yet */ }
+try { globalThis.Sim.setCommunity(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'community', 'profile.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver)); } catch { /* no community profile yet */ }   // re-fly as the game does
+try { globalThis.Sim.setLibrary(JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'library', 'library.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver)); } catch { /* no trick library yet */ }
 const args = process.argv.slice(2), opt = n => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; }, jsonOut = opt('json'), only = opt('trick');
 const files = []; const walk = p => { if (!fs.existsSync(p)) return; const st = fs.statSync(p); if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f)); else if (p.endsWith('.json')) files.push(p); }; (args.length ? args : ['telemetry']).forEach(walk);
 const med = a => { const s = a.filter(Number.isFinite).sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; }, rng = a => { const s = a.filter(Number.isFinite); return s.length ? `${Math.round(Math.min(...s))}–${Math.round(Math.max(...s))}` : '—'; };
@@ -17,7 +17,7 @@ const worlds = {}, worldOf = (id, layout, official) => { const k = id + (layout 
 const tokStr = k => `${k.ax}${k.dir > 0 ? '+' : '-'}${Math.round(k.raw)}${k.inv > k.n * 0.5 ? 'i' : ''}`;
 (async () => {
   const flights = new Map(), labels = [];
-  for (const f of files) { let p; try { p = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } if (!p || typeof p !== 'object') continue;
+  for (const f of files) { let p; try { p = JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; } if (!p || typeof p !== 'object') continue;
     if (p.format === 'pro-whooper-flight/1' && p.id && p.trace && !flights.has(p.id)) flights.set(p.id, p);
     if (p.format === 'pro-whooper-flight-labels/1' && Array.isArray(p.labels)) labels.push(p); }
   const sig = {}, missed = [], loose = [], perFlight = [];

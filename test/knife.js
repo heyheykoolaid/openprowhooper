@@ -23,7 +23,8 @@ function fly(gapName, roll, T = 2.6) {
 }
 const check = (name, got, want) => { n++; const pass = want ? got.includes('Knife Edge') : !got.includes('Knife Edge'); if (pass) ok++; console.log(`${pass ? '✓' : '✗'} ${name.padEnd(58)} ${got.join(', ') || 'nothing'}`); };
 check('rolled 90° through the 0.2 m Knife Slot: Knife Edge', fly('Knife Slot 0.2 m opening', 90), true);
-check('rolled 90° through the 0.3 m slot (too wide for the whoop): not', fly('Knife Slot 0.3 m opening', 90), false);
+check('rolled 90° through the 0.3 m slot (inside 4 whoops): Knife Edge', fly('Knife Slot 0.3 m opening', 90), true);
+check('rolled 90° through the 0.7 m Gap Gate (too wide): not', fly('Gap Gate 0.7 m opening', 90), false);
 check('rolled 90° through the 1.6 m Gap Gate: not', fly('Gap Gate 1.6 m opening', 90), false);
 check('flat through the 0.2 m slot: not', fly('Knife Slot 0.2 m opening', 0), false);
 console.log(`\n${ok}/${n} knife edge checks`);

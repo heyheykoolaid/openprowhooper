@@ -2,7 +2,7 @@
 // node tools/probe-label.js "<trick>" <data folder>   (private data: read it, never copy it into the repo)
 const fs = require('fs'), path = require('path'); require('../src/tricks.js'); require('../src/sim.js'); require('../src/maps.js'); const FL = require('../src/flightlog.js'), S = globalThis.Sim;
 const want = process.argv[2] || 'Barani', root = process.argv[3]; const files = []; (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (p.endsWith('.json')) files.push(p); } })(root);
-(async () => { const flights = new Map(), labs = []; for (const f of files) { let p; try { p = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } const items = p.format === 'pro-whooper-telemetry-bundle/1' ? p.items.map(x => x.payload) : [p];
+(async () => { const flights = new Map(), labs = []; for (const f of files) { let p; try { p = JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; } const items = p.format === 'pro-whooper-telemetry-bundle/1' ? p.items.map(x => x.payload) : [p];
   for (const q of items) { if (q.format === 'pro-whooper-flight/1') flights.set(q.id, q); if (q.format === 'pro-whooper-flight-labels/1') labs.push(q); } }
   for (const lf of labs) for (const l of lf.labels) { if (!l || l.actual !== want || l.undone) continue; const p = flights.get(lf.flight); if (!p) continue; const rows = await FL.unpack(p.trace), T0 = rows[0][0];
     const W = (S.MAPS[p.map] || S.MAPS.playground).build(), toks = [], cr = [], Pr = S.TrickDetector.prototype, ft = Pr.finishTok, tc = Pr.trackCrossings;

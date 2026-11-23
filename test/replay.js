@@ -2,7 +2,7 @@
 // usage: node test/replay.js <session.json | all-reps.json> [--verbose]
 const { replayTrace, loadLabels } = require('./lib.js'); const fs = require('fs');
 const file = process.argv[2], verbose = process.argv.includes('--verbose');
-const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+const data = JSON.parse(fs.readFileSync(file, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver);
 const labels = loadLabels(data);
 let ok = 0, n = 0; const per = {};
 // whole-run sessions: replay once; per-rep files: replay each

@@ -16,7 +16,7 @@ for (const name of names) for (let seed = 1; seed <= 3; seed++) {
   if (j.done >= j.steps.length) ok++; else bad.push(`${name} #${seed}: stuck at step ${j.done + 1}${j.out[j.done] && j.out[j.done].msg ? ' (' + j.out[j.done].msg + ')' : ''}`);
 }
 // and a different trick must not pass: the steps say what is missing
-let wrong = 0; const pairs = [['Powerloop', 'Barani'], ['Matty Flip', 'Power Matty'], ['Split-S', '540 Split S'], ['Powerloop', 'Matty Flip'], ['Flip', 'Double Flip']];
+let wrong = 0; const pairs = [['Powerloop', 'Barani'], ['Matty Flip', 'Power Matty'], ['Split S', '540 Split S'], ['Powerloop', 'Matty Flip'], ['Flip', 'Double Flip']];
 for (const [flown, target] of pairs) { Object.assign(C.coach, { toks: [], passes: [], seenTok: new Map(), seenPass: new Map() });
   const m = MV.make(flown, W, 4242, { wobble: 0 }); if (!m) continue; MV.detect(m, W, 0); const j = C.coachJudgeAny(C.coachPlan(target).alts, 0, true);
   const pass = j.done >= j.steps.length; if (!pass) wrong++; console.log(`  ${pass ? '✗' : '✓'} a ${flown} does not pass ${target}'s steps${pass ? '' : ` (stops at step ${j.done + 1}${j.out[j.done].msg ? ': ' + j.out[j.done].msg : ''})`}`); }
@@ -50,7 +50,7 @@ for (const b of bad) console.log('  ✗ ' + b);
 { const L = new Function('S', 'window', 'env', 'esc', `const detector = {};\n${src}\nreturn { coachPlan, coachPhaseOf, coachRungOf, coachLadder, COACH_TRIES, coachCan };`)(S, { TPW_TRICKS: globalThis.TPW_TRICKS }, env, x => x);
   const ph = [1, 2, 3, 4, 5].map(L.coachPhaseOf).join(' '), r = L.coachRungOf;
   const rungs = r([]) === 0 && r([{ ok: false, phase: 'live' }]) === 0 && r([{ ok: true, phase: 'parts' }]) === 1 && r([{ ok: true, phase: 'parts' }, { ok: true, phase: 'live' }]) === 2 && r([{ ok: false, phase: 'live' }, { ok: true, phase: 'connect' }]) === 3;
-  n++; if (L.coachCan('Trippy Spin x2') && !L.coachPlan('Trippy Spin x2')) ok++; else bad.push('Trippy Spin should be trainable through its own stages');
+  n++; if (L.coachCan('Trippy Spin') && !L.coachPlan('Trippy Spin')) ok++; else bad.push('Trippy Spin should be trainable through its own stages');
   const T = globalThis.TPW_TRICKS, A = L.coachLadder(T, {}, L.coachCan), first = A.next[0].name.trim(), B = L.coachLadder(T, { [first]: { r: 3 } }, L.coachCan), C2 = L.coachLadder(T, { [A.next[3].name.trim()]: { r: 1 } }, L.coachCan);
   const D = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Master'], di = t => D.indexOf(String(t.diff).trim()), sorted = A.next.every((t, k) => !k || di(A.next[k - 1]) <= di(t));
   const okL = ph === 'parts parts live live connect' && L.COACH_TRIES === 5 && rungs && A.learned === 0 && A.total === A.next.length && A.total >= 25 && sorted && B.learned === 1 && !B.next.some(t => t.name.trim() === first) && (di(A.next[3]) !== di(A.next[0]) || C2.next[0].name.trim() === A.next[3].name.trim());

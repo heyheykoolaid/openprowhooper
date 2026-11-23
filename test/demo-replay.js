@@ -13,7 +13,7 @@ const CASES = process.env.EXTRA ? JSON.parse(process.env.EXTRA) : [   // file, f
   ["rubiks-cube.json", [18, 64], ["Rubik's Cube"]],
   ["cubiks-rube.json", [20, 68], ["Cubik's Rube"]],
   ['yaw-spin.json', [4, 30], ['Yaw Spin']],
-  ['inverted-rewind.json', [52, 86], ['Invert Rewind']],   // added with the advanced pass (tools/gif_rotation2.py)
+  ['inverted-rewind.json', [52, 86], ['Inverted Rewind']],   // added with the advanced pass (tools/gif_rotation2.py)
 ];
 function fill(frames, a, b) {     // linearly fill short blurred gaps; report anything longer
   const out = frames.slice(a, b + 1); let longest = 0;
@@ -27,7 +27,7 @@ function fill(frames, a, b) {     // linearly fill short blurred gaps; report an
 }
 let pass = 0, total = 0;
 for (const [file, [a, b], want] of CASES) {
-  const demo = JSON.parse(fs.readFileSync(path.join(DIR, file), 'utf8'));
+  const demo = JSON.parse(fs.readFileSync(path.join(DIR, file), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver);
   const ms = demo.msPerFrame, al = (demo.cameraTiltDeg ?? 20) * D, ca = Math.cos(al), sa = Math.sin(al);
   const { out, longest } = fill(demo.frames, a, b);
   const det = new S.TrickDetector(W), sk = new S.ScoreKeeper();

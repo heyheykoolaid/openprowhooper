@@ -54,7 +54,7 @@
   "object": "through an LED cube"
  },
  {
-  "trick": "Invert Rewind",
+  "trick": "Inverted Rewind",
   "file": "inverted-rewind.json",
   "frames": 184,
   "tracked": 154,
@@ -126,7 +126,7 @@
   "object": "tree"
  },
  {
-  "trick": "Immelmann Turn",
+  "trick": "Immelmann",
   "file": "immelmann.json",
   "frames": 54,
   "tracked": 52,
@@ -342,7 +342,7 @@
   "object": "the pilot (park)"
  },
  {
-  "trick": "Split-S",
+  "trick": "Split S",
   "file": "split-s.json",
   "frames": 93,
   "tracked": 93,
@@ -360,7 +360,7 @@
   "object": "tree branch (~3-4x slow-mo GIF)"
  },
  {
-  "trick": "Split-Back",
+  "trick": "Splitback",
   "file": "splitback.json",
   "frames": 89,
   "tracked": 65,
@@ -387,7 +387,7 @@
   "object": "gazebo"
  },
  {
-  "trick": "Orbit x2",
+  "trick": "Orbits",
   "file": "orbits.json",
   "frames": 236,
   "tracked": 214,
@@ -432,7 +432,7 @@
   "object": "tree"
  },
  {
-  "trick": "Trippy Spin x2",
+  "trick": "Trippy Spin",
   "file": "trippy-spin.json",
   "frames": 96,
   "tracked": 57,
@@ -504,7 +504,7 @@
   "object": "indoor cube"
  },
  {
-  "trick": "Flip Stall Rewind",
+  "trick": "Stall Flip Rewind",
   "file": "stall-flip-rewind.json",
   "frames": 96,
   "tracked": 96,
@@ -513,7 +513,7 @@
   "object": "indoor staircase"
  },
  {
-  "trick": "360 Stall Rewind",
+  "trick": "Stall 360 Rewind",
   "file": "stall-360-rewind.json",
   "frames": 95,
   "tracked": 77,
@@ -522,7 +522,7 @@
   "object": "the pilot"
  },
  {
-  "trick": "Matty Stall Rewind",
+  "trick": "Stall Matty Rewind",
   "file": "stall-matty-rewind.json",
   "frames": 99,
   "tracked": 97,
@@ -531,7 +531,7 @@
   "object": "tree"
  },
  {
-  "trick": "Half Matty Stall Rewind",
+  "trick": "Stall Half Matty Rewind",
   "file": "stall-half-matty-rewind.json",
   "frames": 62,
   "tracked": 49,
@@ -540,7 +540,7 @@
   "object": "the pilot"
  },
  {
-  "trick": "Dive",
+  "trick": "Building Dive",
   "file": "building-dive.json",
   "frames": 135,
   "tracked": 122,
@@ -657,7 +657,7 @@
   "object": "indoor cube (~1 m)"
  },
  {
-  "trick": "Blindflip",
+  "trick": "Blind Loop",
   "file": "blind-loop.json",
   "frames": 121,
   "tracked": 113,

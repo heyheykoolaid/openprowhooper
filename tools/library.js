@@ -21,9 +21,9 @@ const log = (...a) => process.stderr.write(a.join(' ') + '\n');
 // ---------- demo GIFs
 function demoExamples() {
   const dir = path.join(ROOT, 'calibration', 'demos'), out = [], notes = [];
-  let index = [], cases = []; try { index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); cases = JSON.parse(fs.readFileSync(path.join(dir, 'cases.json'), 'utf8')).cases || []; } catch { return { out, notes: ['no demo data'] }; }
+  let index = [], cases = []; try { index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); cases = JSON.parse(fs.readFileSync(path.join(dir, 'cases.json'), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver).cases || []; } catch { return { out, notes: ['no demo data'] }; }
   for (const it of index) {
-    let d; try { d = JSON.parse(fs.readFileSync(path.join(dir, it.file), 'utf8')); } catch { continue; }
+    let d; try { d = JSON.parse(fs.readFileSync(path.join(dir, it.file), 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { continue; }
     const F = d.frames || [], ms = d.msPerFrame || it.msPerFrame || 40, hz = 1000 / ms, track = F.filter(r => Array.isArray(r)).length / Math.max(1, F.length);
     if (track < 0.55) { notes.push(`${it.trick}: only ${Math.round(track * 100)}% of frames tracked, left out`); continue; }
     // blurred frames (fast rotation) are null: fill each gap at the rate on either side of it
@@ -96,7 +96,7 @@ async function challengeExamples(files) {
   const ch = files.filter(f => inDir(f, 'challenges')), tr = files.filter(f => inDir(f, 'challenge-tries')); if (!ch.length) return { out: [], notes: [] };
   const mods = []; for (const f of files) if (inDir(f, 'challenge-mod')) mods.push(base(f));
   const { challengesFrom } = await import(path.join(ROOT, 'tools', 'dropoff-worker.mjs'));
-  const board = challengesFrom(ch.map(base), tr.map(base), mods), out = [], notes = [], pid = {}, read = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  const board = challengesFrom(ch.map(base), tr.map(base), mods), out = [], notes = [], pid = {}, read = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8'), globalThis.Sim && globalThis.Sim.canonReviver); } catch { return null; } };
   const sigOk = g => g && Array.isArray(g.c) && g.c.length === 72 && g.c.every(Number.isFinite) && +g.d > 0;
   for (const c of board) { if (!c.confirmed || c.hidden || !c.name) continue;
     const own = read(ch.find(f => base(f) === c.id + '.json')), passers = new Set(c.passed.map(x => x.toLowerCase())), seen = new Set();

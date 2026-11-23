@@ -21,9 +21,9 @@ const id=n=>W.objs.find(o=>o.name===n).id;
 const LP=v3(-14,0,-16); // lamp post
 const orbit=(turns, inverted, rev)=>t=>{ const w=180*D2R, R=1.6; let a=Math.min(t,0.01+turns*2*Math.PI/w)*w; if(rev && t*w>2*Math.PI){ const a1=2*Math.PI; a=a1-(Math.min(t*w,4*Math.PI+0.01)-a1); }
   const pos=v3(LP.x+R*Math.cos(a),2.2,LP.z+R*Math.sin(a)); const toP=norm(v3(LP.x-pos.x,inverted?-0.35:0.15,LP.z-pos.z)); return {pos,q:basisQ(toP, inverted?v3(0,-1,0):Y)}; };
-run('orbit x2 (upright, pole centred)', orbit(2.05,false), 5.5, ['Orbit x2']);
-run('trippy spin x2 (inverted)', orbit(2.05,true), 5.5, ['Trippy Spin x2']);
-run('trippy switch (1 each way)', orbit(2.1,true,true), 6, ['Trippy Spin x2','Trippy Switch']);
+run('orbit x2 (upright, pole centred)', orbit(2.05,false), 5.5, ['Orbits']);
+run('trippy spin x2 (inverted)', orbit(2.05,true), 5.5, ['Trippy Spin']);
+run('trippy switch (1 each way)', orbit(2.1,true,true), 6, ['Trippy Spin','Trippy Switch']);
 // jump rope: fly sideways (facing along the swing bar) over it and back under it
 run('jump rope (sideways over + under)', t=>{ const f=v3(1,0,0); const z=-3.5-Math.min(t,1.2)*4; const back=t>1.6?(t-1.6)*4:0;
   const pos= t<1.6? v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4) : v3(0,1.4,-8.3+back); const tilt= t<1.6?-0.3:0.3; return {pos,q:basisQ(f,norm(v3(0,1,tilt)))}; }, 3.5, ['Jump Rope']);
@@ -44,7 +44,7 @@ run('360 stall rewind (beside the pilot)', t=>{ const x=2.6, z=15.4; const f=v3(
   if(t<1.0) return {pos:v3(x,0.6,z+3-3*t), q:basisQ(f,Y)};                                     // fly in toward the pilot
   if(t<1.7){ const u=(t-1.0)/0.7; return {pos:v3(x,0.6+1.6*Math.sin(u*Math.PI/2),z-0.2*u), q:basisQ(f,norm(v3(0,1,0.6)))}; }   // climb, nose up
   if(t<2.3){ const u=(t-1.7)/0.6; return {pos:v3(x,2.2,z-0.2), q:qmul(basisQ(f,norm(v3(0,1,0.6))),qaxis(v3(0,0,-1),2*Math.PI*u))}; }   // stall: 360 roll
-  const u=Math.min(1,(t-2.3)/0.9); return {pos:v3(x,2.2-1.5*u,z-0.2+2.2*u), q:basisQ(f,norm(v3(0,1,0.5)))}; }, 4.2, ['360 Stall Rewind']);   // rewind back down
+  const u=Math.min(1,(t-2.3)/0.9); return {pos:v3(x,2.2-1.5*u,z-0.2+2.2*u), q:basisQ(f,norm(v3(0,1,0.5)))}; }, 4.2, ['Stall 360 Rewind']);   // rewind back down
 // mavani: maverick under→over (facing forward, flying backward over the top), pitch-down 180 to invert, yaw 180 inverted, matty back under
 run('mavani', t=>{ const c={y:2.2,z:-6}, R=1.1;
   if(t<0.6) return {pos:v3(0,1.1,-3-t*5),q:basisQ(FWD,Y)};                                   // under the bar at z=-6 → t=0.6
@@ -68,14 +68,14 @@ run('ceiling tap (slide roof)', t=>{ const pos=v3(-8,2.35+Math.min(t,0.5)*0.3,2)
   return {pos,q,contact:(t>0.72&&t<0.722)?{n:v3(0,-1,0),owner:roofId,impact:0.6}:null}; }, 2, ['Ceiling Tap']);
 // flip stall rewind beside the building: climb, flip at the apex, fall back the way you came
 run('flip stall rewind (building)', t=>{ const y= t<1? 1+t*5 - 1.5*t*t : null; const tt=Math.max(0,t-0.5);
-  const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(3,Math.max(0.6,ypos),-20.5+(t>1.4?(t-1.4)*2:0)); const a=Math.max(0,Math.min(1,(t-0.75)/0.45))*2*Math.PI; return {pos,q:qmul(basisQ(FWD,Y),qaxis(X,a))}; }, 3, ['Flip Stall Rewind']);
+  const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(3,Math.max(0.6,ypos),-20.5+(t>1.4?(t-1.4)*2:0)); const a=Math.max(0,Math.min(1,(t-0.75)/0.45))*2*Math.PI; return {pos,q:qmul(basisQ(FWD,Y),qaxis(X,a))}; }, 3, ['Stall Flip Rewind']);
 // eject roll (owner, 2026-11-23: "has to be through a horizontal gap"): climb up through an opening that lies flat, pitch down 180 at the
 // top, roll 360 on the way down. The same flight with no such gap is not one.
-run('eject roll with no horizontal gap is not one', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
-  if(t>1.0) q=qmul(q,qaxis(X,-Math.PI*Math.min(1,(t-1.0)/0.35))); if(t>1.4) q=qmul(q,qaxis(v3(0,0,-1),2*Math.PI*Math.min(1,(t-1.4)/0.45))); return {pos,q}; }, 3, []);
-W.objs.push({ id: 99901, name: 'Test Hatch', kind: 'gap', prims: [], vis: [], gap: { c: v3(-3, 2.5, -20.8), n: v3(0, 1, 0), u: v3(1, 0, 0), hu: 0.8, hv: 0.8 } });
-run('eject roll up through a horizontal gap', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
+run('eject roll in front of the building (no gap needed)', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
   if(t>1.0) q=qmul(q,qaxis(X,-Math.PI*Math.min(1,(t-1.0)/0.35))); if(t>1.4) q=qmul(q,qaxis(v3(0,0,-1),2*Math.PI*Math.min(1,(t-1.4)/0.45))); return {pos,q}; }, 3, ['Eject Roll']);
+W.objs.push({ id: 99901, name: 'Test Hatch', kind: 'gap', prims: [], vis: [], gap: { c: v3(-3, 2.5, -20.8), n: v3(0, 1, 0), u: v3(1, 0, 0), hu: 0.8, hv: 0.8 } });
+run('cube eject: an eject roll up out of a square opening', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
+  if(t>1.0) q=qmul(q,qaxis(X,-Math.PI*Math.min(1,(t-1.0)/0.35))); if(t>1.4) q=qmul(q,qaxis(v3(0,0,-1),2*Math.PI*Math.min(1,(t-1.4)/0.45))); return {pos,q}; }, 3, ['Cube Eject']);
 // Mavvelmann (owner, 2026-11-23, the book's words): under the bar, a maverick up and over it looking forward (travelling backward
 // over the top), then a quick 180 pitch down to upside-down and promptly a 180 roll to level out
 { const mav = (flick, wait, how) => t => { const c = v3(0, 2.2, -6), R = 1.1, F0 = basisQ(FWD, Y);
@@ -88,10 +88,34 @@ run('eject roll up through a horizontal gap', t=>{ const ypos = 1 + 5*t - 2.5*t*
   run('mavvelmann (maverick up, flick, roll)', mav(0.3, 0.1), 4, ['Mavvelmann']);
   run('mavvelmann: a slow pitch down is no flick', mav(1.1, 0.1), 4.5, []);
   run('mavvelmann: a late roll is not prompt', mav(0.3, 1.0), 5, []); }
+// Loop to Matty (the site's cube trick): half a powerloop up over the opening, then a Matty motion backward down through it
+run('loop to matty (down through the hatch)', t => { const F0 = basisQ(FWD, Y), c = { y: 2.4, z: -20.8 }, R = 0.9;
+  if (t < 0.5) return { pos: v3(-3, 1.5, -19.5 - t * 2.6), q: F0 };
+  if (t < 1.1) { const th = (t - 0.5) / 0.6 * Math.PI; return { pos: v3(-3, c.y - R * Math.cos(th), c.z - R * Math.sin(th)), q: qmul(F0, qaxis(X, th)) }; }
+  if (t < 1.6) { const f = (t - 1.1) / 0.5; return { pos: v3(-3, 3.3 - 1.8 * f, -20.8 + 0.1 * f), q: qmul(F0, qaxis(X, Math.PI * (1 - f))) }; }
+  return { pos: v3(-3, 1.5, -20.7 + (t - 1.6) * 3), q: F0 }; }, 4, ['Loop to Matty']);
+// Inverted Uh-uh (the site): half roll to inverted, the nose shakes left, right, left, right, half roll back
+{ const uh = shake => t => { let q = basisQ(FWD, Y); const pos = v3(8, 3, 10 - t * 2), seg = [[0.8, 45, 0.2], [1.0, -90, 0.3], [1.3, 90, 0.3], [1.6, -45, 0.2]];
+    if (t > 0.5) q = qmul(q, qaxis(v3(0, 0, -1), Math.PI * Math.min(1, (t - 0.5) / 0.3)));
+    if (shake) { let yaw = 0; for (const [t0, deg, d] of seg) yaw += deg * Math.min(1, Math.max(0, (t - t0) / d)); q = qmul(q, qaxis(Y, yaw * Math.PI / 180)); }
+    if (t > 1.9) q = qmul(q, qaxis(v3(0, 0, -1), -Math.PI * Math.min(1, (t - 1.9) / 0.3))); return { pos, q }; };
+  run('inverted uh-uh (roll in, head shake, roll back)', uh(true), 4, ['Inverted Uh-uh']);
+  run('the same with no head shake is an Invert Rewind', uh(false), 4, ['Inverted Rewind']); }
+// Rollback / Juicy Rollback (owner, 2026-11-23, from RodFPV's labels): under the swing set, over onto its back by pitch, a roll back
+// upright, and back under it travelling backward. Pitch back = Rollback, pitch forward (a Juicy Flick's way) = Juicy Rollback
+{ const rb = (sign, back) => t => { const F0 = basisQ(FWD, Y); let q = F0, z = t < 1.0 ? -3 - t * 5 : t < 1.6 ? -8 - 0.6 * Math.sin((t - 1.0) / 0.6 * Math.PI) : -8 + (t - 1.6) * 4.5;
+    if (!back && t >= 1.6) z = -8 - (t - 1.6) * 4.5;
+    if (t > 0.75) q = qmul(q, qaxis(X, sign * Math.PI * Math.min(1, (t - 0.75) / 0.35)));
+    if (t > 1.15) q = qmul(q, qaxis(v3(0, 0, -1), Math.PI * Math.min(1, (t - 1.15) / 0.35)));
+    if (t > 1.15) q = qmul(q, qaxis(Y, Math.PI * Math.min(1, (t - 1.15) / 0.35)));
+    return { pos: v3(0.5, 1.2, z), q }; };
+  run('rollback (under, pitch back over, roll, back under backward)', rb(1, true), 5, ['Rollback']);
+  run('juicy rollback (the same with a pitch forward)', rb(-1, true), 5, ['Juicy Rollback']);
+}
 // reverse knife edge: backward through the wall slot, rolled 90, after a 180 pitch
 run('reverse knife edge (wall slot)', t=>{ const x=-17.5-t*1.5; let q=basisQ(v3(-1,0,0),Y); q=qmul(q,qaxis(X,Math.PI*Math.min(1,t/0.4)));  q=qmul(q,qaxis(v3(0,0,-1),Math.PI/2*Math.min(1,Math.max(0,(t-0.45)/0.25))));
   return {pos:v3(x,1.1,4),q}; }, 2.2, ['Reverse Knife Edge']);
-run('facepunch', t=>({pos:v3(2.6,1.66,13.4+ Math.max(0,1-t)*2),q:basisQ(v3(0,0,1),Y),contact:(t>1&&t<1.002)?{n:v3(0,0,-1),owner:id('Pilot'),impact:2}:null}), 2, ['Facepunch']);
+run('facepunch', t=>({pos:v3(2.6,1.66,13.4+ Math.max(0,1-t)*2),q:basisQ(v3(0,0,1),Y),contact:(t>1&&t<1.002)?{n:v3(0,0,-1),owner:id('Pilot'),impact:2}:null}), 2, ['Face Punch']);
 // live counting: points grow every half lap while orbiting; a crash mid-orbit keeps the completed laps, loses the rest
 if(!ONLY || 'live'.includes(ONLY)){ const det=new S.TrickDetector(W); const d=Object.create(S.Drone.prototype); d.armed=true; d.crashed=false; const g=orbit(3,true); let pq=null,pp=null; const seen=[]; const got=[];
   for(let t=0;t<4.5;t+=0.001){ const s=g(t); let q=s.q; if(pq&&(q.w*pq.w+q.x*pq.x+q.y*pq.y+q.z*pq.z)<0) q={w:-q.w,x:-q.x,y:-q.y,z:-q.z}; let w=v3(); if(pq){const dq={w:(q.w-pq.w)/0.001,x:(q.x-pq.x)/0.001,y:(q.y-pq.y)/0.001,z:(q.z-pq.z)/0.001}; const r=qmul({w:q.w,x:-q.x,y:-q.y,z:-q.z},dq); w=v3(2*r.x,2*r.y,2*r.z);}
@@ -102,5 +126,5 @@ if(!ONLY || 'live'.includes(ONLY)){ const det=new S.TrickDetector(W); const d=Ob
 console.log(`\n${pass}/${total} phase-2 flights correct`);
 // orbit the whole slide tower (4 posts) and a single swing-set leg
 const ST=v3(-8,0,2);
-run('orbit x2 around the slide tower', t=>{ const w=150*D2R, R=2.2, a=Math.min(t,0.01+2.05*2*Math.PI/w)*w; const pos=v3(ST.x+R*Math.cos(a),1.9,ST.z+R*Math.sin(a)); return {pos,q:basisQ(norm(v3(ST.x-pos.x,0.1,ST.z-pos.z)),Y)}; }, 6.5, ['Orbit x2']);
-run('trippy spin x2 around the pilot', t=>{ const C=v3(2.6,0,14.2), w=170*D2R, R=1.4, a=Math.min(t,0.01+2.05*2*Math.PI/w)*w; const pos=v3(C.x+R*Math.cos(a),1.7,C.z+R*Math.sin(a)); return {pos,q:basisQ(norm(v3(C.x-pos.x,-0.35,C.z-pos.z)),v3(0,-1,0))}; }, 6, ['Trippy Spin x2']);
+run('orbit x2 around the slide tower', t=>{ const w=150*D2R, R=2.2, a=Math.min(t,0.01+2.05*2*Math.PI/w)*w; const pos=v3(ST.x+R*Math.cos(a),1.9,ST.z+R*Math.sin(a)); return {pos,q:basisQ(norm(v3(ST.x-pos.x,0.1,ST.z-pos.z)),Y)}; }, 6.5, ['Orbits']);
+run('trippy spin x2 around the pilot', t=>{ const C=v3(2.6,0,14.2), w=170*D2R, R=1.4, a=Math.min(t,0.01+2.05*2*Math.PI/w)*w; const pos=v3(C.x+R*Math.cos(a),1.7,C.z+R*Math.sin(a)); return {pos,q:basisQ(norm(v3(C.x-pos.x,-0.35,C.z-pos.z)),v3(0,-1,0))}; }, 6, ['Trippy Spin']);

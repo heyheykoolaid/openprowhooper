@@ -300,7 +300,7 @@
     'Segmented Flips/Rolls': (w, r, o) => { const ax = r() < 0.5 ? 'P' : 'R', s = R1(r), rt = range(r, 700, 1000); return openAir([[ax, 180 * s, rt], ['pause', range(r, 0.22, 0.5)], [ax, 180 * s, rt]])(w, r, o); },
     // owner, 2026-11-21: half a flip to upside-down, a wait (if that), the flip back to upright; pitch, not roll (the book allows either, and
     // the detector still reads both; `roll: true` flies the roll for tests)
-    'Invert Rewind': (w, r, o) => { const ax = o && o.roll ? 'R' : 'P', s = R1(r), rt = range(r, 500, 900), wait = r() < 0.5 ? range(r, 0.1, 0.35) : 0; return openAir([[ax, 180 * s, rt], ...(wait ? [['pause', wait]] : []), [ax, -180 * s, rt]])(w, r, o); },
+    'Inverted Rewind': (w, r, o) => { const ax = o && o.roll ? 'R' : 'P', s = R1(r), rt = range(r, 500, 900), wait = r() < 0.5 ? range(r, 0.1, 0.35) : 0; return openAir([[ax, 180 * s, rt], ...(wait ? [['pause', wait]] : []), [ax, -180 * s, rt]])(w, r, o); },
     'Vanny Roll': (w, r, o) => { const y = R1(r); return openAir([['Y', 180 * y, range(r, 280, 450)], ['R', 360 * R1(r), range(r, 600, 900)], ['Y', 180 * y, range(r, 280, 450)]])(w, r, o); },
     "Rubik's Cube": (w, r, o) => { const p = R1(r); return openAir([['P', 180 * p, range(r, 500, 900)], ['R', 360 * R1(r), range(r, 600, 1000)], ['P', 180 * p, range(r, 450, 900)]])(w, r, o); },
     "Cubik's Rube": (w, r, o) => { const s = R1(r); return openAir([['R', 180 * s, range(r, 600, 1000)], ['P', 360 * R1(r), range(r, 500, 900)], ['R', 180 * s, range(r, 450, 900)]])(w, r, o); },
@@ -312,18 +312,18 @@
     'Reversed Power Flip': loopTrick(pk(X, -360, 600, 900)),
     'Power Roll': loopTrick(pk(ROLL, 360, 450, 900)),
     'Inverted 360 Powerloop': loopTrick(pk(YAW, 360, 450, 700)),
-    'Immelmann Turn': immelmann,
+    'Immelmann': immelmann,
     'Barani': barani,
     'Maverick Loop': maverick(false),
     'Mavvy Roll': maverick(true),
-    'Blindflip': blindflip,
+    'Blind Loop': blindflip,
     'Matty Flip': matty('flip'),
     'Anti Matty': matty('anti'),
     'Matty Twister': matty('twister'),
     'Matty 360': matty('360'),
-    'Split-S': splitS(180, 0),
+    'Split S': splitS(180, 0),
     '540 Split S': splitS(540, 0),
-    'Split-Back': splitS(180, 360),
+    'Splitback': splitS(180, 360),
     'Cradle': cradle,
     'Whiplash': whiplash,
     'Pole Dance': poleDance,
@@ -344,7 +344,7 @@
   };
   // cradle into a trippy round a swing-set leg, passing under the swing bar on the way in: pitch back to inverted, then the
   // orbit's coordinated roll/yaw. Pilot feedback: this kind of thing was being called a Snapback.
-  CONFUSERS['trippy started under the swing bar'] = { ok: ['Trippy Spin x2', 'Orbit x2', 'Cradle'], make: (w, r) => {
+  CONFUSERS['trippy started under the swing bar'] = { ok: ['Trippy Spin', 'Orbits', 'Cradle'], make: (w, r) => {
     const sw = w.objs.find(o => o.name === 'Swing Set'), { a, b, under } = sw.obstacle, leg = v3(a.x, 0, a.z), u = norm(v3(b.x - a.x, 0, b.z - a.z)), n = v3(-u.z, 0, u.x);
     const R = range(r, 1.3, 1.9), y = Math.min(under - 0.4, 1.6), wv = range(r, 150, 200) * D, laps = range(r, 1.6, 2.2), Tin = 1.0, Tc = range(r, 0.4, 0.6), To = laps * 2 * P / wv;
     const start = add(add(leg, mul(u, R)), mul(n, -2.5)), entry = add(leg, mul(u, R));

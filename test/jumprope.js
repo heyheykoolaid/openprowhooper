@@ -49,7 +49,13 @@ function cinnamon(inv) { const g = jumpRope(false); return t => { const s = g(t)
   if (inv) { const ph = Math.max(0, Math.min(1, (t - 1.2) / 0.3, (3.2 - t) / 0.3)) * Math.PI;   // pitched upside-down (a half flip, no roll) before the top and back after
     up = norm(S.add(mul(v3(0, 1, 0), Math.cos(ph)), mul(f, Math.sin(ph)))); f = norm(S.add(mul(f, Math.cos(ph)), mul(v3(0, -1, 0), Math.sin(ph)))); }
   return { pos: s.pos, q: basisQ(f, up) }; }; }
-const cu = fly(W, cinnamon(false), 6), ci = fly(W, cinnamon(true), 6);
-check('a jump rope with a slow 360 yaw, upright the whole way, is a Cinnamon Roll', cu.includes('Cinnamon Roll'), cu.join(', ') || 'nothing');
+// the site's Cinnamon Roll (owner, 2026-11-23): an orbit of the object, over it for the first half and back under it for the second,
+// the object in view all the way round (nose at the middle of the orbit); `look` false = the same path with the nose turning on its own
+function cinOrbit(look) { const Rr = 1.5, h = 0.8, T = 2.6, C = v3(0, cy, cz); return t => { const k = Math.min(1, Math.max(0, (t - 0.8) / T)), a = -Math.PI / 2 + k * 2 * Math.PI;   // under, over at half way, back under as the turn ends
+  let pos = v3(Rr * Math.sin(a), cy + h * Math.sin(a), cz + Rr * Math.cos(a)); if (t < 0.8) pos = v3(-Rr, cy - h, cz - (0.8 - t) * 2.5); else if (t > 0.8 + T) pos = v3(-Rr, cy - h, cz + (t - 0.8 - T) * 2.5);
+  const f = look ? norm(v3(C.x - pos.x, 0, C.z - pos.z)) : v3(Math.sin(a + 1.2), 0, Math.cos(a + 1.2)); return { pos, q: basisQ(f, v3(0, 1, 0)) }; }; }
+const cu = fly(W, cinOrbit(true), 6), ci = fly(W, cinnamon(true), 6), cn = fly(W, cinOrbit(false), 6);
+check('an orbit over then under the bar, the bar in view all the way, is a Cinnamon Roll', cu.includes('Cinnamon Roll'), cu.join(', ') || 'nothing');
+check('the same orbit with the object out of view most of the way is not a Cinnamon Roll', !cn.includes('Cinnamon Roll'), cn.join(', ') || 'nothing');
 check('a cinnamon roll flown upside-down over the top is not a Cinnamon Roll', !ci.includes('Cinnamon Roll'), ci.join(', ') || 'nothing');
 console.log(`\n${ok}/${n} jump-rope checks`); if (ok !== n) process.exit(1);

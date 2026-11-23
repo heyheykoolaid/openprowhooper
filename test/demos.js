@@ -55,7 +55,7 @@ run('demo power roll', chain([approach, arc(0, Math.PI, 150, 330), atPeak(Math.P
 { const top = ell(Math.PI); const inv = pitchQ(Math.PI);
   run('demo immelmann', chain([approach, arc(0, Math.PI, 200, 380),
     { T: 0.4, f: t => ({ pos: S.add(top, S.v3(0, 0, 3 * t)), q: S.qmul(inv, S.qaxis(FWD_ROLL, Math.PI * t / 0.4)) }) },
-    straight(S.add(top, S.v3(0, 0, 1.2)), S.v3(0, 0, 3), 1.5, S.qmul(inv, S.qaxis(FWD_ROLL, Math.PI)))]), 8, ['Immelmann Turn']); }
+    straight(S.add(top, S.v3(0, 0, 1.2)), S.v3(0, 0, 3), 1.5, S.qmul(inv, S.qaxis(FWD_ROLL, Math.PI)))]), 8, ['Immelmann']); }
 
 // Power Switch / Power Split demos: the loop comes all the way round to level on the start side WITHOUT passing
 // back under, hovers (≈0.7 s / ≈1.3 s in the demos), then rewinds back over the bar and under it.
@@ -133,7 +133,7 @@ function splitDemo(rollDeg, rollT) {
   const out = straight(S.v3(0, 1.3, c.z), S.v3(0, 0, 3), 1.6, S.qmul(R1, pitchQ(P)));
   return chain([inSeg, roll, half, out]);
 }
-run('demo split-s (slow 0.8 s roll)', splitDemo(180, 0.8), 6, ['Split-S']);
+run('demo split-s (slow 0.8 s roll)', splitDemo(180, 0.8), 6, ['Split S']);
 run('demo 540 split s (0.7 s roll)', splitDemo(540, 0.7), 6, ['540 Split S']);
 
 // ---- objects as used in the demos: trees (any approach angle) and the pilot's legs ----
@@ -156,7 +156,7 @@ function loopAround(C, hv, RZ, RY) {            // loop geometry around centre C
   const hv = S.v3(0, 0, -1), C = S.v3(2.6, 1.3, 14.2), L = loopAround(C, hv, 1.3, 0.85), b0 = L.at(0), top = L.at(P), inv = S.qmul(L.face, pitchQ(P));
   run("immelmann through the pilot's legs", chain([L.lineG(S.sub(b0, S.mul(hv, 3)), S.mul(hv, 3), 1.0), L.arcG(0, P, 220, 380),
     { T: 0.4, f: t => ({ pos: S.add(top, S.v3(0, 0, 2.5 * t)), q: S.qmul(inv, S.qaxis(FWD_ROLL, P * t / 0.4)) }) },
-    straight(S.add(top, S.v3(0, 0, 1.0)), S.v3(0, 0, 3), 1.4, S.qmul(inv, S.qaxis(FWD_ROLL, P)))]), 7, ['Immelmann Turn']);
+    straight(S.add(top, S.v3(0, 0, 1.0)), S.v3(0, 0, 3), 1.4, S.qmul(inv, S.qaxis(FWD_ROLL, P)))]), 7, ['Immelmann']);
 }
 
 { // Blindflip ("Blind Loop" on prowhooper.com; demo: tree): fly at the tree, yaw 180 just before it, pitch back into a loop over it flying blind,
@@ -167,6 +167,6 @@ function loopAround(C, hv, RZ, RY) {            // loop geometry around centre C
   const sw = sweep(P / 2, 2 * P, 110, 280);
   const loop = { T: sw.T, f: t => { const th = sw.at(t); return { pos: L.at(th), q: S.qmul(L.face, pitchQ((th - P / 2) / (1.5 * P) * 2 * P)) }; } };
   const out = { T: 1.2, f: t => ({ pos: S.add(L.at(2 * P), S.mul(g, 3 * t)), q: L.face }) };
-  run('blindflip / "Blind Loop" (tree)', chain([appr, loop, out]), 8, ['Blindflip']);
+  run('blindflip / "Blind Loop" (tree)', chain([appr, loop, out]), 8, ['Blind Loop']);
 }
 console.log(`\n${pass}/${total} demo loops`);
