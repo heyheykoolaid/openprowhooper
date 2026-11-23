@@ -248,3 +248,22 @@ approximate). Nothing built yet: proposals for the owner to pick from.
   239 deg of lap)? (b) the building-corner climb (quarter turns each way, never a lap): a trick of its own? (c) one of the owner's own
   trippy labels is called Double Rolling Trippy Spin by the game, and one pilot's confirmed trippy has the sticks together: single
   labels, left alone.
+
+### Owner's answers on the trippy questions, and the Training menu (2026-11-23)
+- **"A one lap trippy counts."** It already does: one whole lap scores half the two-lap points. Nothing changed. A part lap (the one
+  confirmed label of 239 deg) still does not count: the owner said one lap.
+- **The building-corner climb "is its own trick."** Built as **Corner Climb** (draft, 300 points: name and points are placeholders for
+  the owner): three swings round an upright corner of a wall or building in the trippy's look, each way in turn, never a whole lap,
+  climbing a metre. Written from the video's description; there is no labelled flight of one yet, so the numbers (3 swings, 45 deg,
+  1 m) are first guesses. Open: its real name and points; whether a climb is required or swinging at one height counts; a Train stage
+  for it on the Dive Tower.
+- **"Move the Tricktionary and trick challenges under a nested training menu option."** Done: main menu → Training ▸ holds both, like
+  Settings ▸. Open: whether Pilot Warm-up belongs there too (it is under Tools & labs today).
+- **"An eject roll has to be through a horizontal gap."** Built: Eject Roll (and Stellar Eject Roll, which starts with one) is only
+  called when the climb goes through a gap whose opening lies flat (a skylight, a hole in a deck). **Assumed**: "horizontal gap" = an
+  opening that lies flat, flown up through; if the owner meant a gap that is wider than it is tall, the check is one line to change.
+  **Consequence, open**: only More Warehouse and Ship Drugs have such gaps today; the other maps and the Training Room need one (a hatch
+  frame in each Trick Park) before the trick can be flown or trained there.
+- **"Ensure the Mavvelmann meets this description"** (the book's text). The rule had the rotations and the under-then-over but not the
+  rest; added: upright and forward-looking from the under pass to the flick, over the top travelling backward, the flick while above
+  the object and quick (0.8 s at most), upside-down after it, the roll within 0.7 s, level at the end. The times are first guesses.

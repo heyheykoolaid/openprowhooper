@@ -1020,12 +1020,16 @@ class Drone {
 // spreadsheet's "Custom Trick Building Blocks") + obstacle crossing events + rules.
 const TRICK_DATA = root.TPW_TRICKS || [];
 // Tricks the owner named that the TPW book does not have (scored like book tricks; pts are the owner's to set, draft until then)
+const MAVVEL_BACK = 0.2, MAVVEL_EARLY = 0.5, MAVVEL_LATE = 1.5, MAVVEL_FLICK = 0.8, MAVVEL_PROMPT = 0.7;   // Mavvelmann: the over pass flown backward (fwdDot at most this); the flick from this long before the over pass to this long after it; the flick's longest (s); the longest wait before the roll (s)
+const CORNER_SWINGS = 3, CORNER_MIN = 45, CORNER_UP = 1.0, CORNER_SIDE = 0.4;   // Corner Climb: swings round the corner, each at least this many deg of it, climbing this far (m); how far each side of the corner's diagonal a swing must reach (m)
 const WALL_STICK_MIN = 1.0;   // s held on the wall (owner, 2026-11-19: "1 second")
 const EXTRA_TRICKS = [
   { cat: 'Matty Flips', name: 'Half Matty Pendulum', diff: 'Advanced', pts: 1050, extra: true,
     desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' },
   { cat: 'Open Air Tricks', name: 'Juicy Tornado', diff: 'Intermediate', pts: 350, extra: true,
     desc: 'A Juicy Flick followed straight away by a forward double roll: flick forward to inverted with a punch of throttle, roll back upright, and keep rolling the same way for two more full rolls while flying forward (owner, 2026-11-20). Points: a Juicy Flick plus a Double Roll, until the owner sets them.' },
+  { cat: 'Wall Tricks', name: 'Corner Climb', diff: 'Intermediate', pts: 300, extra: true,
+    desc: 'A trippy on the corner of a building: looking up at the corner, roll and yaw pushed opposite ways, swing a quarter turn round it one way, sling back the other way, and again, climbing the corner with a touch of pitch (owner, 2026-11-23, from the Infinity Loops trippy masterclass). Three swings and a metre of climb. Name and points are placeholders until the owner sets them.' },
   { cat: 'Wall Tricks', name: 'Wall Stick', diff: 'Novice', pts: 200, extra: true,
     desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' },
   // disarm tricks (owner, 2026-11-21): the rotation is carried by the quad's own momentum with the motors off. Points are placeholders
@@ -1342,8 +1346,10 @@ const CONTEXT_TRICKS = [
   { name: 'Ceiling Tap', pats: ['P+~180', 'P+~270'], req: { tap: { face: 'bottom', surface: 'ceiling' } }, draft: true },
   { name: 'Downtown Tap', pats: ['R*~180 P-~360', 'R*~180 P+~90 P-~360', 'R*~180 P-~270'], req: { tap: { face: 'any', surface: 'any' } }, draft: true },
   // demo GIF: ascends in front of an indoor cube (~1 m), not a tall object
-  { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: 0.8 }, draft: true },
-  { name: 'Stellar Eject Roll', pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'], req: { climbBefore: true, endBack: true }, draft: true },
+  // owner, 2026-11-23: "an eject roll has to be through a horizontal gap": an opening that lies flat (a skylight, a hole in a deck, the
+  // top of a cube frame), flown up through on the climb. `flatGap` = such a gap crossed from 2.5 s before the flip to just after the roll
+  { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, flatGap: true }, draft: true },
+  { name: 'Stellar Eject Roll', pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'], req: { climbBefore: true, flatGap: true, endBack: true }, draft: true },
   // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
   { name: 'Flip Stall Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
   { name: '360 Stall Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
@@ -1450,7 +1456,7 @@ class TrickDetector {
           const f = d.fwd(), vl = len(d.vel), fwdDot = vl > 0.8 ? dot(f, d.vel) / vl : 0;
           // how narrow the gap is (its short side) and how well the quad's up axis lines up with that side (knife-edged through it)
           const narrow = g.round ? 2 * g.hu : 2 * Math.min(g.hu, g.hv), nAx = g.round ? null : (g.hu <= g.hv ? g.u : vAx), up = d.up(), nAlign = nAx ? Math.abs(dot(up, nAx)) : 1;
-          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl });
+          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl, flat: Math.abs(g.n.y) > 0.7 || undefined });
         }
       }
     }
@@ -1564,6 +1570,7 @@ class TrickDetector {
         for (const tv of variants) for (const pp of tr.parsed) {
           const m = matchTokens(pp, tv);
           if (!m) continue;
+          if (tr.name === 'Mavvelmann' && this.mavvelOK && !this.mavvelOK(tv, part)) continue;
           const cand = { name: tr.name, toks: tv, err: m.err + (tv !== toks ? 0.15 : 0), obstacle: seq[0].name, obj: +id, clen: need.length, part, ct1: part[part.length - 1].t };
           if (m && better(cand, best)) best = cand;
         }
@@ -1786,7 +1793,7 @@ class TrickDetector {
     // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
     // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
     if (d.contactThisStep) this.lastTouch = t;
-    this.stickTick(d, t); this.deadTick(d, t);
+    this.stickTick(d, t); this.deadTick(d, t); this.cornerTick(d, dt, t);
     const sl = this.slide;
     if (sl) { const hs = Math.hypot(d.vel.x, d.vel.z);
       if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) { sl.lastC = t; const o = this.world.objs[d.contactOwner]; sl.surface = d.contactGround || !o ? 'the ground' : o.name; }
@@ -1794,6 +1801,32 @@ class TrickDetector {
       if (on && hs < 0.15) { if (sl.stopT == null) sl.stopT = t; } else sl.stopT = null;
       if (d.crashed || t - sl.t > 10 || (sl.stopT != null && t - sl.stopT > 1.0)) this.slide = null;   // came to rest: the moment has passed
     }
+  }
+  // Corner Climb (owner, 2026-11-23: the masterclass's building-corner trippy "is its own trick"): in the trippy's look (the corner held
+  // up in the picture; rolled over, or flown flatter with roll and yaw opposed), swinging round an upright corner of a wall or
+  // building one way and back the other, never a full lap, and climbing. Each swing must reach both faces of the corner (a pass
+  // back and forth in front of one face is not round the corner). Called once, at the third swing with a metre climbed.
+  cornerTick(d, dt, t) {
+    if (!this.corners || !this.corners.length) return;
+    if (!d.armed || d.crashed) { this.cc = null; return; }
+    if (t - this.cnT > 0.3) { this.cnT = t; this.cnNear = this.corners.filter(c => Math.hypot(c.x - d.pos.x, c.z - d.pos.z) < 8 && d.pos.y > c.y0 - 0.5 && d.pos.y < c.y1 + 1.5); }
+    let cc = this.cc; if (!cc && !this.cnNear.length) return;
+    let c = cc ? cc.c : null; if (!c) { let bd = 1e9; for (const k of this.cnNear) { const dd = Math.hypot(k.x - d.pos.x, k.z - d.pos.z); if (dd < bd) { bd = dd; c = k; } } }
+    const rx = d.pos.x - c.x, rz = d.pos.z - c.z, dist = Math.hypot(rx, rz); if (dist > 7 || d.pos.y > c.y1 + 1.5) { this.cc = null; return; }
+    const up = d.up(), f = d.fwd(), rc = this.lastRc, o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0; this.cnSo += (o - this.cnSo) * Math.min(1, dt / 0.35);
+    const ys = [1, 2, 3, 4.5].map(dy => Math.min(c.y1, d.pos.y + dy)); ys.push(c.y1);
+    const topVis = dist > 0.3 && ys.some(y => { const v = this.viewOf(d.pos, up, f, v3(c.x, y, c.z)); return v.top && v.ang < 75; });
+    const pose = topVis && (up.y < 0.35 || this.cnSo > 0.5 && up.y < TRIPPY_FLAT), ang = Math.atan2(rz, rx), side = rx * c.n1.x + rz * c.n1.z - (rx * c.n2.x + rz * c.n2.z);
+    if (!cc) { if (pose) this.cc = { c, ang, acc: 0, dir: 0, rev: 0, n: 0, y0: d.pos.y, t0: t, lastPose: t, lo: side, hi: side, done: false }; return; }
+    let da = ang - cc.ang; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; cc.ang = ang;
+    if (pose) cc.lastPose = t; else { if (t - cc.lastPose > 0.9) this.cc = null; return; }
+    const sg = Math.sign(da), deg = Math.abs(da) * R2D; if (!sg) return; if (!cc.dir) cc.dir = sg;
+    const good = () => cc.acc >= CORNER_MIN && cc.acc < 300 && cc.lo < -CORNER_SIDE && cc.hi > CORNER_SIDE;
+    if (sg === cc.dir) { cc.acc += deg; cc.rev = 0; cc.lo = Math.min(cc.lo, side); cc.hi = Math.max(cc.hi, side); if (cc.acc >= 300) { cc.n = 0; cc.y0 = d.pos.y; cc.t0 = t; } }   // a whole lap is a Trippy Spin's business
+    else { cc.rev += deg; if (cc.rev > 20) { if (good()) cc.n++; else { cc.n = 0; cc.y0 = d.pos.y; cc.t0 = t; cc.done = false; } cc.dir = sg; cc.acc = cc.rev; cc.rev = 0; cc.lo = cc.hi = side; } }
+    if (!cc.done && !this.live && cc.n + (good() ? 1 : 0) >= CORNER_SWINGS && d.pos.y - cc.y0 >= CORNER_UP) { cc.done = true;
+      for (const k of this.toks) if (k.t1 > cc.t0 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1);
+      this.emit({ name: 'Corner Climb', exec: 'CLEAN', clean: 90, continuous: true, obstacle: c.name, meters: +(d.pos.y - cc.y0).toFixed(1), dur: +(t - cc.t0).toFixed(2), toks: [], draft: true }); }
   }
   // Wall Stick (owner, 2026-11-19): held against a wall or the side of anything (a sideways contact, not the ground or a top),
   // nearly still, for WALL_STICK_MIN or more, then a clean fly-away (postStep: a second off every surface, armed, moving).
@@ -1985,6 +2018,11 @@ class StreamDetector extends TrickDetector {
     this.orb = {}; this.circled = []; this.passTr = {}; this.vst = {}; this.hst = {}; this.airPole = null; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
     // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
     // swing-set legs, slide-tower posts, monkey-bar & jungle-gym uprights, the pilot). Fence posts and wall pipes are excluded.
+    // the upright corners of walls and buildings 3 m or taller (Corner Climb): where, how high, and the two faces that meet there
+    this.corners = []; this.cc = null; this.cnNear = []; this.cnT = -9; this.cnSo = 0;
+    for (const o of this.world.objs) { if (o.kind !== 'building' && o.kind !== 'wall') continue;
+      for (const p of o.prims || []) { if (p.type !== 'box' || p.leaf || Math.abs(p.m[4]) < 0.99 || p.h.y < 1.5 || Math.max(p.h.x, p.h.z) < 0.5) continue;
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) this.corners.push({ name: o.name, objId: o.id, x: p.c.x + p.m[0] * p.h.x * sx + p.m[2] * p.h.z * sz, z: p.c.z + p.m[6] * p.h.x * sx + p.m[8] * p.h.z * sz, y0: p.c.y - p.h.y, y1: p.c.y + p.h.y, n1: { x: p.m[0] * sx, z: p.m[6] * sx }, n2: { x: p.m[2] * sz, z: p.m[8] * sz } }); } }
     this.poles = [];
     for (const o of this.world.objs) {
       if (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall') continue;
@@ -2316,6 +2354,20 @@ class StreamDetector extends TrickDetector {
   minCamUpBetween(a, b) { const W = this.fbIn(a, b); if (!W.length) return 1; const c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R);
     return Math.min(...W.map(x => x.up.y * c - x.f.y * s)); }
   // stayed upright by the body OR by the camera view: pilots hold the quad differently for different camera angles
+  // Mavvelmann by the book (owner, 2026-11-23): an Immelmann with a maverick's way up. Under the object, round and above it looking
+  // forward the whole way (upright from the under pass to the flick; over the top travelling backward), THEN, above it, a quick 180
+  // pitch down to upside-down, and promptly a 180 roll to level out
+  mavvelOK(tv, part) {
+    const fl = tv.find(k => k.ax === 'P'), ro = tv.find(k => k.ax === 'R'), U = part[0], O = part[1]; if (!fl || !ro || !U || !O) return false;
+    if (!this.stayedUpright(U.t, Math.max(U.t, fl.t0 - 0.03))) return false;                       // the maverick motion: never inverted on the way up and over
+    if (O.t <= fl.t0 && O.fwdDot && O.fwdDot > MAVVEL_BACK) return false;                          // over the top with backward motion
+    if (fl.t0 < O.t - MAVVEL_EARLY || fl.t0 > O.t + MAVVEL_LATE) return false;                     // the flick comes when you are above the object
+    if (fl.t1 - fl.t0 > MAVVEL_FLICK) return false;                                                // a quick flick
+    if (ro.t0 - fl.t1 > MAVVEL_PROMPT) return false;                                               // the roll follows promptly
+    if (this.minUpBetween(fl.t0 + (fl.t1 - fl.t0) * 0.6, ro.t0 + 0.05) > -0.3) return false;       // upside-down after the flick
+    const end = this.fbIn(ro.t1, ro.t1 + 0.25); if (end.length && Math.max(...end.map(x => x.up.y)) < 0.4) return false;   // levelled out
+    return true;
+  }
   stayedUpright(a, b) { return Math.max(this.minUpBetween(a, b), this.minCamUpBetween(a, b)) > 0.1; }
   backFrac(a, b) { const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.z) > 0.8); if (!W.length) return 0;
     return W.filter(x => { const fh = Math.hypot(x.f.x, x.f.z) || 1, vh = Math.hypot(x.v.x, x.v.z); return (x.f.x * x.v.x + x.f.z * x.v.z) / (fh * vh) < -0.35; }).length / W.length; }
@@ -2330,6 +2382,7 @@ class StreamDetector extends TrickDetector {
     const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1, now = this.time, out = { claims: [] };
     if (req.tap) { const tp = this.tapIn(req.tap, null, t0 - 0.2, t1 + 0.25); if (!tp) return null; out.claims.push(tp.id); out.tapRef = tp; out.obstacle = tp.name; }
     if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return null;
+    if (req.flatGap) { const g = this.crossLog.find(c => c.kind === 'G' && c.flat && c.t >= t0 - 2.5 && c.t <= t1 + 0.4); if (!g) return null; out.obstacle = g.name; }
     if (req.nearTall) { const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0]; const nm = s0 && this.nearTall({ pos: s0.p }, req.nearTall === true ? 3 : req.nearTall); if (!nm) return null; out.obstacle = out.obstacle || nm;
       // a stall rewind rises beside the object and comes back down: it never passes over/under one (loops, jump ropes do)
       if (req.nearTall !== true && this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)) return null;
@@ -2348,6 +2401,7 @@ class StreamDetector extends TrickDetector {
     if (req.tap) { const w = this.nearWall(d); const ceil = this.world.prims.some(p => p.aabb.min.y > d.pos.y && p.aabb.min.y - d.pos.y < 0.7 && d.pos.x > p.aabb.min.x && d.pos.x < p.aabb.max.x && d.pos.z > p.aabb.min.z && d.pos.z < p.aabb.max.z);
       if (!((w && w.dist < 0.7) || ceil)) return false; }
     if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return false;
+    if (req.flatGap && !this.crossLog.some(c => c.kind === 'G' && c.flat && c.t >= t0 - 2.5)) return false;
     if (req.stallIn && !(this.vst.climb || this.stalls.some(x => x.tApex >= t0 - 0.45))) return false;
     if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2)) return false;   // a continuous flip can't become a segmented one
     if (req.rewindIn && !(this.hst.slowT != null || this.rewinds.some(x => x.t1 >= t0 - 0.3))) return false;
@@ -3230,7 +3284,7 @@ function importDiff(text, tune) {
   return { tune: t, found };
 }
 
-const EVENT_TRICKS_DRAFT = ['Disarm Flip', 'Disarm Roll', 'Disarm Spin', 'Dead Pirate Spin', 'Disarm Loop', 'Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
+const EVENT_TRICKS_DRAFT = ['Corner Climb', 'Disarm Flip', 'Disarm Roll', 'Disarm Spin', 'Dead Pirate Spin', 'Disarm Loop', 'Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbit x2', 'Trippy Spin x2', 'Trippy Switch', 'Double Rolling Trippy Spin',
   'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
 // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
 const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];

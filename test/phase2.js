@@ -69,9 +69,25 @@ run('ceiling tap (slide roof)', t=>{ const pos=v3(-8,2.35+Math.min(t,0.5)*0.3,2)
 // flip stall rewind beside the building: climb, flip at the apex, fall back the way you came
 run('flip stall rewind (building)', t=>{ const y= t<1? 1+t*5 - 1.5*t*t : null; const tt=Math.max(0,t-0.5);
   const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(3,Math.max(0.6,ypos),-20.5+(t>1.4?(t-1.4)*2:0)); const a=Math.max(0,Math.min(1,(t-0.75)/0.45))*2*Math.PI; return {pos,q:qmul(basisQ(FWD,Y),qaxis(X,a))}; }, 3, ['Flip Stall Rewind']);
-// eject roll: climb in front of the building, pitch down 180 at the top, roll 360 on the way down
-run('eject roll', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
+// eject roll (owner, 2026-11-23: "has to be through a horizontal gap"): climb up through an opening that lies flat, pitch down 180 at the
+// top, roll 360 on the way down. The same flight with no such gap is not one.
+run('eject roll with no horizontal gap is not one', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
+  if(t>1.0) q=qmul(q,qaxis(X,-Math.PI*Math.min(1,(t-1.0)/0.35))); if(t>1.4) q=qmul(q,qaxis(v3(0,0,-1),2*Math.PI*Math.min(1,(t-1.4)/0.45))); return {pos,q}; }, 3, []);
+W.objs.push({ id: 99901, name: 'Test Hatch', kind: 'gap', prims: [], vis: [], gap: { c: v3(-3, 2.5, -20.8), n: v3(0, 1, 0), u: v3(1, 0, 0), hu: 0.8, hv: 0.8 } });
+run('eject roll up through a horizontal gap', t=>{ const ypos = 1 + 5*t - 2.5*t*t; const pos=v3(-3,Math.max(0.6,ypos),-20.8); let q=basisQ(FWD,Y);
   if(t>1.0) q=qmul(q,qaxis(X,-Math.PI*Math.min(1,(t-1.0)/0.35))); if(t>1.4) q=qmul(q,qaxis(v3(0,0,-1),2*Math.PI*Math.min(1,(t-1.4)/0.45))); return {pos,q}; }, 3, ['Eject Roll']);
+// Mavvelmann (owner, 2026-11-23, the book's words): under the bar, a maverick up and over it looking forward (travelling backward
+// over the top), then a quick 180 pitch down to upside-down and promptly a 180 roll to level out
+{ const mav = (flick, wait, how) => t => { const c = v3(0, 2.2, -6), R = 1.1, F0 = basisQ(FWD, Y);
+    if (t < 0.6) return { pos: v3(0, 1.1, -3 - t * 5), q: F0 };
+    if (t < 1.4) { const th = (t - 0.6) / 0.8 * Math.PI; let q = F0; if (how === 'loop') q = qmul(q, qaxis(X, th)); return { pos: v3(0, c.y - R * Math.cos(th), c.z - R * Math.sin(th)), q }; }
+    let q = how === 'loop' ? qmul(F0, qaxis(X, Math.PI)) : F0; const z = -6 + (t - 1.4) * 2.5, t1 = 1.4 + flick, t2 = t1 + wait;
+    if (how === 'loop') { if (t < t1) return { pos: v3(0, 3.3, z), q }; return { pos: v3(0, 3.3, z), q: qmul(q, qaxis(v3(0, 0, -1), Math.PI * Math.min(1, (t - t2) / 0.35) * (t > t2 ? 1 : 0))) }; }
+    q = qmul(q, qaxis(X, -Math.PI * Math.min(1, (t - 1.4) / flick))); if (t > t2) q = qmul(q, qaxis(v3(0, 0, -1), Math.PI * Math.min(1, (t - t2) / 0.35)));
+    return { pos: v3(0, 3.3, z), q }; };
+  run('mavvelmann (maverick up, flick, roll)', mav(0.3, 0.1), 4, ['Mavvelmann']);
+  run('mavvelmann: a slow pitch down is no flick', mav(1.1, 0.1), 4.5, []);
+  run('mavvelmann: a late roll is not prompt', mav(0.3, 1.0), 5, []); }
 // reverse knife edge: backward through the wall slot, rolled 90, after a 180 pitch
 run('reverse knife edge (wall slot)', t=>{ const x=-17.5-t*1.5; let q=basisQ(v3(-1,0,0),Y); q=qmul(q,qaxis(X,Math.PI*Math.min(1,t/0.4)));  q=qmul(q,qaxis(v3(0,0,-1),Math.PI/2*Math.min(1,Math.max(0,(t-0.45)/0.25))));
   return {pos:v3(x,1.1,4),q}; }, 2.2, ['Reverse Knife Edge']);

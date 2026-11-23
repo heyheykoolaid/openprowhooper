@@ -1056,6 +1056,29 @@ centre (LOCKED IN when the pole is in it, measured on the page: `tripNow`) and t
 or intro for it yet (the bot has no trippy script). Checked in a browser (panel, cues, HUD, stage passes from calls, skip, no rung for
 skipping); the stages were not flown by hand there.
 
+## Corner Climb, one-lap trippies, and the Training menu (owner, 2026-11-23; test/corner.js)
+**A one-lap trippy counts** (owner): it already did: `finishLive` scores any lap trick from one whole lap (320 deg or more) at half the
+two-lap points, called "Trippy Spin x2" with `laps: 1`. Under a lap still does not count. **Corner Climb** ("it's its own trick": the
+masterclass's building-corner trippy; `cornerTick` in sim.js, `EXTRA_TRICKS` 300 pts, draft; **name and points are placeholders**):
+`this.corners` = the upright corners of every 'wall' / 'building' box 3 m or taller (with the two faces that meet there). In the trippy's
+look at the corner (it is up in the picture; rolled past up.y 0.35, or flatter than `TRIPPY_FLAT` with wonky nips) the quad swings round
+it one way and back the other: `CORNER_SWINGS` 3 swings of `CORNER_MIN` 45 deg or more, each reaching `CORNER_SIDE` 0.4 m both sides of
+the corner's diagonal (back and forth in front of one face is not round the corner), never a lap (300 deg starts over), climbing
+`CORNER_UP` 1 m; called once per chain, not while a lap trick is live. No labels and no real flight of it yet: the rule is from the
+video's description. **Main menu → Training ▸** (`#menuTraining`, a `.menuSub` like Settings): the Tricktionary and Trick challenges
+moved in there.
+
+## Eject Roll needs a horizontal gap; Mavvelmann by the book (owner, 2026-11-23; test/phase2.js)
+**Eject Roll** (owner: "has to be through a horizontal gap") and **Stellar Eject Roll**: `req.flatGap` in `CONTEXT_TRICKS` (it replaced
+`nearTall`): a gap whose opening lies flat (`gap.n` within ~45 deg of straight up: a skylight, a hole in a deck; gap crossings carry
+`flat`) crossed from 2.5 s before the flip to just after the roll; the call names the gap. Read as "an opening that lies flat, flown up
+through": the owner did not spell it out, so check with him if it turns out he meant something else. Maps with such gaps today: More
+Warehouse (Skylights), Ship Drugs (Shattered Skylights). **No other map has one, so Eject Roll cannot be flown there, and the Training
+Room has none** (its station for the trick is still the pole): flat gaps are to add. **Mavvelmann** (`mavvelOK` in sim.js, on top of the
+`P-~180 Ra180` + under-then-over rule): upright from the under pass to the flick (the maverick motion), the over pass travelling backward
+(`MAVVEL_BACK`), the flick starting from 0.5 s before the over pass to 1.5 s after it ("when you're above the object") and lasting 0.8 s
+at most ("quick"), upside-down after it, the roll starting within 0.7 s ("promptly"), level at the end.
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,

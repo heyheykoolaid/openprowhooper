@@ -27,12 +27,15 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
    owner hides / renames / prices). **Redeploy the relay** for it to work. Confirmed ones go into the trick library (2026-11-23; 2 stays the number). Open: re-checking tries on
    the relay or in the weekly run; the knowledge bot flying them (it needs their motion and a family it knows).
    **Trippy Spin** (2026-11-23): the stick witness ("wonky nips"), the locked-in grade and the five-stage Train ladder are built.
-   Open, the owner's calls: whether a one-lap / part-lap trippy counts, the building-corner climb, the cue wording. To build: Show me
+   Decided 2026-11-23: one lap counts (it did), the corner climb is its own trick (**Corner Climb**, draft). Open, the owner's calls:
+   Corner Climb's real name and points, the cue wording. Corner Climb needs a real flight and labels to set its numbers. To build: Show me
    for the trippy (a bot script or a library replay on the Big Pole), the stall / Matty / perch-drop entries as stages.
+   **Eject Roll** now needs a horizontal gap (2026-11-23): add a flat hatch to every Trick Park and the Training Room (only More
+   Warehouse and Ship Drugs have one), and move Train's station for it there.
 9. **Proper gap names per map** for the gap call-outs (they use object names today).
 10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);
-    one-lap trippies; Double Flip that was a Half Matty; a 794 deg Double Roll over the tolerance.
+    Double Flip that was a Half Matty; a 794 deg Double Roll over the tolerance.
 
 ## Later
 11. **Training Room race modes** from the owner's brief (time attack, gate order randomizer, altitude restriction, precision penalty,
