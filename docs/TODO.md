@@ -32,6 +32,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
    for the trippy (a bot script or a library replay on the Big Pole), the stall / Matty / perch-drop entries as stages.
    **Eject Roll** now needs a horizontal gap (2026-11-23): add a flat hatch to every Trick Park and the Training Room (only More
    Warehouse and Ship Drugs have one), and move Train's station for it there.
+   **Tricktionary audit** (2026-11-23, https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs): the owner picks which of the 11 rule
+   differences, 3 missing tricks, 3 point values and 14 names to bring in line with prowhooper.com.
 9. **Proper gap names per map** for the gap call-outs (they use object names today).
 10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);

@@ -267,3 +267,22 @@ approximate). Nothing built yet: proposals for the owner to pick from.
 - **"Ensure the Mavvelmann meets this description"** (the book's text). The rule had the rotations and the under-then-over but not the
   rest; added: upright and forward-looking from the under pass to the flick, over the top travelling backward, the flick while above
   the object and quick (0.8 s at most), upside-down after it, the roll within 0.7 s, level at the end. The times are first guesses.
+
+### Audit of every prowhooper.com trick page against the game (owner asked, 2026-11-23)
+All 93 pages read (as close paraphrases, not verbatim) and compared with the rule tables. The report is a Claude Doc:
+https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs. Nothing was changed from it. **Open, the owner's calls:**
+- **Eject Roll**: the site's text has no gap (climb in front of an object; Outdoors 200, Cube 575, Dive Gate 500); today's rule
+  requires a horizontal gap, so the game is stricter than the site.
+- **Inverted Yaw Tracking**: the site ends with a 180 pitch down; the game's rule and text end with a 180 roll.
+- **Barani -> Power Swap**: the site downgrades a Barani whose yaw starts before the horizon (indoors: the back wall) is in view.
+- **Trippy Switch**: the site wants a full orbit each way; the game calls it at half a lap the second way.
+- **Ninja Star** (site: gap 2-3 whoops; game: any gap), **Knife Edge** (site 2-4; game 2.75), **Segmented** (site: 0.5 s stall; game
+  0.18 s from the demo), **Building Dive** (site: at a building; game: also open air), **Beginner Matty** (site: three passes; game
+  also two), **Cinnamon Roll** (site: object in view all the way; game: no view check).
+- **Missing tricks**: Inverted Uh-uh (125), Loop to Matty (cube only, 550), Gaps by size (150 / 125 / 100; the game's gap points are
+  25-75), Indoor Rubik's Cube.
+- **Points**: Barani 750 (game 700), Cubik's Rube 350 (325), Beginner Matty 125 (100); Trippy Spin and Trippy Switch are
+  Intermediate on the site (Advanced in the game). The site also scores by object (Under/Over, gate, cube, dive gate, triple stack,
+  indoors); the game uses the outdoor value everywhere.
+- **Names**: 14 differ (Immelmann, Inverted Rewind, Splitback, Stall Flip Rewind and the other stall rewinds, Building Dive, Face
+  Punch, Blind Loop, Orbits, Trippy Spin).
