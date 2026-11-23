@@ -155,3 +155,23 @@ letter + 2000 for all four).
 - **Open**: whether Free Fly should count letters too (it does, like every score); whether the pools are the right tricks and the
   right difficulty; whether a posted run should carry its letters so the board can show a K.W.A.D. mark (needs a relay change).
 
+
+### Rubik's Cube vs the stall / eject readings (weekly community run, 2026-11-22)
+From the labels: 20 decided Rubik's Cube labels (MoPenguinz most, RodFPV, tcmore, WonkyFPV), only 2 found. Ten were corrections of a
+360 Stall Rewind call (MoPenguinz, RodFPV), three of an Eject Roll (RodFPV, tcmore); 360 Stall Rewind has never been confirmed by
+anyone. The demo GIF is flip 180, roll 360, flip 180.
+- **Decided (by the run, for the owner to approve in the PR)**: a context trick read only from the motion around the rotation (a
+  stall, a climb before it: no touch, no pass) never takes part of a longer trick's rotations (`SOFT_CTX`, `coversToks` in `better`):
+  the half flip in is what looked like the stall or the climb. Taps keep their priority (a touch is real evidence), and so does
+  Stellar Eject Roll (its whole pattern is the climb, the roll and the flip back).
+- **Decided**: a second, looser Rubik's pattern `Pa180 R*~360 Pa~180`: pilots' rolls ran 420-440° and the flip out read 105-140°
+  (slow ends fall under the token threshold), like the Inverted Yaw Spin's loose half flips.
+- **Effect** (66 flights with these tricks re-flown): Rubik's Cube labels found 2 → 8 of 20, rejected 360 Stall Rewind calls still made
+  11 → 7 of 12, no confirmed label lost; Rubik's calls 59 → 116, the new ones nearly all in MoPenguinz's Rubik's practice runs where
+  the game said 360 Stall Rewind or nothing. Bench 96.7 % and stress unchanged.
+- **Open**: the rest of the missed ones have the roll split between roll and yaw (camera tilt) or a yaw in the middle; an attitude
+  witness (upright → inverted, a turn while inverted, upright again by pitch) would find them. Whether 360 Stall Rewind / Eject Roll
+  should need more than they do (neither has a confirmed real example yet).
+- **Knowledge bot**: with five pilots' Powerloops in the library, the round-robin gave motion to a 0.08-weight example (an unconfirmed
+  keep) and Judge the Bot re-flew it as an Anti Matty. Motion now goes only to examples at least a quarter as well attested as the
+  trick's best one.

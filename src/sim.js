@@ -1274,7 +1274,8 @@ const OBSTACLE_TRICKS = [
 for (const T of OBSTACLE_TRICKS) { OBSTACLE_NAMES.add(T.name); MAYBE_NAMES.add(T.name); }
 const OPEN_TRICKS = [
   // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
-  { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180'] },
+  // pilots' corrections (2026-11-22, 3 pilots): the roll runs long (~420-440°) and the flip out comes up short (~105-140°)
+  { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180', 'Pa180 R*~360 Pa~180'] },
   { name: "Cubik's Rube", pats: ['Ra180 P*360 Ra180'] },
   // pilot feedback: sloppy reps (~300-330 of spin) are normal and should count; the grade reflects the error
   // (the half flip in/out is loose: with the camera tilted the nose ends up short of, or past, a clean 180)
@@ -2951,9 +2952,17 @@ class WatchCtx {
   dove() { const c = this.cross('O'), u = this.cross('U'); if (!c || !u) return { ok: true, val: 'n/a' }; return { ok: this.fr(c.t, u.t).some(x => x.v.y < -1.0) }; }
 }
 
+// context tricks read only from how the quad moved around the rotation (a stall, a climb before it): no touch, no pass.
+// One of them never takes part of a longer trick's rotations (pilots, 2026-11-22: Rubik's Cubes read as 360 Stall Rewind
+// or Eject Roll: the half flip in looks like the stall or the climb)
+const SOFT_CTX = new Set(CONTEXT_TRICKS.filter(t => t.req && (t.req.stallIn || t.req.climbBefore) && !t.req.tap).map(t => t.name));
+const coversToks = (c, b) => c.toks.length > b.toks.length && b.toks.every(x => c.toks.some(y => y.ax === x.ax && y.t0 < x.t1 - 0.02 && y.t1 > x.t0 + 0.02));
 function better(c, b) {
   if (!b) return true;
-  if ((c.clen || 0) !== (b.clen || 0)) return (c.clen || 0) > (b.clen || 0);
+  if ((c.clen || 0) !== (b.clen || 0)) {
+    if (b.clen && SOFT_CTX.has(b.name) && coversToks(c, b)) return true;
+    if (c.clen && SOFT_CTX.has(c.name) && coversToks(b, c)) return false;
+    return (c.clen || 0) > (b.clen || 0); }
   if ((c.toks.length) !== (b.toks.length)) return c.toks.length > b.toks.length;
   return trickPoints(c.name) > trickPoints(b.name);
 }
