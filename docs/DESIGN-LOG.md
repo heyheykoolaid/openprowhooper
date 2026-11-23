@@ -328,3 +328,14 @@ against another roll. He said yes to requiring the Jump Rope first.
   Claude had said both of the owner's would be kept; that was read off pass strings without checking which object, and was wrong.
 - **Open, the owner's call**: (a) the book's rule, and the two confirmed labels become "not a Burrito Roll"; (b) keep today's rule;
   (c) keep both, with the no-jump-rope version under another name or as a variant.
+- **Decided (owner, same day: "#1")**: go by the book. A Burrito Roll needs the Jump Rope first (over the object sideways and upright,
+  back under, within 4 s before the roll) and the roll must go against the way the jump rope went round the object. Of the three
+  confirmed labels, the Swing Set one is still called; the Sign Gantry and Footbridge ones (under, roll, under) are no longer Burrito
+  Rolls and are called nothing. A Double Dutch now needs a pass over the object too (without it the Footbridge one fell through to
+  Double Dutch). Open: whether the under-roll-under move should get a name of its own.
+
+### Quick check: the "No, it was…" list looked as if it lost the choice (owner, 2026-11-23)
+The owner: "whenever i press to select another trick in the trick review, it won't let me select it or keep the option." The answer
+was being kept (the line above the buttons said so) but the list snapped back to "No, it was…". Now the list keeps showing what was
+picked. Open: if it still fails for him after this, it is something else (it could not be reproduced as a lost answer here).
+

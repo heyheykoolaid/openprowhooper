@@ -1128,6 +1128,17 @@ follow this with a Matty flip in one fluid motion"): the roll starts from `TWIST
 roll's end; the pass under comes after the roll began and within `TWIST_UNDER` 2.5 s of its end. The demo-shaped flight and the bot's
 20 / 20 are still called. The flight it happened on was not in the shared data, so the exact object is unknown.
 
+## Burrito Roll by the book (owner, 2026-11-23: "#1"; the Burrito branch of `matchObstacle`, `BURRITO_JR`; test/phase2.js)
+The site: "begin with one Jump Rope, then, as you initiate … another … before you cross over the object, do a roll in the opposite
+direction and rewind back down the same side and finish by going under". The rule now needs the **Jump Rope first** (a sideways,
+upright over pass of the same object, upY over 0.2, then an under pass, the over within `BURRITO_JR` 4 s before the roll) and the roll
+**against** the way the jump rope went round (crossings carry `latS`, the sign of the sideways travel; a roll WITH the travel has
+`dir === -latS` of the over pass, as confirmed Side Loops do, so a Burrito's has `dir === latS`). Still: a roll of 150 deg or more, no
+sideways over pass from 0.6 s before it, not in a trippy's pose round a pole. **Cost, known and accepted**: of 3 confirmed labels only the
+owner's Swing Set one is still called; his Sign Gantry one and one on Clappy's Footbridge (under, roll, under, no jump rope) are called
+nothing. **Double Dutch** needs a pass over the object in every branch (the Footbridge move fell through to it). **Quick check**: the
+"No, it was…" list keeps showing the trick picked (`picked` in `renderQuick`); it used to snap back and look like a lost answer.
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,

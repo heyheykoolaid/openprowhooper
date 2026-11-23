@@ -1465,12 +1465,13 @@ class TrickDetector {
             const fwdDot = (fh > 0.2 && vh > 0.8) ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;
             const rr = d.right(), rh = Math.hypot(rr.x, rr.z);
             const latDot = (rh > 0.2 && vh > 0.8) ? Math.abs(rr.x * d.vel.x + rr.z * d.vel.z) / (rh * vh) : 0; // 1 = flying sideways
+            const latS = Math.sign(rr.x * d.vel.x + rr.z * d.vel.z) || 0;   // which way sideways: +1 = toward the quad's right
             // dithering back and forth across the line (floaty loop tops, a wobbly hover over a bar) isn't a pass: the
             // same kind of crossing straight back within 0.25 s cancels the one before
             let li = -1; for (let i = this.crossLog.length - 1; i >= 0; i--) if (this.crossLog[i].obj === o.id) { li = i; break; }
             const L = li >= 0 ? this.crossLog[li] : null;
             if (L && L.kind === kind && t - L.t < 0.25 && !L.used) { this.crossLog.splice(li, 1); this.nCross = Math.min(this.nCross ?? 0, this.crossLog.length); }
-            else this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
+            else this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, latS, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
           }
         }
       }
@@ -1644,9 +1645,16 @@ class TrickDetector {
             // (owner, 2026-11-18: trippy spins were called Burrito Rolls) a Burrito is a sideways move on an over/under, not
             // done while circling a pole and looking up it: a roll made while the quad was going round a pole is the trippy's
             { const inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, rb.t1) - Math.max(w.t0, rb.t0)), 0); if (inPose >= 0.4 * Math.max(0.1, rb.t1 - rb.t0)) return false; }   // the roll was mostly flown in a trippy's pose round a pole
-            return noOver && lat.some(c => c.t < rb.t0) && (R.some(x => x !== rb && x.dir !== rb.dir && x.raw >= 60) || rb.raw >= 200);
+            // (owner, 2026-11-23, the site's words: "begin with one Jump Rope, then, as you initiate … another … before you cross over
+            // the object, do a roll in the opposite direction and rewind back down the same side") the Jump Rope comes first: over
+            // this object sideways and upright, back under it, within BURRITO_JR s before the roll; and the roll goes AGAINST the way
+            // the jump rope went round the object (a roll with it is a Side Loop's: there dir = -latS of the over pass)
+            const jO = lat.filter(c => c.kind === 'O' && c.t < rb.t0 && c.t > rb.t0 - BURRITO_JR).pop(), jU = jO && lat.find(c => c.kind === 'U' && c.t > jO.t && c.t < rb.t0 + 0.3);
+            if (!jO || !jU || !(jO.upY > 0.2)) return false;
+            if (jO.latS && Math.sign(rb.dir) !== jO.latS) return false;
+            return noOver;
           })()) pick('Burrito Roll', 2, lat.slice(-2));
-          else if (fast || R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230)) pick('Double Dutch', 2, lat.slice(-2));   // the flick at the peak is fast; a slow roll all the way round is a side loop
+          else if (fast || (ov && R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230))) pick('Double Dutch', 2, lat.slice(-2));   /* (a Double Dutch jumps over: without a pass over the object a quick roll under it is no Double Dutch) */   // the flick at the peak is fast; a slow roll all the way round is a side loop
           else if (Y.some(x => Math.abs(x.raw - 360) < 80) && (() => {   // (owner, 2026-11-20: "a cinnamon roll is not an inverted trick") a jump rope with a slow yaw: upright over the top and all the way through, like a Cradle
             const p2 = lat.slice(-2), ov = p2.find(c => c.kind === 'O');
             if (ov && ov.upY != null && ov.upY < -0.15) return false;
@@ -3233,6 +3241,7 @@ function dailyKwad(map, day, has) {
 // same trick in a row in one combo is a set: INFINITY LOOPS for Powerloops, BIG BEN for Matty Flips, worth 2000 × the set's
 // number (5 → 2000, 10 → 4000 more, 15 → 6000 more…). Another trick, a crash, a miss or the combo banking starts over.
 const CHAIN_BONUS = { Powerloop: 'INFINITY LOOPS', 'Matty Flip': 'BIG BEN' }, CHAIN_SET = 5, CHAIN_PTS = 2000;
+const BURRITO_JR = 4.0;   // s before a Burrito Roll's roll in which its opening Jump Rope's over pass must lie
 const SWEEP_LOOK = 3.0;   // s either side of a slow flip / roll the sweep witness looks for upright
 const PENDULUM_GAP = 1.6;   // s from one Half Matty's end to the next one's start, for the Pendulum
 function pendulumStep(chain, p) {

@@ -35,6 +35,21 @@ run('burrito roll (jump rope, roll 270, rewind, under)', t=>{ const f=v3(1,0,0),
   const qe=qmul(lean(0.3),qaxis(v3(0,0,-1),-1.5*Math.PI)), u=Math.min(1,(t-3.1)/0.35);
   return {pos:t<3.45?v3(0,2.6-1.3*u,-5.0-0.5*u):v3(0,1.3,-5.5-(t-3.45)*4), q:qe}; }, 4.3, ['Burrito Roll']);
 // double dutch: jump rope with a 360 roll at the peak, right over the bar
+// (owner, 2026-11-23: the site's Burrito Roll begins with one Jump Rope and rolls the OPPOSITE way) the same climb, roll and rewind
+// without the jump rope first is no Burrito Roll, and neither is a roll made the way the jump rope went round
+{ const burr=(jr,dir)=>t=>{ const f=v3(1,0,0); const lean=a=>basisQ(f,norm(v3(0,1,a)));
+    if(t<1.6) return jr? {pos:v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4), q:lean(-0.3)} : {pos:v3(0,1.4,-14.7+t*4), q:lean(0.3)};   // the jump rope's over, or just flying in low on the far side
+    if(t<2.6) return {pos:v3(0,1.4,-8.3+(t-1.6)*4), q:lean(0.3)};
+    if(t<3.1){ const u=(t-2.6)/0.5; return {pos:v3(0,1.4+1.2*u,-4.3-0.7*u), q:qmul(lean(0.3),qaxis(v3(0,0,-1),dir*1.5*Math.PI*u))}; }
+    const qe=qmul(lean(0.3),qaxis(v3(0,0,-1),dir*1.5*Math.PI)), u=Math.min(1,(t-3.1)/0.35);
+    return {pos:t<3.45?v3(0,2.6-1.3*u,-5.0-0.5*u):v3(0,1.3,-5.5-(t-3.45)*4), q:qe}; };
+  for(const [nm,jr,dir] of [['no jump rope first: under, roll, rewind, under',false,-1],['jump rope, then the roll the SAME way round',true,1]]){ if(ONLY && !nm.includes(ONLY)) continue;
+    const det=new S.TrickDetector(W), d=Object.create(S.Drone.prototype); d.armed=true; d.crashed=false; const dt=0.001, gen=burr(jr,dir); let pq=null,pp=null; const got=[];
+    for(let t=0;t<4.3;t+=dt){ const s=gen(t); let q=s.q; if(pq && (q.w*pq.w+q.x*pq.x+q.y*pq.y+q.z*pq.z)<0) q={w:-q.w,x:-q.x,y:-q.y,z:-q.z};
+      let w=v3(); if(pq){ const dq={w:(q.w-pq.w)/dt,x:(q.x-pq.x)/dt,y:(q.y-pq.y)/dt,z:(q.z-pq.z)/dt}; const r=qmul({w:q.w,x:-q.x,y:-q.y,z:-q.z},dq); w=v3(2*r.x,2*r.y,2*r.z); }
+      d.vel=pp?mul(sub(s.pos,pp),1/dt):v3(); pp=s.pos; pq=q; d.pos=s.pos; d.q=q; d.w=w; d.contactThisStep=false; det.update(d,dt); for(const e of det.drain()) if(e.name!=='near') got.push(e.name); }
+    for(let k=0;k<2500;k++){ d.pos=add(d.pos,mul(d.vel,dt)); det.update(d,dt); for(const e of det.drain()) if(e.name!=='near') got.push(e.name); }
+    const ok=!got.includes('Burrito Roll') && !got.includes('Double Dutch'); total++; if(ok) pass++; console.log(`${ok?'PASS':'FAIL'} not a burrito roll (${nm}) -> ${got.join(' | ')||'nothing'}`); } }
 run('double dutch (360 roll over the bar)', t=>{ const f=v3(1,0,0); const lean=a=>basisQ(f,norm(v3(0,1,a)));
   const pos= t<1.6? v3(0,t<1.2?2.9:2.9-(t-1.2)*3,-3.5-Math.min(t,1.2)*4) : v3(0,1.4,-8.3+(t-1.6)*4);
   const r = t<0.4?0: t<0.9? (t-0.4)/0.5*2*Math.PI : 2*Math.PI;
