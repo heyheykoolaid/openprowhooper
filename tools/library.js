@@ -87,12 +87,31 @@ function flightExamples(runs) {
   }
   return out;
 }
+// ---------- confirmed trick challenges (owner, 2026-11-23: "if they're tricks, they're tricks"): a challenge CH_CONFIRM pilots other than
+// its maker matched (the relay's own rule, `challengesFrom` in tools/dropoff-worker.mjs, on the data repo's challenge files) goes in as
+// a custom trick: the maker's move and every passing try, one voice each (a pilot's own decided label, pooled three deep). Hidden ones
+// and ones renamed by the owner follow the owner. The signatures were measured by the game the same way libSigOf measures live.
+async function challengeExamples(files) {
+  const base = f => path.basename(f), inDir = (f, d) => path.basename(path.dirname(f)) === d;
+  const ch = files.filter(f => inDir(f, 'challenges')), tr = files.filter(f => inDir(f, 'challenge-tries')); if (!ch.length) return { out: [], notes: [] };
+  const mods = []; for (const f of files) if (inDir(f, 'challenge-mod')) mods.push(base(f));
+  const { challengesFrom } = await import(path.join(ROOT, 'tools', 'dropoff-worker.mjs'));
+  const board = challengesFrom(ch.map(base), tr.map(base), mods), out = [], notes = [], pid = {}, read = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  const sigOk = g => g && Array.isArray(g.c) && g.c.length === 72 && g.c.every(Number.isFinite) && +g.d > 0;
+  for (const c of board) { if (!c.confirmed || c.hidden || !c.name) continue;
+    const own = read(ch.find(f => base(f) === c.id + '.json')), passers = new Set(c.passed.map(x => x.toLowerCase())), seen = new Set();
+    const add = (p, who) => { if (!p || !sigOk(p.sig) || seen.has(who)) return; seen.add(who); const g = p.sig; out.push({ x: true, t: c.name, d: +g.d, c: g.c.map(Math.round), u: Array.isArray(g.u) && g.u.length === 24 ? g.u.map(Math.round) : null, ps: typeof g.ps === 'string' ? g.ps : undefined, w: W.own / CONFIRM, s: 'pilot', p: 'c' + (pid[who] || (pid[who] = Object.keys(pid).length + 1)) }); };   // an anonymous pilot number, like every pilot example
+    add(own, c.pilot);
+    for (const f of tr.filter(f => base(f).startsWith(c.id + '~'))) { const p = read(f); if (p && p.challenge === c.id && passers.has(String(p.by || '').toLowerCase())) add(p, p.pilot); }
+    notes.push(`${c.name}: ${seen.size} example${seen.size === 1 ? '' : 's'} (by ${c.by}, passed by ${c.passed.join(', ')})`); }
+  return { out, notes };
+}
 (async () => {
   const t0 = Date.now();
   const { out: demos, notes } = demoExamples();
   const { runs } = await load(files);
   S.setLibrary({ format: 'pro-whooper-library/1', examples: [] });   // an empty library switches on the detector's library ear (libTick) for the re-flights
-  const fl = flightExamples(runs), examples = [...demos, ...fl];
+  const fl = flightExamples(runs), chx = await challengeExamples(files); fl.push(...chx.out); const examples = [...demos, ...fl];
   // motion travels for at most MO_KEEP examples per trick (the heaviest, one pilot at a time round-robin): the knowledge bot
   // needs variety, not every rep, and the shipped library stays small
   { const MO_KEEP = 6, by = {}; for (const e of examples) if (e.mo) (by[e.t] || (by[e.t] = [])).push(e);
@@ -110,7 +129,7 @@ function flightExamples(runs) {
     `Leave-one-out (each example's nearest other example is the same trick): **${tot ? Math.round(right / tot * 100) : 0}%** of ${tot}.`, ``,
     `| trick | demo | pilot examples | pilots | counter-examples | trusted | leave-one-out | mixed up with |`, `|---|---|---|---|---|---|---|---|`,
     ...tricks.map(([t, b]) => { const k = loo[t]; return `| ${t} | ${b.demo ? '✓' : ''} | ${b.pos - (b.demo ? 1 : 0)} | ${b.pilots.size} | ${b.neg} | ${b.trusted ? '✓' : ''} | ${k ? `${k.ok}/${k.n}` : '—'} | ${k ? Object.entries(k.conf).map(([n, c]) => `${n}×${c}`).join(', ') : ''} |`; }),
-    ``, ...(notes.length ? ['Demo clips left out: ' + notes.join('; ')] : [])];
+    ``, ...(notes.length ? ['Demo clips left out: ' + notes.join('; ')] : []), ...(chx.notes.length ? ['', 'Confirmed trick challenges (custom tricks): ' + chx.notes.join('; ')] : [])];
   if (CHECK) {   // what the library would do live: re-fly every shared flight with it and count the maybe calls
     log('checking: re-flying every flight with the library…'); let n = 0, hit = 0, wrong = 0; const per = {};
     for (const r of runs) { const Rr = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, pilot: r.own, debug: false });

@@ -1923,14 +1923,14 @@ class TrickDetector {
       const hit = { chal: ch.id, name: ch.name, t0: +best.c.a.toFixed(3), t1: +best.c.b.toFixed(3), at: +t.toFixed(3), dist: +best.d.toFixed(3), sig: { d: best.g.d, c: best.g.c, u: best.g.u, ps: best.g.ps } };
       if (ch.try && best.d <= CH_PASS) { (this.chals || (this.chals = [])).push({ ...hit, try: true }); seen.push({ id: ch.id, t1: best.c.b }); continue; }
       if (ch.live && best.d <= CH_LIVE && !covered(best.c.a, best.c.b)) {
-        const lib = LIBRARY ? libMatch(best.g)[0] : null; if (lib && lib.pos <= best.d) continue;   // it is nearer to a trick the game already knows
+        const lib = LIBRARY ? libMatch(best.g).find(x => x.name !== ch.name) : null; if (lib && lib.pos <= best.d) continue;   // it is nearer to a trick the game already knows (its own examples in the library do not count against it)
         (this.chals || (this.chals = [])).push({ ...hit, live: true, pts: ch.pts }); seen.push({ id: ch.id, t1: best.c.b }); }
     }
     if (seen.length > 30) seen.splice(0, seen.length - 30);
   }
   libJudge(q, t) {
     this.chalJudge(q, t); if (!LIBRARY) return;
-    const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3);
+    const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.chalLog || []).some(c => c.t1 >= a - 0.3 && c.t1 <= b + 0.3);   // a live community trick already called it
     let pick = null;
     for (const c of q.cands) { if (covered(c.a, c.b)) return;   // the rules called something here (or a maybe already went out): nothing to add
       const m = libMatch(this.libSigOf(c.a, c.b)), top = m[0]; if (!top) continue; const B = LIBRARY.by[top.name];

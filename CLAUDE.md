@@ -1029,7 +1029,10 @@ copy in the relay (test/challenges.js holds them to the same answers) for trick 
 shows / renames / prices from the board (`chMod` → `POST /chmod`: challenge-mod/<id>~<op>~<value>~<time>.json, newest wins). Relay files:
 challenges/<time>.<pilot>.<name>.<by>.<map>.json, challenge-tries/<challenge id>~<time>.<pilot>.<by>.json; GET /challenges is the board
 from the three folders' names (one request each, cached 30 s), GET /challenge?id= one file cleaned again. Tries are trusted like board
-scores; each carries its clip for the tools. **Redeploy the relay.** Checked end to end in a browser against the relay's real code with an
+scores; each carries its clip for the tools. **In the trick library** (owner, same day: "if they're tricks, they're tricks"; 2 stays the number):
+tools/library.js `challengeExamples` adds every confirmed, unhidden challenge as a custom trick (the maker's move and each passing try,
+one voice each, the owner's rename, anonymous pilot numbers); `chalJudge` ignores a trick's own library examples, and `libJudge` says no
+maybe over a move a community trick called (`chalLog`). **Redeploy the relay.** Checked end to end in a browser against the relay's real code with an
 in-memory GitHub (post, bad name refused, board, watch, two passes -> live, the call-out and points, owner hide).
 
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)

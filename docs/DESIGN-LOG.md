@@ -191,3 +191,11 @@ The owner, on the to-do item "trick challenges and the trick board": build it no
 - **Open**: whether confirmed challenges should also go into the trick library as examples (so the knowledge bot can fly them);
   whether 2 stays the number as more pilots join; whether tries should be checked again on the relay (today the game's own match is
   trusted, like board scores; every try carries its clip, so the tools can re-check).
+
+### Trick challenges: the number, and the library (owner, 2026-11-23)
+- **Decided**: confirmation stays at **2** pilots other than the maker.
+- **Decided**: confirmed challenges **go into the trick library** ("if they're tricks, they're tricks"): tools/library.js reads the data
+  repo's challenge files with the relay's own board rule and adds each confirmed, unhidden one as a custom trick: the maker's move and
+  every passing try, one voice each, under the owner's name for it if renamed, pilots as anonymous numbers. So the Watcher's library
+  vote and the maybe calls know them too. The live call ignores the trick's own library examples when checking that the move is not
+  nearer a trick the game already knows, and no maybe is said for a move a community trick already called. The weekly run picks them up.

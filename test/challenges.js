@@ -2,7 +2,7 @@
 // answers), the detector matching a move against a posted one (a try anywhere, a confirmed one only where nothing else was called),
 // the community line on the score, and the relay's challenge files, board and owner moderation. node test/challenges.js
 require('../src/tricks.js'); require('../src/sim.js');
-const S = globalThis.Sim, world = S.buildPlayground(), X = S.v3(1, 0, 0);
+const S = globalThis.Sim, world = S.buildPlayground(), X = S.v3(1, 0, 0), X1 = X;
 let ok = 0, n = 0; const check = (name, pass, extra = '') => { n++; if (pass) ok++; console.log(`${pass ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); };
 const fake = () => { const d = Object.create(S.Drone.prototype); d.pos = S.v3(0, 4, 8); d.vel = S.v3(); d.q = { w: 1, x: 0, y: 0, z: 0 }; d.w = S.v3(); d.armed = true; d.crashed = false; d.contactThisStep = false; return d; };
 // attitude-only moves at a fixed spot away from obstacles: [axis, deg/s, seconds]
@@ -90,5 +90,33 @@ const YRY = [['Y', 600, 0.3], ['R', 700, 0.26], ['Y', 600, 0.3]], YRY2 = [['Y', 
     return { ok: true, status: 200, json: async () => f }; };
   r = await handle(new Request('https://drop/challenges', { headers: { Origin: GAME, 'CF-Connecting-IP': '8.8.8.8' } }), env, ghList); const j = await r.json();
   check('GET /challenges: the board from three listings', r.status === 200 && j.challenges.length === 1 && j.challenges[0].n === 1 && gets.length === 3 && j.confirm === S.CH_CONFIRM, gets.length + ' requests ' + JSON.stringify(j).slice(0, 300));
+  libraryChecks();
   console.log(`\n${ok}/${n} challenge checks`);
 })();
+// ---- confirmed challenges go into the trick library (owner, 2026-11-23: "if they're tricks, they're tricks")
+async function libraryChecks() {
+  const fs = require('fs'), os = require('os'), path = require('path'), { execFileSync } = require('child_process');
+  S.setChallenges([{ id: 'measure', name: 'Measure', try: true, sig: { d: 1, c: new Array(72).fill(4000) } }]);
+  const m = fly(seq(YRY), 4).det.libSigOf(0.4, 0.5 + len(YRY) + 0.1), m2 = fly(seq(YRY2), 4).det.libSigOf(0.4, 0.5 + len(YRY2) + 0.1); S.setChallenges(null);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pwch-')), b64 = s => Buffer.from(s).toString('base64url'), put = (f, o) => { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), JSON.stringify(o)); };
+  const sig = g => ({ d: g.d, c: g.c, u: g.u, ps: '' }), A = `1795000000000.pmaker1.${b64('Yaw Roll Yaw')}.${b64('Maker')}.moose`, B = `1795000000001.pmaker2.${b64('Half Done')}.${b64('Maker2')}.moose`, H = `1795000000002.pmaker3.${b64('Hidden One')}.${b64('Maker3')}.moose`;
+  put(`challenges/${A}.json`, { format: 'pro-whooper-challenge/1', name: 'Yaw Roll Yaw', by: 'Maker', pilot: 'pmaker1', map: 'moose', sig: sig(m) });
+  put(`challenges/${B}.json`, { format: 'pro-whooper-challenge/1', name: 'Half Done', by: 'Maker2', pilot: 'pmaker2', map: 'moose', sig: sig(m) });
+  put(`challenges/${H}.json`, { format: 'pro-whooper-challenge/1', name: 'Hidden One', by: 'Maker3', pilot: 'pmaker3', map: 'moose', sig: sig(m) });
+  const tryOf = (id, pilot, by, t) => put(`challenge-tries/${id}~${1795000001000 + t}.${pilot}.${b64(by)}.json`, { format: 'pro-whooper-challenge-try/1', challenge: id, by, pilot, sig: sig(m2) });
+  tryOf(A, 'pone111', 'One', 1); tryOf(A, 'ptwo222', 'Two', 2); tryOf(B, 'pone111', 'One', 3); tryOf(H, 'pone111', 'One', 4); tryOf(H, 'ptwo222', 'Two', 5);
+  put(`challenge-mod/${H}~hide~0~1795000002000.json`, {});
+  execFileSync('node', [path.join(__dirname, '..', 'tools', 'library.js'), dir, '--write', '--out=' + path.join(dir, 'out')], { stdio: 'ignore' });
+  const L = JSON.parse(fs.readFileSync(path.join(dir, 'out', 'library.json'), 'utf8')), X = L.examples.filter(e => e.x);
+  check('a confirmed challenge goes in as a custom trick: the maker\'s move and each passing try', X.filter(e => e.t === 'Yaw Roll Yaw').length === 3 && X.every(e => !e.neg), X.map(e => e.t).join(','));
+  check('one not yet confirmed, or hidden by the owner, does not', !X.some(e => e.t === 'Half Done' || e.t === 'Hidden One'));
+  check('its pilots are anonymous numbers', X.every(e => /^c\d+$/.test(e.p)), X.map(e => e.p).join(','));
+  // with it in the library: the live call still comes (its own examples do not count against it), and no maybe on top of it
+  S.setLibrary(L); S.setChallenges([{ id: A, name: 'Yaw Roll Yaw', live: true, sig: sig(m) }]);
+  { const R = S.replayTrace((() => { const rows = []; let q = { w: 1, x: 0, y: 0, z: 0 }; const ax = a => a === 'P' ? X1 : a === 'R' ? S.v3(0, 0, -1) : S.v3(0, -1, 0);
+      for (let i = 0; i < 700; i++) { const t = i / 100; let rate = [0, 0, 0], tt = t - 2; if (tt >= 0) for (const [a, r, d] of YRY2) { if (tt < d) { q = S.qnorm(S.qmul(q, S.qaxis(ax(a), r * S.D2R / 100))); rate = [a === 'R' ? r : 0, a === 'P' ? r : 0, a === 'Y' ? r : 0]; break; } tt -= d; }
+        rows.push([t, 0, 4, 8, q.w, q.x, q.y, q.z, rate[0], rate[1], rate[2], 0.35, 0, 1, 0, 0, 1, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0]); } return rows; })(), { world, debug: false });
+    check('in the library and live: still called, and not said twice as a maybe', R.chals.length === 1 && R.chals[0].live && !R.maybes.some(x => x.name === 'Yaw Roll Yaw'), `${R.chals.length} call(s), maybes: ${R.maybes.map(x => x.name).join(',') || 'none'}`); }
+  S.setLibrary(null); S.setChallenges(null); fs.rmSync(dir, { recursive: true, force: true });
+}
+
