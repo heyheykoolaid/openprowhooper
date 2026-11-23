@@ -1003,6 +1003,14 @@ like open loops and Mattys. An over-then-under of one object stays that object's
 called just outside the label); the bot's Split-S lifted clear of its object 20/20; bench 96.7 %, stress unchanged. test/splits.js.
 **tools/probe-label.js printed calls at the wrong time** on flights whose trace does not start at 0 (it added the start twice): fixed.
 
+## Rubik's Cube vs the stall / eject readings (2026-11-22, weekly community run; test/rubiks.js)
+Pilots' corrections (MoPenguinz, RodFPV, tcmore): 360 Stall Rewind and Eject Roll took the middle of Rubik's Cubes (the half flip in looked
+like the stall or the climb; context tricks win `better` by `clen`). Now a context trick read only from motion (`SOFT_CTX`: `stallIn` or
+`climbBefore`, no tap) loses to a longer candidate whose tokens cover all of its own (`coversToks`); taps and Stellar Eject Roll keep
+theirs. Rubik's Cube has a second, looser pattern `Pa180 R*~360 Pa~180` (rolls 420-440°, flips out read 105-140°). Re-flown: Rubik's labels
+found 2 -> 8 of 20, rejected 360 Stall Rewinds still called 11 -> 7 of 12, none lost; bench and stress unchanged. tools/library.js gives
+motion (`mo`) only to examples at least a quarter as heavy as the trick's heaviest (a 0.08 Powerloop keep was flown as an Anti Matty).
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,
