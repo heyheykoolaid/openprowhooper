@@ -316,3 +316,15 @@ https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs. Nothing was changed from it. 
   of the roll, the pass under within 2.5 s. Before, any roll and flip near an over-then-under of one object counted.
 - **Open**: which object gave it to him (the flight is not in the shared data). If it was a power line or a roof edge high above, say so:
   those are over/unders the Surveyor makes, and other tricks could be given on them the same way.
+
+### Burrito Roll against the site's description (2026-11-23, open)
+The owner asked whether the game's Burrito Roll matches prowhooper.com ("begin with one Jump Rope, then, as you initiate … another
+Jump Rope, but before you cross over the object, do a roll in the opposite direction and rewind back down the same side and finish
+by going under"). It matches the roll-and-rewind half; it does not require the opening Jump Rope, and "opposite" is only checked
+against another roll. He said yes to requiring the Jump Rope first.
+- **Not changed yet.** Re-flown, only 1 of the 3 confirmed Burrito Roll labels has a jump rope over the same object before the
+  roll. The other two (the owner's on the playground's Sign Gantry, and one on Clappy's Footbridge) go under, roll, and come back
+  under with no pass over that object at all. Requiring the Jump Rope would lose two confirmed labels to drop four rejected ones.
+  Claude had said both of the owner's would be kept; that was read off pass strings without checking which object, and was wrong.
+- **Open, the owner's call**: (a) the book's rule, and the two confirmed labels become "not a Burrito Roll"; (b) keep today's rule;
+  (c) keep both, with the no-jump-rope version under another name or as a variant.
