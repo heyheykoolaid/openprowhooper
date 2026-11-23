@@ -1184,6 +1184,46 @@ function libMatch(sig, only) {
     if (e.neg) b.neg = Math.min(b.neg, dd); else if (dd < b.pos) { b.pos = dd; b.demo = e.s === 'demo'; } }
   return Object.values(best).filter(b => b.pos < Infinity).sort((a, b) => a.pos - b.pos);
 }
+// ---- Names other pilots will see (owner, 2026-11-23: "we need to have a way to censor bad names"): trick challenge names and the
+// names of the pilots who post them. A word list, caught through l33t-speak (0 1 3 4 5 7 @ $ …), accents, spacing and dots between
+// letters, and stretched letters. BAD_SUB is matched anywhere in the name with every letter run squashed to one ("fuuuck"); BAD_WORD
+// only as a whole word (with runs of three or more cut to two, a plural s dropped, and spaced-out single letters joined), because
+// those letters turn up inside ordinary words (cocoon, grape, torpedo). tools/dropoff-worker.mjs keeps an identical copy (the relay
+// checks again): test/challenges.js holds the two to the same answers.
+const BAD_SUB = ['fuck', 'fuk', 'fvck', 'pusy', 'shit', 'cunt', 'niger', 'niga', 'fagot', 'bitch', 'whore', 'slut', 'penis', 'vagina', 'dick', 'puss', 'retard', 'nazi', 'hitler', 'jiz', 'boob', 'wank', 'twat', 'bastard', 'molest', 'incest', 'milf', 'dildo', 'hentai', 'porn', 'cumshot', 'blowjob', 'handjob', 'motherf', 'asshol', 'arsehol', 'killyourself', 'pedophil', 'paedophil', 'tranie', 'beaner', 'wetback', 'raghead', 'towelhead', 'chingchong', 'golliwog', 'jigaboo', 'kike', 'shemale', 'skank', 'clit', 'scrotum', 'testicl', 'orgasm', 'ejacul', 'horny', 'sperm', 'faggot', 'dyke', 'spunk', 'bollock', 'tosser', 'bellend'];
+const BAD_WORD = ['ass', 'arse', 'cum', 'cock', 'cocks', 'tit', 'tits', 'titty', 'anal', 'anus', 'rape', 'raped', 'raping', 'rapist', 'sex', 'sexy', 'fap', 'fag', 'fags', 'fck', 'kys', 'coon', 'spic', 'chink', 'gook', 'negro', 'heil', 'kkk', 'pedo', 'paedo', 'prick', 'tranny', 'homo', 'lesbo', 'hoe', 'hoes', 'piss', 'jerkoff', 'wtf', 'stfu', 'gfy', 'nig', 'jap', 'dago', 'wop', 'gyp', 'isis', 'sieg', 'zieg', 'lynch', 'boner', 'bj', 'hj', 'xxx', 'tard', 'thot', 'incel', 'poon', 'muff', 'nonce', 'nude', 'naked', 'semen', 'pubic', 'erection'];
+const L33T = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b', '9': 'g', '6': 'g', '2': 'z', '(': 'c', '¢': 'c', '€': 'e', '£': 'l' };
+const BAD_SUB_SQ = BAD_SUB.filter(w => !/(.)\1/.test(w)), BAD_WORD_SET = new Set(BAD_WORD);   // a pattern with a double letter is only matched unsquashed (puss / push, boob / bob)
+function badName(v) {
+  const low = String(v == null ? '' : v).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[0-9!|@$+(¢€£]/g, c => L33T[c] || c);
+  const raw = low.split(/[^a-z]+/).filter(Boolean), words = [];   // spaced-out letters (f u c k, s.e.x) are joined into one word
+  for (let i = 0; i < raw.length; i++) { if (raw[i].length === 1) { let j = i, w = ''; while (j < raw.length && raw[j].length === 1) w += raw[j++]; if (w.length > 1) { words.push(w); i = j - 1; continue; } } words.push(raw[i]); }
+  for (const w0 of words) { const sq = w0.replace(/(.)\1+/g, '$1'), w = w0.replace(/(.)\1{2,}/g, '$1$1');   // inside one word only: "Push It" is not a swear
+    if (BAD_SUB_SQ.some(b => sq.includes(b)) || BAD_SUB.some(b => w.includes(b))) return true;
+    for (const x of [w0, w, sq, w.replace(/e?s$/, ''), w.replace(/s$/, '')]) if (x && BAD_WORD_SET.has(x)) return true; }
+  return false;
+}
+// ---- Trick challenges (owner, 2026-11-23; src/challenge.js, the relay's /challenges): a pilot posts a new trick they named, other
+// pilots try it; a try passes when the game's own signature match puts the move within CH_PASS of the original (libDist, the
+// trick library's distance). CH_CONFIRM pilots other than the creator passing makes it a community trick, live at once at
+// CH_PTS points (the owner can change them): called in any flight where no book trick was called, nearer than CH_LIVE and nearer
+// to it than to any trick in the library, scored on its own line (ScoreKeeper.community), never in the TPW trick score.
+// setChallenges([{ id, name, sig, live, try, pts }]): `try` = the one the pilot is attempting now, `live` = confirmed. Untrusted
+// input (the relay's list): every field is checked; absent (Node tests, tools) = nothing happens.
+const CH_PASS = 0.3, CH_LIVE = 0.25, CH_PTS = 200, CH_CONFIRM = 2;
+let CHALLENGES = null;
+function chSig(g) {
+  if (!g || typeof g !== 'object' || !Array.isArray(g.c) || g.c.length !== LIB_N * 3 || !g.c.every(Number.isFinite) || !(+g.d > 0)) return null;
+  const o = { d: clamp(+g.d, 0.05, 12), c: g.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(g.u) && g.u.length === LIB_N && g.u.every(Number.isFinite) ? g.u.map(v => clamp(Math.round(v), -100, 100)) : null };
+  if (typeof g.ps === 'string' && /^[OUG]{0,8}$/.test(g.ps)) o.ps = g.ps; return o;
+}
+function setChallenges(L) {
+  CHALLENGES = null; if (!Array.isArray(L)) return null; const out = [];
+  for (const c of L.slice(0, 60)) { if (!c || typeof c.id !== 'string' || !/^[A-Za-z0-9_.~-]{1,160}$/.test(c.id) || typeof c.name !== 'string' || c.name.length < 2 || c.name.length > 40 || badName(c.name)) continue;
+    const sig = chSig(c.sig); if (!sig || !(c.live || c.try)) continue;
+    out.push({ id: c.id, name: c.name, sig, live: !!c.live, try: !!c.try, pts: Number.isFinite(+c.pts) ? clamp(Math.round(+c.pts), 0, 5000) : CH_PTS }); }
+  CHALLENGES = out.length ? out : null; return CHALLENGES;
+}
 // the pilot's own profile over the community's: each loosening knob takes the looser value; the rest is the pilot's
 function mergeProfiles(c, p) {
   if (!c) return p || null; const o = p ? JSON.parse(JSON.stringify(p)) : {}, L = o.learn || {};
@@ -1872,7 +1912,24 @@ class TrickDetector {
       let on = 0, all = 0; for (const r of M) { const a3 = [Math.abs(r[1]), Math.abs(r[2]), Math.abs(r[3])], k = a3[0] >= a3[1] && a3[0] >= a3[2] ? 0 : a3[1] >= a3[2] ? 1 : 2; all += a3[k]; if (Math.abs(r[6 + k]) > 0.15) on += a3[k]; }
       sig.k = { th, cmd: all > 0 ? Math.round(on / all * 100) : 0 }; }
     return sig; }
+  drainChallenges() { const o = this.chals || []; this.chals = []; return o; }
+  // trick challenges (see CHALLENGES): the move just judged by the library's ear, against the one being tried (any flight, even
+  // where the rules called something: the pilot's own move is what is compared) and the confirmed ones (only where nothing was called)
+  chalJudge(q, t) {
+    if (!CHALLENGES) return; const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3), seen = this.chalLog || (this.chalLog = []), sigs = q.cands.map(c => this.libSigOf(c.a, c.b));
+    for (const ch of CHALLENGES) { let best = null;
+      q.cands.forEach((c, i) => { const g = sigs[i]; if (!g) return; const dd = libDist(g, ch.sig); if (!best || dd < best.d) best = { c, d: dd, g }; });
+      if (!best || seen.some(x => x.id === ch.id && x.t1 >= best.c.a - 0.2)) continue;
+      const hit = { chal: ch.id, name: ch.name, t0: +best.c.a.toFixed(3), t1: +best.c.b.toFixed(3), at: +t.toFixed(3), dist: +best.d.toFixed(3), sig: { d: best.g.d, c: best.g.c, u: best.g.u, ps: best.g.ps } };
+      if (ch.try && best.d <= CH_PASS) { (this.chals || (this.chals = [])).push({ ...hit, try: true }); seen.push({ id: ch.id, t1: best.c.b }); continue; }
+      if (ch.live && best.d <= CH_LIVE && !covered(best.c.a, best.c.b)) {
+        const lib = LIBRARY ? libMatch(best.g)[0] : null; if (lib && lib.pos <= best.d) continue;   // it is nearer to a trick the game already knows
+        (this.chals || (this.chals = [])).push({ ...hit, live: true, pts: ch.pts }); seen.push({ id: ch.id, t1: best.c.b }); }
+    }
+    if (seen.length > 30) seen.splice(0, seen.length - 30);
+  }
   libJudge(q, t) {
+    this.chalJudge(q, t); if (!LIBRARY) return;
     const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3);
     let pick = null;
     for (const c of q.cands) { if (covered(c.a, c.b)) return;   // the rules called something here (or a maybe already went out): nothing to add
@@ -2343,7 +2400,7 @@ class StreamDetector extends TrickDetector {
     this.time += dt; this.lastD = d;
     if (rc) { const L = this.lastRc || (this.lastRc = { thr: 0, roll: 0, pitch: 0, yaw: 0 }); L.thr = rc.thr ?? 0; L.roll = rc.roll ?? 0; L.pitch = rc.pitch ?? 0; L.yaw = rc.yaw ?? 0; } else this.lastRc = null;   // one object, reused: this runs 1000 times a second
     const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates); TOL_X = this.learned.tol;
-    if (LIBRARY) this.libTick(d, t, rates, dt);
+    if (LIBRARY || CHALLENGES) this.libTick(d, t, rates, dt);
     this.trackCrossings(d, t);
     const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
     this.continuousDetectors(d, dt, t, rc);
@@ -3032,7 +3089,7 @@ class ScoreKeeper {
   constructor(totw, kwad) { this.totw = totw || ['Split-S', 'Powerloop', 'Matty Flip']; this.kw = kwad || null; this.reset(); }   // kwad: the day's set (dailyKwad); none = the book's fixed four
   reset() {
     this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
-    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
+    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.commBonus = 0; this.commN = 0; this.commSeen = {}; this.comms = []; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
   }
   add(ev) {
     const base = ev.basePts ?? trickPoints(ev.name);
@@ -3066,18 +3123,25 @@ class ScoreKeeper {
       if (this.chain.n % CHAIN_SET === 0) { const k = this.chain.n / CHAIN_SET, pts = CHAIN_PTS * k; this.chainBonus += pts; chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts }; this.chains.push(chainHit); }
     } else this.chain = null;
     this.trickScore += net;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus);
     const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
     if (!this.biggest || net > this.biggest.net) this.biggest = rec;
     this.log.push(rec);
     return rec;
   }
-  chainBreak() { this.chain = null; this.gapSeen = {}; }   // the combo banked: a new set starts from one, and every gap is fresh again
+  chainBreak() { this.chain = null; this.gapSeen = {}; this.commSeen = {}; }
+  // a confirmed community trick (a trick challenge two other pilots matched: CHALLENGES): its own line, like gaps, so the TPW trick
+  // score stays the calculator's. The same one again in one combo is halved each time, like a gap.
+  community(name, pts) {
+    const rep = this.commSeen[name] || 0, base = clamp(Math.round(+pts || CH_PTS), 0, 5000), got = Math.round(base * Math.pow(0.5, rep)); this.commSeen[name] = rep + 1;
+    this.commBonus += got; this.commN++; const r = { name, pts: got, base, repeat: rep }; this.comms.push(r);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return r;
+  }   // the combo banked: a new set starts from one, and every gap is fresh again
   gap(c, qW) {   // a gap flown through: { label, pts, base, repeat }
     const k = c.obj, rep = this.gapSeen[k] || 0, base = gapPoints(c.narrow ?? 1, qW), pts = Math.round(base * Math.pow(0.5, rep)); this.gapSeen[k] = rep + 1;
     this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name), pts, base, repeat: rep };
     if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus); return r;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return r;
   }
   // The last trick scored clean or sloppy, and the quad knocked into something on the way out (owner, 2026-11-21: pilots graded
   // such calls "bump"): it is a BUMP after all. Its points drop to a bump's and the streak is what a bump leaves it at.
@@ -3086,7 +3150,7 @@ class ScoreKeeper {
     const L = this.last, e = L && this.log[L.i]; if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
     const net = Math.round(e.net * EXEC_MULT.BUMP / L.execM), back = e.net - net;
     e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = (1 + L.streak0) / 2; this.last = null;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus); return back;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return back;
   }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
 }
@@ -3230,7 +3294,7 @@ function replayTrace(rows, opts = {}) {
   const det = new StreamDetector(opts.world); det.camTilt = opts.camTilt ?? 20; if (opts.pilot) det.setPilot(opts.pilot);
   if (opts.hook) opts.hook(det);
   const d = Object.create(Drone.prototype); d.armed = true; d.crashed = false; d.contactThisStep = false;
-  const dt = 0.001, out = [], dbg = [], maybes = [], hasV = rows[0].length >= 24;
+  const dt = 0.001, out = [], dbg = [], maybes = [], chals = [], hasV = rows[0].length >= 24;
   let k = 0, prev = null, lastRow = -1;
   const t0 = opts.from ?? rows[0][0], t1 = Math.min(opts.to ?? Infinity, rows[rows.length - 1][0]);
   while (k < rows.length - 2 && rows[k + 1][0] <= t0) k++;
@@ -3256,9 +3320,10 @@ function replayTrace(rows, opts = {}) {
     det.update(d, dt, rc); det.postStep(d);
     for (const e of det.drain()) out.push({ ...e, t });
     if (det.maybes && det.maybes.length) for (const m of det.drainMaybes()) maybes.push({ ...m, t });
+    if (det.chals && det.chals.length) for (const c of det.drainChallenges()) chals.push({ ...c, t });
     if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
   }
-  return { events: out, debug: dbg, det, maybes };
+  return { events: out, debug: dbg, det, maybes, chals };
 }
 
 // ---- Learning from the pilot's own review labels.
@@ -3324,7 +3389,7 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { BUMP_AFTER, BUMP_LATE, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

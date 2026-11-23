@@ -326,6 +326,10 @@ body.meOn #music { display: none !important; }
 .hubRow b { display: block; font-size: 13px; } .hubRow small { color: #9aa3b5; font-size: 11.5px; } .hubRow > span { white-space: nowrap; font: 12px var(--mono); color: #9aa3b5; } .hubRow.done { opacity: 0.55; } .hubRow.done > span { color: #6be08a; }
 .hubFb { border: 1px solid #ffffff1c; border-radius: 8px; padding: 8px 10px; margin: 6px 0; } .hubFb p { margin: 4px 0 0; white-space: pre-wrap; } .hubKeys { margin-top: 10px; }
 .pwBadge { width: 20px; height: 16px; image-rendering: pixelated; vertical-align: -3px; margin-right: 5px; } .pwBadge.big { width: 26px; height: 21px; vertical-align: -5px; margin: 0 4px 0 6px; } .pwBadgeTxt { font-size: 12px; color: #c9cfdb; } .pwBadge.rainbow { animation: pwShimmer 3s linear infinite; } @keyframes pwShimmer { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .pwBadge.rainbow { animation: none; } }
+.chT td small { display: block; opacity: .7; font-weight: normal; } .chT td.chAct { text-align: right; white-space: nowrap; } .chT td.chAct button { margin-left: 4px; } .chT tr.on td { background: rgba(255, 211, 77, .08); }
+.chSt { display: inline-block; padding: 2px 8px; border-radius: 10px; background: rgba(255, 255, 255, .08); font-size: 12px; white-space: nowrap; } .chSt.live { background: #2a7a3a; color: #fff; } .chSt.hid { background: #6b2a2a; color: #fff; }
+.chTry { background: rgba(255, 211, 77, .12); border: 1px solid rgba(255, 211, 77, .4); border-radius: 8px; padding: 8px 12px; }
+@media (max-width: 640px) { .chT td.chAct { white-space: normal; text-align: left; } }
 #hubBtn.dot::after { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ffd34d; margin-left: 8px; vertical-align: middle; }
 #hubNav { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 8px; align-items: center; background: #12141aee; border: 1px solid #2c2f3a; border-radius: 10px; padding: 6px 10px; color: #eee; font: 13px system-ui, sans-serif; }
 #hubNav span { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -485,6 +489,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button class="primary" data-act="session">2:00 Session</button>
     <button data-act="free">Free Fly</button>
     <button data-act="board">Daily leaderboard</button>
+    <button data-act="challenges" title="New tricks pilots made up: watch them, try them, post your own">Trick challenges</button>
     <button data-act="hub" id="hubBtn" title="Every kind of reviewing in one place: your runs, Quick check, board runs and more">Review Hub</button>
     <button data-act="race" class="hide" title="Indoor racing: build a track, race the clock and your ghost">RaceGOW racing</button>
     <button data-act="judge" id="judgeBtn" class="hide" title="Watch moments from other pilots' runs and say what the trick really was">Judge the community</button>
@@ -565,6 +570,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="deskScreen" class="screen hide"><div class="panel" style="max-width:1000px" id="deskPanel"></div></div>
 <div id="judgeScreen" class="screen hide"><div class="panel" style="max-width:980px" id="judgePanel"></div></div>
 <div id="hubScreen" class="screen hide"><div class="panel hubPanel" id="hubPanel"></div></div>
+<div id="chScreen" class="screen hide"><div class="panel" style="max-width:980px" id="chPanel"></div></div>
 <div id="lbScreen" class="screen hide"><div class="panel" style="max-width:980px" id="lbPanel"></div></div>
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>
 

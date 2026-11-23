@@ -29,12 +29,16 @@
 //     under telemetry/inbox/{flight,labels,feedback}/ and posted runs of any day under leaderboard/, so the owner's
 //     Flight desk, feedback inbox and Judge the community need no GitHub token in the browser. Paths are checked against
 //     fixed patterns, every file goes through clean() again, nothing is cached; wrong keys are slowed like /official's.
+//   - trick challenges: a new trick a pilot named and posts (kind 'challenge', its signature and clip) under challenges/, tries
+//     other pilots' games matched to one (kind 'chtry') under challenge-tries/, the owner's hide / rename / points (POST /chmod,
+//     owner key) under challenge-mod/; GET /challenges is the board made from the three folders' file names, GET /challenge?id=
+//     one challenge. Names go through the same word list as the game (badName).
 //   - ENABLED = "0" switches it off without deleting anything.
 // Variables: GITHUB_TOKEN (secret), GITHUB_REPO "owner/repo", optional GITHUB_BRANCH, ALLOW_ORIGINS (comma separated,
 // default https://heyheykoolaid.github.io), PER_IP_HOUR (30), DAILY_CAP (800), ENABLED. Optional KV binding LIMITS makes
 // the daily cap exact across Cloudflare's machines (one small write per upload); without it, and for the per-address
 // limit, counts are kept in memory on each machine (best effort).
-const FORMATS = { flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1', video: 'pro-whooper-video/1', map: 'pro-whooper-map/1', track: 'pro-whooper-track/2', racetime: 'pro-whooper-racetime/1' };
+const FORMATS = { challenge: 'pro-whooper-challenge/1', chtry: 'pro-whooper-challenge-try/1', flight: 'pro-whooper-flight/1', labels: 'pro-whooper-flight-labels/1', feedback: 'pro-whooper-feedback/1', score: 'pro-whooper-score/1', video: 'pro-whooper-video/1', map: 'pro-whooper-map/1', track: 'pro-whooper-track/2', racetime: 'pro-whooper-racetime/1' };
 const MAX_BYTES = 1000000;
 const KEYS = {
   flight: ['format', 'build', 'id', 'started', 'ended', 'pilot', 'name', 'map', 'mode', 'camTilt', 'craft', 'tune', 'profile', 'input', 'score', 'events', 'missed', 'summary', 'trace'],
@@ -44,7 +48,9 @@ const KEYS = {
   map: ['format', 'build', 'name', 'by', 'pilot', 'base', 'at', 'moved', 'removed', 'added'],   // a pilot's own map, shared by their click: a layer over an official map
   score: ['format', 'build', 'name', 'pilot', 'score', 'map', 'mode', 'flight', 'totals', 'sheet', 'events', 'camTilt', 'camFov', 'craft', 'trace'],
   track: ['format', 'id', 'name', 'by', 'pilot', 'build', 'tags', 'preset', 'section', 'venue', 'lighting', 'laps', 'route', 'elements', 'created', 'updated'],   // a RaceGOW track a pilot shares (the game cleans it again: RG.cleanTrack)
-  racetime: ['format', 'build', 'name', 'pilot', 'track', 'trackName', 'lap', 'ghost', 'craft'],   // a best lap on a track (by its geometry hash) and its ghost
+  racetime: ['format', 'build', 'name', 'pilot', 'track', 'trackName', 'lap', 'ghost', 'craft'],
+  challenge: ['format', 'build', 'name', 'by', 'pilot', 'map', 'at', 'like', 'sig', 't0', 't1', 'camTilt', 'trace'],   // a new trick a pilot named and posts (src/challenge.js): its signature and the clip
+  chtry: ['format', 'build', 'challenge', 'by', 'pilot', 'map', 'at', 'dist', 'sig', 't0', 't1', 'camTilt', 'trace'],   // another pilot's move the game matched to it   // a best lap on a track (by its geometry hash) and its ghost
 };
 const str = (v, max) => typeof v === 'string' && v.length <= max;
 const optStr = (v, max) => v == null || str(v, max);
@@ -60,6 +66,25 @@ function sane(v, depth = 0, budget = { n: 0 }) {
 }
 const okTrace = t => !!t && typeof t === 'object' && str(t.enc, 40) && t.enc.startsWith('cols-delta-varint/1') && t.hz >= 10 && t.hz <= 1000 && Number.isInteger(t.rows) && t.rows >= 1 && t.rows <= 60000
   && Array.isArray(t.cols) && t.cols.length <= 40 && t.cols.every(c => str(c, 20)) && str(t.data, 900000) && /^[A-Za-z0-9+/]*={0,2}$/.test(t.data);
+// ---- names other pilots will see: the same word list as src/sim.js `badName` (test/challenges.js holds the two copies to the same
+// answers). Trick challenge names and the names of the pilots posting them are refused when it says so.
+const BAD_SUB = ['fuck', 'fuk', 'fvck', 'pusy', 'shit', 'cunt', 'niger', 'niga', 'fagot', 'bitch', 'whore', 'slut', 'penis', 'vagina', 'dick', 'puss', 'retard', 'nazi', 'hitler', 'jiz', 'boob', 'wank', 'twat', 'bastard', 'molest', 'incest', 'milf', 'dildo', 'hentai', 'porn', 'cumshot', 'blowjob', 'handjob', 'motherf', 'asshol', 'arsehol', 'killyourself', 'pedophil', 'paedophil', 'tranie', 'beaner', 'wetback', 'raghead', 'towelhead', 'chingchong', 'golliwog', 'jigaboo', 'kike', 'shemale', 'skank', 'clit', 'scrotum', 'testicl', 'orgasm', 'ejacul', 'horny', 'sperm', 'faggot', 'dyke', 'spunk', 'bollock', 'tosser', 'bellend'];
+const BAD_WORD = ['ass', 'arse', 'cum', 'cock', 'cocks', 'tit', 'tits', 'titty', 'anal', 'anus', 'rape', 'raped', 'raping', 'rapist', 'sex', 'sexy', 'fap', 'fag', 'fags', 'fck', 'kys', 'coon', 'spic', 'chink', 'gook', 'negro', 'heil', 'kkk', 'pedo', 'paedo', 'prick', 'tranny', 'homo', 'lesbo', 'hoe', 'hoes', 'piss', 'jerkoff', 'wtf', 'stfu', 'gfy', 'nig', 'jap', 'dago', 'wop', 'gyp', 'isis', 'sieg', 'zieg', 'lynch', 'boner', 'bj', 'hj', 'xxx', 'tard', 'thot', 'incel', 'poon', 'muff', 'nonce', 'nude', 'naked', 'semen', 'pubic', 'erection'];
+const L33T = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b', '9': 'g', '6': 'g', '2': 'z', '(': 'c', '¢': 'c', '€': 'e', '£': 'l' };
+const BAD_SUB_SQ = BAD_SUB.filter(w => !/(.)\1/.test(w)), BAD_WORD_SET = new Set(BAD_WORD);   // a pattern with a double letter is only matched unsquashed (puss / push, boob / bob)
+function badName(v) {
+  const low = String(v == null ? '' : v).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[0-9!|@$+(¢€£]/g, c => L33T[c] || c);
+  const raw = low.split(/[^a-z]+/).filter(Boolean), words = [];   // spaced-out letters (f u c k, s.e.x) are joined into one word
+  for (let i = 0; i < raw.length; i++) { if (raw[i].length === 1) { let j = i, w = ''; while (j < raw.length && raw[j].length === 1) w += raw[j++]; if (w.length > 1) { words.push(w); i = j - 1; continue; } } words.push(raw[i]); }
+  for (const w0 of words) { const sq = w0.replace(/(.)\1+/g, '$1'), w = w0.replace(/(.)\1{2,}/g, '$1$1');   // inside one word only: "Push It" is not a swear
+    if (BAD_SUB_SQ.some(b => sq.includes(b)) || BAD_SUB.some(b => w.includes(b))) return true;
+    for (const x of [w0, w, sq, w.replace(/e?s$/, ''), w.replace(/s$/, '')]) if (x && BAD_WORD_SET.has(x)) return true; }
+  return false;
+}
+const CH_ID_RE = /^(\d{10,16})\.([a-z0-9]{6,40})\.([A-Za-z0-9_-]{1,60})\.([A-Za-z0-9_-]{1,40})\.([a-z0-9-]{1,24})$/;
+const chSigOk = g => { if (!g || typeof g !== 'object' || Array.isArray(g) || !Array.isArray(g.c) || g.c.length !== 72 || !g.c.every(v => Number.isFinite(v) && Math.abs(v) <= 5000) || !(+g.d > 0 && +g.d <= 12)) return null;
+  if (g.u != null && (!Array.isArray(g.u) || g.u.length !== 24 || !g.u.every(v => Number.isFinite(v) && Math.abs(v) <= 100))) return null; if (g.ps != null && !(typeof g.ps === 'string' && /^[OUG]{0,8}$/.test(g.ps))) return null;
+  const o = { d: +g.d, c: g.c.map(Math.round) }; if (g.u) o.u = g.u.map(Math.round); if (typeof g.ps === 'string') o.ps = g.ps; return o; };
 function clean(kind, p) {
   if (!p || typeof p !== 'object' || Array.isArray(p) || p.format !== FORMATS[kind]) return null;
   const out = {}; for (const k of KEYS[kind]) if (p[k] !== undefined) out[k] = p[k];
@@ -100,6 +125,15 @@ function clean(kind, p) {
     if (!Number.isInteger(out.lap) || out.lap < 500 || out.lap > 3600000 || !optStr(out.trackName, 40)) return null;
     const g = out.ghost; if (!g || typeof g !== 'object' || g.hz !== 30 || !Number.isInteger(g.n) || g.n < 1 || g.n > 54000 || !Array.isArray(g.d) || g.d.length !== g.n * 7 || !g.d.every(Number.isInteger)) return null;
     out.ghost = { hz: 30, n: g.n, d: g.d }; const gg = out.ghost; out.ghost = undefined; if (!sane(out)) return null; out.ghost = gg;
+  } else if (kind === 'challenge' || kind === 'chtry') {
+    // a trick challenge (a name nobody's word list objects to, the pilot, the map, the move's signature and its clip) or a try at one
+    const byOk = v => str(v, 24) && /^[A-Za-z0-9_. -]{2,24}$/.test(v) && !badName(v), num = (v, lo, hi) => v == null || (Number.isFinite(v) && v >= lo && v <= hi);
+    if (!byOk(out.by) || !str(out.pilot, 40) || !/^[a-z0-9]{6,40}$/.test(out.pilot) || !str(out.map, 24) || !/^[a-z0-9-]{1,24}$/.test(out.map) || !optStr(out.at, 40)) return null;
+    if (kind === 'challenge') { if (!str(out.name, 40) || !/^[A-Za-z0-9_.,'!&()+ -]{2,40}$/.test(out.name) || !out.name.trim() || badName(out.name) || !optStr(out.like, 60)) return null; out.name = out.name.trim(); }
+    else { if (!str(out.challenge, 160) || !CH_ID_RE.test(out.challenge) || !num(out.dist, 0, 1)) return null; }
+    const g = chSigOk(out.sig); if (!g || !num(out.t0, -1, 60) || !num(out.t1, -1, 60) || !num(out.camTilt, -10, 60)) return null; out.sig = g;
+    const t = out.trace; out.trace = undefined; if (!sane(out) || JSON.stringify(out).length > 20000) return null;
+    if (!okTrace(t) || t.rows > 4000) return null; out.trace = { enc: t.enc, hz: t.hz, cols: t.cols, rows: t.rows, data: t.data };
   } else if (kind === 'video') {
     const F = out.frames; if (!Array.isArray(F) || F.length < 10 || F.length > 6000 || !F.every(r => Array.isArray(r) && r.length === 4 && r.every(Number.isFinite))) return null;
     if (!Array.isArray(out.labels) || out.labels.length > 600 || (out.marks != null && (!Array.isArray(out.marks) || out.marks.length > 2000)) || (out.detected != null && (!Array.isArray(out.detected) || out.detected.length > 2000))) return null;
@@ -205,6 +239,62 @@ function raceGet(request, env, fetchImpl, reply, pth) {
   if (pth.endsWith('/raceboard')) { if (!/^[a-z0-9]{6,20}$/.test(q('track'))) return reply(400, 'bad track'); return rgListing(request, env, fetchImpl, reply, `racetimes/${q('track')}`, 'times', lapsFrom); }
   if (pth.endsWith('/ghost')) { if (!/^[a-z0-9]{6,20}$/.test(q('track')) || !LAP_ID_RE.test(q('id'))) return reply(400, 'bad ghost'); return rgOne(request, env, fetchImpl, reply, `racetimes/${q('track')}/${q('id')}.json`, 'racetime', p => p.track === q('track')); }
   return null;
+}
+// ---- Trick challenges (owner, 2026-11-23; src/challenge.js). A pilot's new trick: challenges/<time>.<pilot>.<name b64url>.<by b64url>.<map>.json.
+// A try another pilot's game matched to it: challenge-tries/<challenge id>~<time>.<pilot>.<by b64url>.json. The owner's moderation
+// (POST /chmod with the owner key): challenge-mod/<challenge id>~<hide|show|name|pts>~<value>~<time>.json, newest of each kind
+// wins. GET /challenges is all three folders' file NAMES turned into the board (no file is opened): each challenge with who passed
+// it; CH_CONFIRM pilots other than its creator make it confirmed. GET /challenge?id= returns one (its signature and clip), cleaned again.
+const CH_CONFIRM = 2;
+const chFile = (p, now) => `${now}.${p.pilot}.${b64u(p.name)}.${b64u(p.by)}.${p.map}.json`;
+const tryFile = (p, now) => `${p.challenge}~${now}.${p.pilot}.${b64u(p.by)}.json`;
+const TRY_RE = /^(.+)~(\d{10,16})\.([a-z0-9]{6,40})\.([A-Za-z0-9_-]{1,40})$/, MOD_RE = /^(.+)~(hide|show|name|pts)~([A-Za-z0-9_-]{1,60})~(\d{10,16})$/;
+function challengesFrom(chNames, tryNames, modNames) {
+  const mods = new Map();   // id -> { hidden, name, pts } from the newest of each kind
+  for (const n of modNames.filter(x => x.endsWith('.json')).map(x => x.slice(0, -5)).sort((a, b) => (+MOD_RE.exec(a)?.[4] || 0) - (+MOD_RE.exec(b)?.[4] || 0))) { const m = MOD_RE.exec(n); if (!m || !CH_ID_RE.test(m[1])) continue; const o = mods.get(m[1]) || {};
+    if (m[2] === 'hide') o.hidden = true; if (m[2] === 'show') o.hidden = false; if (m[2] === 'name') { const v = unb64u(m[3]); if (v && /^[A-Za-z0-9_.,'!&()+ -]{2,40}$/.test(v) && !badName(v)) o.name = v; } if (m[2] === 'pts' && /^\d{1,4}$/.test(m[3])) o.pts = Math.min(5000, +m[3]); mods.set(m[1], o); }
+  const tries = new Map();
+  for (const n of tryNames.filter(x => x.endsWith('.json')).map(x => x.slice(0, -5)).sort()) { const m = TRY_RE.exec(n); if (!m || !CH_ID_RE.test(m[1])) continue; const by = unb64u(m[4]); if (!by || !/^[A-Za-z0-9_. -]{2,24}$/.test(by) || badName(by)) continue;
+    const L = tries.get(m[1]) || []; L.push({ pilot: m[3], by, at: +m[2] }); tries.set(m[1], L); }
+  const out = [];
+  for (const n of chNames.filter(x => x.endsWith('.json')).map(x => x.slice(0, -5)).sort().reverse()) { const m = CH_ID_RE.exec(n); if (!m) continue; const name0 = unb64u(m[3]), by = unb64u(m[4]);
+    if (!name0 || !by || badName(name0) || badName(by)) continue; const o = mods.get(n) || {}, name = o.name || name0;
+    // who passed it: one per pilot id and one per name, never the creator (by id or by name)
+    const pid = new Set(), nm = new Set(), passed = [];
+    for (const t of tries.get(n) || []) { const k = t.by.toLowerCase(); if (t.pilot === m[2] || k === by.toLowerCase() || pid.has(t.pilot) || nm.has(k)) continue; pid.add(t.pilot); nm.add(k); passed.push(t.by); }
+    out.push({ id: n, name: o.hidden ? '' : name, by, pilot: m[2], map: m[5], at: +m[1], pts: o.pts ?? 200, passed: o.hidden ? [] : passed.slice(0, 50), n: passed.length, confirmed: passed.length >= CH_CONFIRM, ...(o.hidden ? { hidden: true } : {}) });
+    if (out.length >= 300) break; }
+  return out;
+}
+let chCache = null;
+async function challengeList(request, env, fetchImpl, reply) {
+  const json = body => reply(200, body, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' }); if (chCache && Date.now() - chCache.at < 30000) return json(chCache.body);
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'; if (!(await bump(env, `mip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, 240))) return reply(429, 'slow down');
+  const names = async folder => { const r = await ghGet(env, fetchImpl, folder); if (r.status === 404) return []; if (!r.ok) throw new Error(String(r.status)); const L = await r.json(); return Array.isArray(L) ? L.filter(x => x && x.type === 'file' && typeof x.name === 'string').map(x => x.name) : []; };
+  try { const [c, t, m] = await Promise.all([names('challenges'), names('challenge-tries'), names('challenge-mod')]);
+    const body = JSON.stringify({ confirm: CH_CONFIRM, challenges: challengesFrom(c, t, m) }); chCache = { at: Date.now(), body }; return json(body); }
+  catch { return chCache ? json(chCache.body) : reply(502, 'could not list the challenges'); }
+}
+function challengeOne(request, env, fetchImpl, reply) {
+  const id = new URL(request.url).searchParams.get('id') || ''; if (!CH_ID_RE.test(id)) return reply(400, 'bad challenge');
+  return rgOne(request, env, fetchImpl, reply, `challenges/${id}.json`, 'challenge');
+}
+// POST /chmod { key, id, op: hide | show | name | pts, name?, pts? }: the owner hiding, showing, renaming or pricing a challenge
+async function challengeMod(request, env, fetchImpl, reply, origin, allowed) {
+  if (!allowed.includes(origin)) return reply(403, 'not from the game');
+  if (!env.OWNER_KEY) return reply(503, 'owner key not set up: add the secret OWNER_KEY in Cloudflare');
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown', hour = Math.floor(Date.now() / 3600000), text = await request.text(); if (text.length > 4000) return reply(413, 'too large');
+  let j; try { j = JSON.parse(text); } catch { return reply(400, 'not JSON'); }
+  if (!j || typeof j !== 'object' || typeof j.key !== 'string' || !j.key || j.key.length > 200) return reply(400, 'bad request');
+  const tries = mem.get(`okey:${ip}:${hour}`); if (tries && tries.n >= 5) return reply(429, 'too many wrong keys: wait an hour');
+  if (!(await sameKey(j.key, env.OWNER_KEY))) { await bump(env, `okey:${ip}:${hour}`, 3600, 1e9); return reply(403, 'wrong owner key'); }
+  if (typeof j.id !== 'string' || !CH_ID_RE.test(j.id) || !['hide', 'show', 'name', 'pts'].includes(j.op)) return reply(400, 'bad request');
+  let val = '0';
+  if (j.op === 'name') { if (typeof j.name !== 'string' || !/^[A-Za-z0-9_.,'!&()+ -]{2,40}$/.test(j.name.trim()) || badName(j.name)) return reply(400, 'not a name the board can show'); val = b64u(j.name.trim()); }
+  if (j.op === 'pts') { if (!Number.isInteger(j.pts) || j.pts < 0 || j.pts > 5000) return reply(400, 'points must be a whole number 0-5000'); val = String(j.pts); }
+  const path = `challenge-mod/${j.id}~${j.op}~${val}~${Date.now()}.json`, body = JSON.stringify({ id: j.id, op: j.op, value: val, at: new Date().toISOString() });
+  let r; try { r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ message: `challenge: ${j.op}`, content: btoa(body), branch: env.GITHUB_BRANCH || 'main' }) }); } catch { return reply(502, 'could not reach GitHub'); }
+  if (!r.ok) return reply(502, `GitHub said ${r.status}`); chCache = null; return reply(200, 'ok');
 }
 const scoreFile = (p, now) => `${String(p.score).padStart(8, '0')}-${p.map}-${b64u(p.name)}-${p.pilot}-${now}.json`;
 // file names of one day's folder -> the board: each pilot's best run per map, highest first
@@ -340,9 +430,10 @@ async function handle(request, env, fetchImpl = fetch) {
   const reply = (status, text, extra) => new Response(text, { status, headers: { ...cors, ...(extra || {}) } });
   if (request.method === 'OPTIONS') return reply(204, '');
   if (env.ENABLED === '0' || !env.GITHUB_TOKEN || !env.GITHUB_REPO) return reply(503, 'closed');
-  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/badges')) return badges(env, reply); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
+  if (request.method === 'GET') { const pth = new URL(request.url).pathname.replace(/\/+$/, ''); if (pth.endsWith('/badges')) return badges(env, reply); if (pth.endsWith('/challenges')) return challengeList(request, env, fetchImpl, reply); if (pth.endsWith('/challenge')) return challengeOne(request, env, fetchImpl, reply); if (pth.endsWith('/board')) return board(request, env, fetchImpl, reply); if (pth.endsWith('/run')) return oneRun(request, env, fetchImpl, reply); if (pth.endsWith('/maps')) return mapList(request, env, fetchImpl, reply); if (pth.endsWith('/map')) return oneMap(request, env, fetchImpl, reply); { const rr = raceGet(request, env, fetchImpl, reply, pth); if (rr) return rr; } return reply(405, 'POST only'); }
   if (request.method !== 'POST') return reply(405, 'POST only');
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/official')) return official(request, env, fetchImpl, reply, origin, allowed);
+  if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/chmod')) return challengeMod(request, env, fetchImpl, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/owner')) return ownerCheck(request, env, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/desk')) return deskApi(request, env, fetchImpl, reply, origin, allowed);
   if (new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/review')) return deskApi(request, env, fetchImpl, reply, origin, allowed, true);
@@ -360,14 +451,14 @@ async function handle(request, env, fetchImpl = fetch) {
   if (!(await bump(env, `ip:${ip}:${Math.floor(Date.now() / 3600000)}`, 3600, +(env.PER_IP_HOUR || 30)))) return reply(429, 'slow down');
   if (!(await bump(env, `day:${day}`, 172800, +(env.DAILY_CAP || 800), true))) return reply(429, 'full for today');
   const id = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
-  const path = j.kind === 'score' ? `leaderboard/${day}/${scoreFile(payload, Date.now())}` : j.kind === 'map' ? `maps/community/${payload.base}/${mapFile(payload, Date.now())}` : j.kind === 'track' ? `tracks/${trackFile(payload, Date.now())}` : j.kind === 'racetime' ? `racetimes/${payload.track}/${lapFile(payload, Date.now())}` : `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
+  const path = j.kind === 'score' ? `leaderboard/${day}/${scoreFile(payload, Date.now())}` : j.kind === 'map' ? `maps/community/${payload.base}/${mapFile(payload, Date.now())}` : j.kind === 'track' ? `tracks/${trackFile(payload, Date.now())}` : j.kind === 'racetime' ? `racetimes/${payload.track}/${lapFile(payload, Date.now())}` : j.kind === 'challenge' ? `challenges/${chFile(payload, Date.now())}` : j.kind === 'chtry' ? `challenge-tries/${tryFile(payload, Date.now())}` : `telemetry/inbox/${j.kind}/${day}/${Date.now()}-${id}.json`, body = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(body); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   let r; try { r = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`, { method: 'PUT',
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'pro-whooper-dropoff', 'X-GitHub-Api-Version': '2022-11-28' },
     body: JSON.stringify({ message: `drop-off: ${j.kind}`, content: btoa(bin), branch: env.GITHUB_BRANCH || 'main' }) }); } catch { return reply(502, 'could not store it'); }
   if (r.ok && j.kind === 'labels') await badgeAdd(env, payload);
-  if (r.ok && j.kind === 'score') boardCache.delete(day); if (r.ok && j.kind === 'map') mapsCache.delete(payload.base); if (r.ok && j.kind === 'track') rgCache.delete('tracks'); if (r.ok && j.kind === 'racetime') rgCache.delete(`racetimes/${payload.track}`);
+  if (r.ok && j.kind === 'score') boardCache.delete(day); if (r.ok && j.kind === 'map') mapsCache.delete(payload.base); if (r.ok && j.kind === 'track') rgCache.delete('tracks'); if (r.ok && j.kind === 'racetime') rgCache.delete(`racetimes/${payload.track}`); if (r.ok && (j.kind === 'challenge' || j.kind === 'chtry')) chCache = null;
   return r.ok ? reply(200, 'ok') : reply(502, 'could not store it');
 }
 export default { fetch: (request, env) => handle(request, env) };
-export { handle, clean, reviewMoments, badgeName, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer, trackFile, lapFile, lapsFrom };
+export { badName, challengesFrom, chFile, tryFile, handle, clean, reviewMoments, badgeName, boardFrom, scoreFile, mapsFrom, mapFile, cleanLayer, trackFile, lapFile, lapsFrom };

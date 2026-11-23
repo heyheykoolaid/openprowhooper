@@ -19,6 +19,7 @@ const checks = [
   ['flight telemetry packing (round trip, size, same trick calls)', () => { const o = run('flightlog.js', []); return /(\d+)\/\1 flight log checks/.test(o) ? null : o; }],
   ['slide disarm with the real physics (slide, re-arm, fly away)', () => { const o = run('slide.js', []); return /(\d+)\/\1 slide checks/.test(o) ? null : o; }],
   ['bumps: a knock on the way out of a move makes its call a bump, a soft touch does not', () => { const o = run('bumps.js', []); return /(\d+)\/\1 bump checks/.test(o) ? null : o; }],
+  ['challenges: trick challenges (the name word list in the game and on the relay, matching a move, the community score line, the relay board and moderation)', () => { const o = run('challenges.js', []); return /(\d+)\/\1 challenge checks/.test(o) ? null : o; }],
   ['rubiks: a Rubik\'s Cube with a long roll or a short flip out is still one, and a stall or eject reading never takes its middle', () => { const o = run('rubiks.js', []); return /rubiks: (\d+)\/\1/.test(o) ? null : o; }],
   ['splits: a Split-S whose pull-through reads short is found from the attitude; upright, no turn-back, nose-down, yaw and backward ends are not', () => { const o = run('splits.js', []); return /splits: (\d+)\/\1/.test(o) ? null : o; }],
   ['Feel Lab: the average step response finds a known lag, overshoot and level', () => { const o = run('stepresp.js', []); return /(\d+)\/\1 step response checks/.test(o) ? null : o; }],

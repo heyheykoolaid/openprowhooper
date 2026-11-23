@@ -5,7 +5,7 @@ Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
 `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `raceedit.js`,
-`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`, `hub.js`. They share one scope. `python3 build.py` inlines everything into
+`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`, `hub.js`, `challenge.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
@@ -1010,6 +1010,27 @@ like the stall or the climb; context tricks win `better` by `clen`). Now a conte
 theirs. Rubik's Cube has a second, looser pattern `Pa180 R*~360 Pa~180` (rolls 420-440°, flips out read 105-140°). Re-flown: Rubik's labels
 found 2 -> 8 of 20, rejected 360 Stall Rewinds still called 11 -> 7 of 12, none lost; bench and stress unchanged. tools/library.js gives
 motion (`mo`) only to examples at least a quarter as heavy as the trick's heaviest (a 0.08 Powerloop keep was flown as an Anti Matty).
+
+## Trick challenges (owner, 2026-11-23; src/challenge.js, `badName` / `setChallenges` / `chalJudge` in sim.js, the relay's /challenges; test/challenges.js)
+A pilot names a new trick in SKITTLES mode (the "name a new trick" box) and presses **🏆 Post as a challenge** (`recapChBtn`, `chPost`): the
+stretch is re-flown through the detector to measure it exactly as a live move (`libSigOf`), checked against what the rules called there, the
+library's nearest trick and the other challenges ("looks like…": a warning, posting stays the pilot's choice), and sent as kind `challenge`
+(`pro-whooper-challenge/1`: name, pilot name and id, map, signature, the clip packed, padded 2.5 s; official maps only). Main menu → **Trick
+challenges** (`#chScreen`, `chRender`): All / Live / Being tried / Mine; ▶ Watch plays the clip as a guest (another map asks and reloads:
+`store 'chPending'`); 🎯 Try it (`store 'chTry'`) makes the detector compare every move with it (`setChallenges` → `chalJudge`, run from the
+library's ear `libTick` 2.5 s after a move; it runs when there is a library OR challenges); a move within `CH_PASS` 0.3 (`libDist`) passes:
+call-out, and the move's clip goes as kind `chtry`. **`CH_CONFIRM` 2 pilots other than the creator** (by pilot id and by name) passing makes
+it **live at once** (owner: "live at default points"): every game calls it where no book trick was called (`callLog`), within `CH_LIVE` 0.25
+and nearer than any library trick, and scores it on its own line (`ScoreKeeper.community`, `CH_PTS` 200 until the owner sets them, halved on
+repeats in a combo; results line; posted sheet `totals.community`), never in the TPW score. Hits reach the page through the detector worker
+(`DW.chals`, message `chal`) like maybes. **Names** (owner: "we need to have a way to censor bad names"): `badName` (a word list through
+l33t-speak, accents, spacing and stretched letters; substrings only inside one word, short words only whole) in the game AND an identical
+copy in the relay (test/challenges.js holds them to the same answers) for trick names and pilot names. **The owner** (owner key) hides /
+shows / renames / prices from the board (`chMod` → `POST /chmod`: challenge-mod/<id>~<op>~<value>~<time>.json, newest wins). Relay files:
+challenges/<time>.<pilot>.<name>.<by>.<map>.json, challenge-tries/<challenge id>~<time>.<pilot>.<by>.json; GET /challenges is the board
+from the three folders' names (one request each, cached 30 s), GET /challenge?id= one file cleaned again. Tries are trusted like board
+scores; each carries its clip for the tools. **Redeploy the relay.** Checked end to end in a browser against the relay's real code with an
+in-memory GitHub (post, bad name refused, board, watch, two passes -> live, the call-out and points, owner hide).
 
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of

@@ -23,10 +23,9 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 6. ~~Disarm tricks~~ built 2026-11-21 (Disarm Flip / Roll / Spin, Dead Pirate Spin, Disarm Loop; test/disarm.js). Still to do: the bot
    flying them (Judge the Bot, Show me), Train steps, doubles.
 7. **3D mode scoring**: decide with 3D pilots which tricks count and what they are worth, and whether 3D gets its own board.
-8. **Trick challenges and the trick board** (owner, 2026-11-20): a pilot names a trick, flies it and posts it; others try it; a try
-   passes when its motion matches closely enough (the library's signature match); 3 different pilots passing confirms it and the owner
-   names its points. Needs a relay kind (`challenge`), a board screen, the guest replay viewer, a "this looks like <existing trick>"
-   check before posting, and the owner's say before anything is scored.
+8. ~~**Trick challenges and the trick board**~~ built 2026-11-23 (owner: 2 other pilots confirm, live at 200 points, a word list + the
+   owner hides / renames / prices). **Redeploy the relay** for it to work. Open: confirmed challenges into the trick library (so the
+   knowledge bot can fly them); re-checking tries on the relay or in the weekly run; whether 2 stays the number.
 9. **Proper gap names per map** for the gap call-outs (they use object names today).
 10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);

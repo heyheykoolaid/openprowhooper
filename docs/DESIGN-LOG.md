@@ -175,3 +175,19 @@ anyone. The demo GIF is flip 180, roll 360, flip 180.
 - **Knowledge bot**: with five pilots' Powerloops in the library, the round-robin gave motion to a 0.08-weight example (an unconfirmed
   keep) and Judge the Bot re-flew it as an Anti Matty. Motion now goes only to examples at least a quarter as well attested as the
   trick's best one.
+
+### Trick challenges (owner, 2026-11-23)
+The owner, on the to-do item "trick challenges and the trick board": build it now.
+- **Decided**: a pilot names a new trick in SKITTLES mode, posts that stretch of their run as a challenge; other pilots watch it and
+  try it; a try passes when the game's signature match (the trick library's `libDist`) puts their move close to the original. **Two
+  pilots other than the creator** passing confirms it ("2 (right now)").
+- **Decided**: once confirmed it is **live at default points** (200) straight away: the game recognises it in every flight where no
+  book trick was called, and scores it on its own line (like gap points and K.W.A.D.), so the TPW trick score stays the calculator's.
+  The owner can change its points later.
+- **Decided**: bad names are stopped by a **word list** (catching l33t-speak, spacing and repeated letters) in the game and again on the
+  relay, for the trick's name and the pilot's; the owner can **hide or rename** any challenge from the trick board with the owner key.
+- **Decided**: before posting, the game checks whether it **looks like an existing trick** (what the rules called in that stretch, the
+  library's nearest trick, and the other challenges) and says so; posting anyway is the pilot's choice, the board shows the look-alike.
+- **Open**: whether confirmed challenges should also go into the trick library as examples (so the knowledge bot can fly them);
+  whether 2 stays the number as more pilots join; whether tries should be checked again on the relay (today the game's own match is
+  trusted, like board scores; every try carries its clip, so the tools can re-check).

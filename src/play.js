@@ -211,7 +211,8 @@ function detArm(on) { if (detQ.length) detQ.push({ arm: on, s: detSnap(drone, la
 // object stays the one every other file talks to: its methods are routed to the worker. The same code on the same steps
 // makes the same calls; the replies arrive a frame or two later. Any failure falls back to the old in-page detector
 // (`store 'detWorker'` false turns the worker off; F3 shows which is running).
-const DW = { on: false, dead: false, w: null, events: [], maybes: [], busy: false, prov: [], live: [], cross: [], passes: [], sentWorld: null, sentV: -1, pending: 0, wantDbg: false };
+let chList = null;   // the trick challenges the detector listens for (src/challenge.js `chApply`)
+const DW = { on: false, dead: false, w: null, events: [], maybes: [], chals: [], busy: false, prov: [], live: [], cross: [], passes: [], sentWorld: null, sentV: -1, pending: 0, wantDbg: false };
 function dwStart() {
   if (DW.on || DW.dead || !store.get('detWorker', true) || typeof Worker === 'undefined') return;
   try {
@@ -222,15 +223,16 @@ function dwStart() {
   const plain = x => { try { return structuredClone(x); } catch (e) { return JSON.parse(JSON.stringify(x, (k, v) => typeof v === 'function' ? undefined : v)); } };
   const rehydrate = s => Object.setPrototypeOf(s, S.Drone.prototype);
   self.onmessage = e => { const m = e.data;
-    if (m.t === 'init') { if (m.community) S.setCommunity(m.community); if (m.library) S.setLibrary(m.library); det = new S.TrickDetector(m.world); det.camTilt = m.camTilt; if (m.pilot) det.setPilot(m.pilot); return; }
+    if (m.t === 'init') { if (m.community) S.setCommunity(m.community); if (m.library) S.setLibrary(m.library); if (m.chal) S.setChallenges(m.chal); det = new S.TrickDetector(m.world); det.camTilt = m.camTilt; if (m.pilot) det.setPilot(m.pilot); return; }
     if (!det) return;
     if (m.t === 'world') { det.world = m.world; det.reset(); return; }
     if (m.t === 'reset') { det.reset(); return; }
+    if (m.t === 'chal') { S.setChallenges(m.v); return; }
     if (m.t === 'camTilt') { det.camTilt = m.v; return; }
     if (m.t === 'pilot') { det.setPilot(m.p); return; }
     if (m.t === 'debug') { det.debug = m.v; return; }
     if (m.t === 'steps') { if (m.want && !Array.isArray(det.debug)) det.debug = []; for (const s of m.items) { if (s.arm !== undefined) { det.onArmChange(rehydrate(s.s), s.arm); continue; } rehydrate(s); det.update(s, DTS, s.rc); det.postStep(s); }
-      const r = { t: 'out', events: det.drain(), maybes: det.drainMaybes ? det.drainMaybes() : [], busy: det.busy(), time: det.time, prov: det.provisional(), live: det.liveState ? det.liveState() : [],
+      const r = { t: 'out', events: det.drain(), maybes: det.drainMaybes ? det.drainMaybes() : [], chals: det.drainChallenges ? det.drainChallenges() : [], busy: det.busy(), time: det.time, prov: det.provisional(), live: det.liveState ? det.liveState() : [],
         cross: fresh(det.crossLog, 40), passes: fresh(det.passes, 40) };
       if (m.want) { r.toks = (det.toks || []).slice(-40); r.cur = (det.cur || []).filter(Boolean); r.debug = (det.debug || []).slice(-8); }
       self.postMessage(plain(r)); } };
@@ -238,21 +240,21 @@ function dwStart() {
     const url = URL.createObjectURL(new Blob([tr, '\n', sm, '\n', body], { type: 'text/javascript' }));
     DW.w = new Worker(url); URL.revokeObjectURL(url);
     DW.w.onmessage = e => { const r = e.data; if (!r || r.t !== 'out') return; DW.pending = Math.max(0, DW.pending - 1);
-      DW.events.push(...r.events); if (DW.workerEv) for (const x of r.events) DW.workerEv.push(x.name + '@' + x.t.toFixed(3)); DW.maybes.push(...r.maybes); DW.busy = r.busy; DW.prov = r.prov; DW.live = r.live; detector.time = r.time;
+      DW.events.push(...r.events); if (DW.workerEv) for (const x of r.events) DW.workerEv.push(x.name + '@' + x.t.toFixed(3)); DW.maybes.push(...r.maybes); DW.chals.push(...(r.chals || [])); DW.busy = r.busy; DW.prov = r.prov; DW.live = r.live; detector.time = r.time;
       for (const c of r.cross) DW.cross.push(c); for (const p of r.passes) DW.passes.push(p); if (DW.cross.length > 80) DW.cross.splice(0, DW.cross.length - 60); if (DW.passes.length > 80) DW.passes.splice(0, DW.passes.length - 60);
       if (r.toks) { detector.toks = r.toks; detector.cur = r.cur; detector.debug = r.debug; } };
     DW.w.onerror = err => { console.warn('trick detector worker failed, back to the page:', err && err.message); dwStop(true); };
     const D = detector, orig = { reset: D.reset.bind(D), setPilot: D.setPilot.bind(D) };
     DW.orig = orig; let tilt = D.camTilt, wld = D.world;
-    DW.w.postMessage({ t: 'init', world: wld, camTilt: tilt, community: S.community || null, library: S.library || null, pilot: store.get('pilot', null) }); DW.sentWorld = wld; DW.sentV = wld.__v || 0;
+    DW.w.postMessage({ t: 'init', world: wld, camTilt: tilt, community: S.community || null, library: S.library || null, chal: chList || null, pilot: store.get('pilot', null) }); DW.sentWorld = wld; DW.sentV = wld.__v || 0;
     Object.defineProperty(D, 'camTilt', { configurable: true, get: () => tilt, set: v => { tilt = v; if (DW.on) DW.w.postMessage({ t: 'camTilt', v }); } });
     Object.defineProperty(D, 'world', { configurable: true, get: () => wld, set: v => { wld = v; } });
-    D.reset = () => { orig.reset(); detQ.length = 0; DW.events.length = 0; DW.maybes.length = 0; DW.busy = false; DW.prov = []; DW.live = []; DW.cross.length = 0; DW.passes.length = 0; D.crossLog = DW.cross; D.passes = DW.passes;   // reset() gives the page copy fresh arrays: point them at the worker's mirror again (the 'what counted' list and combo timer went quiet after the first reset)
+    D.reset = () => { orig.reset(); detQ.length = 0; DW.events.length = 0; DW.maybes.length = 0; DW.chals.length = 0; DW.busy = false; DW.prov = []; DW.live = []; DW.cross.length = 0; DW.passes.length = 0; D.crossLog = DW.cross; D.passes = DW.passes;   // reset() gives the page copy fresh arrays: point them at the worker's mirror again (the 'what counted' list and combo timer went quiet after the first reset)
       if (DW.on) { if (DW.sentWorld !== wld || DW.sentV !== (wld.__v || 0)) { DW.w.postMessage({ t: 'world', world: wld }); DW.sentWorld = wld; DW.sentV = wld.__v || 0; } else DW.w.postMessage({ t: 'reset' }); } };
     D.setPilot = p => { const r = orig.setPilot(p); if (DW.on) DW.w.postMessage({ t: 'pilot', p }); return r; };
     D.onArmChange = (d, on) => { if (DW.on) DW.w.postMessage({ t: 'steps', items: [{ arm: on, s: detSnap(d, lastRC) }], want: DW.wantDbg }); };
-    D.drain = () => DW.events.splice(0); D.drainMaybes = () => DW.maybes.splice(0); D.busy = () => DW.busy; D.provisional = () => DW.prov; D.liveState = () => DW.live;
-    D.crossLog = DW.cross; D.passes = DW.passes; Object.defineProperty(D, 'maybes', { configurable: true, get: () => DW.maybes, set: () => {} });
+    D.drain = () => DW.events.splice(0); D.drainMaybes = () => DW.maybes.splice(0); D.drainChallenges = () => DW.chals.splice(0); D.busy = () => DW.busy; D.provisional = () => DW.prov; D.liveState = () => DW.live;
+    D.crossLog = DW.cross; D.passes = DW.passes; Object.defineProperty(D, 'maybes', { configurable: true, get: () => DW.maybes, set: () => {} }); Object.defineProperty(D, 'chals', { configurable: true, get: () => DW.chals, set: () => {} });
     DW.on = true;
   } catch (err) { console.warn('trick detector worker not available:', err && err.message); dwStop(true); }
 }
@@ -261,8 +263,8 @@ window.__pwDW = { DW, feed: snaps => { for (const x of snaps) { Object.setProtot
 setTimeout(dwStart, 0);
 function dwStop(dead) { if (DW.w) try { DW.w.terminate(); } catch { /* gone already */ } DW.w = null; DW.dead = DW.dead || dead; if (!DW.on) return; DW.on = false;
   // back to the page's own detector: the routed methods go back to the class's own, from a clean start
-  const D = detector; for (const k of ['reset', 'setPilot', 'onArmChange', 'drain', 'drainMaybes', 'busy', 'provisional', 'liveState']) delete D[k];
-  for (const k of ['camTilt', 'world', 'maybes']) { const v = D[k]; delete D[k]; D[k] = k === 'maybes' ? [] : v; }
+  const D = detector; for (const k of ['reset', 'setPilot', 'onArmChange', 'drain', 'drainMaybes', 'drainChallenges', 'busy', 'provisional', 'liveState']) delete D[k];
+  for (const k of ['camTilt', 'world', 'maybes', 'chals']) { const v = D[k]; delete D[k]; D[k] = k === 'maybes' || k === 'chals' ? [] : v; }
   D.crossLog = []; D.passes = []; D.reset(); }
 function detFlush(now) {
   if (detQ.length && DW.on) { const items = detQ.splice(0); for (const s of items) if (s.contactNormal === null) delete s.contactNormal;
@@ -272,6 +274,7 @@ function detFlush(now) {
   if (mode !== 'fly' || race.on) return;
   for (const ev of detector.drain()) onTrick(ev);
   if (detector.maybes && detector.maybes.length) for (const m of detector.drainMaybes()) { recapMaybe(m); if (store.get('maybeFlash', false)) flash(`<b>MAYBE: ${esc(m.name)}?</b><small>the trick library's guess · not scored · say yes or no in SKITTLES mode</small>`, 'near'); }
+  if (detector.chals && detector.chals.length) for (const h of detector.drainChallenges()) chHit(h);   // trick challenges (src/challenge.js)
   comboLink(now / 1000);
   if (combo.active && now / 1000 - combo.lastT > COMBO_IDLE && !detector.busy()) comboEnd(false);
 }

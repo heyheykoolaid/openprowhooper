@@ -88,6 +88,12 @@ the owner needs no GitHub token in the browser. It is read-only and reaches only
 `leaderboard/` (any day), through the relay's own GITHUB_TOKEN (Contents: Read on the data repo, which it already has). Nothing
 to set up beyond redeploying the worker; until then the desk uses the GitHub token from Options if one is saved.
 
+## Trick challenges (2026-11-23)
+The Trick challenges board needs the redeployed worker: kinds `challenge` and `chtry` are filed under `challenges/` and
+`challenge-tries/` in the data repo, `GET /challenges` and `GET /challenge?id=` read them back (names checked against the word list
+again), and `POST /chmod` (the owner key) hides, shows, renames or sets the points of one (`challenge-mod/`). Nothing else to set up:
+the worker's GITHUB_TOKEN already writes and reads the data repo. Until the worker is redeployed the board says it cannot be reached.
+
 ## Publishing official maps through the drop-off (owner only)
 The Map Editor's "Publish for everyone" (Official map mode, pilot name heyheykoolaid) can go through this relay instead
 of a GitHub token in the browser. The relay commits `maps/official/<map>.json` to the game repo; GitHub Pages rebuilds.
