@@ -199,3 +199,23 @@ The owner, on the to-do item "trick challenges and the trick board": build it no
   every passing try, one voice each, under the owner's name for it if renamed, pilots as anonymous numbers. So the Watcher's library
   vote and the maybe calls know them too. The live call ignores the trick's own library examples when checking that the move is not
   nearer a trick the game already knows, and no maybe is said for a move a community trick already called. The weekly run picks them up.
+
+### Trippy Spin: what the Infinity Loops masterclass teaches (owner sent the video, 2026-11-23)
+"How Do You Trippy Spin? The Masterclass" (Infinity Loops, ~27 min; watched from frames and a rough offline transcript, so wording is
+approximate). Nothing built yet: proposals for the owner to pick from.
+- **What it says**: a trippy spin is an inverted orbit: nose away from the object, camera looking UP at its top, the object held top-centre
+  of the picture. Roll and yaw sticks are pushed OPPOSITE ways (an ordinary orbit: the same way). **Pitch sets height, throttle sets how
+  fast and how tight the orbit is** (more throttle does not climb; too much throws the orbit into an oval). Entries, easiest first: the
+  Cradle (already the start of the motion), a stall (nose up, roll in as it drops), then a Matty or a perch drop into it. Camera tilt
+  does not matter (shown at 15° and 0°). Whoops are fine for it. Variations: the switchback (over-rotate, sling back: the best drill for
+  both directions), the rolling trippy, the building-corner climb (quarter turns each way, pitch to climb), the open-air one (round the
+  sun, inside a ring). "Locked in" = the object never leaves the top of the screen.
+- **For recognition (proposed)**: (1) a stick witness for trippies in the Watcher: roll and yaw opposed for most of the lap (an orbit has
+  them together), a soft vote; (2) a "locked in" measure (share of the lap with the object top-centre) to grade clean / sloppy instead of
+  only gating; (3) check our 8 missed Trippy Spin labels against his entries (stall and Matty entries, slow low-throttle laps, low camera
+  tilt leaning far back) and against the pose gate; (4) the variations we do not call: the corner climb (quarter-turn switchbacks, never
+  a full lap) and whether a one-lap trippy / switchback should count (pilots already label "Trippy Spin x1").
+- **For Train (proposed)**: teach it as his ladder: Cradle, then Cradle held into one lap, then two laps, then the switchback; cues from
+  his words ("sticks apart", "pitch for height, not throttle", "keep it at the top of the screen"); a live top-centre target and a
+  stick-pair hint in the pauses; a height drill (hold the lap, climb and sink with pitch only). The Big Pole station is there already.
+- **Open**: which of these to build, and in what order.
