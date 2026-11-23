@@ -1232,6 +1232,7 @@ function mergeProfiles(c, p) {
   if (c.air) o.air = Math.max(o.air || 0, c.air);
   return o;
 }
+const STICK_ON = 0.08, TRIPPY_FLAT = 0.8, LOCK_ANG = 50;   // a stick counts as pushed; how upright a sticks-opposed trippy may be flown; 'locked in' = the pole within this of the camera's line, in the top half
 const SPLIT_DROP = 1.0;   // m an open-air Split-S comes out below where its half roll began
 const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
 let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
@@ -1612,6 +1613,7 @@ class TrickDetector {
           else if (Y.some(x => Math.abs(x.raw - 360) < 80) && (() => {   // (owner, 2026-11-20: "a cinnamon roll is not an inverted trick") a jump rope with a slow yaw: upright over the top and all the way through, like a Cradle
             const p2 = lat.slice(-2), ov = p2.find(c => c.kind === 'O');
             if (ov && ov.upY != null && ov.upY < -0.15) return false;
+            { const yb = Y.find(x => Math.abs(x.raw - 360) < 80), inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, yb.t1) - Math.max(w.t0, yb.t0)), 0); if (inPose >= 0.4 * Math.max(0.1, yb.t1 - yb.t0)) return false; }   // the yaw of a trippy going round its pole (HemmingsonFPV's warehouse trippy was called Cinnamon Roll twice), as for the Burrito
             return !this.minUpBetween || this.minUpBetween(p2[0].t - 0.5, p2[1].t) > -0.15;
           })()) pick('Cinnamon Roll', 2, lat.slice(-2));
           // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
@@ -2100,16 +2102,25 @@ class StreamDetector extends TrickDetector {
         const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)), inView = vi.ang < 55 || [-1, -2].some(dy => d.pos.y + dy >= P.y0 - 0.2 && this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)).ang < 55);
         if (inView) ob.view++;
         { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
-          const topVis = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < 75; }); if (topVis) ob.top++;   // pole held in the top half of the screen
+          let lockNow = false; const topVis = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); if (vt.top && vt.ang < LOCK_ANG) lockNow = true; return vt.top && vt.ang < 75; }); if (topVis) ob.top++;
+          if (!lockNow) lockNow = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < LOCK_ANG; });   // pole held in the top half of the screen
           // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
           // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
           // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
-          const dA = Math.abs(da) * R2D, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
+          // the sticks (the Infinity Loops masterclass, 2026-11-23; all 25 confirmed trippies in the shared flights against the orbits):
+          // in a trippy roll and yaw are pushed OPPOSITE ways ("wonky nips"), in an ordinary orbit the same way. `so` is that,
+          // smoothed over ~0.35 s (-1 together .. +1 opposed; 0 with no sticks recorded, as in the Node tests' fake flights)
+          { const rc = this.lastRc, o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0;
+            ob.so = (ob.so || 0) + (o - (ob.so || 0)) * Math.min(1, dt / 0.35); if (o > 0) ob.sOpp = (ob.sOpp || 0) + dt; else if (o < 0) ob.sSame = (ob.sSame || 0) + dt; }
+          // …or held flatter than knife-edge with the sticks opposed: a high camera tilt flies the same trippy much flatter (the
+          // masterclass; HemmingsonFPV's and the owner's missed trippies never went under up.y 0.35)
+          const wonky = ob.so > 0.5 && up.y < TRIPPY_FLAT;
+          const dA = Math.abs(da) * R2D, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120 || wonky) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
           // the trippy pose while circling a pole (the pole held up in the picture, rolled over or nose up the pole): no Burrito
           // Roll then (owner: a burrito is never flown looking up at a pole); once 90° of the circle has been flown in the pose
           if (pose && ob.tAcc > 90) { const W = this.circled || (this.circled = []), last = W[W.length - 1]; if (last && last.ob === ob && t - last.t1 < 0.25) last.t1 = t; else { W.push({ ob, t0: t, t1: t }); if (W.length > 12) W.shift(); } }
           if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
-            ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; }
+            ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; if (lockNow) ob.lock = (ob.lock || 0) + 1; }
           else if (ob.poseT0 == null) ob.run = 0;
           if (up.y > 0.35 && inView) ob.oAcc += dA; }
         ob.roll += rates[0] * dt;
@@ -2163,10 +2174,14 @@ class StreamDetector extends TrickDetector {
     // how tidy: an even circle at an even pace, holding the view, is clean; egg shapes, surging and losing the view are sloppy
     let clean = 92, notes = []; const ob = L.ob;
     if (L.name === 'Trippy Spin x2' && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
-      clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60));
-      if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); }
+      const lock = (ob.lock || 0) / ob.rn;   // 'locked in' (the masterclass): the object never leaves the top of the screen
+      clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60 - Math.max(0, 0.85 - lock) * 15));
+      if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); else if (lock >= 0.9) notes.push('locked in'); else if (lock < 0.6) notes.push('the object wandered off the top of the screen'); }
+    // the stick witness: a trippy's roll and yaw are opposed, an orbit's together. A soft vote (the call's confidence), never a veto
+    let watch; if (ob && (ob.sOpp || 0) + (ob.sSame || 0) > 0.4) { const share = (ob.sOpp || 0) / ((ob.sOpp || 0) + (ob.sSame || 0)), ok = L.name === 'Orbit x2' ? 1 - share : share;
+      watch = { conf: +clamp(0.35 + 0.65 * ok, 0, 1).toFixed(2), fails: ok < 0.5 ? ['sticks'] : [], votes: { sticks: { n: 1, ok: +ok.toFixed(2) } } }; if (ok < 0.5) notes.push(L.name === 'Orbit x2' ? 'roll and yaw were opposed, as in a trippy' : 'roll and yaw went the same way, as in an orbit'); }
     if (bailed) notes.push('completed laps kept');
-    this.emit({ name: L.name, exec: clean < 70 ? 'SLOPPY' : 'CLEAN', clean, notes, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, toks: [], live: true, draft: true });
+    this.emit({ name: L.name, exec: clean < 70 ? 'SLOPPY' : 'CLEAN', clean, notes, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, dur: +Math.max(0, L.t1 - L.t0).toFixed(2), toks: [], live: true, draft: true, ...(watch ? { watch } : {}) });
     if (reason === 'reverse' && L.name !== 'Orbit x2') this.lastTrippy = { objId: L.objId, dir: L.dir, t: this.time };
   }
   liveState() {
@@ -3323,6 +3338,9 @@ function replayTrace(rows, opts = {}) {
     if (det.chals && det.chals.length) for (const c of det.drainChallenges()) chals.push({ ...c, t });
     if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
   }
+  // a lap trick still being flown when the stretch ends (a long trippy labelled early, re-flown in a window): what it would be
+  // called so far, marked `open` (the tools count it as found; nothing is scored from it)
+  { const L = det.live; if (L && L.laps >= 1 && opts.open) out.push({ name: L.name, exec: 'OPEN', laps: L.laps, dur: +Math.max(0, L.t1 - L.t0).toFixed(2), obstacle: L.pole, toks: [], live: true, open: true, t: t1 + (opts.tail ?? 1.6) }); }
   return { events: out, debug: dbg, det, maybes, chals };
 }
 
@@ -3352,10 +3370,10 @@ function learnWindows(run) {
 function learnScore(runs, profile) {
   let hits = 0, want = 0, bad = 0, calls = 0; const missed = [], hitNames = [];
   for (const run of runs) for (const w of (run._win || (run._win = learnWindows(run)))) {
-    const ev = (run.detect ? run.detect(profile, w).filter(e => e.t >= w.a - 0.2 && e.t <= w.b + 2) : replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false }).events).filter(e => e.name !== 'near' && e.name !== 'Crash');
+    const ev = (run.detect ? run.detect(profile, w).filter(e => e.t >= w.a - 0.2 && e.t <= w.b + 2) : replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false, open: true }).events).filter(e => e.name !== 'near' && e.name !== 'Crash');
     calls += ev.length;
     for (const l of w.labels) {
-      const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t <= l.b + 2.2);
+      const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t - (e.dur || 0) <= l.b + 2.2);
       if (l.want) { want++; if (inSpan.some(e => e.name === l.want)) { hits++; hitNames.push(l.want); } else missed.push(l.want); }
       if (l.not && l.not !== l.want && inSpan.some(e => e.name === l.not)) bad++;
     } }

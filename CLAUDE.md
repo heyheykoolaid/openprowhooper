@@ -1035,6 +1035,27 @@ one voice each, the owner's rename, anonymous pilot numbers); `chalJudge` ignore
 maybe over a move a community trick called (`chalLog`). **Redeploy the relay.** Checked end to end in a browser against the relay's real code with an
 in-memory GitHub (post, bad name refused, board, watch, two passes -> live, the call-out and points, owner hide).
 
+## Trippy Spin: wonky nips, locked in, and its own Train ladder (owner, 2026-11-23, from the Infinity Loops masterclass; test/orbits.js)
+**"Wonky nips"** is the community's name for roll and yaw pushed OPPOSITE ways: the trippy's sticks (an orbit has them together). The 25
+confirmed trippy labels all have them opposed for 47 % or more of the spin and together for 26 % or less. In the orbit code (sim.js):
+`ob.so` is the smoothed opposition (-1..1; a stick counts over `STICK_ON` 0.08), `ob.sOpp` / `ob.sSame` the seconds of each;
+`wonky` (`ob.so > 0.5` and up.y under `TRIPPY_FLAT` 0.8) counts as the trippy `pose`, so trippies flown flat on a high camera tilt are
+trippies; a trace with no sticks changes nothing. `ob.lock` is the share of the lap with the pole within `LOCK_ANG` 50 deg of the camera's
+top centre: in `finishLive` under 0.85 it costs clean % (notes 'locked in' / 'the object wandered off the top of the screen'), never the
+call. Lap tricks carry `watch` { conf 0.35 + 0.65 x the stick share, `votes.sticks`, fails ['sticks'] under half } (Orbit: the share of
+sticks together) and `dur` (how long the spin lasted). A rolled trippy with the sticks together still counts, unsure. **Cinnamon Roll** is
+not called when 40 % or more of its yaw is inside a `circled` stretch. **The tools** (community.js, library.js, signatures.js,
+`learnFromLabels`) compare a label with the whole spin (`e.t - e.dur <= b + 2.4`) and `replayTrace(..., { open: true })` adds an
+`exec: 'OPEN'` event for a lap trick still going at the end of the window: a long spin is called at its exit, after most labels end
+(confirmed trippy labels found 16 -> 22 of 25). **Train** (coach.js `LAP_TRAIN`, `tripStart` / `tripEvent` / `tripTick` / `tripRender` /
+`tripHud`, `#tripHud`; `coach.lap`, phase 'lap'): Trippy Spin is five stages at the Big Pole, judged by the game's own calls and
+`detector.liveState()` laps: the Cradle (or half a lap), one lap, two laps, climb `TRIP_CLIMB` 1.2 m on pitch with the throttle within
+`TRIP_THR` 0.12, the switchback (a Trippy Switch call). Rolling start 3 m/s, 1.5 m beside the pole. The HUD is a target box at the top
+centre (LOCKED IN when the pole is in it, measured on the page: `tripNow`) and the yaw / roll sticks side by side (WONKY NIPS ✓ / SAME WAY
+= ORBIT); hidden while held at the start. K skips a stage (no rung). Rungs: one lap walked, two landed, the switchback learned. No Show me
+or intro for it yet (the bot has no trippy script). Checked in a browser (panel, cues, HUD, stage passes from calls, skip, no rung for
+skipping); the stages were not flown by hand there.
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,

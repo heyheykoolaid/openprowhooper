@@ -11,10 +11,10 @@ function basisQ(f, u) { f = norm(f); const r = norm(cross(f, u)); u = cross(r, f
   else if (m[1][1] > m[2][2]) { const s = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2; q = { w: (m[0][2] - m[2][0]) / s, x: (m[0][1] + m[1][0]) / s, y: s / 4, z: (m[1][2] + m[2][1]) / s }; }
   else { const s = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2; q = { w: (m[1][0] - m[0][1]) / s, x: (m[0][2] + m[2][0]) / s, y: (m[1][2] + m[2][1]) / s, z: s / 4 }; } return qnorm(q); }
 let ok = 0, n = 0; const check = (name, pass, extra = '') => { n++; if (pass) ok++; console.log(`${pass ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); };
-function fly(W, gen, T) { const det = new S.TrickDetector(W), d = Object.create(S.Drone.prototype); d.armed = true; d.crashed = false; const dt = 0.001; let pq = null, pp = null; const got = [];
+function fly(W, gen, T) { const det = new S.TrickDetector(W), d = Object.create(S.Drone.prototype); d.armed = true; d.crashed = false; const dt = 0.001; let pq = null, pp = null; const got = []; got.ev = [];
   for (let t = 0; t < T; t += dt) { const s = gen(t); let q = s.q; if (pq && q.w * pq.w + q.x * pq.x + q.y * pq.y + q.z * pq.z < 0) q = { w: -q.w, x: -q.x, y: -q.y, z: -q.z };
     let w = v3(); if (pq) { const dq = { w: (q.w - pq.w) / dt, x: (q.x - pq.x) / dt, y: (q.y - pq.y) / dt, z: (q.z - pq.z) / dt }, r = qmul({ w: q.w, x: -q.x, y: -q.y, z: -q.z }, dq); w = v3(2 * r.x, 2 * r.y, 2 * r.z); }
-    d.vel = pp ? mul(sub(s.pos, pp), 1 / dt) : v3(); pp = s.pos; pq = q; d.pos = s.pos; d.q = q; d.w = w; d.contactThisStep = false; det.update(d, dt); for (const e of det.drain()) if (e.name !== 'near') got.push(e.name); }
+    d.vel = pp ? mul(sub(s.pos, pp), 1 / dt) : v3(); pp = s.pos; pq = q; d.pos = s.pos; d.q = q; d.w = w; d.contactThisStep = false; det.update(d, dt, s.rc); for (const e of det.drain()) if (e.name !== 'near') { got.push(e.name); got.ev.push(e); } }
   return got; }
 // lap round a tree at (cx, cz): pitched = nose at the tree, leaning by pitch; rolled = nose along the path, top toward the tree
 const lap = (c, R, y, speed, laps, how, lean) => t => { const w = speed / R, a = Math.min(t * w, laps * 2 * Math.PI), pos = v3(c.x + R * Math.cos(a), y, c.z + R * Math.sin(a)), toC = norm(v3(c.x - pos.x, 0, c.z - pos.z)), tan = v3(-Math.sin(a), 0, Math.cos(a)), L = lean * D2R;
@@ -43,4 +43,19 @@ const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.r
     for (let t = 0; t < 1.8; t += dt) { const a = th(t), f = v3(Math.cos(a), -Math.sin(a), 0), u = v3(Math.sin(a), Math.cos(a), 0), pos = v3(-30 + 2 * t, 6, 30); d.q = basisQ(f, u); d.pos = pos; d.vel = pp ? mul(sub(pos, pp), 1 / dt) : v3(2, 0, 0); pp = pos; d.w = v3(0, 0, 0); d.contactThisStep = false; det.update(d, dt); }
     const fw = det.fwdSweptBetween(det.time - 1.7, det.time), sw = det.sweptBetween(det.time - 1.7, det.time);
     check(`fwdSweptBetween: a ${name} reads ${sgn > 0 ? 'forward' : 'backward'}`, sw > 300 && sgn * fw > 0.8 * sw, `swept ${Math.round(sw)}°, forward ${Math.round(fw)}°`); } }
+// The sticks (the Infinity Loops masterclass, 2026-11-23; "wonky nips"): a trippy's roll and yaw are pushed opposite ways, an orbit's the
+// same way. A high camera tilt flies the trippy much flatter than knife-edge (HemmingsonFPV's and the owner's, missed): leaning only
+// 50° (up.y 0.64) with the pole held at the top of the picture it is a Trippy Spin when the sticks are opposed, and nothing when they
+// are not (as before: the Node flights with no sticks are unchanged).
+{ const withRc = (gen, rc) => t => ({ ...gen(t), rc });
+  const flat = lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 50), T = 3.2 * 2 * Math.PI * 3.2 / 8 + 2.5, det45 = W => { const d = new S.TrickDetector(W); return d; };
+  const flyTilt = (gen, tilt) => { const o = S.TrickDetector.prototype, was = Object.getOwnPropertyDescriptor(o, 'camTilt'); const got = (() => { const D = S.TrickDetector; S.TrickDetector = class extends D { constructor(w) { super(w); this.camTilt = tilt; } }; try { return fly(C, gen, T); } finally { S.TrickDetector = D; } })(); return got; };
+  const a = flyTilt(withRc(flat, { thr: 0.5, roll: 0.4, pitch: 0.05, yaw: -0.4 }), 45), b = flyTilt(flat, 45), c = flyTilt(withRc(flat, { thr: 0.5, roll: 0.4, pitch: 0.05, yaw: 0.4 }), 45);
+  const ea = a.ev.find(e => e.name === 'Trippy Spin x2');
+  check('a flat trippy (leaning 50°, camera 45°) with roll and yaw opposed is a Trippy Spin', a.includes('Trippy Spin x2'), a.join(', ') || 'nothing');
+  check('…with the stick witness on the call (confidence, no "sticks" fail) and how long it lasted', !!ea && ea.watch && ea.watch.conf >= 0.9 && !ea.watch.fails.length && ea.dur > 3, ea ? JSON.stringify({ conf: ea.watch && ea.watch.conf, dur: ea.dur, notes: ea.notes }) : '');
+  check('the same flight with no sticks recorded, or with them pushed the same way, is not', !b.some(x => /Trippy/.test(x)) && !c.some(x => /Trippy/.test(x)), `${b.join(', ') || 'nothing'} / ${c.join(', ') || 'nothing'}`);
+  // a properly rolled trippy flown with the sticks the same way round still counts (the witness is a vote, never a veto), with low confidence
+  const d2 = flyTilt(withRc(lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), { thr: 0.5, roll: 0.4, pitch: 0, yaw: 0.4 }), 20), ed = d2.ev.find(e => e.name === 'Trippy Spin x2');
+  check('a rolled trippy with the sticks together still counts, at low confidence with a note', !!ed && ed.watch.conf < 0.5 && ed.watch.fails.includes('sticks'), ed ? JSON.stringify(ed.watch) : d2.join(', ')); }
 console.log(`\n${ok}/${n} orbit checks`); if (ok !== n) process.exit(1);

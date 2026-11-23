@@ -219,3 +219,32 @@ approximate). Nothing built yet: proposals for the owner to pick from.
   his words ("sticks apart", "pitch for height, not throttle", "keep it at the top of the screen"); a live top-centre target and a
   stick-pair hint in the pauses; a height drill (hold the lap, climb and sink with pitch only). The Big Pole station is there already.
 - **Open**: which of these to build, and in what order.
+
+### Trippy Spin: both built, and the stick position is "wonky nips" (owner, 2026-11-23: "let's do both 1 and 2")
+- **Decided**: the community's name for roll and yaw pushed opposite ways is **wonky nips**; the game uses it in Train's cues and HUD.
+  Build both the recognition changes and the Train ladder.
+- **What the labels said first** (25 confirmed Trippy Spin labels re-flown): every one has roll and yaw opposed for at least 47 % of the
+  spin and together for at most 26 %; orbits are the other way round. So the sticks tell the two apart by themselves. Many real trippies
+  are flown flatter than the game's "rolled past knife-edge" pose (high camera tilt): the pose was the wrong gate for those. And most
+  "missed" trippy labels were not missed: a long spin is called when it ENDS, after the label's window, so the tools counted it as a miss.
+- **Built, recognition**: (1) wonky nips held while circling a pole counts as the trippy pose, even flown fairly flat (up to up.y 0.8);
+  with no sticks in the data nothing changes. (2) A stick vote on every Trippy Spin / Orbit call (its confidence; a rolled trippy with
+  the sticks together still counts, at under 50 %, so it comes up in review: a label is never thrown away by one witness). (3) "Locked
+  in" (the pole top-centre for the lap) grades the trick: wandering off the top costs clean %, it never cancels the call. (4) A Cinnamon
+  Roll is not called for a yaw made while tripping round a pole. (5) Lap tricks carry how long they lasted, and the tools compare a label
+  with the whole spin, and count a spin still going when the label's window ends. Confirmed trippy labels found: 16 -> 22 of 25.
+- **Built, Train**: Trippy Spin is taught as five stages at the Training Room's Big Pole (not the step-by-step tries: laps are not
+  steps): the Cradle, one lap, two laps locked in, climb with pitch (throttle held), the switchback. A target box at the top centre of the
+  picture (KEEP THE POLE HERE / LOCKED IN) and the yaw and roll sticks side by side (WONKY NIPS / SAME WAY = ORBIT). The game's own
+  calls and live lap count decide each stage; an orbit says why it was not a trippy. Rungs: one lap = walked, two = landed, the
+  switchback = learned. Cues are drafts from the video's words: the owner edits them.
+- **Checked on the 192 shared flights with these tricks**: Trippy Spin calls 232 -> 231, Orbit 122 -> 117, Trippy Switch 23 -> 26, Burrito
+  Roll 159 -> 153, Cinnamon Roll 24 -> 18. One confirmed label changes: a reviewer's yes on a Cinnamon Roll in the middle of an 18 s,
+  9.5-lap trippy round a warehouse column (wonky nips the whole way; the same reviewer said no to the Cinnamon Roll called 6 s earlier in
+  the same spin): the game now calls the one long Trippy Spin there. Tests, bench and stress (681/700) unchanged.
+- **Not built**: Show me / the intro for Trippy Spin (the bot has no trippy script, and library trippies replay on their own pole);
+  the stall, Matty and perch-drop entries as stages; the rolling trippy and the open-air one.
+- **Open (owner)**: (a) does a one-lap or part-lap trippy count ("Trippy Spin x1" is already a review variant; one confirmed label is
+  239 deg of lap)? (b) the building-corner climb (quarter turns each way, never a lap): a trick of its own? (c) one of the owner's own
+  trippy labels is called Double Rolling Trippy Spin by the game, and one pilot's confirmed trippy has the sticks together: single
+  labels, left alone.

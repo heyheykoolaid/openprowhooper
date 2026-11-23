@@ -81,7 +81,14 @@ function coachStepText(s, vars) {
   if (s.pass) return `${s.pass === 'U' ? 'Fly under' : 'Go over'} ${where}${s.end === 'back' ? ', flying backward' : s.end === 'fwd' ? ', flying forward' : ''}`;
   return coachRotText(s.rot, vars) + (s.during && s.during.length ? ` <small>— ${s.during.map(k => k === 'O' ? 'over ' + where : 'under ' + where).join(', ')} on the way</small>` : '');
 }
-const coachCan = name => !!coachPlan(name);
+// tricks taught as stages rather than steps (laps round a pole): see the Trippy Spin trainer at the end of this file
+const LAP_TRAIN = { 'Trippy Spin x2': [
+  { id: 'cradle', title: 'The Cradle', cue: 'Fly past the pole, pitch back and keep it in view.', tip: 'The way in. Pass close beside the pole, then pull the nose back so you look up at it as you go by, and keep it in the picture. You are already making the trippy\'s motion.' },
+  { id: 'one', title: 'One lap', cue: 'Wonky nips: roll one way, yaw the other. Pole at the top of the screen.', tip: 'From the Cradle, keep going round. Push roll and yaw OPPOSITE ways (in an ordinary orbit they go the same way) and hold the pole at the top centre of the picture. Camera tilt does not matter: a higher one just flies it flatter.' },
+  { id: 'two', title: 'Two laps, locked in', cue: 'Keep it at the top of the screen. Small corrections only.', tip: 'Locked in means the pole never leaves the top of the screen. Less throttle makes a slower, smoother circle; more throttle spins you round faster and throws you wide.' },
+  { id: 'height', title: 'Climb with pitch', cue: 'Leave the throttle alone. A touch of pitch to climb, a touch to sink.', tip: 'Height comes from PITCH, not throttle. Keep tripping, hold the throttle where it is, and move up the pole and back down with the pitch stick alone, ever so slightly.' },
+  { id: 'switch', title: 'The switchback', cue: 'Over-rotate, then sling back the other way.', tip: 'After a lap, turn a little further than you need, then swap both sticks and come back round the other way. It is the best practice there is for tripping in both directions.' } ] };
+const coachCan = name => !!coachPlan(name) || !!LAP_TRAIN[name];
 // ---- what the detector measured, kept here (the detector forgets tokens after 6 s and passes after a while)
 function coachCollect() {
   const D = detector; for (const k of D.toks || []) { const id = k.ax + k.t0.toFixed(3); if (!coach.seenTok.has(id)) { coach.seenTok.set(id, 1); coach.toks.push({ ax: k.ax, dir: k.dir, raw: k.raw, t0: k.t0, t1: k.t1, inv: k.inv > (k.n || 1) * 0.5 }); } }
@@ -262,6 +269,7 @@ setInterval(() => {   // the card while the quad is held at a start or a checkpo
   if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide');
 }, 100);
 function coachStart(name) {
+  if (LAP_TRAIN[name]) { tripStart(name); return; }   // lap tricks have their own ladder (the Trippy Spin)
   const plan = coachPlan(name); if (!plan) return;
   const t = window.TPW_TRICKS.find(x => x.name.trim() === name) || { name, cat: '', desc: '' };
   if (world.id !== ROOM) { coachGoRoom(name); return; }
@@ -294,7 +302,7 @@ function coachClock(start) {
 function coachRetry(start) { if (!coach.on || coach.done || mode !== 'fly') return; detector.reset(); crashLock = false; coachClock(start); renderCoach(); }
 function coachAgain() { coachRetry(true); coachNewTry(); renderCoach(); }
 function coachStop(save = true) {
-  if (!coach.on) return; coach.on = false; coach.hold = null; clearTimeout(coach.retryT); coach.retryT = null; coachFreezeEnd(); $('#coachBox').classList.add('hide');
+  if (!coach.on) return; coach.on = false; coach.lap = null; tripHud(false); coach.hold = null; clearTimeout(coach.retryT); coach.retryT = null; coachFreezeEnd(); $('#coachBox').classList.add('hide');
   if (save && recap.dirty && !recap.guest) recapSave();
 }
 function coachTryDone(ok, how) {
@@ -308,6 +316,7 @@ function coachTryDone(ok, how) {
 // live tries: the detector's own calls
 function coachEvent(ev) {
   if (!coach.on || coach.done || mode !== 'fly' || ev.name === 'near') return;
+  if (coach.lap) { tripEvent(ev); return; }
   if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (coach.phase === 'live' && !coach.ask && !store.get('coachRetry', true)) { coach.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
   // the last try, "connect it": the trick and any other trick within a combo's breath of each other (either order)
   if (coach.phase === 'connect') { if (coach.result || ev.maybe) return; const t = detector.time; coach.chain = (coach.chain || []).filter(c => t - c.t < COACH_LINK + 1.5); coach.chain.push({ name: ev.name, t });
@@ -362,7 +371,8 @@ function coachCaption(c, text) {
   if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide');
 }
 function renderCoach() {
-  const box = $('#coachBox'); if (!coach.on || mode !== 'fly') { box.classList.add('hide'); if (!(judge.demo && mode === 'judge')) coachCaption(null); return; } box.classList.remove('hide');
+  const box = $('#coachBox'); if (!coach.on || mode !== 'fly') { box.classList.add('hide'); tripHud(false); if (!(judge.demo && mode === 'judge')) coachCaption(null); return; } box.classList.remove('hide');
+  if (coach.lap) { tripRender(box); return; }
   const vars = new Set(), dots = Array.from({ length: COACH_TRIES }, (_, k) => { const L = coach.log[k]; return `<i class="${L ? (L.ok ? 'ok' : 'no') : k + 1 === coach.tryN ? 'on' : ''}" title="try ${k + 1}: ${{ parts: 'step by step', live: 'live', connect: 'connect it' }[coachPhaseOf(k + 1)]}"></i>`; }).join('');
   let body = '';
   if (coach.done) {
@@ -413,6 +423,7 @@ document.addEventListener('click', e => {
   e.stopPropagation(); b.blur(); const a = b.dataset.co;
   if (a === 'yes' || a === 'no' || a === 'mine') coachAnswer(a);
   if (a === 'again') { if (coach.done) coachStart(coach.name); else coachAnswer('again'); }
+  if (a === 'lapskip') tripPass('skipped', true);
   if (a === 'missed') coachMissed();
   if (a === 'pauses') { store.set('coachPauses', !store.get('coachPauses', true)); if (coach.freeze) coachFreezeEnd(); renderCoach(); }
   if (a === 'retry') { store.set('coachRetry', !store.get('coachRetry', true)); clearTimeout(coach.retryT); coach.retryT = null; renderCoach(); }
@@ -429,7 +440,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyY' && A) coachAnswer(A.ok ? 'yes' : 'mine');
   if (e.code === 'KeyN' && A) coachAnswer(A.ok ? 'no' : 'again');
   if (e.code === 'KeyQ' && !A) coachMissed();
-  if (e.code === 'KeyK' && !coach.done) { coach.ask = null; coachTryDone(false, 'skipped'); }
+  if (e.code === 'KeyK' && !coach.done) { if (coach.lap) tripPass('skipped', true); else { coach.ask = null; coachTryDone(false, 'skipped'); } }
 });
 
 // ---- Show me (owner, 2026-11-20: "it should go first person in the demo drone, so you can see the stick overlay, the game
@@ -854,3 +865,96 @@ setInterval(() => { if (!coach.freeze) return; if (!coach.on || mode !== 'fly' |
   F.check = coachStickCheck(coachTarget(F.k), lastRC); F.held = F.check.ok ? (coach.scale < 0.02 ? F.held + dt : F.held) : Math.max(0, F.held - 2 * dt);   // the hold counts once it has come to rest
   if (F.held >= COACH_HOLD) { coach.pauseSnap = { k: F.k, st: coachSnap() }; coach.atCk = false; coachFreezeEnd(); } else coachFreezeDraw(); }, 100);
 window.__pwCoach = { exWhy: () => { demo.why = []; const l = demoExamples(coach.name, coach.fly); return { n: l.length, lib: l.filter(f => f.lib).length, why: demo.why.slice() }; }, st4: () => ({ tryN: coach.tryN, phase: coach.phase, done: coach.done, log: coach.log, chain: coach.chain, intro: judge.intro ? { phase: judge.intro.phase, i: judge.intro.i, n: judge.intro.list ? judge.intro.list.length : 0, list: (judge.intro.list || []).map(f => ({ lib: f.lib, ok: f.ok, hit: f.hit, object: f.object, label: demoExLabel(f) })) } : null }), tryDone: (ok, how) => coachTryDone(ok, how), event: n => coachEvent({ name: n }), demoHit: () => coach.fly ? { hit: coach.fly.hit, ok: coach.fly.ok, lib: coach.fly.lib, object: coach.fly.object } : null, freeze: k => { coachFreezeStart(k); return !!coach.freeze; }, frozen: () => coachFrozen(), retry: s => coachRetry(s), mark: n => { coach.ck = { bank: { n, obj: null, vars: {}, out: coach.steps.slice(0, n).map(() => ({ ok: true, msg: 'test' })), key: JSON.stringify(coach.steps.slice(0, n)) }, steps: coach.steps, st: coachSnap() }; coach.doneN = n; }, state: () => JSON.stringify({ entry: coach.entry ? { v: +Math.hypot(coach.entry.vel.x, coach.entry.vel.y, coach.entry.vel.z).toFixed(2), thr: coach.entry.thr, obj: coach.entry.obj, y: coach.entry.pos.y } : null, ck: coach.ck ? coach.ck.bank.n : 0, bank: coach.bank ? coach.bank.n : 0, v: +Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z).toFixed(2), tryN: coach.tryN, ry: +drone.right().y.toFixed(2), held: !!coach.hold, y: +drone.pos.y.toFixed(2), sc: +coach.scale.toFixed(3), upY: +drone.up().y.toFixed(2), done: coach.doneN, t: coach.freeze ? coachTarget(coach.freeze.k) : null, f: coach.freeze, ph: coach.phase, on: coach.on, mode, armed: drone.armed, cr: drone.crashed }) };   // test hook (tools / smoke tests)
+
+// ============================================================ The Trippy Spin ladder (owner, 2026-11-23: "let's do both")
+// Lap tricks have no rotation steps to walk through, so the Trippy Spin is taught the way the Infinity Loops masterclass teaches
+// it (docs/DESIGN-LOG.md): five stages at the Training Room's Big Pole, each passed by what the game itself sees, flown on without
+// a reset when one is passed: 1 the Cradle (the way in), 2 hold it for one lap, 3 two laps, 4 climb and sink with PITCH while the
+// throttle stays put (the misconception he spends longest on), 5 the switchback (over-rotate and sling back: the drill for both
+// directions). While flying: a target at the top centre of the picture that lights when the pole is held there ("locked in"), and
+// the two sticks that matter side by side: roll and yaw pushed OPPOSITE ways, the community's "wonky nips" (an orbit has them
+// together). Rungs as for every trick: walked = one lap, landed = two laps, learned = the switchback. Nothing from the room is kept.
+const TRIP_CLIMB = 1.2, TRIP_THR = 0.12;   // m to climb (or sink) in stage 4, with the throttle within this of where it was
+const trip = { hudOn: false, pole: null };
+function tripStart(name) {
+  if (world.id !== ROOM) { coachGoRoom(name); return; }
+  const sp = COACH_SPOTS.pole, o = world.objs.find(x => x.name === sp[0]), cap = o && o.prims.find(p => p.type === 'capsule');
+  trip.pole = cap ? { x: cap.a.x, z: cap.a.z, y0: Math.min(cap.a.y, cap.b.y), y1: Math.max(cap.a.y, cap.b.y) } : null;
+  world.spawn = { pos: S.v3(sp[1], 0.03, sp[2]), yaw: sp[3] }; coach.room = true; clearTimeout(coach.retryT); coach.retryT = null;
+  startFly(false);
+  const t = window.TPW_TRICKS.find(x => x.name.trim() === name) || { name, cat: '', desc: '' };
+  Object.assign(coach, { on: true, lap: { name, stages: LAP_TRAIN[name], k: 0, done: [], msg: '', base: null, passAt: 0 }, stn: 'pole', name, t, phase: 'lap', steps: [], alts: [[]], sticks: undefined, fly: null, ck: null, bank: null, pauseSnap: null, atCk: false, freeze: null, doneN: 0, tryN: 1, msg: '', result: null, ask: null, log: [], toks: [], passes: [], seenTok: new Map(), seenPass: new Map(), obj: sp[0], done: false, spots: [sp[0]] });
+  // the rolling start: 3 m/s toward the pole, 1.5 m to one side of it, so the pass is already lined up
+  const yaw = sp[3], fw = S.qrot(S.qaxis(S.v3(0, 1, 0), yaw), S.v3(0, 0, -1));
+  coach.entry = { pos: { x: sp[1] - 1.5, y: 2, z: sp[2] }, q: S.qaxis(S.v3(0, 1, 0), yaw), vel: { x: fw.x * 3, y: 0, z: fw.z * 3 }, w: { x: 0, y: 0, z: 0 }, thr: 0, obj: sp[0] };
+  drone.reset(world.spawn); coachHoldStart(); renderCoach();
+  flash(`<b>TRAIN: TRIPPY SPIN</b><small>five stages at the big pole · the Cradle, one lap, two laps, height with pitch, the switchback</small>`);
+}
+const tripLive = () => { try { return (detector.liveState() || []).find(x => /Trippy/.test(x.name)) || null; } catch { return null; } };
+// what the pilot sees and does right now (for the HUD and the hints; the detector does the judging): is the pole held in the top
+// of the picture, and are roll and yaw pushed opposite ways
+function tripNow() {
+  const P = trip.pole, rc = lastRC || {}, on = v => Math.abs(v || 0) > 0.08, both = on(rc.roll) && on(rc.yaw), out = { lock: false, near: false, opp: both && rc.roll * rc.yaw < 0, same: both && rc.roll * rc.yaw > 0, roll: rc.roll || 0, yaw: rc.yaw || 0 };
+  if (!P) return out; const p = drone.pos, d = Math.hypot(P.x - p.x, P.z - p.z); out.near = d < 9; if (!out.near) return out;
+  const up = drone.up(), f = drone.fwd(), a = (tune.camTilt || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), nrm = v => { const l = Math.hypot(v.x, v.y, v.z) || 1; return { x: v.x / l, y: v.y / l, z: v.z / l }; };
+  const cam = nrm({ x: f.x * c + up.x * s, y: f.y * c + up.y * s, z: f.z * c + up.z * s }), cu = nrm({ x: up.x * c - f.x * s, y: up.y * c - f.y * s, z: up.z * c - f.z * s });
+  for (let y = Math.max(P.y0, p.y - 3); y <= P.y1 + 0.01; y += 1) { const dir = nrm({ x: P.x - p.x, y: y - p.y, z: P.z - p.z }), ang = Math.acos(Math.max(-1, Math.min(1, cam.x * dir.x + cam.y * dir.y + cam.z * dir.z))) * 180 / Math.PI;
+    if (dir.x * cu.x + dir.y * cu.y + dir.z * cu.z > 0.05 && ang < 50) { out.lock = true; break; } }
+  return out;
+}
+function tripPass(how, skipped) {
+  const L = coach.lap; if (!L || coach.done || performance.now() - L.passAt < 900) return; const st = L.stages[L.k]; L.passAt = performance.now();
+  L.done[L.k] = { ok: !skipped, how }; coach.log.push({ n: L.k + 1, phase: L.k < 2 ? 'parts' : L.k < 4 ? 'live' : 'connect', ok: !skipped && L.k !== 0 && L.k !== 3, how });   // rungs: one lap = walked, two laps = landed, the switchback = learned
+  if (!skipped) { flash(`<b>✓ ${esc(st.title).toUpperCase()}</b><small>${esc(how)}</small>`);
+    const R = store.get('coachRungs', {}), was = (R[coach.name] || {}).r || 0, now = Math.max(was, coachRungOf(coach.log)); if (now > was) { R[coach.name] = { r: now, at: Date.now() }; store.set('coachRungs', R); if (now === 3) setTimeout(() => flash('<b>★ TRIPPY SPIN LEARNED</b><small>one lap, two laps, and back the other way</small>'), 1200); } }
+  L.k++; L.base = null; L.msg = ''; if (L.k >= L.stages.length) { coach.done = true; tripHud(false); } renderCoach();
+}
+function tripEvent(ev) {
+  const L = coach.lap; if (!L || coach.done) return; const id = L.stages[L.k].id;
+  if (ev.name === 'Crash' || ev.exec === 'CRASH') { if (!store.get('coachRetry', true)) { L.msg = 'Crashed: reset (R) and go again.'; renderCoach(); } return; }
+  if (id === 'cradle' && ev.name === 'Cradle') tripPass('the game called the Cradle');
+  else if (id === 'switch' && ev.name === 'Trippy Switch') tripPass('round one way, and back the other');
+  else if ((id === 'one' || id === 'two') && ev.name === 'Trippy Spin x2' && (ev.laps || 0) >= (id === 'one' ? 1 : 2)) tripPass(`${ev.laps} laps${ev.notes && ev.notes.includes('locked in') ? ', locked in' : ''}`);
+  else if (ev.name === 'Orbit x2' && id !== 'cradle') { L.msg = 'That was an orbit: roll and yaw went the same way. Push them opposite ways and look UP at the pole.'; renderCoach(); }
+}
+// every 150 ms (from the coach's own timer, through renderCoach): the live lap count and the height drill
+function tripTick() {
+  const L = coach.lap; if (!L || coach.done || coach.hold || drone.crashed || !drone.armed) return; const id = L.stages[L.k].id, T = tripLive(), laps = T ? T.laps : 0, now = tripNow();
+  if (id === 'cradle' && laps >= 0.5) tripPass('straight into the spin');
+  else if (id === 'one' && laps >= 1) tripPass('one lap');
+  else if (id === 'two' && laps >= 2) tripPass('two laps');
+  else if (id === 'height') {
+    if (laps < 0.5) { L.base = null; L.msg = ''; }
+    else { const y = drone.pos.y, thr = lastRC.thr || 0; if (!L.base) L.base = { y, thr, lo: y, hi: y };
+      if (Math.abs(thr - L.base.thr) > TRIP_THR && inputCfg.mode !== 'keyboard') { L.base = { y, thr, lo: y, hi: y }; L.msg = 'The throttle moved: hold it still and use pitch.'; }
+      else { L.base.lo = Math.min(L.base.lo, y); L.base.hi = Math.max(L.base.hi, y); L.msg = `${(L.base.hi - L.base.lo).toFixed(1)} of ${TRIP_CLIMB} m on pitch alone`; if (L.base.hi - L.base.lo >= TRIP_CLIMB) tripPass(`${(L.base.hi - L.base.lo).toFixed(1)} m up the pole with the throttle held`); } } }
+  if (!coach.done && id !== 'cradle' && id !== 'height' && now.near && now.same && laps < 0.5) L.msg = 'Roll and yaw are going the same way (an orbit). Opposite ways for a trippy.';
+  else if (id !== 'height' && /same way|orbit/.test(L.msg) && now.opp) L.msg = '';
+}
+function tripRender(box) {
+  const L = coach.lap; tripTick(); const T = tripLive(), k = L.k;
+  const dots = L.stages.map((s, i) => `<i class="${L.done[i] ? (L.done[i].ok ? 'ok' : 'no') : i === k ? 'on' : ''}" title="${esc(s.title)}"></i>`).join('');
+  const best = ((store.get('coachRungs', {})[coach.name]) || {}).r || 0;
+  const body = coach.done
+    ? `<div class="trLast"><b>Done!</b> ${L.done.filter(d => d && d.ok).length} of ${L.stages.length} stages.<div class="coLadder">${[1, 2, 3].map(r => `<i class="${best >= r ? 'ok' : ''}">${best >= r ? '✓' : '○'} ${COACH_RUNGS[r]}</i>`).join('')}</div>${best >= 3 ? 'Learned. Trip something in a Session for points.' : 'Train it again to climb the next rung.'}</div>
+      <div class="trBtns"><button data-co="again">⟲ Train again</button><button data-co="done">✓ Done</button><button data-co="stop" class="ghost">Free fly</button></div>`
+    : `<div class="trLast">Stage ${k + 1} of ${L.stages.length} · <b>${esc(L.stages[k].title)}</b>: ${esc(L.stages[k].tip)}</div>
+      <ol class="coSteps">${L.stages.map((s, i) => `<li class="${L.done[i] && L.done[i].ok ? 'ok' : i === k ? 'on' : ''}">${L.done[i] ? (L.done[i].ok ? '✓ ' : '· ') : i === k ? '▶ ' : ''}${esc(s.title)}${L.done[i] ? ` <small class="coGot">${esc(L.done[i].how)}</small>` : ''}</li>`).join('')}</ol>
+      ${T ? `<div class="note">tripping: ${T.laps} lap${T.laps === 1 ? '' : 's'}</div>` : ''}
+      <div class="trBtns"><button data-co="lapskip" class="ghost" title="On to the next stage">Skip ▸ <kbd>K</kbd></button></div>`;
+  const html = `<div class="trHead"><small>🎓 TRAIN</small><span class="coDots">${dots}</span></div><div class="trTarget">Trippy Spin</div>
+    <div class="trObs">fly it on: <b>${esc(coach.spots[0])}</b> · any camera tilt · R: back to the start</div>
+    ${L.msg ? `<div class="trMsg">${esc(L.msg)}</div>` : ''}${body}
+    <div class="trFoot">${!coach.done ? `<button data-co="retry" class="ghost" title="After a crash, put me back at the start (R does it by hand)">${store.get('coachRetry', true) ? '⟲ Auto-retry: on' : '⟲ Auto-retry: off'}</button>` : ''}<button data-co="done" class="ghost">✓ Done</button></div>`;
+  if (!coach.done) coachCaption({ label: `STAGE ${k + 1} OF ${L.stages.length} · ${L.stages[k].title.toUpperCase()}`, k: 0, n: 1 }, L.stages[k].cue); else coachCaption(null);
+  if (html !== box.__h) { box.__h = html; box.innerHTML = html; }
+}
+// the target at the top centre of the picture and the two sticks: plain elements, a few times a second (no filters over the view)
+function tripHud(on) {
+  const el = $('#tripHud'); if (!el) return; if (!on) { if (trip.hudOn) { el.classList.add('hide'); trip.hudOn = false; } return; }
+  const n = tripNow(), id = coach.lap.stages[coach.lap.k].id, px = v => (50 + Math.max(-1, Math.min(1, v)) * 42).toFixed(0);
+  const html = `<div class="thTarget ${n.lock ? 'ok' : ''}"><span>${n.lock ? 'LOCKED IN' : 'KEEP THE POLE HERE'}</span></div>
+    ${id === 'cradle' ? '' : `<div class="thSticks ${n.opp ? 'ok' : n.same ? 'bad' : ''}"><div class="thBox"><i style="left:${px(n.yaw)}%"></i><em>yaw</em></div><div class="thBox"><i style="left:${px(n.roll)}%"></i><em>roll</em></div><b>${n.opp ? 'WONKY NIPS ✓' : n.same ? 'SAME WAY = ORBIT' : 'roll one way, yaw the other'}</b></div>`}`;
+  if (el.__h !== html) { el.__h = html; el.innerHTML = html; } el.classList.remove('hide'); trip.hudOn = true;
+}
+setInterval(() => { if (coach.on && coach.lap && mode === 'fly' && !coach.done && !coach.hold) tripHud(true); else if (trip.hudOn) tripHud(false); }, 70);

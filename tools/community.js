@@ -49,7 +49,7 @@ function fly(run, community, wins) {
   if (!wins) Pr.finishTok = function (k) { const n0 = this.toks.length; ft.call(this, k); if (this.toks.length > n0) toks.push(this.toks[n0]); };
   try {
     for (const [a, b] of wins || [[run.T0, run.T1]]) {
-      const R = S.replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: run.own, from: a, to: b, tail: 1.8, debug: false });
+      const R = S.replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: run.own, from: a, to: b, tail: 1.8, debug: false, open: true });
       for (const e of R.events) if (e.name !== 'near' && e.name !== 'Crash' && !events.some(x => x.name === e.name && Math.abs(x.t - e.t) < 0.3)) events.push({ name: e.name, t: e.t, conf: e.watch ? e.watch.conf : 1 });
     }
   } finally { Pr.finishTok = ft; }
@@ -61,7 +61,7 @@ function score(runs, flown, baseFlown) {
   const out = { value: 0, hit: 0, want: 0, wrong: 0, lostConfirmed: [], lostW: 0, gainW: 0, gainAuthors: new Set(), per: {}, hits: [] };
   const P = n => out.per[n] || (out.per[n] = { want: 0, hit: 0, not: 0, wrong: 0, calls: 0 });
   runs.forEach((run, i) => {
-    const E = flown[i].events, B = baseFlown ? baseFlown[i].events : null, inSpan = (e, x) => e.t >= x.a - 0.7 && e.t <= x.b + 2.4, explained = new Set();
+    const E = flown[i].events, B = baseFlown ? baseFlown[i].events : null, inSpan = (e, x) => e.t >= x.a - 0.7 && e.t - (e.dur || 0) <= x.b + 2.4, explained = new Set();
     for (const e of E) P(e.name).calls++;
     for (const x of run.ev) {
       if (x.kind === 'want') { out.want += x.w; P(x.name).want += x.w; const h = E.find(e => e.name === x.name && inSpan(e, x)); if (h) { explained.add(h); out.hit += x.w; out.value += x.w; P(x.name).hit += x.w; out.hits.push(x);
@@ -118,7 +118,7 @@ function bench(profile) {
   // tighten: per-trick Watcher-confidence floors from rejected calls
   const floorNotes = []; cur.floor = { ...(cur.floor || {}) };
   { const byTrick = {};
-    runs.forEach((run, i) => { for (const e of flown[i].events) { const T = byTrick[e.name] || (byTrick[e.name] = { bad: [], good: [], plain: [] }), sp = x => e.t >= x.a - 0.7 && e.t <= x.b + 2.4;
+    runs.forEach((run, i) => { for (const e of flown[i].events) { const T = byTrick[e.name] || (byTrick[e.name] = { bad: [], good: [], plain: [] }), sp = x => e.t >= x.a - 0.7 && e.t - (e.dur || 0) <= x.b + 2.4;   // a lap trick is called when it ends: it covers every label along its laps
       const no = run.ev.find(x => x.kind === 'not' && x.name === e.name && sp(x)), yes = run.ev.find(x => x.kind === 'want' && x.name === e.name && sp(x));
       if (yes) T.good.push({ c: e.conf, w: yes.w }); else if (no) T.bad.push({ c: e.conf, w: no.w, author: no.author }); else T.plain.push(e.conf); } });
     for (const [name, T] of Object.entries(byTrick)) { if (!T.bad.length) continue;
@@ -149,7 +149,7 @@ function bench(profile) {
     `## Per trick (weighted)`, `| trick | labelled | found before | found after | rejected calls | still called |`, `|---|---|---|---|---|---|`,
     ...names.map(n => { const a = s0.per[n] || {}, b = after.per[n] || {}; return `| ${n} | ${(a.want || 0).toFixed(1)} | ${pct(a.hit || 0, a.want)} | ${pct(b.hit || 0, b.want)} | ${(a.not || 0).toFixed(1)} | ${(a.wrong || 0).toFixed(1)} → ${(b.wrong || 0).toFixed(1)} |`; }), ``,
     `## Custom tricks pilots named`, ...(Object.keys(customs).length ? Object.values(customs).sort((a, b) => b.authors.size - a.authors.size || b.n - a.n).map(c => `- **${c.label}** · ${c.n}× by ${c.authors.size} pilot${c.authors.size > 1 ? 's' : ''}${c.authors.size >= MIN_P ? ' · ready for a draft rule' : ''} · measured: ${[...new Set(c.toks)].slice(0, 6).join(' | ')}`) : ['- none yet']), ``,
-    `## Still missed (the to-do list)`, ...(() => { const m = {}; runs.forEach((run, i) => { for (const x of run.ev.filter(e => e.kind === 'want')) if (!flown[i].events.some(e => e.name === x.name && e.t >= x.a - 0.7 && e.t <= x.b + 2.4)) { const k = `${x.name} → ${flown[i].events.filter(e => e.t >= x.a - 0.7 && e.t <= x.b + 2.4).map(e => e.name).join(' + ') || 'nothing'}`; m[k] = (m[k] || 0) + 1; } }); const e = Object.entries(m).sort((a, b) => b[1] - a[1]); return e.length ? e.map(([k, v]) => `- ${v}× ${k}`) : ['- nothing']; })(), ``,
+    `## Still missed (the to-do list)`, ...(() => { const m = {}; runs.forEach((run, i) => { for (const x of run.ev.filter(e => e.kind === 'want')) if (!flown[i].events.some(e => e.name === x.name && e.t >= x.a - 0.7 && e.t - (e.dur || 0) <= x.b + 2.4)) { const k = `${x.name} → ${flown[i].events.filter(e => e.t >= x.a - 0.7 && e.t <= x.b + 2.4).map(e => e.name).join(' + ') || 'nothing'}`; m[k] = (m[k] || 0) + 1; } }); const e = Object.entries(m).sort((a, b) => b[1] - a[1]); return e.length ? e.map(([k, v]) => `- ${v}× ${k}`) : ['- nothing']; })(), ``,
     `Weights (one voice; a moment's labels are pooled, full at ${CONFIRM} people): reviewer ${W.reviewer}, own review ${W.own}, board vote ${W.judge}, F flag ${+W.flag.toFixed(3)}, Q flag ${+W.q.toFixed(3)}, unreviewed call ${+W.keep.toFixed(3)}; at most ${W.cap} per pilot per trick; changes need ${MIN_P} pilots. ${((Date.now() - t0) / 1000).toFixed(0)} s.`];
   const profile = { format: 'pro-whooper-community/1', updated: new Date().toISOString().slice(0, 10), learn: cur.learn, ...(cur.rate ? { rate: cur.rate } : {}), ...(cur.air ? { air: cur.air } : {}), floor: cur.floor || {},
     stats: { flights: runs.length, pilots: pilotsFlying.size, labellers: authors.size, evidence: evAll.length, found: [+(s0.hit / (s0.want || 1)).toFixed(3), +(after.hit / (after.want || 1)).toFixed(3)], changes } };

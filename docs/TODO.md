@@ -26,6 +26,9 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 8. ~~**Trick challenges and the trick board**~~ built 2026-11-23 (owner: 2 other pilots confirm, live at 200 points, a word list + the
    owner hides / renames / prices). **Redeploy the relay** for it to work. Confirmed ones go into the trick library (2026-11-23; 2 stays the number). Open: re-checking tries on
    the relay or in the weekly run; the knowledge bot flying them (it needs their motion and a family it knows).
+   **Trippy Spin** (2026-11-23): the stick witness ("wonky nips"), the locked-in grade and the five-stage Train ladder are built.
+   Open, the owner's calls: whether a one-lap / part-lap trippy counts, the building-corner climb, the cue wording. To build: Show me
+   for the trippy (a bot script or a library replay on the Big Pole), the stall / Matty / perch-drop entries as stages.
 9. **Proper gap names per map** for the gap call-outs (they use object names today).
 10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);

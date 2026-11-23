@@ -79,10 +79,10 @@ function flightExamples(runs) {
     // each labelled stretch is re-flown through the detector itself, so the example is measured exactly as the game measures
     // a move live: rotation, up.y, the over/under/gap passes and the sticks (the detector's libSigOf)
     for (const e of r.ev) { if (e.kind !== 'want' && e.kind !== 'not' && e.kind !== 'custom') continue; if (e.inferred) continue; if (e.crashed) continue;   // graded "crash": the right trick, but not how it is flown   // a guessed 'no' is never a counter-example
-      const from = Math.max(r.rows[0][0], e.a - 3.5), { det, events: rev } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false });   // the detector's clock starts at 0 at 'from'
+      const from = Math.max(r.rows[0][0], e.a - 3.5), { det, events: rev } = S.replayTrace(r.rows, { world: r.world, camTilt: r.camTilt, from, to: e.b + 0.4, tail: 0, debug: false, open: true });   // the detector's clock starts at 0 at 'from'
       const sig = det.libSigOf(e.a - from - 0.25, e.b - from + 0.25); if (!sig) continue;
       const mo = e.kind === 'want' && e.botSrc !== 'library' ? motionOf(r.rows, det, r.world, from, sig) : null;
-      if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.map = r.map || null; mo.by = r.name || null; mo.at = r.started || null; mo.t = +(+e.a).toFixed(1); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
+      if (mo) { mo.ct = Math.round(r.camTilt || 20); mo.map = r.map || null; mo.by = r.name || null; mo.at = r.started || null; mo.t = +(+e.a).toFixed(1); mo.hit = rev.some(x => x.name === e.name && x.t >= e.a - 1 && x.t - (x.dur || 0) <= e.b + 3) ? 1 : 0; }   // the pilot's camera tilt; whether today's detector called it on the original flight   // a knowledge-bot re-flight adds no new motion
       out.push({ x: e.kind === 'custom' || undefined, t: e.kind === 'custom' ? e.label : e.name, ...sig, w: e.kind === 'custom' ? W.own / CONFIRM : e.w, s: e.src === 'reviewer' ? 'reviewer' : 'pilot', neg: e.kind === 'not' || undefined, p: P(e.author), obs: undefined, mo }); }
   }
   return out;

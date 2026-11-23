@@ -50,6 +50,7 @@ for (const b of bad) console.log('  ✗ ' + b);
 { const L = new Function('S', 'window', 'env', 'esc', `const detector = {};\n${src}\nreturn { coachPlan, coachPhaseOf, coachRungOf, coachLadder, COACH_TRIES, coachCan };`)(S, { TPW_TRICKS: globalThis.TPW_TRICKS }, env, x => x);
   const ph = [1, 2, 3, 4, 5].map(L.coachPhaseOf).join(' '), r = L.coachRungOf;
   const rungs = r([]) === 0 && r([{ ok: false, phase: 'live' }]) === 0 && r([{ ok: true, phase: 'parts' }]) === 1 && r([{ ok: true, phase: 'parts' }, { ok: true, phase: 'live' }]) === 2 && r([{ ok: false, phase: 'live' }, { ok: true, phase: 'connect' }]) === 3;
+  n++; if (L.coachCan('Trippy Spin x2') && !L.coachPlan('Trippy Spin x2')) ok++; else bad.push('Trippy Spin should be trainable through its own stages');
   const T = globalThis.TPW_TRICKS, A = L.coachLadder(T, {}, L.coachCan), first = A.next[0].name.trim(), B = L.coachLadder(T, { [first]: { r: 3 } }, L.coachCan), C2 = L.coachLadder(T, { [A.next[3].name.trim()]: { r: 1 } }, L.coachCan);
   const D = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Master'], di = t => D.indexOf(String(t.diff).trim()), sorted = A.next.every((t, k) => !k || di(A.next[k - 1]) <= di(t));
   const okL = ph === 'parts parts live live connect' && L.COACH_TRIES === 5 && rungs && A.learned === 0 && A.total === A.next.length && A.total >= 25 && sorted && B.learned === 1 && !B.next.some(t => t.name.trim() === first) && (di(A.next[3]) !== di(A.next[0]) || C2.next[0].name.trim() === A.next[3].name.trim());

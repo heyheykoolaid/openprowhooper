@@ -122,6 +122,17 @@ code { color: var(--acid); }
 .coLadderBox { margin: 8px 0 14px; padding: 10px 14px; border: 2px solid var(--acid); background: #0008; line-height: 1.9; } .coLadderBox small { color: #9aa; } .coLadderBox a { color: var(--acid); margin: 0 2px 0 6px; }
 .coLadder { display: flex; gap: 6px; margin: 8px 0 6px; } .coLadder i, .coChain i { font-style: normal; font: 700 11px var(--mono); padding: 2px 8px; border: 1px solid #fff3; border-radius: 10px; color: #9aa; } .coLadder i.ok, .coChain i.ok { color: #111; background: var(--acid); border-color: var(--acid); }
 .coChain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; } .coChain b { color: #9aa; }
+#tripHud { position: fixed; inset: 0; z-index: 58; pointer-events: none; font: 700 11px var(--mono); letter-spacing: .14em; }
+#tripHud .thTarget { position: absolute; left: 50%; top: 5%; width: 26vw; height: 26vh; transform: translateX(-50%); border: 2px dashed rgba(255,255,255,.45); border-radius: 14px; color: rgba(255,255,255,.7); text-align: center; }
+#tripHud .thTarget span { position: absolute; left: 0; right: 0; bottom: -18px; }
+#tripHud .thTarget.ok { border: 3px solid #5dff8a; color: #5dff8a; }
+#tripHud .thSticks { position: absolute; left: 50%; bottom: 250px; transform: translateX(-50%); display: flex; gap: 10px; align-items: flex-start; color: #fff; }
+#tripHud .thSticks b { align-self: center; background: #000; padding: 3px 8px; border: 1px solid #fff3; }
+#tripHud .thSticks.ok b { color: #5dff8a; border-color: #5dff8a; } #tripHud .thSticks.bad b { color: #ffb347; border-color: #ffb347; }
+#tripHud .thBox { position: relative; width: 64px; height: 22px; background: rgba(0,0,0,.7); border: 1px solid #fff5; border-radius: 4px; }
+#tripHud .thBox::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #fff3; }
+#tripHud .thBox i { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #ffd34d; }
+#tripHud .thBox em { position: absolute; left: 0; right: 0; top: 24px; text-align: center; font-style: normal; opacity: .8; }
 #coachCue small { display: block; font: 700 11px var(--mono); letter-spacing: .18em; color: var(--acid); margin-bottom: 3px; }
 #demoRadio { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 56; pointer-events: none; }
 body.demoBig #judgeBox { left: 50%; right: auto; top: 10px; transform: translateX(-50%); width: min(620px, 80vw); } body.demoBig #judgeBox .trFoot { margin-top: 6px; }
@@ -463,7 +474,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="fps"></div><div id="perfHud" class="hide"></div>
 <div id="trickDebug" class="hide"><div class="topbar"><b>Trick debug (G)</b><button id="dbgCopy" class="ghost">Copy last trick data</button></div><div class="rows"></div><textarea id="dbgText" class="hide" readonly></textarea></div>
 <div id="nowPlaying"></div>
-<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoRadio" class="hide"></canvas><canvas id="demoArrows" class="hide"></canvas><div id="coachCue" class="hide"></div><div id="coachFreeze" class="hide"></div>
+<div id="train" class="hide"></div><div id="coachBox" class="hide"></div><canvas id="demoRadio" class="hide"></canvas><canvas id="demoArrows" class="hide"></canvas><div id="coachCue" class="hide"></div><div id="tripHud" class="hide"></div><div id="coachFreeze" class="hide"></div>
 <div id="judgeBox" class="hide"></div><canvas id="judgeSticks" class="hide" width="260" height="120" title="The bot's sticks (V)"></canvas>
 <div id="askBox" class="hide"><div id="askBody"></div></div>
 <div id="music">
