@@ -11,8 +11,10 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 2. ~~**Daily K.W.A.D.**~~ built 2026-11-21 (test/kwad.js). Open: a K.W.A.D. mark on the board (needs the posted run to carry its
    letters and a relay change); the owner's look at the pools.
 3. ~~More Warehouse: moving conveyor and the detail pass~~ done 2026-11-21 (gapcheck 25/25, floatcheck 0). Open: parcels riding the belt.
-4. **Community learner re-run** (it did not finish on 2026-11-21, and the detector changed since): run it in the background, bring the
-   owner what it wants to change.
+4. **Community learner re-run**: done 2026-11-23 (PR community-2026-11-22: 7 confidence floors, the Rubik's Cube fix). Next from its
+   to-do list: Rubik's Cubes whose roll is split between roll and yaw (an attitude witness), missed open Rolls and Trippy Spins, Split-S
+   still missed in open air, Mavvy Roll read as Mavvelmann (3, RodFPV), Flip vs Powerloop on bars. Treat the custom name "Rubiks Cube"
+   as Rubik's Cube.
 
 ## Next
 5. **Train mode, older asks**: step-by-step for pole, wall and gap tricks (steps by hand); judging "upright" and "flying backward" in

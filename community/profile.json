@@ -1,25 +1,38 @@
 {
  "format": "pro-whooper-community/1",
- "updated": "2026-11-18",
+ "updated": "2026-11-23",
  "learn": {
   "tol": 0,
   "rev": 0,
   "crossBack": 0
  },
  "floor": {
-  "Eject Roll": 0.5
+  "Eject Roll": 0.5,
+  "Yaw Spin": 0.6,
+  "Flip": 0.5,
+  "Double Dutch": 0.6,
+  "Juicy Flick": 0.7,
+  "Mavvelmann": 0.5,
+  "360 Stall Rewind": 0.6,
+  "Maverick Loop": 0.6
  },
  "stats": {
-  "flights": 80,
-  "pilots": 7,
-  "labellers": 3,
-  "evidence": 153,
+  "flights": 304,
+  "pilots": 18,
+  "labellers": 7,
+  "evidence": 741,
   "found": [
-   0.569,
-   0.569
+   0.587,
+   0.587
   ],
   "changes": [
-   "Eject Roll needs 50% Watcher confidence (drops 3 rejected calls, 1 unreviewed)"
+   "Yaw Spin needs 60% Watcher confidence (drops 2 rejected calls, 13 unreviewed)",
+   "Flip needs 50% Watcher confidence (drops 3 rejected calls, 6 unreviewed)",
+   "Double Dutch needs 60% Watcher confidence (drops 5 rejected calls, 53 unreviewed)",
+   "Juicy Flick needs 70% Watcher confidence (drops 5 rejected calls, 32 unreviewed)",
+   "Mavvelmann needs 50% Watcher confidence (drops 10 rejected calls, 27 unreviewed)",
+   "360 Stall Rewind needs 60% Watcher confidence (drops 7 rejected calls, 18 unreviewed)",
+   "Maverick Loop needs 60% Watcher confidence (drops 8 rejected calls, 6 unreviewed)"
   ]
  }
 }
