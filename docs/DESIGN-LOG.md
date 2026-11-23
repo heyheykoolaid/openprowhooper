@@ -332,7 +332,8 @@ against another roll. He said yes to requiring the Jump Rope first.
   back under, within 4 s before the roll) and the roll must go against the way the jump rope went round the object. Of the three
   confirmed labels, the Swing Set one is still called; the Sign Gantry and Footbridge ones (under, roll, under) are no longer Burrito
   Rolls and are called nothing. A Double Dutch now needs a pass over the object too (without it the Footbridge one fell through to
-  Double Dutch). Open: whether the under-roll-under move should get a name of its own.
+  Double Dutch). **Decided (owner, same day)**: the under-roll-under move gets no name: "it's just a roll through a gap". It scores
+  as whatever it is: a Roll if the roll is a full one, plus gap points if it went through a gap.
 
 ### Quick check: the "No, it was…" list looked as if it lost the choice (owner, 2026-11-23)
 The owner: "whenever i press to select another trick in the trick review, it won't let me select it or keep the option." The answer
