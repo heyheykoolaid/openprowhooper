@@ -308,3 +308,11 @@ https://claude.ai/artifact/RtyBUdYHF5FcxfpPE5wacs. Nothing was changed from it. 
 - **Consequences to know**: a Snapback or Juicy Flick made right after passing under something waits a moment longer only when the
   quad is already coming back toward the object (it may be a Rollback). On a sample of 60 other shared flights the new rule called 6
   Rollbacks and 4 Juicy Rollbacks nobody has labelled: worth a look in review.
+
+### Matty Twister tightened to the description (owner, 2026-11-24)
+- **Reported**: "i was just awarded a matty twister, despite not trying and not being over an object."
+- **Decided**: it must match the book: over the object, the 360 roll while over it, the Matty flip at once, out under the object.
+- **Built**: the roll has to start within about a second of the over pass and above the object's top, the flip within half a second
+  of the roll, the pass under within 2.5 s. Before, any roll and flip near an over-then-under of one object counted.
+- **Open**: which object gave it to him (the flight is not in the shared data). If it was a power line or a roof edge high above, say so:
+  those are over/unders the Surveyor makes, and other tricks could be given on them the same way.

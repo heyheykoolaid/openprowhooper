@@ -1120,6 +1120,14 @@ used up and pending calls dropped, and a Snapback / Juicy Flick / Roll / Yaw Spi
 it is travelling back toward the object: Rod's rewinds already are; a Snapback that flies on is called without more delay). All 9 labels are called by the right name. Extras,
 drafts, 300 / 350 points (placeholders), credited to RodFPV in the Tricktionary. One pilot's labels: watch the calls on other pilots.
 
+## Matty Twister by the book (owner, 2026-11-24; `twisterOK` in sim.js, test/twister.js)
+The owner was given one "despite not trying and not being over an object": the table rule only asked for the rotations and an over
+then an under of one object anywhere in the window. Now also (the site's words: "a 360 roll, while over the object, and immediately
+follow this with a Matty flip in one fluid motion"): the roll starts from `TWIST_BEFORE` 0.6 s before the over pass to `TWIST_AFTER`
+1 s after it, with the quad above the object's top (`obstacle.over`) as it starts; the flip starts within `TWIST_FLOW` 0.5 s of the
+roll's end; the pass under comes after the roll began and within `TWIST_UNDER` 2.5 s of its end. The demo-shaped flight and the bot's
+20 / 20 are still called. The flight it happened on was not in the shared data, so the exact object is unknown.
+
 ## The learned witness (tools/witness.py, community/witness.json, `setWitness` / `witnessProb` / `witFeats` in src/sim.js; owner, 2026-11-21)
 Extra-trees (60, depth 10; numpy + scikit-learn to train, plain arrays to read) trained on the library's confirmed examples of
 tricks with 4+ of them, each padded with 6-12 **noisy copies** (`augment`: the label's ends a little off, time stretched unevenly,

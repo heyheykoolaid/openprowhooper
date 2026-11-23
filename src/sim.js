@@ -1024,6 +1024,7 @@ const ROLLBACK_ROLL = 100;   // deg of roll travel between the two passes
 const ROLLBACK_SEE = 0.3;   // s after the turn by which a rewind is travelling back toward the object
 const ROLLBACK_BACK = 3.2, ROLLBACK_HOLD = new Set(['Snapback', 'Juicy Flick', 'Roll', 'Yaw Spin']);   // s from the pass under to the pass back under; the calls that wait that long for it
 const CINNAMON_VIEW = 0.35, UHUH_SWING = 25;   /* the share of a Cinnamon Roll with its object within 40 deg of the camera line (a turn made looking anywhere reads about 0.2; a flown orbit of the object 0.4-0.6) */
+const TWIST_BEFORE = 0.6, TWIST_AFTER = 1.0, TWIST_FLOW = 0.5, TWIST_UNDER = 2.5;   // Matty Twister: the roll starts this long before / after the over pass at most; the flip starts within this of the roll's end; the pass under within this
 const MAVVEL_BACK = 0.2, MAVVEL_EARLY = 0.5, MAVVEL_LATE = 1.5, MAVVEL_FLICK = 0.8, MAVVEL_PROMPT = 0.7;   // Mavvelmann: the over pass flown backward (fwdDot at most this); the flick from this long before the over pass to this long after it; the flick's longest (s); the longest wait before the roll (s)
 const CORNER_SWINGS = 3, CORNER_MIN = 45, CORNER_UP = 1.0, CORNER_SIDE = 0.4;   // Corner Climb: swings round the corner, each at least this many deg of it, climbing this far (m); how far each side of the corner's diagonal a swing must reach (m)
 const WALL_STICK_MIN = 1.0;   // s held on the wall (owner, 2026-11-19: "1 second")
@@ -1598,6 +1599,7 @@ class TrickDetector {
           const m = matchTokens(pp, tv);
           if (!m) continue;
           if (tr.name === 'Mavvelmann' && this.mavvelOK && !this.mavvelOK(tv, part)) continue;
+          if (tr.name === 'Matty Twister' && this.twisterOK && !this.twisterOK(tv, part, +id)) continue;
           const early = tr.name === 'Barani' && this.horizonAt && (() => { const y = tv.find(k => k.ax === 'Y'); return y && !this.horizonAt(y.t0); })();
           const cand = { name: early ? 'Power Swap' : tr.name, toks: tv, err: m.err + (tv !== toks ? 0.15 : 0), obstacle: seq[0].name, obj: +id, clen: need.length, part, ct1: part[part.length - 1].t, ...(early ? { earlyYaw: true } : {}) };
           if (m && better(cand, best)) best = cand;
@@ -2429,6 +2431,18 @@ class StreamDetector extends TrickDetector {
       else if ((y - ext) * dir > 0) { big = Math.max(big, 0); ext = y; } else if (Math.abs(y - ext) >= UHUH_SWING) { dir = -dir; n++; ext = y; } }
     const net = Math.abs(H[H.length - 1][5] - H[0][5]), span = Math.max(...H.map(r => r[5])) - Math.min(...H.map(r => r[5]));
     return n >= 3 && net <= 70 && span <= 200; }
+  // Matty Twister by the book (owner, 2026-11-24: one was called "despite not trying and not being over an object"): fly over the
+  // object; the 360 roll is made WHILE OVER it (it starts from just before the over pass to a second after, above the object's top);
+  // the Matty flip follows at once, in one motion; the pass under comes out of the flip
+  twisterOK(tv, part, id) {
+    const R = tv.filter(k => k.ax === 'R'), P = tv.filter(k => k.ax === 'P'), ro = R.sort((a, b) => b.raw - a.raw)[0], fl = P[P.length - 1], O = part[0], U = part[1]; if (!ro || !fl || !O || !U) return false;
+    if (ro.t0 < O.t - TWIST_BEFORE || ro.t0 > O.t + TWIST_AFTER) return false;          // rolled while over the object
+    const o = this.world.objs.find(x => x.id === id), top = o && o.obstacle ? o.obstacle.over : null, at = this.fbIn(ro.t0 - 0.03, ro.t0 + 0.03)[0];
+    if (top != null && at && at.p.y < top - 0.15) return false;                          // and above it, not beside or below
+    if (fl.t1 < ro.t1 - 0.05 || fl.t0 - ro.t1 > TWIST_FLOW) return false;                // the flip follows the roll at once
+    if (U.t < ro.t0 || U.t - ro.t1 > TWIST_UNDER) return false;                          // and comes out under the object
+    return true;
+  }
   // Mavvelmann by the book (owner, 2026-11-23): an Immelmann with a maverick's way up. Under the object, round and above it looking
   // forward the whole way (upright from the under pass to the flick; over the top travelling backward), THEN, above it, a quick 180
   // pitch down to upside-down, and promptly a 180 roll to level out
