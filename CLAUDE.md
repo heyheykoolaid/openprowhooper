@@ -1617,3 +1617,14 @@ tricks"), no points taken. **Trick of the Week** `TOTW_MULT` 200 / 200 / 150 / 1
 back-to-back halving, sloppy -35 %, bump 50 %, K.W.A.D.; and the spreadsheet's same-obstacle reduction and switch bonus, which the
 pasted text does not mention. **Main menu → Training ▸ → How scoring works** (`#rulesScreen`): the rules in the game's own words,
 credited to Tyrantt, with a link to prowhooper.com/rules-overview/. Board scores from before this day were made under the old rules.
+
+## INVERTED (owner, 2026-11-25; 3D mode only; `InvertedTimer`, `INV_PTS`, `INV_UP`, `ScoreKeeper.inverted` in sim.js, `invTick` in play.js; test/inverted.js)
+"Every 1 second spent inverted while 3D is called INVERTED, and ticks 200 per second inverted without bumps or crash. No repeat
+penalty." In 3D mode (`tune.flightMode === '3d'`), armed, not crashed, touching nothing, with up.y under `INV_UP` -0.7 (within ~45 deg
+of flat on its back), every full second scores `INV_PTS` 200 (`invTick` each physics step after `drone.step`). Any contact (not only a
+hard bump), a crash or disarming ends the stretch; seconds already scored stay, the next stretch counts from 0. Its own line like gaps
+(`invBonus`, `invN`, `invBest` = the longest stretch; added to `total`; the results line; the posted sheet's `totals.inverted` /
+`invertedN`): no streak, no repeat or back-to-back penalty, not in the TPW trick score. One combo entry "INVERTED Ns" counts up and keeps
+the combo alive while it runs; a "INVERTED Ns +200" pop-up each second. Not a call: nothing goes to the review / recap events or the
+labels, so the tools do not re-fly it. In the Tricktionary (Other Tricks, `EXTRA_TRICKS`, in `DETECTABLE`, no prowhooper.com link) and
+on the How scoring works page.

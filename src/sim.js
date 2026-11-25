@@ -1043,6 +1043,8 @@ const EXTRA_TRICKS = [
     desc: 'Fly through a cube and do half of a Powerloop, pitching back until you can see the back gate. Then pitch forward into a Matty flip motion, going backward down through the top of the cube and out the back (prowhooper.com; a cube trick).' },
   { cat: 'Open Air Tricks', name: 'Inverted Uh-uh', diff: 'Intermediate', pts: 125, extra: true,
     desc: 'A quick throttle blip and a half flip or half roll to inverted. Upside-down, yaw 45° left, 90° right, 90° left and 45° right, back to where you were facing, like the whoop shaking its head "uh-uh". Finish with a half flip or half roll back upright. Created by Heads from Infinity Loops (prowhooper.com).' },
+  { cat: 'Other Tricks', name: 'INVERTED', diff: 'Intermediate', pts: 200, extra: true,
+    desc: '3D mode only. Fly upside-down: every full second spent inverted in the air scores 200, as long as you like, with no repeat penalty. Touching anything, a bump or a crash ends the count (the seconds already scored stay); turn upside-down again to start a new one.' },
   { cat: 'Gaps', name: 'Gaps', diff: 'Beginner', pts: 150, extra: true,
     desc: 'Fly through a small, enclosed gap. Scored by how tight it is on its short side: 150 through 6 inches (15 cm) or less, 125 at 12 inches, 100 at 18 inches, and 25 less for every 6 inches more, down to 25 from 3 feet up. The same gap again in one combo is worth half each time.' },
   { cat: 'Wall Tricks', name: 'Corner Climb', diff: 'Intermediate', pts: 300, extra: true,
@@ -3277,11 +3279,24 @@ function pendulumStep(chain, p) {
 const GAP_MIN = 25, GAP_MAX = 150, GAP_STEP = 0.1524, GAP_PER = 25;   /* the site's Gaps (owner, 2026-11-23): 150 through 6 in or less on the short side, 25 less per 6 in more (125 at 12 in, 100 at 18 in), never under 25 */
 function gapLabel(name) { let n = String(name || 'Gap').replace(/\s+opening$/i, '').replace(/\s+(mouth)$/i, '').replace(/\s+\d+(\.\d+)?( m)?$/, '').trim(); return /gap$/i.test(n) ? n : n + ' Gap'; }
 function gapPoints(narrow) { const over = Math.max(0, (narrow - GAP_STEP) / GAP_STEP); return Math.max(GAP_MIN, Math.min(GAP_MAX, Math.round((GAP_MAX - GAP_PER * over) / 5) * 5)); }
+// INVERTED (owner, 2026-11-25): in 3D mode, every full second upside-down (up.y under INV_UP: within ~45 deg of flat on its back) in
+// the air, armed, scores INV_PTS. Any touch, a crash or disarming ends the stretch; seconds already scored stay. step() returns how
+// many seconds this step completed (0 or 1) and keeps `run`, the seconds in the current stretch.
+const INV_PTS = 200, INV_UP = -0.7;
+class InvertedTimer {
+  constructor() { this.t = 0; this.run = 0; this.on = false; }
+  stop() { const r = this.run; this.t = 0; this.run = 0; this.on = false; return r; }
+  step(dt, s) {   // s: { mode3d, armed, crashed, contact, upY }
+    if (!s.mode3d || !s.armed || s.crashed || s.contact || !(s.upY < INV_UP)) { this.stop(); return 0; }
+    this.on = true; this.t += dt; if (this.t < 1) return 0;
+    this.t -= 1; this.run++; return 1;
+  }
+}
 class ScoreKeeper {
   constructor(totw, kwad) { this.totw = totw || ['Split S', 'Powerloop', 'Matty Flip']; this.kw = kwad || null; this.reset(); }   // kwad: the day's set (dailyKwad); none = the book's fixed four
   reset() {
     this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
-    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.commBonus = 0; this.commN = 0; this.commSeen = {}; this.comms = []; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
+    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.commBonus = 0; this.commN = 0; this.invBonus = 0; this.invN = 0; this.invBest = 0; this.commSeen = {}; this.comms = []; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
   }
   add(ev) {
     const base = ev.basePts ?? trickPoints(ev.name);
@@ -3316,7 +3331,7 @@ class ScoreKeeper {
       if (this.chain.n % CHAIN_SET === 0) { const k = this.chain.n / CHAIN_SET, pts = CHAIN_PTS * k; this.chainBonus += pts; chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts }; this.chains.push(chainHit); }
     } else this.chain = null;
     this.trickScore += net;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus);
     const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
     if (!this.biggest || net > this.biggest.net) this.biggest = rec;
     this.log.push(rec);
@@ -3328,13 +3343,13 @@ class ScoreKeeper {
   community(name, pts) {
     const rep = this.commSeen[name] || 0, base = clamp(Math.round(+pts || CH_PTS), 0, 5000), got = Math.round(base * Math.pow(0.5, rep)); this.commSeen[name] = rep + 1;
     this.commBonus += got; this.commN++; const r = { name, pts: got, base, repeat: rep }; this.comms.push(r);
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return r;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return r;
   }   // the combo banked: a new set starts from one, and every gap is fresh again
   gap(c, qW) {   // a gap flown through: { label, pts, base, repeat }
     const k = c.obj, rep = this.gapSeen[k] || 0, base = gapPoints(c.narrow ?? 1, qW), pts = Math.round(base * Math.pow(0.5, rep)); this.gapSeen[k] = rep + 1;
     this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name), pts, base, repeat: rep };
     if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return r;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return r;
   }
   // The last trick scored clean or sloppy, and the quad knocked into something on the way out (owner, 2026-11-21: pilots graded
   // such calls "bump"): it is a BUMP after all. Its points drop to a bump's and the streak is what a bump leaves it at.
@@ -3343,8 +3358,12 @@ class ScoreKeeper {
     const L = this.last, e = L && this.log[L.i]; if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
     const net = Math.round(e.net * EXEC_MULT.BUMP / L.execM), back = e.net - net;
     e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = 1; this.streakCount = 0; this.last = null;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return back;
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return back;
   }
+  // INVERTED (owner, 2026-11-25; 3D mode only): one more full second upside-down in the air. INV_PTS each, no repeat penalty, no
+  // streak, its own line like gaps. run = seconds in this stretch so far.
+  inverted(run) { this.invBonus += INV_PTS; this.invN++; this.invBest = Math.max(this.invBest, run | 0);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return INV_PTS; }
   // a bump or a ground tap BETWEEN tricks (official rules): no trick loses points, the streak ends. True when there was one to lose.
   bumpBetween() { const had = this.streak > 1; this.streak = 1; this.streakCount = 0; this.last = null; return had; }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
@@ -3448,7 +3467,7 @@ const DEMO_SPOT = {
 };
 function trickSpots(name, cat) { const n = name.trim(); return { on: SPOT_OVERRIDE[n] || SPOT_BY_CAT[(cat || '').trim()] || ['open air'], demo: DEMO_SPOT[n] || null }; }
 const DETECTABLE = [...new Set([...OBSTACLE_TRICKS.map(t => t.name), ...OPEN_TRICKS.map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT, 'Maverick Loop', 'Mavvy Roll', 'Beginner Matty', 'Knife Edge', 'Ninja Star',
-  'Wall Tap', 'Wall Ride', 'Building Dive', 'Stall Rewind', 'Slide Disarm', 'Perch', 'Segmented Flips/Rolls', 'Face Punch'])];
+  'Wall Tap', 'Wall Ride', 'Building Dive', 'Stall Rewind', 'Slide Disarm', 'Perch', 'Segmented Flips/Rolls', 'Face Punch', 'INVERTED'])];
 const DRAFT = new Set([...OBSTACLE_TRICKS.filter(t => t.draft).map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT]);
 function hoverInfo(p) {
   let lo = 0, hi = 1; const V = 3.75 * (p.bat.cells || 1);   // mid-pack voltage
@@ -3587,7 +3606,7 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, INV_PTS, INV_UP, InvertedTimer, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

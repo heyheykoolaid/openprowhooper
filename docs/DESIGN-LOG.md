@@ -6,6 +6,16 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-25
 
+### INVERTED: a 3D-mode-only trick (owner, 2026-11-25)
+"I want to add in a 3d mode only trick, it's for time spent inverted, every 1 second spent inverted while 3d is called INVERTED, and
+ticks 200 per second inverted without bumps or crash. no repeat penalty."
+- **Built**: in 3D mode, every full second upside-down in the air scores 200, counting up in one combo entry, its own line on the score
+  sheet like gaps (so no streak, no repeat or back-to-back penalty, and the TPW trick score is unchanged).
+- **Claude's calls, say if wrong**: "inverted" = within about 45 deg of flat on its back; ANY touch ends the stretch, not only a hard
+  bump (so sitting upside-down on the ground earns nothing); the seconds already scored are kept when it ends; the streak multiplier
+  does not apply; it is not sent as a call for review (the tools would have nothing to re-fly it against).
+- **Open**: should a long stretch pay more per second (it is flat 200 now)? Should the streak apply to it?
+
 ### Scoring follows the official rules text (owner, 2026-11-25: "1. yes. 2, 2x. 3. it should not. 4. sounds good! put that under training!")
 - **Decided**: bring the six differences in line with the text. The streak cap is x2. A repeat that pays 0 % does not build the streak.
   A "How scoring works" page goes under Training.

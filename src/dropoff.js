@@ -321,7 +321,7 @@ const lbMapTitle = id => (S.MAPS[id] && S.MAPS[id].title) || id;
 function lbSessionOver(r) {   // called by endSession while the run's arrays are still in place
   const rows = recap.trace; let i0 = rows.findIndex(x => x[13]); i0 = Math.max(0, (i0 < 0 ? 0 : i0) - TRACE_HZ);
   LB.last = { id: recap.id, total: Math.round(r.total), map: MAP_ID, rows: rows.slice(i0, i0 + 19900),
-    totals: { trick: r.trickScore, switchMult: r.switchMult(), kwad: r.kwadBonus, chain: r.chainBonus || 0, gaps: r.gapBonus || 0, gapN: r.gapN || 0, community: r.commBonus || 0, communityN: r.commN || 0, streak: +r.maxStreak.toFixed(2), obstacles: r.uniqueObs.size },
+    totals: { trick: r.trickScore, switchMult: r.switchMult(), kwad: r.kwadBonus, chain: r.chainBonus || 0, gaps: r.gapBonus || 0, gapN: r.gapN || 0, community: r.commBonus || 0, communityN: r.commN || 0, inverted: r.invBonus || 0, invertedN: r.invN || 0, streak: +r.maxStreak.toFixed(2), obstacles: r.uniqueObs.size },
     sheet: r.log.filter(x => x.net || x.exec === 'CRASH').slice(0, 400).map(x => ({ name: x.name, exec: x.exec, net: x.net, base: x.base, obstacle: x.obstacle || undefined })),
     events: recap.events.filter(e => !e.maybe).slice(0, 400).map(e => ({ t: e.t, t0: e.t0, name: e.name, exec: e.exec })) };
   lbResultsBox(); lbLoad(lbToday()).then(lbResultsBox);

@@ -93,7 +93,7 @@ function comboEnd(bailed) {
   const el = $('#comboBank'); const n = combo.names.length;
   el.innerHTML = bailed ? `<b>BAILED</b><small>${n} trick${n > 1 ? 's' : ''} · ${combo.pts.toLocaleString()} pts kept · streak lost</small>` : `<b>+${combo.pts.toLocaleString()}</b><small>${n > 1 ? n + ' TRICK COMBO' : 'LANDED'}</small>`;
   el.className = bailed ? 'bail show' : 'show'; void el.offsetWidth;
-  combo.names = []; combo.pts = 0; combo.active = false; renderCombo(); if (score && score.chainBreak) score.chainBreak();
+  combo.names = []; combo.pts = 0; combo.active = false; invEntry = -1; renderCombo(); if (score && score.chainBreak) score.chainBreak();
 }
 function renderCombo() {
   const el = $('#combo'); const prov = mode === 'fly' ? detector.provisional() : [], live = mode === 'fly' && detector.liveState ? detector.liveState() : [];
@@ -129,6 +129,20 @@ function betweenBumpTick() {
   if (!bumpWait) return; if (mode !== 'fly' || drone.crashed) { bumpWait = null; return; }
   const live = detector.liveState ? detector.liveState() : []; if (live.some(l => TOUCH_TRICKS.has(String(l.name).replace(' x2', '')))) { bumpWait.until = drone.time + BUMP_WAIT; return; }
   if (drone.time > bumpWait.until) betweenBumpApply();
+}
+// INVERTED (owner, 2026-11-25): 3D mode only, every full second upside-down in the air scores INV_PTS (Sim InvertedTimer); one entry in
+// the combo that counts up, keeps the combo alive while it runs; a touch, a crash or disarming ends the stretch.
+const invT = new S.InvertedTimer(); let invEntry = -1;
+function invTick(dt) {
+  const was = invT.on, up = S.qrot(drone.q, S.v3(0, 1, 0));
+  const got = (mode === 'fly' && !race.on && score) ? invT.step(dt, { mode3d: tune.flightMode === '3d', armed: drone.armed, crashed: drone.crashed, contact: drone.contactThisStep, upY: up.y }) : (invT.stop(), 0);
+  if (was && !invT.on) invEntry = -1;
+  if (!invT.on) return; combo.lastT = performance.now() / 1000;
+  if (!got) return;
+  const pts = score.inverted(invT.run), label = `INVERTED ${invT.run}s`;
+  if (invEntry >= 0 && combo.active && invEntry < combo.names.length) combo.names[invEntry] = label; else { combo.names.push(label); invEntry = combo.names.length - 1; }
+  combo.pts += pts; combo.active = true; renderCombo(); updateBreakdown();
+  flash(`<b>INVERTED ${invT.run}s</b><div class="pRow"><em>+${pts}</em></div>`, 'gapPop');
 }
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
@@ -307,7 +321,7 @@ function frame(now) {
       else drone.step(rc, DT);
       if (!race.on) { detQ.push(detSnap(drone, rc)); recordTrace(rc); }   // judged after the frame is drawn (detFlush)
       if (lateTrick && drone.contactThisStep) lateBumpCheck();
-      if (drone.contactThisStep) betweenBumpCheck(); if (bumpWait) betweenBumpTick();
+      if (drone.contactThisStep) betweenBumpCheck(); if (bumpWait) betweenBumpTick(); invTick(DT);
       if (drone.contactThisStep && CAT.ids.has(drone.contactOwner)) catHit();   // Slackvegan's bodega cat
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);
