@@ -20,14 +20,14 @@ full once three people agree" (the rule since 2026-11-20; the row still said "a 
 only moments with no game call show them there ("PILOTS SAY").
 
 ### Double Rolling Trippy Spin: the owner's video against the rule (2026-11-25; nothing changed)
-The owner sent a 14 s FPV clip of herself flying a Double Rolling Trippy Spin round a big conifer, camera at 30 deg: "see how it rolls while
+The owner sent a 14 s FPV clip of his own a Double Rolling Trippy Spin round a big conifer, camera at 30 deg: "see how it rolls while
 within a trippy spin while still keeping the object at the top of the screen?" Measured from the video (tools/gif_rotation.py, 30 fps,
 the 4:3 picture, 150 deg lens assumed): the camera looks up the trunk the whole time and the picture turns round the view of the tree
 steadily one way, ~3180 deg in 13.8 s (~8.8 turns, ~230 deg/s, no pauses); all axes together ~265 deg/s, close to the Tricktionary demo
 (~1540 deg in ~5.5 s). The ground shows only about three times (the start, ~3.5-4 s, ~9.6-10.2 s). Orbit laps cannot be counted from
 the camera alone (the clip has no position).
 - **The game's rule** (`orbitKind` in sim.js): a trippy round a pole whose body roll is 300 deg or more a lap AND that passes upright <->
-  upside-down at least 0.75 times a lap ("barrel-rolls through upright every lap"). Her flight rolls round the line to the tree, which
+  upside-down at least 0.75 times a lap ("barrel-rolls through upright every lap"). His flight rolls round the line to the tree, which
   barely brings the quad upright (3 times in 14 s), so the game would most likely call it a plain Trippy Spin.
 - **The game's DRT calls in the shared data**: of 9 decided labels, 2 confirm a call; the owner rejected 5 calls on 2026-11-24/25 (they
   were a Split S, a Flip, a Matty Flip and two non-tricks): the "through upright" test catches other tricks that flip over near a pole.
