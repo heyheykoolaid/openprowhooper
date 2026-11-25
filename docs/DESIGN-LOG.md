@@ -19,6 +19,12 @@ full once three people agree" (the rule since 2026-11-20; the row still said "a 
 **Open**: showing the other pilots' labels inside the review player itself (on the timeline) for moments the game DID call; today
 only moments with no game call show them there ("PILOTS SAY").
 
+### RaceGOW track cards: fewer buttons (owner, 2026-11-25)
+"Can we remove Race/Edit/Copy Code/Export from the layout menu in racegow?", then, asked whether Race should go too: "Keep race, remove
+edit." **Done**: the track cards show Race, Leaderboard, Share and Delete (Save a copy on other pilots' tracks). Edit, Copy code and
+Export are gone from the cards; the editor itself and its own export are unchanged. **Open**: with Edit gone a built-in track can only
+be changed from inside the editor (New track, or a track already open there): say if a track should open in the editor some other way.
+
 ### RaceGOW: the importer and routes as steps (owner, 2026-11-25: "24 inches. Correct, that's fine. Yup, full credit. Let's do 1 and 2.")
 - **Decided**: every layout is in 24 in sections (the file's 30 in mark on four RaceGOW 6 tracks is wrong); the 21 laps the owner has not
   clicked through ship as the file has them; designers are credited by name on the track.

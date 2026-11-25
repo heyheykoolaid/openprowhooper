@@ -1577,4 +1577,5 @@ what they did. **Shaped openings**: a checkpoint element may carry `cells` [[x0,
 `cleanTrack`, in the hash only when present): through any of them counts. The editor's Route list is per pass: ⇄ (the other way),
 ＋ (through it again), ✕ (take a repeat out), ↑ ↓; an opening flown several times shows one label with every step's number.
 The 25 fly their laps pass by pass in the test (502 passes, 426 openings, the both-way and repeated ones included), and are raceable.
+**Track cards** (owner, 2026-11-25): Race, Leaderboard, Share, Delete (Save a copy on others'); no Edit, Copy code or Export on the cards.
 **Not built** (next, in the design log): the picker's click-the-opening tools inside the editor, the flight lines as a guide / ghost.

@@ -281,7 +281,7 @@ function rgCard(t, own) {
   const venue = t.venue.kind === 'map' ? `on ${esc((S.MAPS[t.venue.map] || {}).title || t.venue.map)}` : esc(RG.ROOMS[t.venue.room].label);
   return `<div class="rCard"><h3>${esc(t.name)}</h3><small>${venue} · ${Math.max(0, B0.seq.length - 1)} gates${est.lap ? ` · ~${est.lap} s · difficulty ${est.difficulty}` : ''}${t.by ? ' · by ' + esc(t.by) : ''}</small>
     <div class="rBest">Best lap ${fmtLap(B.lap)}${B.ta && B.ta[race.opts.laps] ? ` · ${race.opts.laps} laps ${fmtLap(B.ta[race.opts.laps].total)}` : ''}</div>
-    <div class="row"><button class="primary" data-rgt="race:${id}">Race</button><button data-rgt="edit:${id}">${own ? 'Edit' : 'Edit a copy'}</button><button data-rgt="board:${id}">Leaderboard</button><button data-rgt="code:${id}">Copy code</button><button data-rgt="export:${id}">Export</button>${own ? `<button data-rgt="share:${id}">Share</button><button data-rgt="del:${id}">Delete</button>` : `<button data-rgt="keep:${id}">Save a copy</button>`}</div>
+    <div class="row"><button class="primary" data-rgt="race:${id}">Race</button><button data-rgt="board:${id}">Leaderboard</button>${own ? `<button data-rgt="share:${id}">Share</button><button data-rgt="del:${id}">Delete</button>` : `<button data-rgt="keep:${id}">Save a copy</button>`}</div>
     <div class="rgBoard" id="rgb-${id}"></div></div>`;
 }
 function rgRenderMenu() {
