@@ -17,6 +17,10 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
    as Rubik's Cube.
 
 ## Next
+4b. **RaceGOW from the real layouts** (owner, 2026-11-25): the importer and routes-as-steps are built (all 25 layouts ship;
+   test/racegow.js). Next, in order: the Route Picker's click-the-opening tools (Pipes / Lap / Squares) inside the track editor; the
+   flight lines of the older layouts as a guide line and first ghost; design norms from the 25 for "Make raceable" and a random-track
+   maker. The owner's eye on the 21 laps he has not clicked through.
 5. **Train mode, older asks**: step-by-step for pole, wall and gap tricks (steps by hand); judging "upright" and "flying backward" in
    the steps; flow ideas never done (slow-mo instead of full stops, tries that adapt to the pilot, a ghost in the live tries, a sound
    per step, no reload into the Training Room). Show me now flies the Big Square for the loop tricks (2026-11-21): check it by eye.

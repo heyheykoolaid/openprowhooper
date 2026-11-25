@@ -96,7 +96,9 @@
         k.gate({ polys }); } },
     checkpoint: { cat: 'Gates', layer: 'gates', gate: true, label: 'Checkpoint', desc: 'An invisible rectangle to fly through (put one in any opening: a door, under a table)',
       params: { w: [0.8, 0.1, 8, 0.05, 'Width', 'm'], h: [0.8, 0.1, 8, 0.05, 'Height', 'm'], lift: [0, 0, 5, 0.01, 'Off the floor', 'm'], dir: { v: 'forward', opts: ['forward', 'both ways'], label: 'Counts flown' } },
-      build(e, k, p) { k.gate({ poly: [[-p.w / 2, p.lift], [-p.w / 2, p.lift + p.h], [p.w / 2, p.lift + p.h], [p.w / 2, p.lift]], invisible: true, both: p.dir === 'both ways' }); } },
+      // e.cells [[x0, x1, y0, y1]...] (local metres): an opening of several rectangles (an L round a frame); through any of them counts
+      build(e, k, p) { if (Array.isArray(e.cells) && e.cells.length) { k.gate({ polys: e.cells.map(([x0, x1, y0, y1]) => [[x0, y0], [x0, y1], [x1, y1], [x1, y0]]), invisible: true, both: p.dir === 'both ways' }); return; }
+        k.gate({ poly: [[-p.w / 2, p.lift], [-p.w / 2, p.lift + p.h], [p.w / 2, p.lift + p.h], [p.w / 2, p.lift]], invisible: true, both: p.dir === 'both ways' }); } },
     start: { cat: 'Gates', layer: 'gates', gate: true, start: true, label: 'Start / Finish', desc: 'Laps start and end here: a gantry with a chequered banner and timing beams, or an invisible line (put it in an opening of a PVC structure)',
       params: { w: [1.2, 0.2, 4, 0.05, 'Width', 'm'], h: [0.9, 0.2, 3, 0.05, 'Height', 'm'], lift: [0, 0, 1.5, 0.01, 'Off the floor', 'm'], look: { v: 'gantry', opts: ['gantry', 'invisible line'], label: 'Look' } },
       build(e, k, p) { const x = p.w / 2 + 0.03, top = p.lift + p.h;
@@ -235,6 +237,7 @@
   };
 
   // ------------------------------------------------------------------ tracks
+  const stepId = st => String(st).replace(/!$/, '');
   const uid = (p = 'e') => p + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6);
   function newTrack(opts = {}) {
     const preset = 'racegow', venue = opts.venue && opts.venue.kind === 'map' ? { kind: 'map', map: String(opts.venue.map || 'moose') } : { kind: 'room', room: ROOMS[opts.venue && opts.venue.room] ? opts.venue.room : 'livingroom', size: opts.venue && opts.venue.size };
@@ -255,11 +258,13 @@
     const els = t.elements.filter(e => e && CATALOG[e.type]).slice(0, 600).map(e => { const p = paramsOf(e), C = CATALOG[e.type];
       const o = { id: String(e.id || uid()).replace(/[^\w-]/g, '').slice(0, 24) || uid(), type: e.type, x: clamp(num(e.x), -500, 500), y: clamp(num(e.y), -5, 100), z: clamp(num(e.z), -500, 500),
         ry: num(e.ry) % 360, rx: clamp(num(e.rx), -180, 180), rz: clamp(num(e.rz), -180, 180), s: clamp(num(e.s, 1) || 1, 0.25, 4), p, layer: C.layer };
-      if (e.sector) o.sector = true; if (e.hidden) o.hidden = true; if (e.name) o.name = name(e.name); return o; });
+      if (e.sector) o.sector = true; if (e.hidden) o.hidden = true; if (e.name) o.name = name(e.name);
+      if (e.type === 'checkpoint' && Array.isArray(e.cells)) { const cs = e.cells.filter(q => Array.isArray(q) && q.length === 4 && q.every(v => typeof v === 'number' && isFinite(v))).slice(0, 16).map(q => q.map(v => +clamp(v, -20, 20).toFixed(4))).filter(q => q[1] > q[0] && q[3] > q[2]); if (cs.length) o.cells = cs; }
+      return o; });
     const ids = new Set(els.map(e => e.id));
     return { format: 'pro-whooper-track/2', id: String(t.id || uid('t')).replace(/[^\w-]/g, '').slice(0, 32), name: name(t.name) || 'Track', by: name(t.by).slice(0, 24), pilot: /^[a-z0-9]{6,40}$/.test(String(t.pilot || '')) ? t.pilot : undefined,
       tags: (Array.isArray(t.tags) ? t.tags : []).filter(x => TAGS.includes(x)).slice(0, 6), preset: 'racegow', section: clamp(num(t.section, U), U, 3), venue,
-      lighting: LIGHTING[t.lighting] ? t.lighting : 'default', laps: clamp(Math.round(num(t.laps, 3)), 1, 20), route: (Array.isArray(t.route) ? t.route : []).filter(id => ids.has(id)).slice(0, 400),
+      lighting: LIGHTING[t.lighting] ? t.lighting : 'default', laps: clamp(Math.round(num(t.laps, 3)), 1, 20), route: (Array.isArray(t.route) ? t.route : []).filter(st => typeof st === 'string' && ids.has(stepId(st))).slice(0, 400),
       elements: els, created: String(t.created || '').slice(0, 30), updated: String(t.updated || '').slice(0, 30), path: Array.isArray(t.path) ? t.path.slice(0, 200).map(q => [num(q[0]), num(q[1]), num(q[2])]) : undefined };
   }
   const TAGS = ['technical', 'flow', 'freestyle', 'beginner', 'igow', 'racegow', 'tiny', 'big', 'dark', 'outdoor'];
@@ -275,7 +280,7 @@
     return cleanTrack({ format: 'pro-whooper-track/2', id: t.id, name: t.name, preset: 'racegow', section: sec, venue, laps: 3, route: [], elements: els, created: t.created });
   }
   // a short fingerprint of what the track IS (its geometry, not its name): leaderboards key on it
-  function trackHash(t) { const g = JSON.stringify([t.preset, t.section, t.venue, t.route, t.elements.map(e => [e.type, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), Math.round(e.ry), Math.round(e.rx), Math.round(e.rz), +e.s.toFixed(2), e.p, !!e.sector])]);
+  function trackHash(t) { const g = JSON.stringify([t.preset, t.section, t.venue, t.route, t.elements.map(e => [e.type, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), Math.round(e.ry), Math.round(e.rx), Math.round(e.rz), +e.s.toFixed(2), e.p, !!e.sector, ...(e.cells ? [e.cells] : [])])]);
     let h1 = 0x811c9dc5, h2 = 0x01000193; for (let i = 0; i < g.length; i++) { const c = g.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
     return (h1.toString(36).padStart(7, '0') + h2.toString(36).padStart(7, '0')).slice(0, 14); }
 
@@ -293,17 +298,26 @@
     return { ...mapWorld, indoor: false, ceiling: mapWorld.ceiling || 60, size: mapWorld.size || { x: 200, z: 200, h: 60 } };
   }
   // the route: the gates in order. track.route lists element ids; gates not in it follow in the order they were placed.
-  function routeOf(track) { const gates = track.elements.filter(e => CATALOG[e.type] && CATALOG[e.type].gate && !e.hidden && !CATALOG[e.type].start && !CATALOG[e.type].finish);
-    const pos = new Map(track.route.map((id, i) => [id, i])); return gates.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e6 + track.elements.indexOf(a)) - (pos.has(b.id) ? pos.get(b.id) : 1e6 + track.elements.indexOf(b))); }
+  // A route is a list of STEPS (2026-11-25, from the real RaceGOW layouts: a lap goes through the same opening again and again,
+  // and both ways): each step is an element's id, or the id with '!' after it = flown the other way to how the element faces.
+  // An id may be listed any number of times. routeSteps: [{ e, rev, s }] in order; routeIds: the same as strings (what
+  // track.route should hold); routeOf: the gates in order, each once (its first step).
+  function routeSteps(track) { const gates = track.elements.filter(e => CATALOG[e.type] && CATALOG[e.type].gate && !e.hidden && !CATALOG[e.type].start && !CATALOG[e.type].finish);
+    const by = new Map(gates.map(e => [e.id, e])), seen = new Set(), out = [];
+    for (const st of track.route || []) { if (typeof st !== 'string') continue; const e = by.get(stepId(st)); if (!e) continue; seen.add(e.id); out.push({ e, rev: st.endsWith('!'), s: e.id + (st.endsWith('!') ? '!' : '') }); }
+    for (const e of gates) if (!seen.has(e.id)) out.push({ e, rev: false, s: e.id });
+    return out; }
+  const routeIds = track => routeSteps(track).map(x => x.s);
+  function routeOf(track) { const seen = new Set(); return routeSteps(track).map(x => x.e).filter(e => !seen.has(e.id) && seen.add(e.id)); }
   function buildTrack(track, mapWorld) {
     const V = venueOf(track, mapWorld), ctx = { section: track.section || U, ceiling: V.ceiling };
     const objs = [], gatesByEl = new Map(), fields = [], lights = [];
     for (const e of track.elements) { const o = { id: 'rg:' + e.id, eid: e.id, name: e.name || (CATALOG[e.type] || {}).label, kind: 'race', ...elementParts(e, ctx) }; for (const pr of o.prims) pr.owner = o.id; objs.push(o);
       if (o.gates.length) gatesByEl.set(e.id, o.gates); fields.push(...o.fields); lights.push(...o.lights); }
     const start = track.elements.find(e => e.type === 'start' && !e.hidden), finish = track.elements.find(e => e.type === 'finish' && !e.hidden);
-    const route = routeOf(track), seq = [];   // one checkpoint per route step (an element may hold several openings: a split gate)
+    const route = routeSteps(track), seq = [];   // one checkpoint per route step (an element may hold several openings: a split gate)
     if (start && gatesByEl.get(start.id)) seq.push({ eid: start.id, cps: gatesByEl.get(start.id), start: true });
-    for (const e of route) if (gatesByEl.get(e.id)) seq.push({ eid: e.id, cps: gatesByEl.get(e.id), sector: !!e.sector });
+    for (const { e, rev } of route) if (gatesByEl.get(e.id)) seq.push({ eid: e.id, cps: gatesByEl.get(e.id), sector: !!e.sector, ...(rev ? { rev: true } : {}) });
     if (finish && gatesByEl.get(finish.id)) seq.push({ eid: finish.id, cps: gatesByEl.get(finish.id), finish: true });
     const prims = [...(mapWorld ? [] : V.prims), ...objs.flatMap(o => o.prims)];
     let spawn = V.spawn || { pos: v3(0, 0.03, 0), yaw: 0 };
@@ -334,7 +348,7 @@
   Race.prototype.step = function (p0, p1, t) {
     const ev = [];
     if (this.done || this.n < 2) return ev;
-    const want = this.B.seq[this.next], cross1 = st => { for (const cp of st.cps) { const c = crossing(cp, p0, p1); if (c) return c < 0 && cp.both ? 1 : c; } return 0; }, c = cross1(want);
+    const want = this.B.seq[this.next], cross1 = st => { for (const cp of st.cps) { const c = crossing(cp, p0, p1) * (st.rev ? -1 : 1); if (c) return c < 0 && cp.both ? 1 : c; } return 0; }, c = cross1(want);
     const c1 = c < 0 && want.cps.some(cp => cp.both) ? 1 : c;
     if (c1 < 0) { ev.push({ type: 'wrong', i: this.next, t }); return ev; }
     if (c1 > 0) {
@@ -485,8 +499,56 @@
     route[8].y = +(U + 0.03).toFixed(4);
     return { ...newTrack({ name: 'RaceGOW 5 - Track 8', by: 'sample', venue: { kind: 'room', room: 'garage' } }), elements: [st, ...els], route: route.map(e => e.id), tags: ['racegow', 'technical'], laps: 3 };
   }
-  const SAMPLES = [sampleTrack8];
+  // ------------------------------------------------------------------ real RaceGOW layouts (tracks/racegow/layouts.json)
+  // fromLayout: one layout of the file -> a track. The layout is in sections: u, v across the floor, z up; the game is x, y up, z,
+  // so (u, v, z) -> (u, z, -v) x the section, centred in an empty room sized round it. Every pipe is a pvcPipe (cut as the file
+  // cuts it); every DIFFERENT opening of the lap is one invisible checkpoint facing the way it is first flown, and the lap is
+  // the route's steps: the same opening again is the same element again, the other way round is its id with '!'. The first pass
+  // is the Start / Finish (an invisible line in that opening). Ids come from the layout, so every pilot's copy has the same
+  // track hash (the boards key on it). Throws on anything it cannot place (a pipe off the axes, a pass with no size).
+  function fromLayout(L) {
+    if (!L || !Array.isArray(L.segs) || !Array.isArray(L.cps) || L.cps.length < 3) throw new Error('not a layout');
+    const r4 = v => +v.toFixed(4), id0 = String(L.id || 'rg').replace(/[^\w-]/g, '').slice(0, 12);
+    const pts = L.segs.flat(), us = pts.map(q => q[0]), vs = pts.map(q => q[1]), top = Math.max(...pts.map(q => q[2]));
+    const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
+    const W = (u, v, z) => ({ x: r4((u - cu) * U), y: r4(z * U), z: r4(-(v - cv) * U) });
+    const els = [], route = [];
+    L.segs.forEach(([a, b], i) => { const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ax = d.findIndex(v => Math.abs(v) > 1e-9), len = Math.abs(d[ax]);
+      if (ax < 0 || d.filter(v => Math.abs(v) > 1e-9).length !== 1 || len < 0.25 || len > 4) throw new Error('pipe ' + i + ' cannot be placed');
+      const A = W(...a), B = W(...b), lo = ax === 0 ? (A.x < B.x ? A : B) : ax === 1 ? (A.z < B.z ? A : B) : (A.y < B.y ? A : B);   // a pvcPipe runs from its origin along local +y
+      els.push({ ...newElement('pvcPipe', { ...lo, rz: ax === 0 ? -90 : 0, rx: ax === 1 ? 90 : 0 }, { len: r4(len) }), id: id0 + 'p' + i }); });
+    const openings = new Map();
+    L.cps.forEach((c, i) => {
+      const dive = c.kind === 'dive', sz = +c.size || 1;
+      let key, mk, dir;
+      if (dive) { if (![c.u, c.v, c.z].every(Number.isFinite)) throw new Error('pass ' + i + ' cannot be placed'); dir = c.up ? 1 : -1; key = ['d', c.u, c.v, c.z, sz].join(',');
+        mk = d0 => ({ at: { ...W(c.u + sz / 2, c.v + sz / 2, c.z), rx: d0 > 0 ? 90 : -90 }, cells: [[r4(-sz * U / 2), r4(sz * U / 2), r4(-sz * U / 2), r4(sz * U / 2)]] }); }
+      else { if (!['u', 'v'].includes(c.axis) || ![c.u, c.v, c.z0, c.z1].every(Number.isFinite) || !Array.isArray(c.direction) || !(c.z1 > c.z0)) throw new Error('pass ' + i + ' cannot be placed');
+        const along = c.axis === 'u' ? 'v' : 'u', a0 = c[along], rects = Array.isArray(c.parts) && c.parts.length ? c.parts : [[a0, a0 + sz, c.z0, c.z1]];
+        const lo = Math.min(...rects.map(q => q[0])), hi = Math.max(...rects.map(q => q[1])), mid = (lo + hi) / 2;
+        dir = c.axis === 'u' ? Math.sign(c.direction[0]) : Math.sign(c.direction[1]); if (!dir) throw new Error('pass ' + i + ' has no way');
+        key = [c.axis, c[c.axis], JSON.stringify(rects)].join(',');
+        mk = d0 => { const g = c.axis === 'u' ? { dx: d0, dz: 0 } : { dx: 0, dz: -d0 }, ry = Math.round(Math.atan2(-g.dx, -g.dz) / D2R), rt = { x: Math.cos(ry * D2R), z: -Math.sin(ry * D2R) };
+          const o = c.axis === 'u' ? W(c.u, mid, 0) : W(mid, c.v, 0), lx = a => { const q = c.axis === 'u' ? W(c.u, a, 0) : W(a, c.v, 0); return (q.x - o.x) * rt.x + (q.z - o.z) * rt.z; };
+          const cells = rects.map(q => { const x0 = lx(q[0]), x1 = lx(q[1]); return [r4(Math.min(x0, x1)), r4(Math.max(x0, x1)), r4(q[2] * U), r4(q[3] * U)]; });
+          return { at: { ...o, ry }, cells, w: r4((hi - lo) * U), h: r4((Math.max(...rects.map(q => q[3])) - Math.min(...rects.map(q => q[2]))) * U), lift: r4(Math.min(...rects.map(q => q[2])) * U), one: rects.length === 1 }; }; }
+      const label = String(c.label || '').replace(/\\s*=\\s*/g, ' ').replace(/[^\w .,'!&()+\-]/g, '').slice(0, 40);
+      if (i === 0) { const m = mk(dir); if (dive || !m.one) throw new Error('the start must be one upright opening');
+        const st = { ...newElement('start', m.at, { w: m.w, h: m.h, lift: m.lift, look: 'invisible line' }), id: id0 + 's' }; st.name = 'Start / finish'; els.unshift(st); return; }
+      let o = openings.get(key);
+      if (!o) { const m = mk(dir), e = { ...newElement('checkpoint', m.at, m.one ? { w: m.w, h: m.h, lift: m.lift } : {}), id: id0 + 'c' + openings.size }; if (!m.one) e.cells = m.cells; e.name = label || 'Pass'; els.push(e); o = { e, dir }; openings.set(key, o); }
+      route.push(o.e.id + (dir === o.dir ? '' : '!')); });
+    const room = { x: Math.max(8, r4((Math.max(...us) - Math.min(...us)) * U + 6)), z: Math.max(7, r4((Math.max(...vs) - Math.min(...vs)) * U + 6)), h: Math.max(3, Math.ceil((top + 3) * U + 0.4)) };
+    const t = newTrack({ name: L.name || 'RaceGOW', by: L.designer || 'RaceGOW', venue: { kind: 'room', room: 'empty', size: room } });
+    return { ...t, id: 'rgl-' + id0, elements: els, route, tags: ['racegow', 'technical'], laps: 3, created: '' };
+  }
+  // the layouts that ship: the build puts the file in window.PW_RG_LAYOUTS; Node reads it from the repo
+  let LAYOUTS = [];
+  { let doc = root.PW_RG_LAYOUTS || null;
+    if (!doc && typeof require === 'function' && typeof __dirname === 'string') { try { doc = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'tracks', 'racegow', 'layouts.json'), 'utf8')); } catch { doc = null; } }
+    if (doc && Array.isArray(doc.layouts)) LAYOUTS = doc.layouts; }
+  const SAMPLES = [sampleTrack8, ...LAYOUTS.map(L => () => fromLayout(L))];
   root.RG = { U, PIPE_R, SURF, PRESETS, CATALOG, CATS, LAYERS, LED, COLORS, TAGS, LIGHTING, ROOMS, sizePresets, rotM, poseOf, paramsOf, defaults, newTrack, newElement, cleanTrack, convertV1, trackHash,
-    elementParts, buildTrack, routeOf, crossing, centreOf, stepCentre, inOpening, Race, sectorPlan, packGhost, unpackGhost, sampleGhost, GHZ, flow, estimate, checks, pathGates, mirror, autoFace, uid, SAMPLES };
+    elementParts, buildTrack, routeOf, routeSteps, routeIds, stepId, fromLayout, LAYOUTS, crossing, centreOf, stepCentre, inOpening, Race, sectorPlan, packGhost, unpackGhost, sampleGhost, GHZ, flow, estimate, checks, pathGates, mirror, autoFace, uid, SAMPLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.RG;
 })(typeof window !== 'undefined' ? window : globalThis);

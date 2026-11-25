@@ -19,6 +19,18 @@ full once three people agree" (the rule since 2026-11-20; the row still said "a 
 **Open**: showing the other pilots' labels inside the review player itself (on the timeline) for moments the game DID call; today
 only moments with no game call show them there ("PILOTS SAY").
 
+### RaceGOW: the importer and routes as steps (owner, 2026-11-25: "24 inches. Correct, that's fine. Yup, full credit. Let's do 1 and 2.")
+- **Decided**: every layout is in 24 in sections (the file's 30 in mark on four RaceGOW 6 tracks is wrong); the 21 laps the owner has not
+  clicked through ship as the file has them; designers are credited by name on the track.
+- **Built**: all 25 are built-in tracks (26 with Track 8), each in an empty room sized round it. A route is now a list of passes: the
+  same opening can be in a lap any number of times, and either way; an opening can be several rectangles (an L round a frame). The
+  editor's route list works per pass (other way, again, take out, up, down).
+- **How it was checked**: each of the 25 is flown pass by pass by a test that works out where every pass is from the file by its own
+  arithmetic; pipes are checked against the file end by end; the track list and the editor's route list were tried in a browser. Not
+  raced by hand.
+- **Open**: the picker's tools in the editor (3), the flight lines (4), design norms (5). The track cards still say "gates" for passes.
+  Track 8's ids are random per pilot, so its board key differs between pilots (the 25 do not have this): fix when boards matter.
+
 ### RaceGOW: what the 25 real layouts and the Route Picker teach (owner asked, 2026-11-25; nothing built)
 The owner sent a file of 25 real RaceGOW layouts (RaceGOW 1 #1-10, 2 #1-4 and #6, 3 #1-5, 6 #1-5: pipes on a section grid, the lap as
 ordered passes, a flight line for the older ones) and the Route Picker page he used to correct laps by clicking openings.

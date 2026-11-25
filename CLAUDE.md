@@ -1558,3 +1558,23 @@ lights Auto drops to Few on slow machines.
 reads "N other pilots have labelled this trick on other flights" (it was read as "at this moment"). Vote rows carry `isVote`.
 The Tricktionary has a search box in its top bar (`#tSearch`, `trickFilter` in menus.js; rows carry `data-tq` = name, category,
 difficulty in lower case; every typed word must match; categories with no match hide; Esc clears it).
+
+## RaceGOW: the 25 real layouts, and routes as steps (owner, 2026-11-25; `fromLayout`, `routeSteps` in src/racegow.js; test/racegow.js)
+**tracks/racegow/layouts.json** (`pro-whooper-racegow-layouts/1`, the owner's file, cleaned): RaceGOW 1 #1-10, 2 #1-4 and #6, 3 #1-5,
+6 #1-5 on a 24 in section grid (u, v across the floor, z up, in sections): `segs` (pipes), `cps` (the lap as ordered passes: an upright
+opening { axis 'u' | 'v' = its normal, u, v = the plane and the low end along it, size, z0, z1, direction, parts [[a0, a1, z0, z1]…] for
+a shaped one } or { kind 'dive', u, v, z, size, up }), `designer`, and for the older events `guide` (the flight line; in the repo, not
+shipped, not used yet). build.py ships it without the guides (`window.PW_RG_LAYOUTS`); Node reads the file. **`RG.fromLayout(L)`** makes
+a track: (u, v, z) -> (u, z, -v) x 0.6096 m centred in an `empty` room sized round it; every pipe a `pvcPipe`; every DIFFERENT opening
+one invisible `checkpoint` facing the way it is first flown; the first pass the Start / Finish (invisible line); ids from the layout
+(`rgl-rg6-1`, `…p3`, `…c5`), so every pilot's copy has the same track hash. `RG.SAMPLES` = Track 8 and the 25 (given once each,
+`store 'rg.samples'`); the designer is the track's `by` ("by FPVSkittles" on its card; "RaceGOW" where the file names nobody).
+Only RaceGOW 6 #1-4's laps were hand-checked by the owner (the Route Picker); the other 21 are as the file has them.
+**Routes are steps**: `track.route` lists element ids, any id any number of times, and `id!` = flown the other way to how the element
+faces. `routeSteps(track)` -> [{ e, rev, s }], `routeIds` -> the strings (what the editor writes back), `routeOf` -> each gate once;
+`buildTrack`'s `seq` has a step per pass (`rev`), `Race.step` turns a reversed step's crossing round. Old routes (each id once) mean
+what they did. **Shaped openings**: a checkpoint element may carry `cells` [[x0, x1, y0, y1]…] (local metres, up to 16; kept by
+`cleanTrack`, in the hash only when present): through any of them counts. The editor's Route list is per pass: ⇄ (the other way),
+＋ (through it again), ✕ (take a repeat out), ↑ ↓; an opening flown several times shows one label with every step's number.
+The 25 fly their laps pass by pass in the test (502 passes, 426 openings, the both-way and repeated ones included), and are raceable.
+**Not built** (next, in the design log): the picker's click-the-opening tools inside the editor, the flight lines as a guide / ghost.

@@ -59,7 +59,10 @@ official = {}
 for f in sorted((root / 'maps' / 'official').glob('*.json')) if (root / 'maps' / 'official').exists() else []:
     try: official[f.stem] = json.loads(f.read_text())
     except Exception: pass
-t = t.replace('<script>/*OFFICIAL*/</script>', '<script>window.PW_OFFICIAL=' + json.dumps(official) + ';</script>')
+# the real RaceGOW layouts (tracks/racegow/layouts.json -> RG.LAYOUTS in racegow.js); the flight lines stay in the repo for now
+rgl = json.loads((root / 'tracks' / 'racegow' / 'layouts.json').read_text())
+for L in rgl['layouts']: L.pop('guide', None)
+t = t.replace('<script>/*OFFICIAL*/</script>', '<script>window.PW_OFFICIAL=' + json.dumps(official) + ';window.PW_RG_LAYOUTS=' + json.dumps(rgl, separators=(',', ':')) + ';</script>')
 t = t.replace('<script>/*ART*/</script>', '<script>window.PW_ART=' + json.dumps(art) + ';</script>')
 # dist/index.html (the hosted game: openprowhooper.com, 2026-11-20): the pictures (graffiti, club flags, map thumbnails, ~1.3 MB
 # of the 3.4 MB page) change rarely, so they go in their own files named by their content (data/<name>.<hash>.js); pilots'

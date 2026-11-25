@@ -129,4 +129,55 @@ const fan = RG.elementParts(RG.newElement('fan', { x: 0, z: 1 }), {}).fields[0];
 const df = fly(mkD({ objs: [], prims: [], fields: [fan] }), 0.5), dn = fly(mkD({ objs: [], prims: [] }), 0.5);
 ok(df.pos.z < dn.pos.z - 0.05, 'fan zone pushes the quad (' + (df.pos.z - dn.pos.z).toFixed(3) + ' m)');
 
+
+// --- the real RaceGOW layouts (tracks/racegow/layouts.json): every one imports, cleans, builds, and its lap can be flown
+// pass by pass; the geometry is checked against the file with this test's own arithmetic (u, v, z -> x, y up, -v)
+{
+  ok(RG.LAYOUTS.length === 25, '25 layouts ship (' + RG.LAYOUTS.length + ')'); ok(RG.SAMPLES.length === 26, 'samples: Track 8 and the 25');
+  let passes = 0, repeats = 0, revs = 0, shaped = 0;
+  for (const L of RG.LAYOUTS) {
+    let T; try { T = RG.fromLayout(L); } catch (err) { ok(false, L.id + ' imports: ' + err.message); continue; }
+    const C = RG.cleanTrack(JSON.parse(JSON.stringify(T)));
+    ok(JSON.stringify(C.route) === JSON.stringify(T.route) && C.elements.length === T.elements.length, L.id + ' survives cleanTrack (route steps, elements)');
+    ok(JSON.stringify(C.elements.map(e => e.cells || 0)) === JSON.stringify(T.elements.map(e => e.cells || 0)), L.id + ' keeps its shaped openings');
+    ok(RG.trackHash(C) === RG.trackHash(RG.cleanTrack(RG.fromLayout(L))), L.id + ' has the same hash every time it is imported');
+    ok(C.name === L.name && (!L.designer || C.by === L.designer), L.id + ' keeps its name and designer (' + C.name + ', ' + C.by + ')');
+    const B = RG.buildTrack(C); ok(B.seq.length === L.cps.length, L.id + ' one step per pass (' + B.seq.length + ' / ' + L.cps.length + ')');
+    ok(new Set(T.route).size <= T.route.length && T.elements.filter(e => e.type === 'checkpoint').length === new Set(T.route.map(RG.stepId)).size, L.id + ' one checkpoint per different opening');
+    passes += T.route.length; repeats += T.route.length - new Set(T.route.map(RG.stepId)).size; revs += T.route.filter(x => x.endsWith('!')).length; shaped += T.elements.filter(e => e.cells && e.cells.length > 1).length;
+    // pipes: each one's ends where the file has them
+    const pts = L.segs.flat(), us = pts.map(q => q[0]), vs = pts.map(q => q[1]), cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
+    const W = (u, v, z) => v3((u - cu) * RG.U, z * RG.U, -(v - cv) * RG.U), pipes = B.objs.filter(o => C.elements.find(e => e.id === o.eid).type === 'pvcPipe');
+    let off = 0; L.segs.forEach(([a, b], i) => { const A = W(...a), Bp = W(...b), bb = pipes[i].prims[0].aabb, r = RG.PIPE_R + 1e-3;
+      for (const k of ['x', 'y', 'z']) if (Math.abs(bb.min[k] - (Math.min(A[k], Bp[k]) - RG.PIPE_R)) > r || Math.abs(bb.max[k] - (Math.max(A[k], Bp[k]) + RG.PIPE_R)) > r) off++; });
+    ok(pipes.length === L.segs.length && !off, L.id + ' pipes stand where the file puts them (' + off + ' off)');
+    // the lap: a short straight flight through each pass, the way the file says
+    const flyAt = c => { let o, d;
+      if (c.kind === 'dive') { o = W(c.u + c.size / 2, c.v + c.size / 2, c.z); d = v3(0, c.up ? 1 : -1, 0); }
+      else { const q = c.parts ? c.parts[0] : [c.axis === 'u' ? c.v : c.u, (c.axis === 'u' ? c.v : c.u) + c.size, c.z0, c.z1], m = (q[0] + q[1]) / 2, z = (q[2] + q[3]) / 2;
+        o = c.axis === 'u' ? W(c.u, m, z) : W(m, c.v, z); d = v3(c.direction[0], 0, -c.direction[1]); }
+      return [S.sub(o, S.mul(d, 0.2)), S.add(o, S.mul(d, 0.2))]; };
+    const R = new RG.Race(B, { mode: 'hotlaps' }), ev = []; let t = 0;
+    for (const c of [...L.cps, L.cps[0]]) { const [p0, p1] = flyAt(c); ev.push(...R.step(p0, p1, t += 0.5)); }
+    const kinds = ev.map(e => e.type).join(' ');
+    ok(ev[0] && ev[0].type === 'start' && ev.filter(e => e.type === 'gate').length === L.cps.length && ev.some(e => e.type === 'lap') && !/wrong|skip/.test(kinds), L.id + ' its lap flies clean, pass by pass (' + kinds.replace(/gate /g, 'g').slice(0, 80) + ')');
+    // the wrong way through the first pass after the start is refused
+    { const R2 = new RG.Race(B, { mode: 'hotlaps' }); let [p0, p1] = flyAt(L.cps[0]); R2.step(p0, p1, 0.5); [p0, p1] = flyAt(L.cps[1]); const e2 = R2.step(p1, p0, 1); ok(e2.some(e => e.type === 'wrong') && !e2.some(e => e.type === 'gate'), L.id + ' backward through pass 1 is the wrong way'); }
+    const chk = RG.checks(B); ok(chk.ok, L.id + ' is raceable (' + chk.checks.filter(c => c.level === 'fail').map(c => c.text).join('; ') + ')');
+    ok(!chk.checks.some(c => /through the walls|float/.test(c.text) && c.level !== 'pass'), L.id + ' nothing floats or leaves the room (' + chk.checks.filter(c => c.level === 'warn').map(c => c.text).join('; ') + ')');
+  }
+  ok(passes === 502 - 25 && repeats >= 40, `the laps re-use openings (${passes} passes, ${repeats} of them a repeat, ${revs} the other way, ${shaped} shaped openings)`);
+  ok(revs >= 40 && shaped >= 6, 'both-way passes and shaped openings came through (' + revs + ', ' + shaped + ')');
+  // a route as steps on a hand-made track: the same gate twice, once the other way; plain ids still mean what they did
+  const T = RG.newTrack({ venue: { kind: 'room', room: 'empty', size: { x: 12, z: 12, h: 3 } } }), g1 = RG.newElement('checkpoint', { x: 0, z: 0 }, { w: 1, h: 1 }), g2 = RG.newElement('checkpoint', { x: 0, z: -2 }, { w: 1, h: 1 });
+  T.elements.push(g1, g2); T.route = [g1.id, g2.id, g1.id + '!', 'nope', g2.id];
+  const St = RG.routeSteps(T); ok(St.length === 4 && St[2].rev && St[2].e === g1 && !St[0].rev, 'routeSteps keeps repeats and the way (' + RG.routeIds(T).length + ')');
+  ok(RG.routeOf(T).length === 2, 'routeOf lists each gate once'); ok(RG.cleanTrack(T).route.length === 4, 'cleanTrack drops only the unknown step');
+  const B = RG.buildTrack(RG.cleanTrack(T)); ok(B.seq.length === 5 && B.seq[3].rev && B.seq[3].eid === g1.id, 'the build has a step per pass');
+  const R = new RG.Race(B), st = B.seq[0].cps[0], thru = (cp, back) => { const o = S.add(cp.o, S.mul(cp.up, 0.5)), a = S.sub(o, S.mul(cp.fwd, 0.2)), b = S.add(o, S.mul(cp.fwd, 0.2)); return back ? [b, a] : [a, b]; };
+  const go = (cp, back) => R.step(...thru(cp, back), 1).map(e => e.type).filter(x => x !== 'sector').join(',');
+  ok(go(st) === 'start' && go(B.seq[1].cps[0]) === 'gate' && go(B.seq[2].cps[0]) === 'gate', 'steps 1-2 forward');
+  ok(go(B.seq[3].cps[0]) === 'wrong', 'step 3 forward through the reversed gate is the wrong way'); ok(go(B.seq[3].cps[0], true) === 'gate', 'step 3 backward counts');
+  T.route = [g2.id]; ok(RG.routeIds(T).join() === [g2.id, g1.id].join(), 'gates not in the route follow, as before');
+}
 console.log(`${pass}/${pass + fail} racegow checks`); if (fail) process.exit(1);

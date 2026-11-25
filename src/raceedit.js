@@ -125,7 +125,8 @@ function rgElementMesh(o, opts = {}) {
 function rgDraw(B, opts = {}) {
   rgClear(rgRoot); const meshes = new Map(); const hidden = opts.hiddenLayers || new Set();
   for (const o of B.objs) { const e = B.track.elements.find(x => x.id === o.eid); if (!e || hidden.has(e.layer)) continue; const m = rgElementMesh(o, opts); rgRoot.add(m); meshes.set(o.eid, m); }
-  if (opts.editor) { const S2 = B.seq; S2.forEach((st, i) => { const c = RG.stepCentre(st), lab = rgText(st.start ? 'S/F' : st.finish ? 'FIN' : String(i), st.start ? '#ffffff' : '#7dff9a', 0.1); lab.position.set(c.x, c.y + 0.32, c.z); rgRoot.add(lab); }); }
+  if (opts.editor) { const byEl = new Map(); B.seq.forEach((st, i) => { const g = byEl.get(st.eid) || { st, n: [] }; g.n.push(st.start ? 'S/F' : st.finish ? 'FIN' : String(i)); byEl.set(st.eid, g); });   // an opening flown several times: one label, every step's number
+    for (const { st, n } of byEl.values()) { const c = RG.stepCentre(st), lab = rgText(n.slice(0, 5).join('·') + (n.length > 5 ? '…' : ''), st.start ? '#ffffff' : '#7dff9a', 0.1); lab.position.set(c.x, c.y + 0.32, c.z); rgRoot.add(lab); } }
   return meshes;
 }
 
@@ -435,7 +436,7 @@ function edPlaceGhost(p) { const P = ed.place; if (!P) return; if (P.ghost) { ed
   const g = rgElementMesh({ eid: 'ghost', ...parts }, { editor: true }); g.traverse(o => { if (o.material && !o.isSprite) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; o.userData.ownMat = true; } });
   P.ghost = g; P.el = e; ed.extras.add(g); }
 function edPlaceAt(e, keep) { const P = ed.place, p = edFloor(e); if (!P || !p) return; edPush(); const el = P.el; edClamp(el); ed.track.elements.push(el);
-  if (RG.CATALOG[el.type].gate && !RG.CATALOG[el.type].start && !RG.CATALOG[el.type].finish) ed.track.route = [...RG.routeOf(ed.track).map(x => x.id).filter(id => id !== el.id), el.id];
+  if (RG.CATALOG[el.type].gate && !RG.CATALOG[el.type].start && !RG.CATALOG[el.type].finish) ed.track.route = [...RG.routeIds(ed.track).filter(st => RG.stepId(st) !== el.id), el.id];
   ed.sel = new Set([el.id]); if (!keep) ed.place = null; edRebuild(); edPanels(); if (keep) edPlaceGhost(p); }
 // ---- handles: arrows move along X / Y / Z, the ring turns about the vertical (drag the piece itself to slide it on the floor)
 const EH = { grp: new THREE.Group() };
@@ -503,7 +504,7 @@ function edAct(a) {
   const [k, v] = a.split(/:(.*)/s), sel = [...ed.sel].map(edEl).filter(Boolean);
   if (k === 'view') { ed.view = v; if (v === 'top') ed.topCam.t.copy(ed.cam.t); edPanels(); resize(); }
   if (k === 'undo') edUndo(); if (k === 'redo') edRedo();
-  if (k === 'delete' && sel.length) { edPush(); const ids = new Set(sel.map(x => x.id)); ed.track.elements = ed.track.elements.filter(x => !ids.has(x.id)); ed.track.route = ed.track.route.filter(id => !ids.has(id)); ed.sel.clear(); edRebuild(); edPanels(); }
+  if (k === 'delete' && sel.length) { edPush(); const ids = new Set(sel.map(x => x.id)); ed.track.elements = ed.track.elements.filter(x => !ids.has(x.id)); ed.track.route = ed.track.route.filter(st => !ids.has(RG.stepId(st))); ed.sel.clear(); edRebuild(); edPanels(); }
   if (k === 'dup' && sel.length) { edPush(); const ns = sel.map(x => ({ ...JSON.parse(JSON.stringify(x)), id: RG.uid(), x: x.x + 0.5, z: x.z + 0.5 })); ed.track.elements.push(...ns); ed.sel = new Set(ns.map(x => x.id)); edRebuild(); edPanels(); }
   if (k === 'copy' && sel.length) { ed.clip = JSON.parse(JSON.stringify(sel)); edHint(`Copied ${sel.length}`); }
   if (k === 'paste' && ed.clip) { edPush(); const cx = ed.clip.reduce((s, x) => s + x.x, 0) / ed.clip.length, cz = ed.clip.reduce((s, x) => s + x.z, 0) / ed.clip.length, tgt = ed.cam.t;
@@ -516,15 +517,19 @@ function edAct(a) {
   if (k === 'mirrorTrack') { edPush(); RG.mirror(ed.track, ed.track.elements.map(x => x.id), v, 0); edRebuild(); edPanels(); }
   if (k === 'path') { ed.place = null; ed.path = { pts: [] }; edHint('Path: click points along the line you want to fly, Enter to place gates along it, Esc to stop'); edPanels(); }
   if (k === 'pathDone' && ed.path) { const P = ed.path; ed.path = null; if (P.pts.length >= 2) { edPush(); const ns = RG.pathGates(P.pts, +$('#edPathGap').value || 2, $('#edPathType').value, RG.CATALOG[$('#edPathType').value].pvc ? {} : { size: +$('#edPathSize').value || 0.4 });
-      for (const n of ns) edClamp(n); ed.track.elements.push(...ns); ed.track.route = [...RG.routeOf(ed.track).map(x => x.id).filter(id => !ns.some(n => n.id === id)), ...ns.map(n => n.id)]; ed.sel = new Set(ns.map(x => x.id)); edHint(`Placed ${ns.length} gates`); }
+      for (const n of ns) edClamp(n); ed.track.elements.push(...ns); ed.track.route = [...RG.routeIds(ed.track).filter(st => !ns.some(n => n.id === RG.stepId(st))), ...ns.map(n => n.id)]; ed.sel = new Set(ns.map(x => x.id)); edHint(`Placed ${ns.length} gates`); }
     edRebuild(); edPanels(); }
   if (k === 'place') edStartPlace(v);
   if (k === 'cat') { ed.cat = v; edPanels(); }
   if (k === 'layer') { const [what, L] = v.split(','); const S0 = what === 'hide' ? ed.hidden : ed.locked; if (S0.has(L)) S0.delete(L); else S0.add(L); edRebuild(); edPanels(); }
   if (k === 'snap') { ed.snap = +v; edPanels(); } if (k === 'asnap') { ed.aSnap = +v; edPanels(); } if (k === 'magnet') { ed.magnet = !ed.magnet; edPanels(); }
   if (k === 'col') { ed.showCol = !ed.showCol; edRebuildOverlays(); edPanels(); } if (k === 'flow') { ed.showFlow = !ed.showFlow; edRebuildOverlays(); edPanels(); }
-  if (k === 'routeUp' || k === 'routeDown') { edPush(); const R = RG.routeOf(ed.track).map(x => x.id), i = R.indexOf(v), j = i + (k === 'routeUp' ? -1 : 1); if (i >= 0 && j >= 0 && j < R.length) { [R[i], R[j]] = [R[j], R[i]]; ed.track.route = R; } edRebuild(); edPanels(); }
-  if (k === 'routeRev') { edPush(); ed.track.route = RG.routeOf(ed.track).map(x => x.id).reverse(); for (const g of RG.routeOf(ed.track)) g.ry = ((g.ry + 180) % 360 + 540) % 360 - 180; const st = ed.track.elements.find(x => x.type === 'start'); if (st) st.ry = ((st.ry + 180) % 360 + 540) % 360 - 180; edRebuild(); edPanels(); }
+  // the route is a list of steps (RG.routeIds): v is the step's place in it. A gate can be in the lap again (＋) and either way (⇄)
+  if (k === 'routeUp' || k === 'routeDown') { edPush(); const R = RG.routeIds(ed.track), i = +v, j = i + (k === 'routeUp' ? -1 : 1); if (i >= 0 && j >= 0 && i < R.length && j < R.length) { [R[i], R[j]] = [R[j], R[i]]; ed.track.route = R; } edRebuild(); edPanels(); }
+  if (k === 'routeAgain' || k === 'routeFlip' || k === 'routeDrop') { const R = RG.routeIds(ed.track), i = +v; if (!(i >= 0 && i < R.length)) return; edPush(); const id = RG.stepId(R[i]);
+    if (k === 'routeAgain') R.splice(i + 1, 0, R[i]); else if (k === 'routeFlip') R[i] = R[i].endsWith('!') ? id : id + '!'; else if (R.filter(st => RG.stepId(st) === id).length > 1) R.splice(i, 1);
+    ed.track.route = R; edRebuild(); edPanels(); }
+  if (k === 'routeRev') { edPush(); ed.track.route = RG.routeIds(ed.track).reverse(); for (const g of RG.routeOf(ed.track)) g.ry = ((g.ry + 180) % 360 + 540) % 360 - 180; const st = ed.track.elements.find(x => x.type === 'start'); if (st) st.ry = ((st.ry + 180) % 360 + 540) % 360 - 180; edRebuild(); edPanels(); }
   if (k === 'sel') { ed.sel = new Set(v.split(',').filter(edEl)); edAct('focus'); edPanels(); edRebuildOverlays(); }
   if (k === 'raceable') { edRebuild(); edPanels(); const ok = ed.chk.ok; edHint(ok ? 'Raceable: every required check passes' : 'Not raceable yet: see the checklist'); if (ok) { const sel1 = ed.chk.checks.filter(c => c.level !== 'pass'); if (sel1.length) ed.sel = new Set(sel1.flatMap(c => c.ids)); } }
   if (k === 'test') { edSaveNow(); const t = ed.track; $('#rgEd').classList.add('hide'); document.body.classList.remove('editing'); rgClear(ed.extras); EH.grp.visible = false; raceStart(t, 'test', { fromEditor: true }); }
@@ -565,14 +570,14 @@ function edInspector() {
 }
 function edInspectorLive() { const L = [...ed.sel].map(edEl).filter(Boolean); if (L.length !== 1) return; for (const k of ['x', 'y', 'z', 'ry', 'rx', 'rz', 's']) { const i = document.querySelector(`#edInsp [data-ef="${k}"]`); if (i && document.activeElement !== i) i.value = +L[0][k].toFixed(3); } }
 function edRight() {
-  const T = ed.track, R = RG.routeOf(T), chk = ed.chk || { checks: [], estimate: {} }, ic = { pass: '✓', warn: '⚠', fail: '✗', note: 'ℹ' };
+  const T = ed.track, R = RG.routeSteps(T), nOf = id => R.filter(x => x.e.id === id).length, chk = ed.chk || { checks: [], estimate: {} }, ic = { pass: '✓', warn: '⚠', fail: '✗', note: 'ℹ' };
   $('#edRightP').innerHTML = `<h4>Track</h4><p class="hint">${T.venue.kind === 'map' ? 'on ' + esc(S.MAPS[T.venue.map].title) : esc(RG.ROOMS[T.venue.room].label)}</p>
     <label>Laps (time attack) <input type="number" id="edLaps" min="1" max="20" value="${T.laps}"></label>
     ${T.venue.kind === 'room' ? `<label>Lighting <select id="edLight">${Object.entries(RG.LIGHTING).map(([k, l]) => `<option value="${k}" ${T.lighting === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
     <label>PVC section size (in) <input type="number" id="edSec" min="24" max="96" step="1" value="${Math.round(T.section / 0.0254)}"></label>
     <label>Tags <span class="edTags">${RG.TAGS.map(g => `<label class="chk"><input type="checkbox" data-etag="${g}" ${T.tags.includes(g) ? 'checked' : ''}>${g}</label>`).join('')}</span></label>
     <h4>Selection</h4><div id="edInsp"></div>
-    <h4>Route <small>${R.length} gates</small> <button data-ea="routeRev" title="Fly it the other way round">Reverse</button></h4><ol class="edRoute">${R.map((g, i) => `<li class="${ed.sel.has(g.id) ? 'on' : ''}"><a data-ea="sel:${g.id}">${esc(g.name || RG.CATALOG[g.type].label)}${g.sector ? ' ⏱' : ''}</a><button data-ea="routeUp:${g.id}" ${i ? '' : 'disabled'}>↑</button><button data-ea="routeDown:${g.id}" ${i < R.length - 1 ? '' : 'disabled'}>↓</button></li>`).join('')}</ol>
+    <h4>Route <small>${R.length} passes</small> <button data-ea="routeRev" title="Fly it the other way round">Reverse</button></h4><ol class="edRoute">${R.map(({ e: g, rev }, i) => `<li class="${ed.sel.has(g.id) ? 'on' : ''}"><a data-ea="sel:${g.id}">${esc(g.name || RG.CATALOG[g.type].label)}${rev ? ' ⇄' : ''}${g.sector ? ' ⏱' : ''}</a><button data-ea="routeFlip:${i}" title="Fly this pass the other way">⇄</button><button data-ea="routeAgain:${i}" title="Through this one again, right after">＋</button>${nOf(g.id) > 1 ? `<button data-ea="routeDrop:${i}" title="Take this pass out of the lap (the gate stays)">✕</button>` : ''}<button data-ea="routeUp:${i}" ${i ? '' : 'disabled'}>↑</button><button data-ea="routeDown:${i}" ${i < R.length - 1 ? '' : 'disabled'}>↓</button></li>`).join('')}</ol>
     <h4>Make raceable <button data-ea="raceable">Check</button></h4><div class="edChk">${chk.checks.map(c => `<div class="${c.level}" ${c.ids.length ? `data-ea="sel:${c.ids.join(',')}"` : ''}>${ic[c.level]} ${esc(c.text)}</div>`).join('')}</div>`;
   edInspector();
 }
