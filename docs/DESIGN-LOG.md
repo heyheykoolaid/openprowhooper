@@ -6,6 +6,21 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-25
 
+### The official scoring rules against the game's ScoreKeeper (owner, 2026-11-25; nothing changed yet)
+The owner pasted the official Pro Whooper rules text (streak bonus, K.W.A.D., repeat reduction, back-to-back, subpar execution, bumps,
+failing) and said Tyrantt agreed to the game using them. Compared with `ScoreKeeper` (built from the calculator spreadsheet):
+- **Same**: K.W.A.D. 250 a letter + 2000; repeats 100 / 75 / 50 / 0 %; back-to-back halving, compounding; sloppy -35 %; a bump's 50 %;
+  a failed trick scores nothing and does not count as a repeat.
+- **Different**: (1) Trick of the Week: rules 200 / 200 / 150 / 100 / 0 %, game 200 / 150 / 100 / 0 (one 200 short). (2) Streak cap:
+  rules "maxes out at 200 %", game has none. (3) A bump: rules end the streak (and the combo), game halves the streak bonus (the
+  spreadsheet's way) and the combo runs on. (4) A bump between tricks: rules end the streak, game does nothing. (5) A failed trick:
+  rules break the streak, game leaves it. (6) Streak growth: rules add the trick's BASE value / 10000, game adds the value after
+  execution, repeat and back-to-back reductions (and nothing for a back-to-back or 0 % repeat).
+- **In the game, not in the pasted text**: the same-obstacle reduction and the obstacle-switch bonus (from the spreadsheet); and our
+  own extra lines (gaps, INFINITY LOOPS / BIG BEN, community tricks), kept apart from the trick score.
+- **Open (owner)**: bring the six in line with the text (it changes board scores from that day)? Is the cap +200 % (x3) or x2? Does a
+  0 % repeat still build the streak? Also show the rules text in the game (a "How scoring works" page, credited)?
+
 ### Tyrantt's blessing, and links to prowhooper.com (owner, 2026-11-25)
 Tyrantt (Discord, today): "totally cool with the idea, especially since it's free for everyone". For credit he suggested a link in the
 menu to the Tricktionary, and offered to tag the tricks the game uses on his site, linking to a page of the tricks available in the game.
