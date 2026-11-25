@@ -1599,7 +1599,6 @@ a bump / crash (called Stall 360 Rewind + Half Matty), and two older pilots' one
 Tyrantt agreed to the game and asked for a link to the Tricktionary as the credit. The main menu has a line under the map line
 (`.pwCredit`: "Tricks and scoring from Tyrantt's Pro Whooper Tricktionary ↗ prowhooper.com"); the Tricktionary's note links there, each
 category heading links to its category page (`PW_SITE_CAT`: /open-air/, /powerloops/, /maverick-loops/, /matty-flips/, /split-s/,
-/pole-dancing/, /jump-ropes/, /rewinds/, /wall-tricks/, /gaps/, /misc-tricks/) and each trick has "↗ prowhooper.com". **Per-trick pages
-are not wired yet**: the site's trick-page addresses were not read (the fetch of /all-tricks/ needed the owner's approval), so a trick's
-link opens its category page; put a trick's own path in `PW_SITE_URL` (name -> path) and its link goes straight there. Tricks that are
+/pole-dancing/, /jump-ropes/, /rewinds/, /wall-tricks/, /gaps/, /misc-tricks/) and each trick has "↗ prowhooper.com". **Each trick links to its own page** (`PW_SITE_URL`, name -> path, all 93 read from prowhooper.com/all-tricks/ on 2026-11-25; the
+names match the game's exactly; odd paths: Split S is /split-s-2/, Gaps /gaps-2/); a trick with no entry falls back to its category page. Tricks that are
 ours alone (`PW_SITE_NONE`) have no link. All links open in a new tab (`rel="noopener"`).

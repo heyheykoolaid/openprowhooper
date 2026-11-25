@@ -11,8 +11,8 @@ Tyrantt (Discord, today): "totally cool with the idea, especially since it's fre
 menu to the Tricktionary, and offered to tag the tricks the game uses on his site, linking to a page of the tricks available in the game.
 **Built**: a credit line with the link on the main menu; in the Tricktionary a link in the note, on each category heading, and
 "↗ prowhooper.com" by every trick that is on the site (93 of 105; our own extras have none).
-**Open**: (1) trick links open the trick's CATEGORY page for now: the site's per-trick addresses still have to be read (one fetch of
-prowhooper.com/all-tricks/ the owner has to approve); `PW_SITE_URL` in menus.js takes them. (2) Tyrantt's side: a page on our end that
+**Done the same day**: every trick links to its own page (all 93 addresses read from the site's All Tricks page; the names match
+the game's one for one). **Open**: (2) Tyrantt's side: a page on our end that
 lists every trick the game detects, for his tags to link to (the Tricktionary screen has no address of its own yet: a
 `#tricks` / `#trick=<name>` link into the game would do it).
 
