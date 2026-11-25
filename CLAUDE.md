@@ -1579,3 +1579,18 @@ what they did. **Shaped openings**: a checkpoint element may carry `cells` [[x0,
 The 25 fly their laps pass by pass in the test (502 passes, 426 openings, the both-way and repeated ones included), and are raceable.
 **Track cards** (owner, 2026-11-25): Race, Leaderboard, Share, Delete (Save a copy on others'); no Edit, Copy code or Export on the cards.
 **Not built** (next, in the design log): the picker's click-the-opening tools inside the editor, the flight lines as a guide / ghost.
+
+## Double Rolling Trippy Spin by roll per lap (owner, 2026-11-25, from his video and a labelled run; `orbitKind` in sim.js; test/feedback.js)
+The old rule ("barrel-rolls through upright every lap") never matched how the owner flies it and was firing on Split S, Flips and Mattys
+near poles. Measured on his labelled run (Moose, 30 deg camera): body roll per degree round the pole 0.6-0.9 in plain trippies, 2.6-3.4
+in his DRTs, which never went past knife-edge. Now: **DRT** = a trippy (`tAcc / span` at least 0.45, `span` = `orbSpan` at least
+`DRT_SPAN` 120) whose roll since the trippy began (`ob.pRoll`, counted in every orbit step once `poseT0` is set, still or not) is at
+least `DRT_ROLL` 1.8 x the span. No upright test (`flips` stays only for `orbiting()`). **Keeping the lap alive while rolling**
+(`rollingIn`: in the trippy look within `DRT_HOLD` 1.5 s and rolling faster than `DRT_RATE` 150 deg/s): stopping counts after
+`DRT_STILL` 2.5 s, going back after `DRT_BACK` 150 deg (was 1 s / 30 deg), and ground given back is flown again before the lap grows
+(`back`). **A trippy turning into a DRT** (`hist`, `DRT_SPLIT_T` 1 s, `DRT_SPLIT_R` 300 deg, 2.5x the orbit's sweep, after a lap): the
+trippy is banked (`endOrbit(…, 'split')`) and a fresh orbit `split: true` judges the rolling; it is a DRT with `DRT_SPLIT_MIN` 540 deg
+of roll even when it hardly goes round, and its laps are max(round the pole, roll / 2). DRT timing and clean grading follow the trippy's.
+Re-flown on the 30 shared flights with trippy / orbit labels: DRT labels found 1 -> 3 of 7, rejected DRT calls 2 -> 0, Trippy Spin
+31 -> 32 of 34, Orbits and Trippy Switch unchanged, DRT calls 13 -> 5; bench 96.7 % unchanged. Still missed: two short DRTs that ended in
+a bump / crash (called Stall 360 Rewind + Half Matty), and two older pilots' ones. One pilot's labels: watch other pilots' calls.

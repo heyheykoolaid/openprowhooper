@@ -1261,6 +1261,8 @@ function mergeProfiles(c, p) {
   if (c.air) o.air = Math.max(o.air || 0, c.air);
   return o;
 }
+const DRT_SPLIT_T = 1.0, DRT_SPLIT_R = 300, DRT_SPLIT_MIN = 540;   // a trippy turning into a DRT: this much roll within this long
+const DRT_ROLL = 1.8, DRT_SPAN = 120, DRT_RATE = 150, DRT_HOLD = 1.5, DRT_STILL = 2.5, DRT_BACK = 150;   // Double Rolling Trippy: roll per degree round the pole; how much of the trippy; rolling fast (deg/s) in the look (s) keeps the lap alive this long still / this far back
 const STICK_ON = 0.08, TRIPPY_FLAT = 0.8, LOCK_ANG = 50;   // a stick counts as pushed; how upright a sticks-opposed trippy may be flown; 'locked in' = the pole within this of the camera's line, in the top half
 const SPLIT_DROP = 1.0;   // m an open-air Split-S comes out below where its half roll began
 const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
@@ -2196,7 +2198,12 @@ class StreamDetector extends TrickDetector {
       let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
       // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
       // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
-      if (Math.abs(da) / dt < Math.min(25 * D2R, 0.8 / Math.max(dist, 0.5))) { ob.still += dt; if (ob.still > 1.0 && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
+      // a Double Rolling Trippy rolls round the line to the pole and can all but stop going round for a moment, or swing back a
+      // little (the owner's labelled run, 2026-11-25: the lap restarted every 2-3 s): while it is rolling fast in the trippy look,
+      // give it longer before it counts as stopped or reversed, and keep counting its roll
+      const rollingIn = ob.poseT0 != null && t - (ob.lastPose ?? -9) < DRT_HOLD && Math.abs(rates[0]) > DRT_RATE;
+      if (ob.poseT0 != null) ob.pRoll = (ob.pRoll || 0) + rates[0] * dt;
+      if (Math.abs(da) / dt < Math.min(25 * D2R, 0.8 / Math.max(dist, 0.5))) { ob.still += dt; if (ob.still > (rollingIn ? DRT_STILL : 1.0) && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
       ob.still = 0; const sg = Math.sign(da);
       if (!ob.dir) { ob.dir = sg; ob.t0 = t; }
       if (sg === ob.dir) {
@@ -2209,7 +2216,7 @@ class StreamDetector extends TrickDetector {
         // its nose down at the pole (pilots: RodFPV's orbits round Clappy's sakura trees at 10-16 m/s ran pitch -65..-75°,
         // roll 10-40°, and were called Trippy Spin)
         const rolled = !(f.y < -0.6 && up.y > -0.15);   // not 'nose well below the horizon while still right-way-up' (inverted trippies and nose-up-the-pole ones are fine)
-        ob.acc += Math.abs(da) * R2D; ob.rev = 0; ob.n++; ob.t1 = t; if (up.y < 0.15 && rolled) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
+        const back = Math.min(ob.rev || 0, Math.abs(da) * R2D); ob.acc += Math.abs(da) * R2D - back; ob.rev = Math.max(0, (ob.rev || 0) - Math.abs(da) * R2D); ob.n++;   // ground given back while rolling is flown again before it counts ob.t1 = t; if (up.y < 0.15 && rolled) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
         // in view: level with the quad, or lower down the trunk (a fast orbit looks down at the pole: pilot RodFPV)
         const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)), inView = vi.ang < 55 || [-1, -2].some(dy => d.pos.y + dy >= P.y0 - 0.2 && this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)).ang < 55);
         if (inView) ob.view++;
@@ -2227,7 +2234,7 @@ class StreamDetector extends TrickDetector {
           // …or held flatter than knife-edge with the sticks opposed: a high camera tilt flies the same trippy much flatter (the
           // masterclass; HemmingsonFPV's and the owner's missed trippies never went under up.y 0.35)
           const wonky = ob.so > 0.5 && up.y < TRIPPY_FLAT;
-          const dA = Math.abs(da) * R2D, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120 || wonky) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
+          const dA = Math.abs(da) * R2D - back, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120 || wonky) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
           // the trippy pose while circling a pole (the pole held up in the picture, rolled over or nose up the pole): no Burrito
           // Roll then (owner: a burrito is never flown looking up at a pole); once 90° of the circle has been flown in the pose
           if (pose && ob.tAcc > 90) { const W = this.circled || (this.circled = []), last = W[W.length - 1]; if (last && last.ob === ob && t - last.t1 < 0.25) last.t1 = t; else { W.push({ ob, t0: t, t1: t }); if (W.length > 12) W.shift(); } }
@@ -2238,7 +2245,16 @@ class StreamDetector extends TrickDetector {
         ob.roll += rates[0] * dt;
         const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
         if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin') { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; continue; }
-      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > 30) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; } }
+        // a plain trippy that turns into a Double Rolling one (the owner's run: one lap of trippy, then rolling): bank the trippy's
+        // laps and judge the rolling on its own (the last DRT_SPLIT_T s rolled DRT_SPLIT_R deg or more, 2.5x the orbit's sweep)
+        { const H = ob.hist || (ob.hist = []); if (!H.length || t - H[H.length - 1][0] >= 0.1) { H.push([t, ob.acc, ob.pRoll || 0]); while (H.length && t - H[0][0] > 2.5) H.shift(); }
+          const h = H.find(x => t - x[0] <= DRT_SPLIT_T), dR = h ? Math.abs((ob.pRoll || 0) - h[2]) : 0, dAc = h ? ob.acc - h[1] : 0;
+          if (h && t - h[0] > DRT_SPLIT_T - 0.15 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin' && this.orbSpan(ob) >= 330 && dR >= DRT_SPLIT_R && dR >= 2.5 * Math.max(dAc, 30)) {
+            this.endOrbit(P, ob, 'split'); ev = true;
+            this.orb[P.id] = { acc: 0, dir: ob.dir, t0: h[0], t1: t, lastAng: ang, n: 1, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0,
+              poseT0: h[0], accStart: 0, lastPose: t, pRoll: Math.sign(ob.pRoll || 1) * dR, split: true };
+            continue; } }
+      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > (rollingIn ? DRT_BACK : 30)) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; } }
     }
     this.updateLive(t);
     if (t - (this.prunedAt || 0) >= 0.05 || t < (this.prunedAt || 0)) { this.prunedAt = t;   // forgetting old sightings does not need doing every millisecond
@@ -2250,24 +2266,29 @@ class StreamDetector extends TrickDetector {
   orbSpan(ob) { return ob.poseT0 != null ? ob.acc - ob.accStart : 0; }   // degrees swept since the trippy view was first held
   orbitKind(ob) {
     if (!ob || !ob.n) return null;
-    const span = this.orbSpan(ob), laps = Math.max(0.25, ob.acc / 360), inv = ob.inv / ob.n, view = ob.view / ob.n, rollPerLap = Math.abs(ob.roll) / laps;
-    // a Double Rolling Trippy barrel-rolls THROUGH UPRIGHT every lap; a trippy leaning hard into the pole also piles up body
-    // roll (more so with a tilted camera) but never comes upright (pilot feedback: trippies were read as DRT)
-    if (ob.acc >= 150 && rollPerLap >= 300 && (ob.flips || 0) / 2 / laps >= 0.75) return 'Double Rolling Trippy Spin';
+    const span = this.orbSpan(ob), laps = Math.max(0.25, ob.acc / 360), inv = ob.inv / ob.n, view = ob.view / ob.n;
+    // a Double Rolling Trippy (the owner's video and labelled run, 2026-11-25): a trippy that keeps rolling round the line to the
+    // pole, the pole still up in the picture, so the body rolls far more than the orbit alone turns it: his labelled ones 2.6-3.4 deg
+    // of roll per degree round the pole, plain trippies 0.6-0.9. It never needs to come upright (his never went past knife-edge; the
+    // old "through upright every lap" test called Split S, Flips and Mattys near poles instead)
+    if (span >= DRT_SPAN && ob.tAcc / span >= 0.45 && Math.abs(ob.pRoll || 0) / span >= DRT_ROLL) return 'Double Rolling Trippy Spin';
+    if (ob.split && Math.abs(ob.pRoll || 0) >= DRT_SPLIT_MIN && Math.abs(ob.pRoll || 0) / Math.max(span, 1) >= DRT_ROLL) return 'Double Rolling Trippy Spin';   // the rolling after a trippy: in the owner's run it hardly went round at all
     if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin';
     const mr = ob.aw ? ob.as / ob.aw : 0, round = mr > 0 ? Math.sqrt(Math.max(0, ob.as2 / ob.aw - mr * mr)) / mr : 1;   // 0 = a circle; a straight fly-by is 0.5+
     const around = ob.pl > 0 ? ob.pt / ob.pl : 0;
     if (!ob.air && ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8) return 'Orbits';
     return null;
   }
-  orbLapDeg(ob, kind) { return kind === 'Trippy Spin' ? this.orbSpan(ob) : ob.acc; }
+  // laps are laps round the pole; a Double Rolling Trippy split off a trippy can barely go round (the owner's run), so its rolling
+  // counts as well, at two rolls a lap ("double"), whichever is more
+  orbLapDeg(ob, kind) { return kind === 'Double Rolling Trippy Spin' && ob.split ? Math.max(this.orbSpan(ob), Math.abs(ob.pRoll || 0) / 2) : kind === 'Trippy Spin' || kind === 'Double Rolling Trippy Spin' ? this.orbSpan(ob) : ob.acc; }
   updateLive(t) {
     // the post with the most sweep owns the live trick (circling the slide tower sweeps all 4 posts at once)
     let best = null, bestP = null;
     for (const P of (this.airPole ? [...this.poles, this.airPole] : this.poles)) { const ob = this.orb[P.id]; if (ob && P.air) ob.air = true; if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) { best = ob; bestP = P; } }
     const L = this.live;
-    if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2; L.t1 = t; if (L.name === 'Trippy Spin') L.t0 = L.ob.poseT0; }
-    else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: this.orbitKind(best) === 'Trippy Spin' ? best.poseT0 : best.t0, t1: t, laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2 };
+    if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2; L.t1 = t; if (L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') L.t0 = L.ob.poseT0; }
+    else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: ['Trippy Spin', 'Double Rolling Trippy Spin'].includes(this.orbitKind(best)) ? best.poseT0 : best.t0, t1: t, laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2 };
     const N = this.live;
     if (N && this.lastTrippy && !N.switched && N.name !== 'Orbits' && N.objId === this.lastTrippy.objId && N.dir !== this.lastTrippy.dir && N.t0 - this.lastTrippy.t < 1.6 && N.laps >= SWITCH_LAPS) {
       N.switched = true; this.emit({ name: 'Trippy Switch', exec: 'CLEAN', clean: 95, obstacle: N.pole, toks: [], live: true }); this.lastTrippy = null;
@@ -2285,7 +2306,7 @@ class StreamDetector extends TrickDetector {
     for (const sg of this.orbSegs) if (sg.t1 > L.t0 - 0.3 && sg.t0 < L.t1 + 0.3) this.claimUsed.add(sg.id);
     // how tidy: an even circle at an even pace, holding the view, is clean; egg shapes, surging and losing the view are sloppy
     let clean = 92, notes = []; const ob = L.ob;
-    if (L.name === 'Trippy Spin' && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
+    if ((L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
       const lock = (ob.lock || 0) / ob.rn;   // 'locked in' (the masterclass): the object never leaves the top of the screen
       clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60 - Math.max(0, 0.85 - lock) * 15));
       if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); else if (lock >= 0.9) notes.push('locked in'); else if (lock < 0.6) notes.push('the object wandered off the top of the screen'); }

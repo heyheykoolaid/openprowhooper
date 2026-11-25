@@ -35,6 +35,15 @@ the camera alone (the clip has no position).
   object faster than the orbit alone would turn it: extra turn about that line per lap, measured from attitude and position, with no
   need to pass upright. Open: how much extra counts ("double": one extra turn a lap?), and a sim flight or Blackbox log of it to set it.
 
+### Double Rolling Trippy Spin: built (owner, 2026-11-25: "Do it up!")
+- **Built**: DRT = a trippy whose body roll is at least 1.8x its sweep round the pole; no upright test. The lap is kept alive while
+  rolling (longer before "stopped", up to 150 deg back). A trippy that turns into rolling is banked as a Trippy Spin and the rolling
+  is called on its own, even when it barely goes round; its laps then count its rolling at two rolls a lap.
+- **Result on his run**: the 10 s DRT and the trippy-then-DRT are called right, the Flip near the Cedar is no longer a DRT, the plain
+  trippies stay Trippy Spins, the false Roll inside the DRT is gone. Over all 30 shared flights with trippy labels: DRT 1 -> 3 of 7,
+  rejected DRT calls 2 -> 0, Trippy Spin 31 -> 32 of 34. Not caught: his two short ones that ended in a bump / crash.
+- **Open**: 1.8x is set from one pilot; the laps of a rolling-in-place DRT (roll / 2) are a guess at "double". Watch other pilots' calls.
+
 ### Double Rolling Trippy Spin: the owner's labelled run (2026-11-25; nothing changed yet)
 The owner flew a run on Moose (camera 30 deg) and labelled 4 Double Rolling Trippy Spins (two with bumps, one a crash) next to 3 plain
 Trippy Spins, round the Hemlock and Cedar by the playground. Re-flown through the detector (the orbit state of the pole, every 0.5 s):

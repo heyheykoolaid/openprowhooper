@@ -69,7 +69,15 @@ function lookUp(pitchDeg, wob) { const R = 1.6, w = 170 * D, T = 2.1 * 2 * P / w
 for (const pd of [40, 55, 65]) run(`trippy spin x2 (inverted, nose up the pole ${pd})`, lookUp(pd, 0), ['Trippy Spin']);
 run('trippy spin x2 (nose up 60, wobbling 15)', lookUp(60, 15), ['Trippy Spin']);
 run('trippy spin x2 (leaning 65, wobbling)', (() => { const o = orbit(2.1, 65, 0); return { T: o.T, at: t => { const s = o.at(t); return { pos: s.pos, q: qmul(s.q, rollQ(14 * D * Math.sin(t * 7))) }; } }; })(), ['Trippy Spin']);
-run('double rolling trippy (1 roll per lap)', orbit(2.1, 0, 1), ['Double Rolling Trippy Spin']);
+// the owner's Double Rolling Trippies (2026-11-25, his video and a labelled run): about 3 rolls per lap round the pole, never coming
+// upright on purpose; one barrel roll a lap is no more roll than a plain trippy has, so it is not one
+run('double rolling trippy (3 rolls per lap)', orbit(2.1, 0, 3), ['Double Rolling Trippy Spin']);
+run('one barrel roll a lap round a pole is not a double rolling trippy', orbit(2.1, 0, 1), [], ['Double Rolling Trippy Spin']);
+// a trippy that turns into a double rolling one, as the owner flew it: 1.3 laps of plain trippy (leaning 25), then the rolling: the
+// trippy is banked with its laps and the rolling called on its own
+run('trippy, then double rolling', (() => { const w = 170 * D, a1 = 1.3 * 2 * P, T1 = a1 / w, T = T1 + 1.2 * 2 * P / w, R = 1.6;
+  return { T: T + 1.5, at: t => { const a = Math.min(t, T) * w, pos = v3(LP.x + R * Math.cos(a), 2.4, LP.z + R * Math.sin(a)), face = faceQ(v3(-Math.cos(a), 0, -Math.sin(a)));
+    return { pos, q: qmul(face, rollQ(P - 25 * D + (a > a1 ? 3 * (a - a1) : 0))) }; } }; })(), ['Trippy Spin', 'Double Rolling Trippy Spin']);
 // 4. Matty flip at the pilot's rates, split by a hang: over the bar, front flip ~200 at 320/s, hang looking down (slow),
 // then the rest of the pitch while dropping behind and flying backward under the bar
 function matty(first, hangRate, hangT, second, rate2) {
