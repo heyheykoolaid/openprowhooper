@@ -4,6 +4,21 @@ A running record of what the owner and Claude decide and why, newest first. One 
 decided, what was left open. docs/TODO.md is the ordered list of what to do; CLAUDE.md says how things are built; this file keeps
 the reasoning so it is not lost between sessions. **Add an entry whenever a design question is discussed, even when nothing is built.**
 
+## 2026-11-25
+
+### Review queue: say who labelled what; a search box in the Tricktionary
+The owner, looking at a queue row ("the game was very unsure (35 %); 2 other pilots have labelled Double Rolling Trippy Spin"): "can we
+make it so that we can see what other people have labelled the trick as? the text is confusing, cos i know that person didn't label it".
+The line meant "two other pilots have labelled that trick somewhere, on other flights" (the reason the row ranks higher), not at this
+moment. **Decided / built**: every queue row now says what the game called, what was labelled AT that moment and by whom
+("labelled here: RodFPV: Trippy Spin", or "nobody has labelled this moment yet"), and the ranking note reads "N other pilots have
+labelled this trick on other flights" (`saidAt` / `hereTxt` in `deskQueue`, dropoff.js; `q.said`, `q.isVote`). Votes read "counts in
+full once three people agree" (the rule since 2026-11-20; the row still said "a second pilot").
+"can we make the tricktionary searchable? just a lil search box in the corner that narrows down as you type": **built** (`#tSearch`,
+`trickFilter` in menus.js): matches name, category or difficulty, every word typed; empty categories hide; Esc clears.
+**Open**: showing the other pilots' labels inside the review player itself (on the timeline) for moments the game DID call; today
+only moments with no game call show them there ("PILOTS SAY").
+
 ## 2026-11-21
 
 ### Audit of everything outstanding

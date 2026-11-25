@@ -1551,3 +1551,10 @@ beyond the bow, the grid ring beyond 120 m, purple fog, a far shore of dark towe
 lights strobe red and blue in turns (lights with `o.strobe`, and the lightbar materials); hallucinations (translucent neon
 pills, wireframe mushrooms (were palms; the pilot asked for mushrooms), geometric eyes that turn to watch the quad) drift overhead, visual only. 12 real lights: Map
 lights Auto drops to Few on slow machines.
+
+## Queue rows say who labelled what; Tricktionary search (owner, 2026-11-25)
+`deskQueue` (dropoff.js): each row's `why` names the game's call, the labels whose span covers that moment with their pilot
+(`saidAt`, `hereTxt`: "labelled here: <name>: <trick>" or "nobody has labelled this moment yet"; `q.said`), and the ranking boost
+reads "N other pilots have labelled this trick on other flights" (it was read as "at this moment"). Vote rows carry `isVote`.
+The Tricktionary has a search box in its top bar (`#tSearch`, `trickFilter` in menus.js; rows carry `data-tq` = name, category,
+difficulty in lower case; every typed word must match; categories with no match hide; Esc clears it).

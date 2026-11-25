@@ -588,16 +588,19 @@ function deskQueue() {
   const guestQ = deskVia() === 'guest';
   for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; if (guestQ && mine(i.p.name)) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
     const near = (t, T) => t >= T[0] - 1.5 && t <= T[1] + 2.5, answered = t => spans.some(T => near(t, T) && !(T[2] && !mine(T[4]))), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
-    const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), `; ${k} other pilot${k === 1 ? ' has' : 's have'} labelled ${n}`] : [0, '']; };
+    const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), `; ${k} other pilot${k === 1 ? ' has' : 's have'} labelled this trick on other flights`] : [0, '']; };
+    // what was said AT this moment, by whom (owner, 2026-11-25: "see what other people have labelled the trick as"): every label whose span covers it
+    const saidAt = t => { const seen = new Set(), o = []; for (const T of spans) if (near(t, T)) { const k = `${String(T[4]).toLowerCase()}|${T[3]}`; if (!seen.has(k)) { seen.add(k); o.push(`${T[4] || 'a pilot'}: ${T[3]}`); } } return o.slice(0, 4); };
+    const hereTxt = t => { const o = saidAt(t); return o.length ? `; labelled here: ${o.join(', ')}` : '; nobody has labelled this moment yet'; };
     for (const e of Array.isArray(p.events) ? p.events : []) { if (!e || !Number.isFinite(e.t) || typeof e.name !== 'string' || e.name === 'Crash' || e.name === 'near') continue;
       const c = Number.isFinite(e.conf) ? e.conf : 1, pc = `${Math.round(c * 100)} %`;
       const r = e.flagged ? [100, 'the pilot flagged this call as wrong (F)'] : e.maybe ? [60, "the trick library's guess (a maybe)"] : c < 0.5 ? [50 + (0.5 - c) * 40, `the game was very unsure (${pc})`] : c < 0.7 ? [30 + (0.7 - c) * 50, `the game was unsure (${pc})`] : null;
-      if (r) { const [bs, bw] = boost(e.name); per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] + bs - age * 3, why: r[1] + bw }); } }
+      if (r) { const [bs, bw] = boost(e.name); per.push({ file: it.file, kind: 'call', e, t: e.t, name: e.name.slice(0, 60), score: r[0] + bs - age * 3, why: `the game called ${e.name.slice(0, 60)}: ` + r[1] + hereTxt(e.t) + bw, said: saidAt(e.t) }); } }
     for (const m of Array.isArray(p.missed) ? p.missed : []) if (m && Number.isFinite(m.t)) per.push({ file: it.file, kind: 'missed', t: m.t, name: '(a trick the game missed)', score: 90 - age * 3, why: 'the pilot pressed Q: the game missed a trick just before this' });
     // another pilot's vote (a review of a board run): a moment counts in full only once 3 people agree (tools/evidence.js consensus), so a second opinion ranks near the top
     for (const T of spans) if (T[2] && !mine(T[4]) && !spans.some(U => U !== T && !U[2] && near(T[1], U))) { const e = (p.events || []).find(x => x && Number.isFinite(x.t) && near(x.t, T));
-      const [bs, bw] = boost(T[3]); per.push({ file: it.file, kind: e ? 'call' : 'missed', vote: T[3], e, t: e ? e.t : T[1], name: e ? String(e.name).slice(0, 60) : `(${T[3]})`, score: 95 + bs - age * 3, why: `${T[4] || 'a pilot'} voted "${T[3]}": it counts once a second pilot agrees${bw}` }); }
-    out.push(...per.filter(q => (q.why.includes('voted') || !answered(q.t)) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }
+      const [bs, bw] = boost(T[3]); per.push({ file: it.file, kind: e ? 'call' : 'missed', vote: T[3], e, t: e ? e.t : T[1], name: e ? String(e.name).slice(0, 60) : `(${T[3]})`, score: 95 + bs - age * 3, isVote: true, said: saidAt(e ? e.t : T[1]), why: `${T[4] || 'a pilot'} voted "${T[3]}"${e ? ` (the game called ${String(e.name).slice(0, 60)})` : ''}: it counts in full once three people agree${hereTxt(e ? e.t : T[1]).replace('; nobody has labelled this moment yet', '')}${bw}` }); }
+    out.push(...per.filter(q => (q.isVote || !answered(q.t)) && !done[deskQKey(q.file, q.t)]).sort((a, b) => b.score - a.score).slice(0, 3)); }
   return out.sort((a, b) => b.score - a.score).slice(0, DESK_Q); }
 async function deskQOpen(q) {
   const it = (desk.list || []).find(x => x.file === q.file), i = desk.info[q.file]; if (!it || !i || i.bad) return; const p = i.p;

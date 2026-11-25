@@ -85,6 +85,7 @@ select { max-width: 64%; } input[type=number] { width: 78px; }
 textarea { width: 100%; height: 110px; margin: 6px 0; }
 .tt { border-collapse: collapse; width: 100%; font: 13px var(--mono); } .tt td, .tt th { padding: 3px 5px; border-bottom: 1px solid #2a2724; text-align: left; vertical-align: top; }
 .tt input { width: 66px; }
+.tSearchWrap { display: flex; gap: 8px; align-items: center; } #tSearch { width: 190px; padding: 5px 8px; font: 13px var(--mono); background: #14110f; color: #eee; border: 1px solid #4a443c; border-radius: 6px; } #tSearch:focus { outline: none; border-color: #ffd23f; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
 .stats div { background: #0e0d0c; border: 1px solid #2c2925; padding: 8px; } .stats b { display: block; font-family: 'Bungee'; font-weight: 400; font-size: 18px; color: var(--acid); } .stats span { font: 11px var(--mono); color: #a89f8e; }
 .note { font: 12px var(--mono); color: #a89f8e; } .warn { color: #ffb02e; font: 13px var(--mono); }
@@ -552,7 +553,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
   <div class="topbar"><h2>Controls</h2><button data-act="back">Back</button></div><div id="cBody"></div></div></div>
 
 <div id="tricksScreen" class="screen hide"><div class="panel">
-  <div class="topbar"><h2>Tricktionary</h2><button data-act="back">Back</button></div><div id="tBody"></div></div></div>
+  <div class="topbar"><h2>Tricktionary</h2><span class="tSearchWrap"><input id="tSearch" type="search" placeholder="🔍 search tricks…" autocomplete="off" spellcheck="false" aria-label="Search tricks"><button data-act="back">Back</button></span></div><div id="tBody"></div></div></div>
 
 <div id="checklist" class="screen hide"><div class="panel">
   <div class="topbar"><h2>Trick Checklist</h2><button data-act="clclose">Back to flying</button></div><div id="clBody"></div></div></div>

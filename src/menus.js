@@ -482,9 +482,19 @@ function openTricks() {
   const cats = {}; for (const t of window.TPW_TRICKS) (cats[t.cat.trim()] = cats[t.cat.trim()] || []).push(t);
   const all = window.TPW_TRICKS.filter(t => t.pts > 0), nDet = all.filter(t => det.has(t.name.trim())).length, nDraft = all.filter(t => dr.has(t.name.trim())).length;
   $('#tBody').innerHTML = `<p class="note">${nDet} of ${all.length} tricks have detection rules. <b>●</b> tested rule · <b>◐</b> new draft rule written from the TPW description — fly it in Trick Training so it can be confirmed. Points and execution rules come from the TPW calculator. Trick of the Week: Split S, Powerloop, Matty Flip (first landing ×2, then ×1.5, then ×1).</p>` + (trainOk ? coachLadderHtml() : '') +
-    Object.entries(cats).map(([c, ts]) => `<h3>${c}</h3><table class="tt">${ts.map(t => { const n = t.name.trim(), has = det.has(n), d = dr.has(n);
-      return `<tr class="${has ? 'det' : 'nodet'}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${trainOk && coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then for real, then connected to another trick">🎓 train</a>${coachMark(n)}` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table>`).join('');
+    Object.entries(cats).map(([c, ts]) => `<div class="ttCat"><h3>${c}</h3><table class="tt">${ts.map(t => { const n = t.name.trim(), has = det.has(n), d = dr.has(n);
+      return `<tr class="${has ? 'det' : 'nodet'}" data-tq="${esc(`${n} ${c} ${t.diff}`.toLowerCase())}"><td title="${d ? 'draft rule' : has ? 'tested rule' : 'not detected'}">${has ? (d ? '◐' : '●') : '○'}</td><td><b>${t.name}</b>${d ? ' <small class="draftTag">draft</small>' : ''}${trainOk && coachCan(n) ? ` <a href="#" class="watch train" data-train="${encodeURIComponent(n)}" title="Fly it step by step with the game coaching you, then for real, then connected to another trick">🎓 train</a>${coachMark(n)}` : ''}${watchOk && window.Maneuvers && window.Maneuvers.LIB[n] ? ` <a href="#" class="watch" data-watch="${n}" title="the bot flies it — judge it">▶ watch</a>` : ''}</td><td>${t.diff}</td><td>${t.pts}</td><td class="desc">${t.desc}${(sp => `<div class="spot">Fly it on: <b>${sp.on.join(', ')}</b>${sp.demo ? ` · demo: ${sp.demo}` : ''}</div>`)(S.trickSpots(n, t.cat))}</td></tr>`; }).join('')}</table></div>`).join('') + '<p class="note hide" id="tNone">No trick by that name.</p>';
+  trickFilter();
 }
+// the Tricktionary's search box (owner, 2026-11-25): narrows the list as you type; matches the trick's name, category or difficulty
+function trickFilter() {
+  const box = $('#tSearch'), q = box ? box.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : []; let any = false;
+  for (const cat of document.querySelectorAll('#tBody .ttCat')) { let n = 0;
+    for (const tr of cat.querySelectorAll('tr[data-tq]')) { const ok = q.every(w => tr.dataset.tq.includes(w)); tr.classList.toggle('hide', !ok); if (ok) n++; }
+    cat.classList.toggle('hide', !n); if (n) any = true; }
+  const none = $('#tNone'); if (none) none.classList.toggle('hide', any);
+}
+{ const box = $('#tSearch'); if (box) { box.addEventListener('input', trickFilter); box.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape' && box.value) { box.value = ''; trickFilter(); e.preventDefault(); } }); } }
 
 
 
