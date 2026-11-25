@@ -35,6 +35,19 @@ the camera alone (the clip has no position).
   object faster than the orbit alone would turn it: extra turn about that line per lap, measured from attitude and position, with no
   need to pass upright. Open: how much extra counts ("double": one extra turn a lap?), and a sim flight or Blackbox log of it to set it.
 
+### Double Rolling Trippy Spin: the owner's labelled run (2026-11-25; nothing changed yet)
+The owner flew a run on Moose (camera 30 deg) and labelled 4 Double Rolling Trippy Spins (two with bumps, one a crash) next to 3 plain
+Trippy Spins, round the Hemlock and Cedar by the playground. Re-flown through the detector (the orbit state of the pole, every 0.5 s):
+- **Body roll per degree of orbit separates them**: plain trippies 0.6-0.9 (about one roll a lap, which any trippy has); the labelled
+  DRTs 2.6-3.4 (the rolling outruns the orbit about three times). One DRT stretch rolled ~195 deg while the orbit moved 26 deg.
+- **The quad never goes upside-down in a DRT** (up.y stays above -0.11), so the rule's "passes upright <-> inverted every lap" never
+  fires: the game called them Trippy Spin, Roll, Stall 360 Rewind, Half Matty. The one DRT the game called in this run was on a Flip.
+- **The orbit tracker loses the lap while she rolls**: the swept angle resets (or jumps to the Cedar next door) every 2-3 s inside a
+  DRT, so laps there come out short.
+- Agrees with the video measured the same morning: the rolling is round the line to the tree, not a barrel roll through upright.
+- **Proposed**: DRT = a trippy (pose, wonky nips) round a pole with body roll at least ~2x the orbit's sweep, no upright test; keep
+  the orbit alive through the rolling (do not reset it while the pole stays the one in view). The owner's call.
+
 ### RaceGOW track cards: fewer buttons (owner, 2026-11-25)
 "Can we remove Race/Edit/Copy Code/Export from the layout menu in racegow?", then, asked whether Race should go too: "Keep race, remove
 edit." **Done**: the track cards show Race, Leaderboard, Share and Delete (Save a copy on other pilots' tracks). Edit, Copy code and
