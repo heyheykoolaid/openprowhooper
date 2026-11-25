@@ -18,6 +18,7 @@ const checks = [
   ['vaporwave school map (builds, spawn clear, transitions, orbit and loop on its objects)', () => { const o = run('school.js', []); return /(\d+)\/\1 school map checks/.test(o) ? null : o; }],
   ['flight telemetry packing (round trip, size, same trick calls)', () => { const o = run('flightlog.js', []); return /(\d+)\/\1 flight log checks/.test(o) ? null : o; }],
   ['slide disarm with the real physics (slide, re-arm, fly away)', () => { const o = run('slide.js', []); return /(\d+)\/\1 slide checks/.test(o) ? null : o; }],
+  ['scoring: the official rules (streak by base value to x2, bumps / fails end it, repeats, Trick of the Week)', () => { const o = run('scoring.js', []); return /(\d+)\/\1 scoring rule checks/.test(o) ? null : o; }],
   ['bumps: a knock on the way out of a move makes its call a bump, a soft touch does not', () => { const o = run('bumps.js', []); return /(\d+)\/\1 bump checks/.test(o) ? null : o; }],
   ['challenges: trick challenges (the name word list in the game and on the relay, matching a move, the community score line, the relay board and moderation)', () => { const o = run('challenges.js', []); return /(\d+)\/\1 challenge checks/.test(o) ? null : o; }],
   ['rubiks: a Rubik\'s Cube with a long roll or a short flip out is still one, and a stall or eject reading never takes its middle', () => { const o = run('rubiks.js', []); return /rubiks: (\d+)\/\1/.test(o) ? null : o; }],

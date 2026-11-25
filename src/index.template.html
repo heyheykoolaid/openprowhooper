@@ -150,6 +150,7 @@ body.demoBig #coachCue { bottom: 3vh; }
 #judgeBox .demoSteps li { margin: 5px 0; } #judgeBox .demoSteps li.on { color: #fff; font-weight: bold; background: rgba(80,220,255,.12); } #judgeBox .demoSteps li.ok { color: #9fe3b0; } #judgeBox .demoStk { font-weight: normal; color: #ffd34d; font-size: 11px; margin-top: 2px; } #judgeBox .demoOn { border-left: 3px solid var(--cyan); }
 #coachBox .coWhy { color: #ffb0a6; font-weight: normal; margin-top: 2px; } #coachBox .coGot { color: #9fe3b0; } #coachBox .coRes { margin: 6px 0; padding: 5px 8px; border-left: 3px solid #888; } #coachBox .coRes.ok { border-color: #7dff9a; } #coachBox .coRes.no { border-color: #ff6a5a; }
 .tt a.train { margin-left: 6px; } .tt a.watch.pwSite, .ttCat h3 a.watch.pwSite { color: #ffd23f; opacity: .75; } .tt a.pwSite:hover, .ttCat h3 a.pwSite:hover { opacity: 1; text-decoration: underline; } .ttCat h3 a.pwSite { font: 11px var(--mono); margin-left: 8px; text-decoration: none; } a.pwHome { color: #ffd23f; }
+.rules h3 { margin: 16px 0 4px; color: #6cf; font: 600 15px var(--mono); } .rules p { margin: 6px 0; font: 14px/1.5 var(--mono); color: #ddd6c8; } .rules b { color: #ffd23f; }
 .pwCredit { margin: 0 0 8px; font: 12px/1.4 var(--mono); color: #cfc6b4; } .pwCredit a { color: #ffd23f; text-decoration: none; } .pwCredit a:hover { text-decoration: underline; }
 #train { position: fixed; left: 16px; top: 112px; width: min(340px, 44vw); z-index: 60; background: rgba(14,13,12,.86); border: 2px solid #0b0a09; box-shadow: 5px 5px 0 rgba(0,0,0,.5); padding: 10px 14px; font: 12px var(--mono); }
 .trHead { display: flex; justify-content: space-between; align-items: center; } .trHead small { color: var(--hot); letter-spacing: 1px; }
@@ -511,7 +512,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
     <button data-act="settings" title="Garage, controls and options">Settings ▸</button>
     <button data-act="tools" class="hide">Tools &amp; labs ▸</button>
   </div>
-  <div class="menuBtns menuSub hide" id="menuTraining"><button data-act="settingsBack" class="ghost">◂ Back</button><button data-act="tricks">Tricktionary<small>every trick, how it is flown, and what you have learned</small></button><button data-act="challenges">Trick challenges<small>new tricks pilots made up: watch them, try them, post your own</small></button></div>
+  <div class="menuBtns menuSub hide" id="menuTraining"><button data-act="settingsBack" class="ghost">◂ Back</button><button data-act="tricks">Tricktionary<small>every trick, how it is flown, and what you have learned</small></button><button data-act="rules">How scoring works<small>the official Pro Whooper rules: streaks, repeats, bumps, K.W.A.D.</small></button><button data-act="challenges">Trick challenges<small>new tricks pilots made up: watch them, try them, post your own</small></button></div>
   <div class="menuBtns menuSub hide" id="menuSettings"><button data-act="settingsBack" class="ghost">◂ Back</button><button data-act="garage">Garage &amp; Tune<small>your whoop, parts, rates and physics</small></button><button data-act="controls">Controls / Radio<small>radio, keyboard, gamepad, switches</small></button><button data-act="options">Options<small>pilot name, sharing, sound, graphics</small></button></div><input id="vol" type="hidden">
   <p class="note" id="menuDevice"></p>
 </div></div></div>
@@ -584,6 +585,22 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <div id="deskScreen" class="screen hide"><div class="panel" style="max-width:1000px" id="deskPanel"></div></div>
 <div id="judgeScreen" class="screen hide"><div class="panel" style="max-width:980px" id="judgePanel"></div></div>
 <div id="hubScreen" class="screen hide"><div class="panel hubPanel" id="hubPanel"></div></div>
+<div id="rulesScreen" class="screen hide"><div class="panel" style="max-width:820px">
+  <div class="topbar"><h2>How scoring works</h2><button data-act="back">Back</button></div>
+  <p class="note">The game scores by the official Pro Whooper competition rules, used with <b>Tyrantt</b>'s blessing. The full rules: <a class="pwHome" href="https://prowhooper.com/rules-overview/" target="_blank" rel="noopener">prowhooper.com ↗</a></p>
+  <div class="rules">
+  <h3>Bonuses</h3>
+  <p><b>Streak.</b> Every trick you land in a row adds to a multiplier for the tricks after it: its base points ÷ 100, in percent. An 850-point trick adds 8.5 %; follow it with a 200-point trick and you are at 10.5 %. It tops out at ×2. A crash, a bump or a failed trick sets it back to nothing.</p>
+  <p><b>K.W.A.D.</b> Four tricks a day spell K, W, A and D. Each letter is +250; all four is +2000 more.</p>
+  <h3>Penalties</h3>
+  <p><b>Repeats.</b> The first time you land a trick it pays 100 %, the second 75 %, the third 50 %, and nothing after that. The Tricks of the Week pay more, for longer: 200 %, 200 %, 150 %, 100 %, then nothing. A repeat that pays nothing does not build your streak.</p>
+  <p><b>Back to back.</b> The same trick straight after itself pays half, then a quarter, then an eighth, and so on.</p>
+  <p><b>Sloppy.</b> A trick flown untidily (a loop that stalls, a missed target) loses 35 %.</p>
+  <p><b>Bumps and ground taps.</b> Hit something during a trick and it pays half, and your combo and streak end. Hit something between tricks and the last trick keeps its points, but the streak ends.</p>
+  <p><b>Failing a trick.</b> A failed trick scores nothing and breaks the streak. It does not count as a repeat.</p>
+  <h3>Only in this game</h3>
+  <p>Kept on their own lines, apart from the trick score: points for every gap you fly through (tighter pays more), INFINITY LOOPS and BIG BEN for five Powerloops or Matty Flips in a row, and community tricks from Trick challenges. Flying many different objects in a run multiplies the trick score a little; many tricks in a row on one object pay less.</p>
+  </div></div></div>
 <div id="chScreen" class="screen hide"><div class="panel" style="max-width:980px" id="chPanel"></div></div>
 <div id="lbScreen" class="screen hide"><div class="panel" style="max-width:980px" id="lbPanel"></div></div>
 <div id="resultsScreen" class="screen hide"><div class="panel" style="max-width:720px" id="results"></div></div>

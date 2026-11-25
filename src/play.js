@@ -112,16 +112,32 @@ function lateBumpCheck() {
   if (!(drone.contactThisStep && drone.armed && (drone.lastImpact || 0) >= S.BUMP_AFTER)) return; lateTrick = null;
   const back = score.lateBump();
   const e = recap.events[L.i]; if (e && e.name === L.name) { e.exec = 'BUMP'; e.late = true; }
-  combo.pts = Math.max(0, combo.pts - back); renderCombo(); updateBreakdown();
-  flash(`<b>BUMP</b><small>${esc(L.name)}: a hit on the way out · −${back}</small>`, 'near');
+  combo.pts = Math.max(0, combo.pts - back); renderCombo();
+  flash(`<b>BUMP</b><small>${esc(L.name)}: a hit on the way out · −${back} · streak lost</small>`, 'near'); comboEnd(true); updateBreakdown();
+}
+// A bump or a ground tap BETWEEN tricks ends the streak (the official rules; owner, 2026-11-25). A knock of BUMP_AFTER or harder,
+// armed, with a streak to lose, waits BUMP_WAIT s: if a trick that IS a touch (taps, wall rides, slides, a perch, a wall stick) is
+// called or is live in that time, the knock was the trick and nothing happens; a trick graded BUMP takes its own penalty.
+const BUMP_WAIT = 1.5, TOUCH_TRICKS = new Set([...(window.TPW_TRICKS || []).filter(t => t.cat.trim() === 'Wall Tricks').map(t => t.name.trim()), 'Slide Disarm', 'Perch', 'Wall Stick', 'Face Punch']);
+let bumpWait = null;
+function betweenBumpCheck() {
+  if (bumpWait || lateTrick || mode !== 'fly' || race.on || !score || !drone.armed || drone.crashed || score.streak <= 1) return;
+  if ((drone.lastImpact || 0) >= S.BUMP_AFTER) bumpWait = { until: drone.time + BUMP_WAIT };
+}
+function betweenBumpApply() { bumpWait = null; if (score && score.bumpBetween && score.bumpBetween()) { flash('<b>BUMP</b><small>a hit between tricks · streak lost</small>', 'near'); updateBreakdown(); } }
+function betweenBumpTick() {
+  if (!bumpWait) return; if (mode !== 'fly' || drone.crashed) { bumpWait = null; return; }
+  const live = detector.liveState ? detector.liveState() : []; if (live.some(l => TOUCH_TRICKS.has(String(l.name).replace(' x2', '')))) { bumpWait.until = drone.time + BUMP_WAIT; return; }
+  if (drone.time > bumpWait.until) betweenBumpApply();
 }
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
+  if (bumpWait && ev.name !== 'near') { if (TOUCH_TRICKS.has(ev.name) || ev.exec === 'BUMP' || ev.exec === 'CRASH') bumpWait = null; else betweenBumpApply(); }
   if (ev.name === 'near') { flash(`<b>SO CLOSE</b><small>${ev.near}</small>`, 'near'); return; }
   const r = score.add(ev);
   if (ev.exec === 'CRASH') { comboEnd(true); flash(`<b>CRASH!</b><small>streak lost</small>`, 'crash'); updateBreakdown(); return; }
   if (!r) return;
-  comboAdd(r);
+  comboAdd(r); if (r.exec === 'BUMP') comboEnd(true);   // a bump ends the combo and the streak (official rules)
   lateTrick = r.exec === 'CLEAN' || r.exec === 'SLOPPY' ? { until: drone.time + S.BUMP_LATE, name: r.name, i: recap.events.length - 1 } : null;
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
@@ -149,7 +165,7 @@ function hud() {
   const s = params.stats;
   $('#score').textContent = score.total.toLocaleString();
   $('#streak').textContent = `STREAK ×${score.streak.toFixed(2)}`;
-  $('#streakbar').style.width = Math.min(100, (score.streak - 1) * 250) + '%';
+  $('#streakbar').style.width = Math.min(100, (score.streak - 1) / (S.STREAK_MAX - 1) * 100) + '%';
   $('#switch').textContent = score.uniqueObs.size ? `${score.uniqueObs.size} obstacle${score.uniqueObs.size > 1 ? 's' : ''} · switch ×${score.switchMult()}` : '';
   for (const L of ['K', 'W', 'A', 'D']) $('#kw' + L).classList.toggle('on', !!score.kwad[L]);
   // OSD
@@ -291,6 +307,7 @@ function frame(now) {
       else drone.step(rc, DT);
       if (!race.on) { detQ.push(detSnap(drone, rc)); recordTrace(rc); }   // judged after the frame is drawn (detFlush)
       if (lateTrick && drone.contactThisStep) lateBumpCheck();
+      if (drone.contactThisStep) betweenBumpCheck(); if (bumpWait) betweenBumpTick();
       if (drone.contactThisStep && CAT.ids.has(drone.contactOwner)) catHit();   // Slackvegan's bodega cat
       acc -= DT; n++;   // racing is about the track and the clock: no trick judging
       if (race.on) raceStep(p0, DT);

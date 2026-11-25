@@ -6,6 +6,19 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-25
 
+### Scoring follows the official rules text (owner, 2026-11-25: "1. yes. 2, 2x. 3. it should not. 4. sounds good! put that under training!")
+- **Decided**: bring the six differences in line with the text. The streak cap is x2. A repeat that pays 0 % does not build the streak.
+  A "How scoring works" page goes under Training.
+- **Built**: streak grows by base value / 10000 up to x2; a bump (during a trick, just after it, or between tricks), a failed trick
+  and a crash end it; a bumped trick also banks the combo; Trick of the Week 200 / 200 / 150 / 100 / 0 %. The page is in the game's
+  own words, credited to Tyrantt, linking to his rules page.
+- **Claude's calls, say if wrong**: back-to-back tricks DO build the streak (the text says base value; only the 0 % repeat was ruled
+  out); a bumped trick is still paid at the streak it had; a knock "between tricks" waits 1.5 s so that taps, wall rides, slides,
+  perches and wall sticks (tricks that are a touch) do not end the streak; soft touches (under the bump threshold) never do.
+- **Left as it was**: the same-obstacle reduction and the obstacle-switch bonus from the spreadsheet (not in the pasted text).
+- **Consequence**: board scores posted before today were made under the old rules; today's board mixes both until UTC midnight.
+- **Not flown by hand**: the between-tricks bump was checked in the score keeper's tests and by loading the game, not by flying into things.
+
 ### The official scoring rules against the game's ScoreKeeper (owner, 2026-11-25; nothing changed yet)
 The owner pasted the official Pro Whooper rules text (streak bonus, K.W.A.D., repeat reduction, back-to-back, subpar execution, bumps,
 failing) and said Tyrantt agreed to the game using them. Compared with `ScoreKeeper` (built from the calculator spreadsheet):

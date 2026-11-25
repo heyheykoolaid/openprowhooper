@@ -14,7 +14,8 @@ built from these files in order: `game.js` (state, renderer), `worldview.js`, `i
   both to the claude.ai Project (`claude/design-log.md`, `claude/todo.md`) when they change.
 - Keep `npm test` green. Every behaviour change to trick detection must keep all suites passing and should add a
   regression case (a synthetic flight in `test/*.js` or a real recording in `test/fixtures/`).
-- Scoring must stay faithful to the TPW calculator (see `ScoreKeeper` in `src/sim.js`). Presentation (combo display) may differ.
+- Scoring must stay faithful to the official Pro Whooper rules (see `ScoreKeeper` in `src/sim.js`; where the rules text and the
+  calculator spreadsheet differ, the rules text wins: owner, 2026-11-25). Presentation (combo display) may differ.
 - Never commit secrets. The game's GitHub token lives only in the player's browser (localStorage); it must never be
   written into exports, uploads, the build, or the repo.
 - Don't delete pilot data in `calibration/` or `blackbox/`.
@@ -1602,3 +1603,17 @@ category heading links to its category page (`PW_SITE_CAT`: /open-air/, /powerlo
 /pole-dancing/, /jump-ropes/, /rewinds/, /wall-tricks/, /gaps/, /misc-tricks/) and each trick has "↗ prowhooper.com". **Each trick links to its own page** (`PW_SITE_URL`, name -> path, all 93 read from prowhooper.com/all-tricks/ on 2026-11-25; the
 names match the game's exactly; odd paths: Split S is /split-s-2/, Gaps /gaps-2/); a trick with no entry falls back to its category page. Tricks that are
 ours alone (`PW_SITE_NONE`) have no link. All links open in a new tab (`rel="noopener"`).
+
+## Scoring by the official rules (owner, 2026-11-25, with Tyrantt's say-so; `ScoreKeeper` in sim.js, play.js; test/scoring.js)
+The owner pasted the official rules text; six things differed from the spreadsheet-built `ScoreKeeper` and now follow the text.
+**Streak**: a clean or sloppy trick adds its BASE points / 10000 (850 -> +8.5 %) for the tricks after it, capped at `STREAK_MAX` x2
+(owner: "2x"); a repeat paying 0 % adds nothing (owner); back-to-back tricks do add. A **bump** (also a late one, `lateBump`), a
+**failed trick** (`MISSED`) and a crash set it to 1; the spreadsheet's "bump halves it" is gone. A bumped trick is still paid at the
+streak it had, and in the game it banks the combo (`comboEnd(true)`). **A bump between tricks** (`betweenBumpCheck` / `betweenBumpTick` /
+`betweenBumpApply` in play.js, `ScoreKeeper.bumpBetween`): a knock of `BUMP_AFTER` or harder, armed, with a streak to lose, waits
+`BUMP_WAIT` 1.5 s; if a trick that IS a touch (`TOUCH_TRICKS`: the Wall Tricks category, Slide Disarm, Perch, Wall Stick, Face Punch)
+is called or live in that time nothing happens, a trick graded BUMP takes its own penalty, otherwise the streak ends ("a hit between
+tricks"), no points taken. **Trick of the Week** `TOTW_MULT` 200 / 200 / 150 / 100 %, then 0. Unchanged: repeats 100 / 75 / 50 / 0,
+back-to-back halving, sloppy -35 %, bump 50 %, K.W.A.D.; and the spreadsheet's same-obstacle reduction and switch bonus, which the
+pasted text does not mention. **Main menu → Training ▸ → How scoring works** (`#rulesScreen`): the rules in the game's own words,
+credited to Tyrantt, with a link to prowhooper.com/rules-overview/. Board scores from before this day were made under the old rules.

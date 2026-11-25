@@ -3238,7 +3238,8 @@ const EXEC_MULT = { CLEAN: 1, SLOPPY: 0.65, MISSED: 0, BUMP: 0.5, CRASH: 0 };
 const REPEAT_MULT = [1, 0.75, 0.5, 0];          // nth time a trick is landed in a run
 const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the same obstacle
 const SWITCH_BONUS = [[21, 2.0], [18, 1.7], [15, 1.5], [12, 1.35], [9, 1.2], [6, 1.1], [3, 1.05]];
-const TOTW_MULT = [2, 1.5, 1];
+const TOTW_MULT = [2, 2, 1.5, 1];             // Trick of the Week: 200 / 200 / 150 / 100 %, then 0 (the official rules, 2026-11-25)
+const STREAK_MAX = 2;                          // the streak multiplier tops out at x2 (owner, 2026-11-25, from the official rules' "maxes out at 200 %")
 const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
 // Daily K.W.A.D. (owner, agreed 2026-11-20): four tricks a day per map, the same for every pilot, from the date (the board's UTC
 // day) and the map. K and W are open-air tricks flown anywhere (K the simplest, W a step up); A and D are obstacle tricks on a NAMED
@@ -3284,6 +3285,7 @@ class ScoreKeeper {
   }
   add(ev) {
     const base = ev.basePts ?? trickPoints(ev.name);
+    if (ev.exec === 'MISSED') { this.streak = 1; this.streakCount = 0; }   // a failed trick breaks the streak (official rules); it scores nothing below and is no repeat
     if (ev.exec === 'CRASH') { this.streak = 1; this.streakCount = 0; this.prev = null; this.chain = null; this.log.push({ ...ev, net: 0 }); return { ...ev, net: 0, base: 0, streak: this.streak }; }
     if (!base) return null;
     const execM = EXEC_MULT[ev.exec] ?? 1;
@@ -3297,10 +3299,10 @@ class ScoreKeeper {
     if (ev.obstacle) { this.obstRun = (this.lastObstacle === ev.obstacle) ? this.obstRun + 1 : 0; obsM = OBST_REPEAT[Math.min(this.obstRun, 6)]; this.lastObstacle = ev.obstacle; this.uniqueObs.add(ev.obstacle); }
     const streakM = this.streak;
     const net = Math.round(base * execM * repeatM * totwM * b2bM * obsM * streakM);
-    // streak update (spreadsheet: +adjusted raw/10000 for clean-ish, bump halves the bonus)
-    const adjRaw = base * Math.min(1, totwM || 1) * execM * repeatM * b2bM;
-    if (ev.exec === 'BUMP') this.streak = (1 + this.streak) / 2;
-    else if (ev.exec === 'CLEAN' || ev.exec === 'SLOPPY') { if (repeatM > 0 && this.b2b === 1) { this.streak += adjRaw / 10000; this.streakCount++; } }
+    // the streak, by the official rules (owner, 2026-11-25; it was the spreadsheet's): every clean or sloppy trick adds its BASE value
+    // / 10000 (850 points: +8.5 %) for the tricks after it, up to STREAK_MAX; a repeat worth 0 % adds nothing (owner); a bump ends it
+    if (ev.exec === 'BUMP') { this.streak = 1; this.streakCount = 0; }
+    else if (ev.exec === 'CLEAN' || ev.exec === 'SLOPPY') { if (repeatM * totwM > 0) { this.streak = Math.min(STREAK_MAX, this.streak + base / 10000); this.streakCount++; } }
     this.maxStreak = Math.max(this.maxStreak, this.streak);
     if (ev.exec !== 'MISSED') { this.counts[ev.name] = n + 1; if (totwIdx >= 0) this.totwCounts[ev.name] = (this.totwCounts[ev.name] || 0) + 1; }
     this.last = { i: this.log.length, streak0: streakM, execM };   // for lateBump
@@ -3340,9 +3342,11 @@ class ScoreKeeper {
   lateBump() {
     const L = this.last, e = L && this.log[L.i]; if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
     const net = Math.round(e.net * EXEC_MULT.BUMP / L.execM), back = e.net - net;
-    e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = (1 + L.streak0) / 2; this.last = null;
+    e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = 1; this.streakCount = 0; this.last = null;
     this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus); return back;
   }
+  // a bump or a ground tap BETWEEN tricks (official rules): no trick loses points, the streak ends. True when there was one to lose.
+  bumpBetween() { const had = this.streak > 1; this.streak = 1; this.streakCount = 0; this.last = null; return had; }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
 }
 
@@ -3583,7 +3587,7 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);
