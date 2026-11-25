@@ -19,6 +19,21 @@ full once three people agree" (the rule since 2026-11-20; the row still said "a 
 **Open**: showing the other pilots' labels inside the review player itself (on the timeline) for moments the game DID call; today
 only moments with no game call show them there ("PILOTS SAY").
 
+### RaceGOW: what the 25 real layouts and the Route Picker teach (owner asked, 2026-11-25; nothing built)
+The owner sent a file of 25 real RaceGOW layouts (RaceGOW 1 #1-10, 2 #1-4 and #6, 3 #1-5, 6 #1-5: pipes on a section grid, the lap as
+ordered passes, a flight line for the older ones) and the Route Picker page he used to correct laps by clicking openings.
+- **Measured**: 502 passes over 426 different openings; 9-31 passes a lap (about 20); about 20 sections of pipe a track; footprints up
+  to 4 x 3 sections, mostly 2-3 tall. A third of the passes are above the first row; 74 are bigger than one square; 10 are shaped
+  (6 of them L-shapes round a frame); 51 openings are flown both ways in one lap; 76 passes re-use an opening.
+- **What the game's mode cannot do today**: a route lists each element once, so an opening flown twice needs a duplicate checkpoint
+  (the Track 8 sample does that by hand); checkpoints are one rectangle (the race code already takes several polygons, the editor
+  cannot make them); a lap is built by placing checkpoint blocks, not by clicking the openings the pipes make; one sample track.
+- **Proposed, in order**: (1) an importer from this format, all 25 as built-in tracks; (2) routes as steps (opening + way), repeats
+  allowed; (3) the picker's Pipes / Lap / Squares modes inside the track editor; (4) the flight lines as the racing line (guide,
+  ghost, a check on the lap-time estimate); (5) design norms from the 25 for "Make raceable" and a random-track maker.
+- **Open (owner)**: which to build first; the file says 24 in sections overall but 30 in on four RaceGOW 6 tracks: which is right;
+  only the four RaceGOW 6 laps in the picker are hand-checked, the other 21 need his eye; whether the designers' names may be shown.
+
 ## 2026-11-21
 
 ### Audit of everything outstanding
