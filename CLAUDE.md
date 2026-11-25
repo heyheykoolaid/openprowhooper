@@ -1594,3 +1594,12 @@ of roll even when it hardly goes round, and its laps are max(round the pole, rol
 Re-flown on the 30 shared flights with trippy / orbit labels: DRT labels found 1 -> 3 of 7, rejected DRT calls 2 -> 0, Trippy Spin
 31 -> 32 of 34, Orbits and Trippy Switch unchanged, DRT calls 13 -> 5; bench 96.7 % unchanged. Still missed: two short DRTs that ended in
 a bump / crash (called Stall 360 Rewind + Half Matty), and two older pilots' ones. One pilot's labels: watch other pilots' calls.
+
+## Links to prowhooper.com (owner, 2026-11-25, with Tyrantt's blessing; `PW_SITE*`, `pwSiteUrl` / `pwSiteLink` in menus.js)
+Tyrantt agreed to the game and asked for a link to the Tricktionary as the credit. The main menu has a line under the map line
+(`.pwCredit`: "Tricks and scoring from Tyrantt's Pro Whooper Tricktionary ↗ prowhooper.com"); the Tricktionary's note links there, each
+category heading links to its category page (`PW_SITE_CAT`: /open-air/, /powerloops/, /maverick-loops/, /matty-flips/, /split-s/,
+/pole-dancing/, /jump-ropes/, /rewinds/, /wall-tricks/, /gaps/, /misc-tricks/) and each trick has "↗ prowhooper.com". **Per-trick pages
+are not wired yet**: the site's trick-page addresses were not read (the fetch of /all-tricks/ needed the owner's approval), so a trick's
+link opens its category page; put a trick's own path in `PW_SITE_URL` (name -> path) and its link goes straight there. Tricks that are
+ours alone (`PW_SITE_NONE`) have no link. All links open in a new tab (`rel="noopener"`).
