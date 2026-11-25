@@ -42,7 +42,7 @@ Trippy Spins, round the Hemlock and Cedar by the playground. Re-flown through th
   DRTs 2.6-3.4 (the rolling outruns the orbit about three times). One DRT stretch rolled ~195 deg while the orbit moved 26 deg.
 - **The quad never goes upside-down in a DRT** (up.y stays above -0.11), so the rule's "passes upright <-> inverted every lap" never
   fires: the game called them Trippy Spin, Roll, Stall 360 Rewind, Half Matty. The one DRT the game called in this run was on a Flip.
-- **The orbit tracker loses the lap while she rolls**: the swept angle resets (or jumps to the Cedar next door) every 2-3 s inside a
+- **The orbit tracker loses the lap while the quad rolls**: the swept angle resets (or jumps to the Cedar next door) every 2-3 s inside a
   DRT, so laps there come out short.
 - Agrees with the video measured the same morning: the rolling is round the line to the tree, not a barrel roll through upright.
 - **Proposed**: DRT = a trippy (pose, wonky nips) round a pole with body roll at least ~2x the orbit's sweep, no upright test; keep
