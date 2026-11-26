@@ -144,6 +144,44 @@ function invTick(dt) {
   combo.pts += pts; combo.active = true; renderCombo(); updateBreakdown();
   flash(`<b>INVERTED ${invT.run}s</b><div class="pRow"><em>+${pts}</em></div>`, 'gapPop');
 }
+// mistawintaz (owner, 2026-11-26: "Yup!"): the day's K.W.A.D. objects glow until their letter is taken, so they can be found: a pulsing
+// outline round each piece named for an open A / D letter (bright where it is in sight, faint through walls), a light beam rising from
+// it and the letter floating above. Drawn only (no collider), only while flying (not racing), from the colliders' own bounds.
+const KM = { grp: null, sig: '', parts: [] };
+function kmBounds(o) {
+  const b = new THREE.Box3(), V = (x, y, z) => b.expandByPoint(new THREE.Vector3(x, y, z));
+  for (const p of o.prims || []) {
+    if (p.type === 'box') { const m = p.m, h = p.h, ex = Math.abs(m[0]) * h.x + Math.abs(m[1]) * h.y + Math.abs(m[2]) * h.z, ey = Math.abs(m[3]) * h.x + Math.abs(m[4]) * h.y + Math.abs(m[5]) * h.z, ez = Math.abs(m[6]) * h.x + Math.abs(m[7]) * h.y + Math.abs(m[8]) * h.z; V(p.c.x - ex, p.c.y - ey, p.c.z - ez); V(p.c.x + ex, p.c.y + ey, p.c.z + ez); }
+    else if (p.type === 'capsule') for (const q of [p.a, p.b]) { V(q.x - p.r, q.y - p.r, q.z - p.r); V(q.x + p.r, q.y + p.r, q.z + p.r); }
+    else if (p.type === 'sphere') { V(p.c.x - p.r, p.c.y - p.r, p.c.z - p.r); V(p.c.x + p.r, p.c.y + p.r, p.c.z + p.r); }
+  }
+  if (b.isEmpty() && o.obstacle && o.obstacle.a) { const ob = o.obstacle; V(ob.a.x, ob.under - 0.15, ob.a.z); V(ob.b.x, ob.over, ob.b.z); b.expandByScalar(0.12); }
+  return b;
+}
+function kwadMarkSync(t) {
+  const open = mode === 'fly' && !race.on && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
+  const sig = MAP_ID + '|' + open.map(L => L + score.kw[L].obj).join(',');
+  if (sig !== KM.sig) {
+    KM.sig = sig; if (KM.grp) { scene.remove(KM.grp); KM.grp.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } }); } KM.grp = null; KM.parts = [];
+    if (open.length) {
+      KM.grp = new THREE.Group(); KM.grp.renderOrder = 900; scene.add(KM.grp);
+      for (const L of open) {
+        const objs = world.objs.filter(o => o.name === score.kw[L].obj && !o.auto && !o.edge).slice(0, 8); let top = null;
+        for (const o of objs) { const b = kmBounds(o); if (b.isEmpty()) continue; b.expandByScalar(0.08); const sz = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()), eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(sz.x, sz.y, sz.z));
+          const near = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.95 })), far = new THREE.LineSegments(eg.clone(), new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.28, depthTest: false, depthWrite: false }));
+          near.position.copy(c); far.position.copy(c); far.renderOrder = 901; near.layers.enable(1); const fill = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fill.position.copy(c); fill.userData.km = 0.14; KM.grp.add(near, far, fill); KM.parts.push(near, far, fill);
+          if (!top || c.y + sz.y / 2 > top.y) top = new THREE.Vector3(c.x, b.max.y, c.z); }
+        if (!top) continue;
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 26, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+        beam.position.set(top.x, top.y + 13.4, top.z); beam.layers.enable(1); KM.grp.add(beam); KM.parts.push(beam);
+        const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.font = '900 96px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(L, 64, 70); g.fillStyle = '#c6ff3a'; g.fillText(L, 64, 70);
+        const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+        sp.position.set(top.x, top.y + 1.4, top.z); sp.scale.set(1.3, 1.3, 1); sp.renderOrder = 902; KM.grp.add(sp); KM.parts.push(sp);
+      }
+    }
+  }
+  if (KM.grp) { KM.grp.visible = true; const k = 0.6 + 0.4 * Math.sin(t * 4); for (const m of KM.parts) { const base = m.isSprite ? 1 : m.userData.km || (m.material.depthTest === false ? 0.28 : m.isMesh ? 0.35 : 0.95); m.material.opacity = base * (m.isSprite ? 1 : k); } }
+}
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
   if (bumpWait && ev.name !== 'near') { if (TOUCH_TRICKS.has(ev.name) || ev.exec === 'BUMP' || ev.exec === 'CRASH') bumpWait = null; else betweenBumpApply(); }
@@ -378,13 +416,13 @@ function frame(now) {
     const target = new THREE.Vector3(drone.pos.x - f.x / fl * 0.45, drone.pos.y + 0.16, drone.pos.z - f.z / fl * 0.45);
     chasePos.lerp(target, 1 - Math.exp(-dt * 6)); chaseCam.position.copy(chasePos); chaseCam.lookAt(drone.pos.x, drone.pos.y + 0.02, drone.pos.z);
   }
-  if (mode === 'review') { reviewTick(); return; }
+  if (mode === 'review') { if (KM.grp) KM.grp.visible = false; reviewTick(); return; }
   const rT0 = pf ? performance.now() : 0;
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   if (world.theme === 'dusk') duskTick(Math.min(0.1, dt || 0.016));
   if (world.theme === 'nyc') nycTick(Math.min(0.1, dt || 0.016));
   if (world.belts) beltTick(Math.min(0.1, dt || 0.016));
-  meowTick(Math.min(0.1, dt || 0.016));
+  meowTick(Math.min(0.1, dt || 0.016)); kwadMarkSync(performance.now() / 1000);
   renderer.render(scene, cam);
   if (BLOOM.on && (race.on || world.theme === 'vapor' || world.theme === 'vice' || world.theme === 'dusk' || world.theme === 'nyc')) bloomRender(cam);   // racing: the gates' LEDs glow
   if (PERF.fx) fxRender();

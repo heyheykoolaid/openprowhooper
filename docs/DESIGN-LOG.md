@@ -6,6 +6,10 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-26
 
+- **K.W.A.D. objects glow** (mistawintaz: "had too much trouble finding the cable tray"; owner: "Yup!"). Only the A / D objects of the
+  day, only while their letter is open: an outline box, a light beam and the letter over it, gone once taken. Decided: shown through walls
+  faintly (finding it is the point). Open: an Options switch to turn it off, if pilots find it too much.
+
 ### Battery life off means no battery; brownouts on a full pack; the water tower; clickable K.W.A.D. tricks
 - **Battery** (mistawintaz: "on the mob 7 75mm, I was getting brown outs from just pushing the throttle to 100"; owner: "ensure battery
   sim is removed, as well as the UI elements when disabled"). Found: the brownout check ran even with battery life off, and the sag was

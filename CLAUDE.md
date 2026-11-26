@@ -1645,3 +1645,7 @@ flat octagons inside the drawn cone (`buildSlackvegan`, the walk-up roof block).
 **K.W.A.D. tricks are clickable** (Toasty, via the owner; `kwadDef` in game.js, `.kwDef`): on the pause menu's and the daily board's
 K.W.A.D. list a click on a trick opens its difficulty, points and definition under the row, with "📖 in the Tricktionary" (opens it
 searched to that trick; Back returns to the pause menu) and its prowhooper.com page. The in-flight list (`#kwadList`) is not clickable.
+**K.W.A.D. objects glow** (mistawintaz, owner "Yup!", 2026-11-26; `KM`, `kmBounds`, `kwadMarkSync` in play.js, `__pw.kwadMark`): while flying (not
+racing, not in review) every piece named for an open A / D letter has a pulsing acid-green box round its colliders' bounds (bright where
+in sight, faint through walls, a soft additive fill, bloom layer 1), a thin beam rising 26 m from its top and the letter floating over it;
+it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change.
