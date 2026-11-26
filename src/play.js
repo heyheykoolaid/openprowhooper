@@ -183,6 +183,7 @@ function hud() {
   $('#switch').textContent = score.uniqueObs.size ? `${score.uniqueObs.size} obstacle${score.uniqueObs.size > 1 ? 's' : ''} · switch ×${score.switchMult()}` : '';
   for (const L of ['K', 'W', 'A', 'D']) $('#kw' + L).classList.toggle('on', !!score.kwad[L]);
   // OSD
+  { const off = tune.batteryLife === false; for (const id of ['#osdV', '#osdA', '#osdMah']) $(id).classList.toggle('hide', off); }   // battery life off: no battery on the OSD (owner, 2026-11-26)
   const v = drone.vbat; $('#osdV').textContent = v.toFixed(2) + 'V'; $('#osdV').classList.toggle('blink', v / (params.bat.cells || 1) < 3.35 && drone.armed);
   $('#osdA').textContent = drone.ibat.toFixed(1) + 'A'; $('#osdMah').textContent = Math.round(drone.mAh) + 'mAh' + (tune.batteryLife === false ? ' ∞' : ' ' + Math.round(drone.soc * 100) + '%');
   // battery life: a warning near the end of the pack, and the brown-out when the AIO gives up (sim.js Drone.step)

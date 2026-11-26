@@ -139,7 +139,7 @@ function onKey(e) {
   if (e.code === 'KeyC') camMode = camMode === 'fpv' ? 'chase' : 'fpv';
   if (e.code === 'Tab') { e.preventDefault(); $('#breakdown').classList.toggle('hide'); }
   if (e.code === 'KeyB' && race.on && race.fromEditor) { backToEditor(); return; }
-  if (e.code === 'KeyB') freshPack();
+  if (e.code === 'KeyB' && tune.batteryLife !== false) freshPack();   // no pack to swap with battery life off
   if (e.code === 'KeyH') setShowFrame(!showFrame);   // H: show / hide the whoop's own frame in the FPV view (also in the Garage)
   if (e.code === 'KeyV') { stickUI.on = !stickUI.on; store.set('ui.sticks', stickUI.on); }   // V: stick overlay
 }
@@ -184,7 +184,7 @@ function setShowFrame(on) { showFrame = !!on; store.set('showFrame', showFrame);
 function freshPack() { drone.soc = 1; drone.mAh = 0; drone.brownout = false; drone.lowV = 0; batWarn.low = false; flash('<b>FRESH PACK</b><small>battery swapped</small>', 'good'); }
 const batWarn = { low: false, dead: false };
 function setArmed(on, byThrottle) {
-  if (on && drone.brownout) { flash('<b>BATTERY DEAD</b><small>the flight controller browned out · B for a fresh pack</small>', 'warn'); return; }
+  if (on && drone.brownout && tune.batteryLife !== false) { flash('<b>BATTERY DEAD</b><small>the flight controller browned out · B for a fresh pack</small>', 'warn'); return; }
   if (on) {
     if (!byThrottle && !thrArmOk(lastRC.thr)) { flash(`<b>THROTTLE HIGH</b><small>${Math.round(lastRC.thr * 100)}% — lower it fully to arm</small>`, 'warn'); return; }
     if (drone.crashed) { flipOver(); }

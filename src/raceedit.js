@@ -233,7 +233,7 @@ function raceHud() {
   $('#rgBox').innerHTML = `<div>BEST LAP <b>${fmtLap(B.lap)}</b></div>${theo ? `<div class="dim">THEORETICAL ${fmtLap(theo)}</div>` : ''}${race.mode === 'timeattack' && B.ta && B.ta[race.laps] ? `<div>PB ${race.laps} LAPS ${fmtLap(B.ta[race.laps].total)}</div>` : ''}`
     + R.lapTimes.slice(-5).reverse().map(l => `<div class="${l <= (R.bestLap ?? 1e9) + 1e-9 ? 'good' : ''}">${fmtLap(l)}</div>`).join('');
   const cells = drone.p.bat.cells || 1, mins = drone.armed && race.ampAvg > 1 ? drone.soc * drone.p.bat.cap / 1000 / race.ampAvg * 60 : null;
-  $('#rgBat').innerHTML = `${(drone.vbat / cells).toFixed(2)} V/cell · ${drone.ibat.toFixed(1)} A${tune.batteryLife !== false && mins != null ? ` · ~${mins >= 1 ? Math.floor(mins) + ' min' : Math.round(mins * 60) + ' s'} left` : ''}${race.bumpT > 0 ? ' · <b class="bump">BUMP</b>' : ''}`;
+  $('#rgBat').innerHTML = tune.batteryLife === false ? (race.bumpT > 0 ? '<b class="bump">BUMP</b>' : '') : `${(drone.vbat / cells).toFixed(2)} V/cell · ${drone.ibat.toFixed(1)} A${mins != null ? ` · ~${mins >= 1 ? Math.floor(mins) + ' min' : Math.round(mins * 60) + ' s'} left` : ''}${race.bumpT > 0 ? ' · <b class="bump">BUMP</b>' : ''}`;   // battery life off: only BUMP
 }
 function raceVisuals(dt) {
   const R = race.R; if (!R) return; race.msgT -= dt; race.lastDeltaT -= dt; race.bumpT -= dt; rgLedTick(performance.now() / 1000);

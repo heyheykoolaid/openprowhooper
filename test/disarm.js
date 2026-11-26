@@ -37,7 +37,7 @@ fly('a loop whose top is flown with the motors off', c => { const { t, rc, st, d
   if (!st.lvl) { rc.pitch = 0.6; rc.thr = 0.35; if (d.up().y > 0.92) st.lvl = true; return; } rc.thr = 0.55; }, ['Disarm Loop'], 7);
 fly('the same flip with the motors running: an ordinary Flip', c => { const { t, rc, st } = c; if (t < 1) return; if (t < 1.25) { rc.thr = 0.75; return; } if (t < 1.25 + 0.6) { rc.pitch = 1; rc.thr = 0.3; return; } rc.thr = 0.55; }, ['Flip']);
 fly('motors off for a moment in a hover, no rotation', c => { const { t, st } = c; if (t > 1.2 && !st.a) { c.disarm(); st.a = 1; } if (t > 1.6 && !st.b) { c.arm(); st.b = 1; } c.rc.thr = t > 1.6 ? 0.6 : 0.36; }, []);
-{ const got = fly('a dead flip that is never caught (it hits the ground)', dead('pitch', 1, 1e9), [], 7).concat(fly('  …or caught only after it has landed', c => { const f = dead('pitch', 1, 1e9); f(c); if (c.t > 6) c.arm(); }, [], 8));
+{ const got = fly('a dead flip that is never caught (it hits the ground)', dead('pitch', 1, 1e9), [], 7).concat(fly('  …or caught only after it has landed', c => { const f = dead('pitch', 1, 1e9); f(c); if (c.t > 6) c.arm(); }, names => names.every(x => x === 'Crash'), 8));   // re-armed on the ground it may tip over (a crash): never a trick
   void got; }
 fly('a flick with the motors off for a quarter turn only', dead('pitch', 1, 90), ['Flip']);
 fly('the old physics (no deadSpin): the same cut flip stops turning', dead('pitch', 1, 345, { maxOff: 0.9 }), names => !names.some(x => /Disarm|Dead/.test(x)), 6, null);

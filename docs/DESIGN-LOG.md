@@ -4,6 +4,22 @@ A running record of what the owner and Claude decide and why, newest first. One 
 decided, what was left open. docs/TODO.md is the ordered list of what to do; CLAUDE.md says how things are built; this file keeps
 the reasoning so it is not lost between sessions. **Add an entry whenever a design question is discussed, even when nothing is built.**
 
+## 2026-11-26
+
+### Battery life off means no battery; brownouts on a full pack; the water tower; clickable K.W.A.D. tricks
+- **Battery** (mistawintaz: "on the mob 7 75mm, I was getting brown outs from just pushing the throttle to 100"; owner: "ensure battery
+  sim is removed, as well as the UI elements when disabled"). Found: the brownout check ran even with battery life off, and the sag was
+  unstable at full throttle (it was fed the current x the 2.4 drain factor, raw every step). **Decided / built**: off = a full pack that
+  never sags, drains or browns out, and no battery on the OSD (RaceGOW shows only BUMP; B does nothing). On = the sag follows the motor
+  model's own current, smoothed over 5 ms; no brownout on a full pack at full throttle on any preset tried.
+- **Consequence**: with battery life off, full throttle no longer sags, so punch-outs are a little stronger than before for everyone.
+- **Water tower** (owner: "invisible collision"): the tank's collider stuck out 1.6 m above the roof and under the floor; now it matches
+  what is drawn.
+- **K.W.A.D. tricks** (Toasty: click a trick in "Today's KWAD" for a definition or the Tricktionary): built on the pause menu and the daily
+  board; the in-flight list stays as it is (it fades on its own and the mouse is not used while flying).
+- **Open**: mistawintaz also asked (screenshot, not yet decided by the owner) to make the day's K.W.A.D. objects glow: he could not find
+  the "Cable Tray" in the warehouse.
+
 ## 2026-11-25
 
 ### INVERTED: a 3D-mode-only trick (owner, 2026-11-25)

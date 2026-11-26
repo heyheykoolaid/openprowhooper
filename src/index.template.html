@@ -32,6 +32,8 @@ html, body { margin: 0; height: 100%; background: #0d0c0b; color: var(--ink); fo
 #kwad span { font-family: 'Bungee'; font-size: 30px; color: rgba(255,255,255,.18); -webkit-text-stroke: 1.5px rgba(0,0,0,.6); transform: skew(-8deg); }
 #kwadList { position: absolute; right: 22px; top: 104px; min-width: 190px; padding: 6px 10px 7px; background: rgba(0,0,0,.6); border: 1px solid #fff3; font: 12px var(--mono); color: #eee; }
 #kwadList > small, .kwadBox > small { display: block; font: 700 10px var(--mono); letter-spacing: .16em; color: var(--acid); margin-bottom: 3px; }
+.kwRow[data-kwt] { cursor: pointer; } .kwRow[data-kwt]:hover span { text-decoration: underline; } #kwadList .kwRow[data-kwt] { cursor: default; } #kwadList .kwRow[data-kwt]:hover span { text-decoration: none; }
+.kwDef { margin: 2px 0 6px 22px; padding: 6px 8px; border-left: 2px solid var(--acid); background: #0008; font: 12px/1.45 var(--mono); color: #ddd6c8; } .kwDef p { margin: 3px 0 6px; } .kwDef small { color: var(--acid); } .kwDef .row { display: flex; gap: 10px; align-items: center; }
 .kwRow { display: flex; gap: 8px; align-items: baseline; line-height: 1.55; } .kwRow b { font-family: 'Bungee'; color: var(--hot); width: 14px; } .kwRow small { color: #9aa; } .kwRow.got span { color: var(--acid); } .kwRow.got span::after { content: ' ✓'; }
 .kwadBox { margin: 8px 0; padding: 8px 12px; border: 1px solid #fff3; background: #0006; font: 13px var(--mono); text-align: left; } .kwadBox > b { font-family: 'Bungee'; color: var(--hot); letter-spacing: .04em; }
 #hud.racing #kwadList { display: none; }

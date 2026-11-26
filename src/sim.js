@@ -783,10 +783,16 @@ class Drone {
     if (LD > 0) { const n = Math.max(1, Math.round(LD / 1000 / dt)), Q = this.cmdQ || (this.cmdQ = []); Q.push(Array.from(out)); while (Q.length > n + 1) Q.shift(); outD = Q[0]; }
     // ---- motors + battery
     const up = this.up();
+    // Battery life off (the game's default; owner, 2026-11-26: "ensure battery sim is removed"): a full pack that never sags or browns
+    // out. On: the pack sags under the current, smoothed over ~5 ms (the board's caps): fed back raw every 1 ms step, the sag and the
+    // motors' current chased each other at full throttle and dragged the bus to its 2.5 V floor (pilots got brownouts on a full pack).
+    // The sag follows the motor model's own current: `tune.drain` (x2.4 in the game) is fitted to the mAh a real pack loses, and
+    // multiplying the sag by it too took 40 A off a full 1S pack at full throttle.
+    const batOn = this.tune.batteryLife !== false;
     const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
-    const Vocv = ocv(this.soc, p.bat.hv, p.bat.cells);
-    const Vbus = Math.max(2.5 * p.bat.cells, Vocv - this.ibat * Rint);
-    let Itot = 0.35; // electronics/VTX
+    const Vocv = ocv(batOn ? this.soc : 1, p.bat.hv, p.bat.cells);
+    const Vbus = batOn ? Math.max(2.5 * p.bat.cells, Vocv - (this.ibatS ?? this.ibat) * Rint) : Vocv;
+    let Itot = 0.35, Isag = 0.35; // electronics/VTX; Isag: the motor model's own current, what the pack sags under
     const drain = +this.tune.drain || 1;
     const Fb = v3(), Tb = v3();
     let rotorAccelYaw = 0;
@@ -811,7 +817,7 @@ class Drone {
       const dw = (tau - Q) / p.rotorJ;
       w = this.fc.reversible ? w + dw * dt : Math.max(0, w + dw * dt);
       this.motorW[i] = w; this.motorI[i] = I;
-      Itot += Math.max(0, I * duty) * drain;   // tune.drain: what the motor model leaves out (ESC, iron, the props' real torque); absent = 1
+      Itot += Math.max(0, I * duty) * drain; Isag += Math.max(0, I * duty);   // tune.drain: what the motor model leaves out (ESC, iron, the props' real torque); absent = 1
       rotorAccelYaw += -m.spin * p.rotorJ * dw; // reaction of spinning-up rotor on frame (about body Y)
       // prop velocity (body) at motor location
       const vp = add(vRelB, cross(this.w, m.pos));
@@ -846,10 +852,10 @@ class Drone {
       Tb.y += -m.spin * sW * (p.cq * RHO * n * n * Math.pow(p.D, 5));
     }
     Tb.y += rotorAccelYaw;
-    this.ibat = Itot; this.vbat = Vbus;
-    if (this.tune.batteryLife !== false) this.soc = Math.max(0, this.soc - Itot * dt / (p.bat.cap * 3.6));   // Garage → Battery life off: the pack never runs down
+    this.ibat = Itot; this.vbat = Vbus; this.ibatS = (this.ibatS ?? Isag) + (Isag - (this.ibatS ?? Isag)) * (1 - Math.exp(-dt / 0.005));
+    if (batOn) this.soc = Math.max(0, this.soc - Itot * dt / (p.bat.cap * 3.6));   // Garage → Battery life off: the pack never runs down
     // brownout: a whoop's AIO resets when the loaded voltage falls below ~2.9 V a cell for a moment; the quad drops
-    if (this.armed && Vbus < BROWNOUT * p.bat.cells) { this.lowV = (this.lowV || 0) + dt; if (this.lowV > 0.25) { this.armed = false; this.brownout = true; } } else this.lowV = 0;
+    if (batOn && this.armed && Vbus < BROWNOUT * p.bat.cells) { this.lowV = (this.lowV || 0) + dt; if (this.lowV > 0.25) { this.armed = false; this.brownout = true; } } else this.lowV = 0;
     this.mAh += Itot * dt / 3.6;
     // ---- aerodynamic drag (body frame, quadratic) + rotor H-force (linear)
     const vb = vRelB;

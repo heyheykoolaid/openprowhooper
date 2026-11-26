@@ -1865,7 +1865,15 @@
       for (const [dx, dz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) pipe(wt, v3(wx + dx, RY, wz + dz), v3(wx + dx * 0.85, RY + 3.4, wz + dz * 0.85), 0.1, 'iron');
       for (const s of [-1, 1]) { pipe(wt, v3(wx - 1.3, RY + 1.6, wz + s * 1.25), v3(wx + 1.3, RY + 1.6, wz + s * 1.25), 0.04, 'iron', NS); pipe(wt, v3(wx + s * 1.25, RY + 1.6, wz - 1.3), v3(wx + s * 1.25, RY + 1.6, wz + 1.3), 0.04, 'iron', NS); }
       box(wt, v3(wx, RY + 3.45, wz), v3(1.75, 0.08, 1.75), 'oldWood', 0, 0, 0, NS);
-      pipe(wt, v3(wx, RY + 3.53, wz), v3(wx, RY + 7.3, wz), 1.6, 'towerWood'); pipe(wt, v3(wx, RY + 7.25, wz), v3(wx, RY + 8.6, wz), 1.78, 'roofDark', { cone: true, noCollide: true });
+      // the tank (owner, 2026-11-26: "invisible collision"): one capsule r 1.6 put round ends 1.6 m above the tank's top and below its floor,
+      // so the quad hit air over the roof. Now drawn as before but solid only where it is drawn: 16 staves round the wall, a core,
+      // a lid under the roof, and the roof cone as stacked flat octagons, every corner inside the drawn cone.
+      { const T0 = RY + 3.53, T1 = RY + 7.3, NSD = { noDraw: true, noSurvey: true };
+        pipe(wt, v3(wx, T0, wz), v3(wx, T1, wz), 1.6, 'towerWood', { noCollide: true });
+        for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, cx = wx + Math.cos(a) * 1.35, cz = wz + Math.sin(a) * 1.35; pipe(wt, v3(cx, T0 + 0.25, cz), v3(cx, T1 - 0.25, cz), 0.25, 'towerWood', NSD); }
+        pipe(wt, v3(wx, T0 + 1.35, wz), v3(wx, T1 - 1.35, wz), 1.35, 'towerWood', NSD);
+        for (const ry of [0, Math.PI / 4]) { box(wt, v3(wx, T1 - 0.05, wz), v3(1.13, 0.05, 1.13), 'towerWood', ry, 0, 0, NSD); box(wt, v3(wx, T0 + 0.05, wz), v3(1.13, 0.05, 1.13), 'towerWood', ry, 0, 0, NSD); }
+        pipe(wt, v3(wx, RY + 7.25, wz), v3(wx, RY + 8.6, wz), 1.78, 'roofDark', { cone: true, noCollide: true }); for (let i = 0; i < 6; i++) { const y0 = RY + 7.25 + i * 0.225, y1 = y0 + 0.225, r = 1.78 * (1 - (y1 - RY - 7.25) / 1.35) / Math.SQRT2; if (r < 0.04) break; for (const ry of [0, Math.PI / 4]) box(wt, v3(wx, (y0 + y1) / 2, wz), v3(r, 0.1125, r), 'roofDark', ry, 0, 0, NSD); } }
       for (const y of [RY + 4.3, RY + 5.6, RY + 6.8]) pipe(wt, v3(wx, y, wz), v3(wx, y + 0.06, wz), 1.63, 'iron', { noCollide: true });
       surf(wt, HARD);
       const ac = O('AC Units', 'deco'); for (const [x, z] of [[-22, -9], [-24.5, -9], [-9.5, -17], [-11.5, -8]]) { box(ac, v3(x, RY + 0.6, z), v3(0.9, 0.6, 0.7), 'galv'); box(ac, v3(x, RY + 1.22, z), v3(0.45, 0.02, 0.45), 'darkMetal', 0, 0, 0, { noCollide: true }); }

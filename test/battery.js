@@ -41,4 +41,11 @@ check('electronics match the cells', S.electronicsFit('air65', 'air') && !S.elec
 const f = S.fitParts({ frame: 'whoop85_2s', motor: 'm1103_11k', prop: 'p51_4b', battery: 'b300', electronics: 'air' });
 check('fitParts swaps a misfit for the nearest that fits', f.battery === 'b2s450' && f.electronics === 'aio2s', JSON.stringify(f));
 check('every preset already fits', Object.values(S.PRESETS).every(p => S.batteryFits(p.frame, p.battery) && S.electronicsFit(p.frame, p.electronics)), Object.entries(S.PRESETS).filter(([, p]) => !S.batteryFits(p.frame, p.battery) || !S.electronicsFit(p.frame, p.electronics)).map(([k]) => k).join(', '));
+// owner, 2026-11-26 (mistawintaz: brownouts from full throttle on the 75 mm 2S, battery life off): off = no battery at all; on, a full
+// pack held at full throttle for 2.5 s never browns out, game drain and prop fit included (the sag used to oscillate to its floor)
+{ const W = { objs: [], prims: [], zones: [], spawn: { pos: S.v3(0, 0.03, 0), yaw: 0 } };
+  for (const life of [false, true]) for (const name of ['75mm 2S (Mobula7 style)', 'Air65 Racing', 'Air65 II Champion', '85mm 2S (Mobula8 style)']) {
+    const P = S.buildDrone(S.PRESETS[name]), t = S.defaultTune(); Object.assign(t, { batteryLife: life, drain: 2.4, propCt: 1.31, propCq: 1.8 }); const d = new S.Drone(P, t, W); d.reset({ pos: S.v3(0, 30, 0), yaw: 0 }); d.armed = true;
+    let vmin = 99; for (let k = 0; k < 3000; k++) { d.step({ thr: k < 500 ? 0.4 : 1, roll: 0, pitch: 0, yaw: 0 }, 0.001); d.pos = S.v3(0, 30, 0); d.vel = S.v3(); if (k > 5) vmin = Math.min(vmin, d.vbat / P.bat.cells); }
+    check(`${name}, battery life ${life ? 'on' : 'off'}: full throttle on a full pack, no brownout${life ? '' : ', no sag, pack stays full'}`, !d.brownout && d.armed && (life ? vmin > 2.6 : vmin > 4.2 && d.soc === 1), `lowest ${vmin.toFixed(2)} V/cell`); } }
 console.log(`\n${ok}/${n} battery checks`); if (ok !== n) process.exit(1);

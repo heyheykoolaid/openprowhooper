@@ -1628,3 +1628,20 @@ hard bump), a crash or disarming ends the stretch; seconds already scored stay, 
 the combo alive while it runs; a "INVERTED Ns +200" pop-up each second. Not a call: nothing goes to the review / recap events or the
 labels, so the tools do not re-fly it. In the Tricktionary (Other Tricks, `EXTRA_TRICKS`, in `DETECTABLE`, no prowhooper.com link) and
 on the How scoring works page.
+
+## Battery life off = no battery; the sag fix; the water tower; K.W.A.D. tricks clickable (2026-11-26)
+**Battery** (mistawintaz: brownouts from full throttle on the 75 mm 2S with battery life off; owner: "ensure battery sim is removed,
+as well as the UI elements when disabled"): with `tune.batteryLife === false` (the game's default) `Drone.step` uses a full pack's OCV
+with no sag, never drains and never browns out (`batOn`); the OSD's V / A / mAh are hidden, RaceGOW's battery line shows only BUMP, B
+does nothing, and an old brownout never blocks arming. **The cause**: the sag was the last step's current x the pack's resistance, fed
+back raw every 1 ms, and the current included `tune.drain` (x2.4): at full throttle sag and current chased each other down to the
+2.5 V/cell floor, so a full pack browned out. With battery life on, the sag now follows the motor model's own current (`Isag`, no
+drain factor; `drain` still sets the mAh used) smoothed over 5 ms (`ibatS`): a full Mobula7-style 2S at full throttle sits at
+3.2-3.4 V/cell. test/battery.js (full throttle on a full pack, on and off, 4 presets). test/disarm.js: a dead flip re-armed on the
+ground may now tip into a crash (not a trick either way).
+**Slackvegan's Water Tower** (owner: "invisible collision"): the tank was one capsule r 1.6, whose round ends reached 1.6 m above the
+tank's top and below its floor. It is drawn the same; it collides as 16 staves round the wall, a core, two lids and the roof as stacked
+flat octagons inside the drawn cone (`buildSlackvegan`, the walk-up roof block).
+**K.W.A.D. tricks are clickable** (Toasty, via the owner; `kwadDef` in game.js, `.kwDef`): on the pause menu's and the daily board's
+K.W.A.D. list a click on a trick opens its difficulty, points and definition under the row, with "📖 in the Tricktionary" (opens it
+searched to that trick; Back returns to the pause menu) and its prowhooper.com page. The in-flight list (`#kwadList`) is not clickable.

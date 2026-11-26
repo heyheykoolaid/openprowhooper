@@ -84,8 +84,20 @@ const kwadDay = () => new Date().toISOString().slice(0, 10);
 function kwadFor(map, w) { const names = w ? new Set(w.objs.map(o => o.name)) : null; return S.dailyKwad(map, kwadDay(), names ? n => names.has(n) : null); }
 function newScore() { return new S.ScoreKeeper(null, kwadFor(MAP_ID, world)); }
 function kwadHtml(set, got) {   // the four as rows; `got` = the letters already taken this run (object names are the maps' own)
-  return ['K', 'W', 'A', 'D'].map(L => { const k = set ? set[L] : S.KWAD[L], nm = k.trick || k; return `<div class="kwRow ${got && got[L] ? 'got' : ''}"><b>${L}</b><span>${esc(nm)}${k.obj ? ` <small>on the ${esc(k.obj)}</small>` : ''}</span></div>`; }).join('');
+  return ['K', 'W', 'A', 'D'].map(L => { const k = set ? set[L] : S.KWAD[L], nm = k.trick || k; return `<div class="kwRow ${got && got[L] ? 'got' : ''}" data-kwt="${esc(nm)}" title="What is a ${esc(nm)}? Click for the trick"><b>${L}</b><span>${esc(nm)}${k.obj ? ` <small>on the ${esc(k.obj)}</small>` : ''}</span></div>`; }).join('');
 }
+// Toasty (owner, 2026-11-26): click a K.W.A.D. trick (pause menu, the daily board) for what it is: its definition, points and
+// difficulty open under the row, with the Tricktionary (searched to that trick) and its prowhooper.com page one click away
+function kwadDef(row) {
+  const nm = row.dataset.kwt, next = row.nextElementSibling; if (next && next.classList.contains('kwDef')) { next.remove(); return; }
+  const t = (window.TPW_TRICKS || []).find(x => x.name.trim() === nm); if (!t) return;
+  const url = typeof pwSiteUrl === 'function' ? pwSiteUrl(nm, t.cat) : '';
+  row.insertAdjacentHTML('afterend', `<div class="kwDef"><small>${esc(t.diff)} · ${Number(t.pts) || 0} pts</small><p>${esc(t.desc || '')}</p><div class="row"><a href="#" class="pwHome" data-kwopen="${esc(nm)}">📖 in the Tricktionary</a>${url ? `<a class="pwHome" href="${url}" target="_blank" rel="noopener">↗ prowhooper.com</a>` : ''}</div></div>`);
+}
+document.addEventListener('click', e => {
+  const o = e.target.closest('[data-kwopen]'); if (o) { e.preventDefault(); const nm = o.dataset.kwopen; openTricks(); const box = $('#tSearch'); if (box) { box.value = nm; trickFilter(); } return; }
+  const r = e.target.closest('.kwRow[data-kwt]'); if (r && !r.closest('#kwadList')) kwadDef(r);
+});
 let kwadListT = 0;
 function kwadShow(ms) { const el = $('#kwadList'); if (!el) return; el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); el.classList.remove('hide'); clearTimeout(kwadListT); kwadListT = setTimeout(() => el.classList.add('hide'), ms); }
 function kwadMenus() {   // the pause menu's list (owner, 2026-11-21: not on the main menu)
