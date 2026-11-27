@@ -6,6 +6,15 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### WebFPV runs real Betaflight in WebAssembly: does ours? (owner asked, 2026-11-27; nothing built)
+No: ours is a Betaflight-style flight controller written in JS (`FlightController` in sim.js): Actual and Betaflight rates, PID with
+feedforward, airmode, I-term relax, gyro / D-term lowpass filters (types and dynamic cutoffs as Betaflight's), TPA, anti-gravity, thrust
+linear, throttle boost, simplified-tuning sliders, angle and 3D modes, RC smoothing, and `diff all` / Blackbox-header import. Missing from
+the real thing: the dynamic notch and RPM filters (the sim has no motor noise for them to remove), and every firmware detail not copied.
+What we have that a firmware port does not give by itself: the physics fitted to real whoops' Blackbox logs (Feel Lab, step response).
+Open: whether to try Betaflight SITL compiled to WebAssembly in place of `FlightController` (a big job: the 1 kHz loop, the detector
+worker and the tests all call the JS one; it would need the same hooks and the Node tests would have to load the WASM).
+
 ### Today's K.W.A.D. Powerloop on Clappy's Footbridge never lit (owner asked, 2026-11-27)
 "is today's powerloop kwad objective on clappy map working for you?" The bot's Powerloop on the Footbridge was called right (6 / 6),
 but re-flying the shared Clappy flights showed pilots' Powerloops round the bridge are called on the **Footbridge Rail** 97 times and on
