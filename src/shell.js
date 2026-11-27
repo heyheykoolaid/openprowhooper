@@ -8,7 +8,7 @@
   requestAnimationFrame(frame);
 })();
 window.__pw = { drone, detector, perf: PERF, get frameShown() { return { show: showFrame, visible: droneMesh.visible, cam: camMode, mode }; }, me: { get sel() { return [...ME.sel]; }, get E() { return ME.E; }, giz: (m, ax) => { const c = (m === "move" ? MG.move : m === "rotate" ? MG.rot : MG.scl).children.find(o => !ax || o.userData.giz.axis === ax); if (!c || !MG.grp.visible) return null; MG.grp.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(c), p = (ax ? b.max.clone().add(b.min).multiplyScalar(0.5) : b.getCenter(new THREE.Vector3())); if (m === "rotate") { p.copy(MG.grp.position).add(new THREE.Vector3(0.95 * MG.grp.scale.x, 0, 0)); } const q = p.project(meCam), r = canvas.getBoundingClientRect(); return [Math.round((q.x + 1) / 2 * r.width + r.left), Math.round((1 - q.y) / 2 * r.height + r.top)]; } }, mapcode: { of: E => meCodeOf(E), read: s => meCodeRead(s) }, get score() { return score; }, startFly, S, rec: rc => recordTrace(rc), ghost: (n, o) => startGhost(n, o), judge: t => startJudge(t), review: { payload: () => rvPayload(), get state() { return rv; } } };
-window.__pw.kwadMark = { get state() { return { sig: KM.sig, n: KM.parts.length, vis: !!(KM.grp && KM.grp.visible) }; } };
+window.__pw.kwadMark = { get state() { return { sig: KM.sig, n: KM.parts.length, vis: !!(KM.grp && KM.grp.visible), shown: KM.parts.filter(m => m.visible).length, letters: KM.parts.filter(m => m.isSprite && m.visible).length }; } };
 
 // ============================================================ music player (overlay on everything)
 const music = (() => {

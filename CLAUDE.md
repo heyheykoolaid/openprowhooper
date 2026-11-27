@@ -1671,7 +1671,7 @@ searched to that trick; Back returns to the pause menu) and its prowhooper.com p
 racing, not in review) every piece named for an open A / D letter has a pulsing acid-green box round its colliders' bounds (bright where
 in sight, faint through walls, a soft additive fill, bloom layer 1) and the letter floating over it (no sky beam, all 10 % more
 see-through: owner, 2026-11-27);
-it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change.
+it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change. **The boxes fade with distance** (owner, 2026-11-27: "you shouldn't be able to see them on the east side … it's okay to show the letter"; `kmFade`, `KM_NEAR` 22 m, `KM_FAR` 40 m from the drone to the box's edge, every map); the letter always shows.
 
 ## Inverted Yaw Tracking is a tracked pass (owner, 2026-11-27, after headmazta's tutorial; `iyTrack`, `trackTargets`, `IYT_*` in sim.js, in `uhTick`; test/iyt.js)
 Owner: "it's focused on tracking an object as you pass by it while inverted". (The video itself could not be played from the workspace;

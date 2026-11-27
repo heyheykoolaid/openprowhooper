@@ -158,6 +158,11 @@ function kmBounds(o) {
   if (b.isEmpty() && o.obstacle && o.obstacle.a) { const ob = o.obstacle; V(ob.a.x, ob.under - 0.15, ob.a.z); V(ob.b.x, ob.over, ob.b.z); b.expandByScalar(0.12); }
   return b;
 }
+// the box round a K.W.A.D. object fades out with distance (owner, 2026-11-27: "you shouldn't be able to see them on the east side"):
+// full within KM_NEAR of the box's edge, gone by KM_FAR; the floating letter always shows
+const KM_NEAR = 22, KM_FAR = 40;
+function kmFade(c, r) { const p = drone && drone.pos; if (!p) return 1; const d = Math.max(0, Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) - r);
+  return d <= KM_NEAR ? 1 : d >= KM_FAR ? 0 : 1 - (d - KM_NEAR) / (KM_FAR - KM_NEAR); }
 function kwadMarkSync(t) {
   const open = mode === 'fly' && !race.on && store.get('kwadGlow', true) && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
   const sig = MAP_ID + '|' + open.map(L => L + score.kw[L].obj).join(',');
@@ -169,7 +174,7 @@ function kwadMarkSync(t) {
         const objs = world.objs.filter(o => o.name === score.kw[L].obj && !o.auto && !o.edge).slice(0, 8); let top = null;
         for (const o of objs) { const b = kmBounds(o); if (b.isEmpty()) continue; b.expandByScalar(0.08); const sz = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()), eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(sz.x, sz.y, sz.z));
           const near = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.85 })), far = new THREE.LineSegments(eg.clone(), new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.25, depthTest: false, depthWrite: false }));
-          near.position.copy(c); far.position.copy(c); far.renderOrder = 901; near.layers.enable(1); const fill = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.126, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fill.position.copy(c); fill.userData.km = 0.126; KM.grp.add(near, far, fill); KM.parts.push(near, far, fill);
+          near.position.copy(c); far.position.copy(c); far.renderOrder = 901; near.layers.enable(1); const fill = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.126, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fill.position.copy(c); fill.userData.km = 0.126; const rr = sz.length() / 2; for (const m of [near, far, fill]) { m.userData.c = c.clone(); m.userData.r = rr; } KM.grp.add(near, far, fill); KM.parts.push(near, far, fill);
           if (!top || c.y + sz.y / 2 > top.y) top = new THREE.Vector3(c.x, b.max.y, c.z); }
         if (!top) continue;
         /* the beam into the sky was taken out (owner, 2026-11-27) */
@@ -179,7 +184,7 @@ function kwadMarkSync(t) {
       }
     }
   }
-  if (KM.grp) { KM.grp.visible = true; const k = 0.6 + 0.4 * Math.sin(t * 4); for (const m of KM.parts) { const base = m.isSprite ? 0.9 : m.userData.km || (m.material.depthTest === false ? 0.25 : 0.85);   /* 10 % more see-through (owner, 2026-11-27) */ m.material.opacity = base * (m.isSprite ? 1 : k); } }
+  if (KM.grp) { KM.grp.visible = true; const k = 0.6 + 0.4 * Math.sin(t * 4); for (const m of KM.parts) { const base = m.isSprite ? 0.9 : m.userData.km || (m.material.depthTest === false ? 0.25 : 0.85);   /* 10 % more see-through (owner, 2026-11-27) */ const fd = m.userData.c ? kmFade(m.userData.c, m.userData.r) : 1; m.visible = fd > 0.01; m.material.opacity = base * (m.isSprite ? 1 : k) * fd; } }
 }
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);

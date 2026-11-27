@@ -29,6 +29,9 @@ and orbits (both called in a test), the slats are solid but not over/unders. Ope
 **Trippy Training Towers, and the green slide (owner, same day)**: the spiral is named the Trippy Training Tower; a second one, mirrored
 (turning the other way), stands at the south end of the quad. The Twister Tower's top slide (green), which ran off the plaza into the
 street, is removed; a rail closes that side of the top deck.
+**IGOW flag, and K.W.A.D. boxes fade (owner, same day)**: the East Campus flag carries the IGOW logo. The glowing box round a K.W.A.D.
+object now fades out between 22 and 40 m from the quad, on every map; the floating letter always shows, so the object can still be found.
+Open: the distances are a first guess.
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
