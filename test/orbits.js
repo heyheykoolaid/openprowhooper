@@ -58,9 +58,9 @@ const M = S.MAPS.moose.build(), lone = M.objs.find(o => o.kind === 'tree' && o.r
   // a properly rolled trippy flown with the sticks the same way round still counts (the witness is a vote, never a veto), with low confidence
   const d2 = flyTilt(withRc(lap(sc, 3.2, 1.9, 8, 3.2, 'rolled', 80), { thr: 0.5, roll: 0.4, pitch: 0, yaw: 0.4 }), 20), ed = d2.ev.find(e => e.name === 'Trippy Spin');
   check('a rolled trippy with the sticks together still counts, at low confidence with a note', !!ed && ed.watch.conf < 0.5 && ed.watch.fails.includes('sticks'), ed ? JSON.stringify(ed.watch) : d2.join(', ')); }
-// East Campus's Spiral Sculpture (2026-11-27): its mast is the pole; slats reach 2.5 m, so laps are flown 4 m out
-{ const sp = C.objs.find(o => o.name === 'Spiral Sculpture'), c = sp.prims[0].a; let got = fly(C, lap(c, 4.0, 4.5, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 4 / 8 + 2.5);
-  check('a trippy round the Spiral Sculpture', got.includes('Trippy Spin'), got.join(', ') || 'nothing');
+// East Campus's Trippy Training Towers (2026-11-27): its mast is the pole; slats reach 2.5 m, so laps are flown 4 m out
+{ const sp = C.objs.find(o => o.name === 'Trippy Training Tower South'), c = sp.prims[0].a; let got = fly(C, lap(c, 4.0, 4.5, 8, 3.2, 'rolled', 80), 3.2 * 2 * Math.PI * 4 / 8 + 2.5);
+  check('a trippy round a Trippy Training Tower', got.includes('Trippy Spin'), got.join(', ') || 'nothing');
   got = fly(C, lap(c, 4.2, 5, 11, 3.2, 'pitched', 66), 3.2 * 2 * Math.PI * 4.2 / 11 + 2.5);
-  check('orbits round the Spiral Sculpture', got.includes('Orbits'), got.join(', ') || 'nothing'); }
+  check('orbits round a Trippy Training Tower', got.includes('Orbits'), got.join(', ') || 'nothing'); }
 console.log(`\n${ok}/${n} orbit checks`); if (ok !== n) process.exit(1);

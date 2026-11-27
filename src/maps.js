@@ -132,10 +132,11 @@
         slabOU(`Twister Deck ${i + 1}`, v3(cx, Y + h, cz), v3(1.5, 0.05, 1.5), m);
         bar('Twister Rail', v3(cx - 1.5, Y + h + 0.9, cz - 1.5), v3(cx + 1.5, Y + h + 0.9, cz - 1.5), 0.03, 'paintRed'); });
       const sl = O('Twister Slide', 'deco');
-      for (const [h, dir, len] of [[1.4, 0, 2.6], [2.8, 1, 4.2], [4.2, 2, 5.8]]) { const ang = Math.atan2(h, len), L = Math.hypot(h, len) / 2, mid = h / 2;
+      for (const [h, dir, len] of [[1.4, 0, 2.6], [2.8, 1, 4.2]]) { const ang = Math.atan2(h, len), L = Math.hypot(h, len) / 2, mid = h / 2;
         if (dir === 0) { box(sl, v3(cx + 1.5 + len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, -ang); for (const s of [-1, 1]) box(sl, v3(cx + 1.5 + len / 2, Y + mid + 0.12, cz + s * 0.47), v3(L, 0.12, 0.03), 'paintOrange', 0, 0, -ang); }
         if (dir === 1) { box(sl, v3(cx, Y + mid, cz + 1.5 + len / 2), v3(0.45, 0.04, L), 'metalSlide', 0, ang, 0); for (const s of [-1, 1]) box(sl, v3(cx + s * 0.47, Y + mid + 0.12, cz + 1.5 + len / 2), v3(0.03, 0.12, L), 'paintBlue', 0, ang, 0); }
-        if (dir === 2) { box(sl, v3(cx - 1.5 - len / 2, Y + mid, cz), v3(L, 0.04, 0.45), 'metalSlide', 0, 0, ang); for (const s of [-1, 1]) box(sl, v3(cx - 1.5 - len / 2, Y + mid + 0.12, cz + s * 0.47), v3(L, 0.12, 0.03), 'paintGreen', 0, 0, ang); } }
+        /* the top deck's green slide is gone (owner, 2026-11-27: it ran out past the plaza into the street); a rail closes that side */ }
+      pipe(t, v3(cx - 1.5, Y + 4.2 + 0.9, cz - 1.5), v3(cx - 1.5, Y + 4.2 + 0.9, cz + 1.5), 0.025, 'paintRed', { noCollide: true });
       for (let i = 1; i <= 16; i++) pipe(t, v3(cx - 1.5, Y + i * 0.28, cz + 1.55), v3(cx - 0.9, Y + i * 0.28, cz + 1.55), 0.015, 'galv', { noCollide: true });
       for (const x of [cx - 1.5, cx - 0.9]) pipe(t, v3(x, Y, cz + 1.55), v3(x, Y + 5.0, cz + 1.55), 0.025, 'galv');   // the ladder's rails
       for (const [h] of [[1.4], [2.8], [4.2]]) for (const [a, b] of [[-1.5, 1.5], [1.5, 1.5], [-1.5, -1.5]]) pipe(t, v3(cx + a, Y + h + 0.9, cz + b), v3(cx + (a < 0 && b > 0 ? -0.9 : a), Y + h + 0.9, cz + (b > 0 && a < 0 ? 1.5 : b)), 0.025, 'paintRed', { noCollide: true }); }
@@ -424,13 +425,14 @@
         for (let z = z0; z <= z1 + 0.01; z += 3) pipe(tr, v3(cx - hw, G, z), v3(cx + hw, G, z), 0.045, tw, NS2);
         for (let z = z0, k = 0; z < z1 - 0.01; z += 3, k++) pipe(tr, v3(cx - hw, G, z + (k % 2 ? 3 : 0)), v3(cx + hw, G, z + (k % 2 ? 0 : 3)), 0.035, tw, NS2);
         for (let z = z0; z <= z1 + 0.01; z += 3) for (const x of [cx - hw, cx + hw]) box(tr, v3(x, 0.06, z), v3(0.2, 0.06, 0.2), 'concrete', 0, 0, 0, NS2); }
-      // the Spiral (owner, same day: "the big spiral structure would look cool as a big public sculpture"): a steel mast (a pole) with
-      // 96 slats 5 m long round it, each 9 deg on and 16 cm up from the last: 2.4 turns, 16 m tall, on a plinth. The slats collide
-      // and are kept off the Surveyor (96 over/unders would be noise); it is for orbits and trippies, and flying through the turns
-      { const sx = 87, sz = -28, sp = O('Spiral Sculpture', 'pole'), N = 96;
+      // the Trippy Training Towers (owner, same day: "the big spiral structure would look cool as a big public sculpture"; named by the
+      // owner, "copy and reverse it on the other side"): a steel mast (a pole) with 96 slats 5 m long round it, each 9 deg on and 16 cm up
+      // from the last: 2.4 turns, 16 m tall, on a plinth; the north one turns one way, the south one the other. The slats collide and
+      // are kept off the Surveyor (96 over/unders each would be noise); they are for orbits and trippies, and flying through the turns
+      for (const [sx, sz, sg, nm] of [[87, -28, 1, 'Trippy Training Tower North'], [87, 28, -1, 'Trippy Training Tower South']]) { const sp = O(nm, 'pole'), N = 96;
         pipe(sp, v3(sx, 0, sz), v3(sx, 16.6, sz), 0.18, 'sculptSteel'); pipe(sp, v3(sx, 16.6, sz), v3(sx, 17.6, sz), 0.12, 'sculptSteel', { cone: true, noCollide: true });
         box(sp, v3(sx, 0.25, sz), v3(1.4, 0.25, 1.4), 'concrete', 0, 0, 0, { noSurvey: true });
-        for (let k = 0; k < N; k++) box(sp, v3(sx, 0.9 + k * 0.16, sz), v3(2.5, 0.035, 0.22), 'sculptSteel', k * Math.PI / 20, 0, 0, { noSurvey: true }); }
+        for (let k = 0; k < N; k++) box(sp, v3(sx, 0.9 + k * 0.16, sz), v3(2.5, 0.035, 0.22), 'sculptSteel', sg * k * Math.PI / 20, 0, 0, { noSurvey: true }); }
       frame('Campus Arch', 82, 22, 3.0, 3.2, 'x', dark);
       { const fp = O('Campus Flagpole', 'pole'); pipe(fp, v3(84, 0, 3), v3(84, 11, 3), 0.07, 'galv'); box(fp, v3(84, 0.15, 3), v3(0.5, 0.15, 0.5), 'concrete', 0, 0, 0, NS);
         box(fp, v3(84.9, 10.2, 3), v3(0.85, 0.5, 0.015), 'paintBlue', 0, 0, 0, NC); }
