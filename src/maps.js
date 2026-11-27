@@ -185,7 +185,7 @@
       for (const z of [-3.85, -2.15]) { const a = v3(x1 - N * run, Y + rise + 0.9, z), b = v3(x1, 5.1 + 0.9, z); pipe(st, a, b, 0.03, 'galv'); for (let i = 0; i <= 4; i++) { const t = i / 4, x = a.x + (b.x - a.x) * t; pipe(st, v3(x, Y + rise * (1 + (N - 1) * t), z), v3(x, a.y + (b.y - a.y) * t, z), 0.02, 'galv'); } } }
     // ---- the outer ring: blocks of shops and flats (24-40 out), alleys 3 m wide between them, overhead walkways
     const blocks = [];
-    const side = (name, along, out, n) => { const spans = [[-40, -22], [-19, -3], [0, 14], [17, 40]];
+    const side = (name, along, out, n) => { const spans = name === 'East Shops' ? [[-40, -22], [-19, -4.5], [-1.5, 14], [17, 40]] : [[-40, -22], [-19, -3], [0, 14], [17, 40]];   // East Shops' middle alley in line with the footbridge (owner, 2026-11-27)
       spans.forEach(([a0, a1], i) => { const h = [4.2, 7.5, 5.4, 9.2, 6.3, 4.8][(i + n) % 6], c = (a0 + a1) / 2, hl = (a1 - a0) / 2, d0 = 24, d1 = 40, dm = (d0 + d1) / 2;
         const ax = along === 'x', ctr = ax ? v3(c, h / 2, out * dm) : v3(out * dm, h / 2, c), half = ax ? v3(hl, h / 2, 8) : v3(8, h / 2, hl);
         const o = O(`${name} ${i + 1}`, 'building', { wallNormal: ax ? v3(0, 0, -out) : v3(-out, 0, 0), tall: h, perchHeight: h });
@@ -234,7 +234,7 @@
           box(ac, ax ? v3(e + sx * 0.3, 2.4, out * 28) : v3(out * 28, 2.4, e + sx * 0.3), ax ? v3(0.3, 0.35, 0.5) : v3(0.5, 0.35, 0.3), 'metal');
           pipe(pp, ax ? v3(e + sx * 0.1, 0, out * 31) : v3(out * 31, 0, e + sx * 0.1), ax ? v3(e + sx * 0.1, h, out * 31) : v3(out * 31, h, e + sx * 0.1), 0.06, 'galv'); } });
       // alleys: a dumpster in each, and an overhead walkway across two of them
-      [-20.5, -1.5, 15.5].forEach((m, k) => { const d = O('Dumpster', 'deco'); box(d, along === 'x' ? v3(m, 0.65, out * 33) : v3(out * 33, 0.65, m), along === 'x' ? v3(0.8, 0.65, 1.0) : v3(1.0, 0.65, 0.8), 'dumpster');
+      [-20.5, name === 'East Shops' ? -3 : -1.5, 15.5].forEach((m, k) => { const d = O('Dumpster', 'deco'); box(d, along === 'x' ? v3(m, 0.65, out * 33) : v3(out * 33, 0.65, m), along === 'x' ? v3(0.8, 0.65, 1.0) : v3(1.0, 0.65, 0.8), 'dumpster');
         if ((k + n) % 2 === 0) slabOU('Alley Walkway', along === 'x' ? v3(m, 3.6, out * 30) : v3(out * 30, 3.6, m), along === 'x' ? v3(1.5, 0.08, 0.9) : v3(0.9, 0.08, 1.5), 'metalPlate');
         O('Alley', 'gap', { gap: { c: along === 'x' ? v3(m, 1.6, out * 24) : v3(out * 24, 1.6, m), n: along === 'x' ? v3(0, 0, 1) : v3(1, 0, 0), hu: 1.5, hv: 1.6, u: along === 'x' ? v3(1, 0, 0) : v3(0, 0, 1) } }); }); };
     side('North Shops', 'x', -1, 0); side('South Flats', 'x', 1, 2); side('East Shops', 'z', 1, 1); side('West Flats', 'z', -1, 3);
@@ -273,7 +273,7 @@
       // the shops: a lit window with a glass door, a sign over the awning (not over the murals), a white valance on each awning
       const sw = O('Shop Window', 'deco'), sg = O('Shop Sign', 'deco'), va = O('Awning Valance', 'deco'), SHOP_KINDS = ['cafe', 'ramen', 'boba', 'books', 'flowers', 'arcade', 'whoop', 'laundry']; let si = 0;   // worldview.js PARK_SHOPS
       for (const [name, along, out, n] of [['North Shops', 'x', -1, 0], ['South Flats', 'x', 1, 2], ['East Shops', 'z', 1, 1], ['West Flats', 'z', -1, 3]])
-        [[-40, -22], [-19, -3], [0, 14], [17, 40]].forEach(([a0, a1], i) => { const ax = along === 'x', ry = ax ? (out < 0 ? 0 : Math.PI) : (out > 0 ? -Math.PI / 2 : Math.PI / 2), mural = (name === 'North Shops' && (i === 1 || i === 2)) || (name === 'South Flats' && i === 1);
+        (name === 'East Shops' ? [[-40, -22], [-19, -4.5], [-1.5, 14], [17, 40]] : [[-40, -22], [-19, -3], [0, 14], [17, 40]]).forEach(([a0, a1], i) => { const ax = along === 'x', ry = ax ? (out < 0 ? 0 : Math.PI) : (out > 0 ? -Math.PI / 2 : Math.PI / 2), mural = (name === 'North Shops' && (i === 1 || i === 2)) || (name === 'South Flats' && i === 1);
           for (let k = 0; k < Math.floor((a1 - a0) / 5); k += 2) { const m = a0 + 2.5 + k * 5, P = (d, y) => ax ? v3(m, y, out * d) : v3(out * d, y, m), kind = SHOP_KINDS[(si++ * 3 + n) % SHOP_KINDS.length];
             sw.vis.push({ shape: 'sign', c: P(24 - 0.062, 1.32), w: 3.1, h: 2.45, ry, mat: 'shopWin_' + kind, decal: 1 });
             if (!mural) sg.vis.push({ shape: 'sign', c: P(24 - 0.012, 3.4), w: 3.0, h: 0.56, ry, mat: 'shopSign_' + kind, decal: 1 });
@@ -336,14 +336,14 @@
     // Lecture Hall and the Library beside it, the quad behind (trees, a bell tower on the hall, a colonnade, an arch, a flagpole,
     // benches, lamps), a low wall at the east end. Every trick piece is tagged: decks, roofs and beams over/unders, masts, trees,
     // lamps and the flagpole poles, openings gaps, the halls buildings (walls, dives, perches). Added last: nothing before it moves.
-    { const NS = { noSurvey: true }, NC = { noCollide: true }, dark = 'darkMetal', BZ = -1.5, DY = 5.1;
+    { const NS = { noSurvey: true }, NC = { noCollide: true }, dark = 'darkMetal', BZ = -3, DY = 5.1;
       const deckFinish = (nm, x0, x1) => { const dk = O(nm, 'deco'), cx = (x0 + x1) / 2, hx = (x1 - x0) / 2 - 0.05;
         box(dk, v3(cx, DY + 0.004, BZ), v3(hx, 0.004, 1.15), 'plazaPave', 0, 0, 0, { noCollide: true, decal: 1 });
         for (let x = x0 + 1.5; x < x1 - 0.3; x += 1.5) box(dk, v3(x, DY + 0.009, BZ), v3(0.03, 0.004, 1.15), dark, 0, 0, 0, { noCollide: true, decal: 2 }); };
       const rails = (nm, x0, x1) => { for (const z of [BZ - 1.12, BZ + 1.12]) bar(nm, v3(x0, 6.0, z), v3(x1, 6.0, z), 0.03, 'galv');
         const rp = O(nm + ' Post', 'deco'); for (let x = x0 + 0.75; x < x1 - 0.2; x += 1.5) for (const z of [BZ - 1.12, BZ + 1.12]) box(rp, v3(x, DY + 0.45, z), v3(0.025, 0.45, 0.025), dark, 0, 0, 0, NS); };
       // the Skywalk: down the alley (z -3..0) from the footbridge's end to the shops' back, on cross beams into both walls
-      slabOU('Skywalk', v3(32.1, 5.0, BZ), v3(7.9, 0.1, 1.2), 'concrete');
+      slabOU('Skywalk', v3(32.1, 5.0, BZ), v3(7.9, 0.1, 1.2), 'concrete');   // down the alley (z -4.5..-1.5), on the footbridge's line
       { const bm = O('Skywalk Beam', 'deco'); for (const x of [26, 30, 34, 38]) box(bm, v3(x, 4.8, BZ), v3(0.08, 0.1, 1.5), dark, 0, 0, 0, NS); }
       deckFinish('Skywalk Finish', 24.2, 40); rails('Skywalk Rail', 24.25, 40);
       { const lt = O('Skywalk Light', 'deco'); for (const x of [28, 36]) box(lt, v3(x, 8.85, BZ), v3(0.5, 0.025, 0.08), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); }
@@ -371,7 +371,7 @@
       const hall = (name, x0, x1, z0, z1, h, mat) => { const o = O(name, 'building', { wallNormal: v3(-1, 0, 0), tall: h, perchHeight: h }); box(o, v3((x0 + x1) / 2, h / 2, (z0 + z1) / 2), v3((x1 - x0) / 2, h / 2, (z1 - z0) / 2), mat); parapet(x0, x1, z0, z1, h); return o; };
       // Campus Hall (x 52..66, z -18..15, 12 m) with the Breezeway (z -3..0, 5.1..8.5 m) through it and the Arcade under that
       const HX0 = 52, HX1 = 66, HH = 12;
-      const hs = hall('Campus Hall', HX0, HX1, -18, -3, HH, 'brick'); hall('Campus Hall', HX0, HX1, 0, 15, HH, 'brick');
+      const hs = hall('Campus Hall', HX0, HX1, -18, BZ - 1.5, HH, 'brick'); hall('Campus Hall', HX0, HX1, BZ + 1.5, 15, HH, 'brick');
       box(hs, v3(59, 10.25, BZ), v3(7, 1.75, 1.5), 'brick');   // over the breezeway
       { const pr = O('Parapet', 'deco'); box(pr, v3(HX0 + 0.1, HH + 0.225, BZ), v3(0.1, 0.225, 1.5), 'concrete'); box(pr, v3(HX1 - 0.1, HH + 0.225, BZ), v3(0.1, 0.225, 1.5), 'concrete'); }
       slabOU('Campus Breezeway Floor', v3(59, 4.95, BZ), v3(7, 0.15, 1.5), 'concrete');
@@ -380,8 +380,8 @@
         for (const x of [55, 63]) box(lt, v3(x, 4.78, BZ), v3(0.5, 0.02, 0.1), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); }
       O('Campus Breezeway', 'gap', { gap: { c: v3(HX0, 6.8, BZ), n: v3(1, 0, 0), hu: 1.35, hv: 1.6, u: v3(0, 0, 1) } });
       O('Campus Arcade', 'gap', { gap: { c: v3(HX0, 2.35, BZ), n: v3(1, 0, 0), hu: 1.35, hv: 2.25, u: v3(0, 0, 1) } });
-      const inStair = (m, y) => m > -0.5 && m < 9 && y < 6;
-      windows(HX0 - 0.025, 'x', -18, -3, HH); windows(HX0 - 0.025, 'x', 0, 15, HH); windows(HX1 + 0.025, 'x', -18, -3, HH); windows(HX1 + 0.025, 'x', 0, 15, HH, inStair);
+      const inStair = (m, y) => m > BZ + 1 && m < BZ + 10.5 && y < 6;
+      windows(HX0 - 0.025, 'x', -18, BZ - 1.5, HH); windows(HX0 - 0.025, 'x', BZ + 1.5, 15, HH); windows(HX1 + 0.025, 'x', -18, BZ - 1.5, HH); windows(HX1 + 0.025, 'x', BZ + 1.5, 15, HH, inStair);
       // the bell tower on the hall's roof: four posts, a roof (an over/under), its opening a gap
       { const bx = 59, bz = 8, y0 = HH, bt = slabOU('Bell Tower Roof', v3(bx, y0 + 3.7, bz), v3(1.55, 0.14, 1.55), 'roofTar');
         for (const [u, w] of [[-1.25, -1.25], [1.25, -1.25], [-1.25, 1.25], [1.25, 1.25]]) pipe(bt, v3(bx + u, y0, bz + w), v3(bx + u, y0 + 3.56, bz + w), 0.12, 'concrete');
@@ -394,8 +394,8 @@
         const rl = O('Terrace Rail', 'deco'); pipe(rl, v3(68.35, 6.0, BZ - 1.15), v3(68.35, 6.0, BZ + 1.15), 0.03, 'galv', NS); pipe(rl, v3(HX1 + 0.05, 6.0, BZ - 1.15), v3(68.35, 6.0, BZ - 1.15), 0.03, 'galv', NS);
         for (const [x, z] of [[68.35, BZ - 1.15], [68.35, BZ + 1.15], [67.2, BZ - 1.15]]) pipe(rl, v3(x, DY, z), v3(x, 6.0, z), 0.025, dark, NS);
         const sc = O('Campus Stairs', 'deco'), N = 17, rise = DY / N, run = 0.5;
-        for (let k = 0; k < N - 1; k++) { const top = DY - rise * (k + 1); box(sc, v3(67.2, top / 2, k * run + run / 2), v3(1.2, top / 2, run / 2), 'stairStone', 0, 0, 0, NS); }
-        pipe(sc, v3(68.35, 6.0, 0), v3(68.35, 0.9 + rise, (N - 1) * run), 0.03, 'galv', NS); }
+        const z0 = BZ + 1.5; for (let k = 0; k < N - 1; k++) { const top = DY - rise * (k + 1); box(sc, v3(67.2, top / 2, z0 + k * run + run / 2), v3(1.2, top / 2, run / 2), 'stairStone', 0, 0, 0, NS); }
+        pipe(sc, v3(68.35, 6.0, z0), v3(68.35, 0.9 + rise, z0 + (N - 1) * run), 0.03, 'galv', NS); }
       // Lecture Hall and the Library on the lane, passages between them and Campus Hall
       hall('Lecture Hall', 52, 74, -40, -22, 9, 'concrete'); hall('Library', 52, 74, 19, 40, 7.5, 'brick');
       windows(51.975, 'x', -40, -22, 9); windows(51.975, 'x', 19, 40, 7.5); windows(74.025, 'x', -40, -22, 9); windows(74.025, 'x', 19, 40, 7.5);
@@ -403,7 +403,7 @@
       O('Campus Passage', 'gap', { gap: { c: v3(52, 2.6, -20), n: v3(1, 0, 0), hu: 1.85, hv: 2.5, u: v3(0, 0, 1) } });
       O('Campus Passage', 'gap', { gap: { c: v3(52, 2.6, 17), n: v3(1, 0, 0), hu: 1.85, hv: 2.5, u: v3(0, 0, 1) } });
       // the shops' backs face the lane now: windows on them (drawn only)
-      [[-40, -22, 7.5], [-19, -3, 5.4], [0, 14, 9.2], [17, 40, 6.3]].forEach(([a0, a1, h]) => windows(40.025, 'x', a0, a1, h));
+      [[-40, -22, 7.5], [-19, -4.5, 5.4], [-1.5, 14, 9.2], [17, 40, 6.3]].forEach(([a0, a1, h]) => windows(40.025, 'x', a0, a1, h));
       // the quad: trees (poles, their crowns over/unders), the colonnade (its roof an over/under, flown end to end: a gap), an arch,
       // the flagpole, lamps, benches, a low wall at the east end
       const qtree = (x, z) => { const tr = O('Quad Tree', 'pole'); tr.round = { c: v3(x, 0, z), r: 1.6, under: 3.0, over: 6.0 }; tr.obstacle = { a: v3(x - 1.6, 0, z), b: v3(x + 1.6, 0, z), under: 3.0, over: 6.0 };
@@ -416,9 +416,9 @@
       frame('Campus Arch', 82, 22, 3.0, 3.2, 'x', dark);
       { const fp = O('Campus Flagpole', 'pole'); pipe(fp, v3(84, 0, 3), v3(84, 11, 3), 0.07, 'galv'); box(fp, v3(84, 0.15, 3), v3(0.5, 0.15, 0.5), 'concrete', 0, 0, 0, NS);
         box(fp, v3(84.9, 10.2, 3), v3(0.85, 0.5, 0.015), 'paintBlue', 0, 0, 0, NC); }
-      for (const [x, z, lit] of [[70.5, 7, 1], [80, -1.5, 0], [88, 7, 1], [80, -22, 0]]) { const l = O('Campus Lamp', 'pole', lit ? { light: v3(x, 4.2, z), lightColor: 0xfff1d6, lightPower: 26, lightRange: 18 } : {});
+      for (const [x, z, lit] of [[70.5, 6.2, 1], [80, -1.5, 0], [88, 6.2, 1], [80, -22, 0]]) { const l = O('Campus Lamp', 'pole', lit ? { light: v3(x, 4.2, z), lightColor: 0xfff1d6, lightPower: 26, lightRange: 18 } : {});
         pipe(l, v3(x, 0, z), v3(x, 4.2, z), 0.06, 'metal'); ball(l, v3(x, 4.3, z), 0.2, 'lampHead', NC); }
-      for (const [x, z, ry, bx, bz] of [[78, 8.4, 0, 0, 0.2], [86, 8.4, 0, 0, 0.2], [82, -3.6, 0, 0, -0.2]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);
+      for (const [x, z, ry, bx, bz] of [[78, 10.1, 0, 0, 0.2], [86, 10.1, 0, 0, 0.2], [78, -6, 0, 0, -0.2]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);
         for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.2, z - u * s), v3(0.04, 0.2, 0.2), 'metal', ry); box(b, v3(x + bx, 0.75, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, NS);
         for (const u of [-0.7, 0.7]) box(b, v3(x + u * c + bx, 0.6, z - u * s + bz), v3(0.02, 0.14, 0.018), 'metal', ry, 0, 0, NS); }
       { const cw = O('Campus Wall', 'wall', { wallNormal: v3(-1, 0, 0) }); box(cw, v3(98.2, 0.6, 0), v3(0.2, 0.6, 40), 'brick'); box(cw, v3(98.2, 1.25, 0), v3(0.26, 0.05, 40), 'concrete', 0, 0, 0, NS); }
@@ -466,7 +466,7 @@
       ...[-34, -26, -18, -10, 18, 26, 34].map(z => ({ shape: 'zone', mat: 'laneDash', c: v3(46, 0.007, z), h: v3(2.5, 0, 0.08), ry: Math.PI / 2 })),
       { shape: 'zone', mat: 'crosswalk', c: v3(46, 0.008, 6), h: v3(1.5, 0, 3.9), ry: Math.PI / 2 },
       { shape: 'zone', mat: 'parkGrass', c: v3(83, 0.005, 0), h: v3(15.5, 0, 40) },
-      { shape: 'zone', mat: 'concrete', c: v3(82, 0.006, 0), h: v3(1.4, 0, 38) }, { shape: 'zone', mat: 'concrete', c: v3(81.5, 0.006, 9.8), h: v3(13.5, 0, 1.2) }];
+      { shape: 'zone', mat: 'concrete', c: v3(82, 0.006, 0), h: v3(1.4, 0, 38) }, { shape: 'zone', mat: 'concrete', c: v3(81.5, 0.006, 8.3), h: v3(13.5, 0, 1.2) }];
     return K.done({ id: 'clappy', title: 'Clappy Park', theme: 'park', zones, spawn: { pos: v3(-8, 0.03, 18), yaw: 0 }, bounds: { x: [-80, 98], z: [-40, 40] } });
   }
 

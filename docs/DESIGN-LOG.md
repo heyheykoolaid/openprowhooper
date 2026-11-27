@@ -15,6 +15,10 @@ Every new piece that can be flown round or through is tagged (over/unders, poles
 the bot's Powerloop, Matty Flip and Split S are called on each. **Known limits**: in the 3 m alley and the breezeway a loop across the
 deck has no room (only out of an end, as in real life). **Open**: add campus objects to the daily K.W.A.D. (it reshuffles the sets);
 old flights that flew east of the shops (x 46-65, open air before) now meet buildings there when re-flown.
+**Lined up (owner, same day: "The walkway is not lined up")**: the skywalk followed the alley, 1.5 m off the footbridge's line. The
+alley between East Shops 2 and 3 moved 1.5 m south instead of the footbridge (moving the bridge would have broken the labelled
+Rollbacks and the K.W.A.D. spot on it); the skywalk, the Campus Bridge and the breezeway now run on the footbridge's line. Old flights
+through that alley re-fly against walls 1.5 m away from where they were.
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.

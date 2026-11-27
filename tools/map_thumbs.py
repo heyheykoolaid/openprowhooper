@@ -69,7 +69,7 @@ EXTRA = {
     'clappy-busstop':  ('clappy', [6, 1.6, -18], [11.5, 1.4, -22.9]),
     'clappy-bridge':   ('clappy', [6, 3.5, 4.5], [19, 7.5, -3]),
     'clappy-bridge-deck': ('clappy', [11.2, 6.6, -2.6], [24, 7, -3.2]),
-    'clappy-skywalk':  ('clappy', [25, 6.6, -1.5], [52, 6.4, -1.5]),
+    'clappy-skywalk':  ('clappy', [25, 6.6, -3], [52, 6.4, -3]),
     'clappy-lane':     ('clappy', [46, 2.2, 22], [46, 6, -6]),
     'clappy-quad':     ('clappy', [92, 4, 16], [60, 6, -4]),
     'clappy-campus-high': ('clappy', [100, 30, 45], [55, 0, -5]),
