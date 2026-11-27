@@ -6,6 +6,14 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
+RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
+Decided: keep the deck, rails and pillars exactly (the K.W.A.D. Footbridge, Rod's Rollback labels, the shared flights all depend on them) and
+dress it: dark steel portal frames at both ends, a two-mast tower beside the street with two crossbeams and pointed finials, stays down to
+the deck edges, pale deck panels with dark joints, fascia and railing posts. Every new piece is a trick object: portal and tower beams
+over/unders, masts poles, portals and the tower openings gaps ("Through the Bridge Portal / Tower"). Open: the reel's glass section with
+yellow trim and the brick abutments were left out; say if they should go in.
+
 ### Inverted Yaw Tracking: the owner's tutorial link (2026-11-27; nothing built)
 Owner sent headmazta's "How To: Inverted Yaw Track" (YouTube, 4:56): "see how it's focused on tracking an object as you pass by it while
 inverted?" **The video could not be watched from here** (YouTube is blocked for downloads and the cloud browser showed "Video
@@ -664,11 +672,3 @@ The owner: "whenever i press to select another trick in the trick review, it won
 was being kept (the line above the buttons said so) but the list snapped back to "No, it was…". Now the list keeps showing what was
 picked. Open: if it still fails for him after this, it is something else (it could not be reproduced as a lost answer here).
 
-
-## 2026-11-27 — Clappy's footbridge after JD's "The Bridge"
-RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
-Decided: keep the deck, rails and pillars exactly (the K.W.A.D. Footbridge, Rod's Rollback labels, the shared flights all depend on them) and
-dress it: dark steel portal frames at both ends, a two-mast tower beside the street with two crossbeams and pointed finials, stays down to
-the deck edges, pale deck panels with dark joints, fascia and railing posts. Every new piece is a trick object: portal and tower beams
-over/unders, masts poles, portals and the tower openings gaps ("Through the Bridge Portal / Tower"). Open: the reel's glass section with
-yellow trim and the brick abutments were left out; say if they should go in.
