@@ -21,7 +21,7 @@ rule 7 (no flying a gate backward to shortcut); (4) **close calls** for the tric
 things, under a deck, low passes, scored by clearance like a manual (a freestyle idea, not racing). **A question for the owner**: RaceGOW's
 rules cut the pipe at 26.5-27.25 in (a 28 in opening); 24 in is their minimum gate size, with the whole track scaled to it. Our layouts are
 built at 24 in sections (owner, 2026-11-25): so every track is at the smallest allowed scale, about 12 % smaller than the organiser's own.
-Open: which of (1)-(4) to build, and whether to move the tracks to 27 in.
+**Decided (owner, same day)**: none of it; "we're doing our own thing well enough with tricks". Tracks stay at 24 in.
 
 ### Clappy Park: room round the corner trees, and no more clipping (owner, 2026-11-27)
 "on the corners of clappy park, there's a light post and a cherry tree, can we space these out more? they make it hard to trippy. there's
