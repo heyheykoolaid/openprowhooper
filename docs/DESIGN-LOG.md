@@ -17,8 +17,8 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
   at the top. can we help our helpers better distinguish?"). Built both ways: the detector reads a Power Roll from one pitch loop with
   the roll at the top round an object (his 4 labelled ones were called Immelmann + Split S or Rubik's Cube; now all 4 are Power Rolls),
   and the people judging calls get a short "how to tell them apart" note for that pair and five other look-alike pairs.
-- **Open**: one Immelmann he confirmed (same run, the Swing Set) has the very same shape and now reads Power Roll: a slip, or a real
-  difference to keep? The hint wording for the other pairs is Claude's from the book: edit freely.
+- **Settled**: the one Immelmann he confirmed with the same shape was a slip (owner: "due to how the labeling works, segments of
+  tricks can kinda join together. Disregard that example."). Power Roll stays as built. The hint wording for the other pairs is Claude's from the book: edit freely.
 - **Looked at, not changed**: Flip vs Powerloop on bars: the remaining Powerloop labels read as Flip are a bump, a crash and a loop through
   a race gate that never crossed its top bar; the Flips read as Powerloop are open-air 315-340 deg backward flips while moving, which the
   open-loop rule takes for small loops. Telling those apart needs a study of loop size and climb on confirmed open loops: next round.

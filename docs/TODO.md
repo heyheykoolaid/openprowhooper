@@ -72,7 +72,6 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 ## Waiting on the owner
 - Scoring: should back-to-back tricks build the streak (they do now)? (The wait is 2 s: answered 2026-11-27.)
 - INVERTED: 200 + 50 a second up to 1000 (built 2026-11-27): right numbers? Should the streak apply to it?
-- Power Roll: one confirmed Immelmann (your run, the Swing Set) has the same shape as your Power Rolls and now reads Power Roll: a slip?
 - Tyrantt's tags: build a linkable page of the game's tricks (`#tricks`, `#trick=<name>`)? (4c above)
 - Burrito Roll: the under-roll-under move has no name and scores as a Roll (decided 2026-11-23); say if that changes.
 - Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points

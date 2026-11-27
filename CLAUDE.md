@@ -1662,7 +1662,7 @@ upright and flying forward = Power Roll; it replaces an Immelmann / Split S / Ru
 pieces of those rotations (so nothing else is read from them). An Immelmann / Split S / Rubik's / Roll waits (`powerRollComing`: under then
 over one object, 120+ deg of P+ so far and a 250+ deg roll) up to 2.2 s for the pass back under. Re-flown: all 4 of the owner's Power
 Roll labels called (0 before), Rubik's Cube labels unchanged; one label the owner confirmed as an Immelmann (same run, same shape: P+381
-loop, 330 roll at the top, UOU) now reads Power Roll; bench 96.7 % and stress unchanged.
+loop, 330 roll at the top, UOU) now reads Power Roll: a slip (owner, 2026-11-27: "segments of tricks can kinda join together"; disregard it); bench 96.7 % and stress unchanged.
 **Telling look-alikes apart** (`TELL_APART`, `tellApart` in game.js, `.tellApart`): a short note for Rubik's Cube / Power Roll (the
 owner's words), Immelmann / Power Roll, Powerloop / Flip, Matty Flip / Powerloop, Trippy Spin / Orbits, Jump Rope / Side Loop, shown
 under the picked call in SKITTLES mode and the Review Hub's player, in Quick check, and under each trick in the Tricktionary.
