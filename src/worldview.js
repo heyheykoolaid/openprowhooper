@@ -713,6 +713,8 @@ const PARK_SHOPS = [['CLAPPY CAFE', '#2e5a46', '#f4e6c4', 'cafe'], ['RAMEN', '#9
 function parkMats() {
   const R = (() => { let s = 2727; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const T = (w, h, draw, clamp) => { const [c, g] = cnv(w, h); draw(g, w, h); const t = tex(c); if (clamp) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
+  MAT.trussWhite = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.5, metalness: 0.25 });   // East Campus truss and spiral (2026-11-27)
+  MAT.sculptSteel = new THREE.MeshStandardMaterial({ color: 0xb9bec2, roughness: 0.35, metalness: 0.6 });
   MAT.blossom2 = new THREE.MeshStandardMaterial({ color: 0xf9cfe0, roughness: 0.85, flatShading: true });   // paler
   MAT.blossom3 = new THREE.MeshStandardMaterial({ color: 0xe98db4, roughness: 0.85, flatShading: true });   // deeper
   MAT.streetLeaf = new THREE.MeshStandardMaterial({ color: 0x6f9a3e, roughness: 0.9, flatShading: true });

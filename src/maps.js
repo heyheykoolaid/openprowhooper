@@ -411,9 +411,26 @@
         pipe(tr, v3(x, 0, z), v3(x, 3.6, z), 0.14, 'bark'); ball(tr, v3(x, 4.5, z), 1.5, 'streetLeaf'); ball(tr, v3(x + 0.8, 4.0, z + 0.4), 0.9, 'streetLeaf'); ball(tr, v3(x - 0.7, 4.1, z - 0.6), 0.95, 'streetLeaf');
         box(tr, v3(x, 0.014, z), v3(0.8, 0.012, 0.8), 'soil', 0, 0, 0, { noCollide: true, decal: 1 }); };
       for (const [x, z] of [[76, -12], [76, 12], [89, -12], [89, 12], [80, 30], [80, -31]]) qtree(x, z);
-      { const cx = 94, z0 = -18, z1 = 18, cr = slabOU('Colonnade Roof', v3(cx, 3.0, 0), v3(1.55, 0.12, 18.2), 'concrete');
-        for (let z = z0; z <= z1 + 0.01; z += 3) for (const x of [cx - 1.3, cx + 1.3]) pipe(cr, v3(x, 0, z), v3(x, 2.88, z), 0.15, 'stairStone');
-        O('Colonnade', 'gap', { gap: { c: v3(cx, 1.42, z0), n: v3(0, 0, 1), hu: 1.05, hv: 1.35, u: v3(1, 0, 0) } }); }
+      // the Campus Truss (owner, 2026-11-27, after a video: "the cool truss/over under structure would look better than the covered
+      // pathway"): 13 white portal frames 3 m apart (each a frame: an over/under and a gap), a braced girder on top of them (chords,
+      // verticals, side and top diagonals), the whole run an over/under across it; the sides between the posts are open to weave
+      { const cx = 94, z0 = -18, z1 = 18, W = 3, H = 3.0, G = 4.1, hw = W / 2 + 0.09, tw = 'trussWhite', NS2 = { noSurvey: true };
+        for (let z = z0; z <= z1 + 0.01; z += 3) frame('Truss Frame', cx, z, W, H, 'x', tw);
+        O('Campus Truss', 'overunder', { obstacle: { a: v3(cx, 0, z0 - 0.1), b: v3(cx, 0, z1 + 0.1), under: H, over: G + 0.06 } });
+        const tr = O('Campus Truss Girder', 'deco');
+        for (const x of [cx - hw, cx + hw]) { pipe(tr, v3(x, H + 0.18, z0), v3(x, H + 0.18, z1), 0.06, tw, NS2); pipe(tr, v3(x, G, z0), v3(x, G, z1), 0.06, tw, NS2);
+          for (let z = z0; z <= z1 + 0.01; z += 3) pipe(tr, v3(x, H + 0.18, z), v3(x, G, z), 0.045, tw, NS2);
+          for (let z = z0, k = 0; z < z1 - 0.01; z += 3, k++) pipe(tr, v3(x, k % 2 ? G : H + 0.18, z), v3(x, k % 2 ? H + 0.18 : G, z + 3), 0.035, tw, NS2); }
+        for (let z = z0; z <= z1 + 0.01; z += 3) pipe(tr, v3(cx - hw, G, z), v3(cx + hw, G, z), 0.045, tw, NS2);
+        for (let z = z0, k = 0; z < z1 - 0.01; z += 3, k++) pipe(tr, v3(cx - hw, G, z + (k % 2 ? 3 : 0)), v3(cx + hw, G, z + (k % 2 ? 0 : 3)), 0.035, tw, NS2);
+        for (let z = z0; z <= z1 + 0.01; z += 3) for (const x of [cx - hw, cx + hw]) box(tr, v3(x, 0.06, z), v3(0.2, 0.06, 0.2), 'concrete', 0, 0, 0, NS2); }
+      // the Spiral (owner, same day: "the big spiral structure would look cool as a big public sculpture"): a steel mast (a pole) with
+      // 96 slats 5 m long round it, each 9 deg on and 16 cm up from the last: 2.4 turns, 16 m tall, on a plinth. The slats collide
+      // and are kept off the Surveyor (96 over/unders would be noise); it is for orbits and trippies, and flying through the turns
+      { const sx = 87, sz = -28, sp = O('Spiral Sculpture', 'pole'), N = 96;
+        pipe(sp, v3(sx, 0, sz), v3(sx, 16.6, sz), 0.18, 'sculptSteel'); pipe(sp, v3(sx, 16.6, sz), v3(sx, 17.6, sz), 0.12, 'sculptSteel', { cone: true, noCollide: true });
+        box(sp, v3(sx, 0.25, sz), v3(1.4, 0.25, 1.4), 'concrete', 0, 0, 0, { noSurvey: true });
+        for (let k = 0; k < N; k++) box(sp, v3(sx, 0.9 + k * 0.16, sz), v3(2.5, 0.035, 0.22), 'sculptSteel', k * Math.PI / 20, 0, 0, { noSurvey: true }); }
       frame('Campus Arch', 82, 22, 3.0, 3.2, 'x', dark);
       { const fp = O('Campus Flagpole', 'pole'); pipe(fp, v3(84, 0, 3), v3(84, 11, 3), 0.07, 'galv'); box(fp, v3(84, 0.15, 3), v3(0.5, 0.15, 0.5), 'concrete', 0, 0, 0, NS);
         box(fp, v3(84.9, 10.2, 3), v3(0.85, 0.5, 0.015), 'paintBlue', 0, 0, 0, NC); }

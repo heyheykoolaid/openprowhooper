@@ -20,6 +20,12 @@ alley between East Shops 2 and 3 moved 1.5 m south instead of the footbridge (mo
 Rollbacks and the K.W.A.D. spot on it); the skywalk, the Campus Bridge and the breezeway now run on the footbridge's line. Old flights
 through that alley re-fly against walls 1.5 m away from where they were.
 **Floating lights (owner, same day)**: the skywalk's two light strips hung in mid-air over the alley; they now sit under the deck in housings, like the footbridge's.
+**A spiral sculpture and a truss (owner, same day, with a video from another sim: "the big spiral structure would look cool as a big
+public sculpture, and the cool truss/over under structure would look better than the covered pathway")**: built our own versions, not
+copies. The colonnade is gone; in its place a white truss arcade: 13 portal frames 3 m apart with a braced girder on top, open at the
+sides so you can weave between the posts, every frame an over/under and a gap, the whole run an over/under across it. The spiral is a
+16.6 m sculpture in the north of the quad: a mast with 96 slats 5 m long winding 2.4 turns round it; the mast is the pole for trippies
+and orbits (both called in a test), the slats are solid but not over/unders. Open: whether the spiral's turns should count as gaps.
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
