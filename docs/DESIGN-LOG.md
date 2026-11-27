@@ -6,6 +6,11 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### K.W.A.D. marker and list (owner, 2026-11-27)
+"remove the column from the sky on kwad, and make the marker about 10% more transparent"; the list under the K W A D letters should
+show in game "like it did before" (not clickable). **Done**: no beam; outline, fill and letter 10 % fainter; the list stays up for the
+whole flight instead of fading after 9 s (and 4.5 s after each letter), still hidden while racing.
+
 ### Review queue rows: who labelled it, not how many labelled the trick elsewhere
 The owner: the row should not say "6 other pilots have labelled this trick", "as that's kinda irrelevant to the person clicking on it,
 what it should show, is if someone else labelled it, and what they labelled it as." **Done**: that sentence is gone (the count still

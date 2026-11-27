@@ -145,7 +145,7 @@ function invTick(dt) {
   flash(`<b>INVERTED ${invT.run}s</b><div class="pRow"><em>+${pts}</em></div>`, 'gapPop');
 }
 // mistawintaz (owner, 2026-11-26: "Yup!"): the day's K.W.A.D. objects glow until their letter is taken, so they can be found: a pulsing
-// outline round each piece named for an open A / D letter (bright where it is in sight, faint through walls), a light beam rising from
+// outline round each piece named for an open A / D letter (bright where it is in sight, faint through walls) and
 // it and the letter floating above. Drawn only (no collider), only while flying (not racing), from the colliders' own bounds.
 const KM = { grp: null, sig: '', parts: [] };
 function kmBounds(o) {
@@ -168,19 +168,18 @@ function kwadMarkSync(t) {
       for (const L of open) {
         const objs = world.objs.filter(o => o.name === score.kw[L].obj && !o.auto && !o.edge).slice(0, 8); let top = null;
         for (const o of objs) { const b = kmBounds(o); if (b.isEmpty()) continue; b.expandByScalar(0.08); const sz = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()), eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(sz.x, sz.y, sz.z));
-          const near = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.95 })), far = new THREE.LineSegments(eg.clone(), new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.28, depthTest: false, depthWrite: false }));
-          near.position.copy(c); far.position.copy(c); far.renderOrder = 901; near.layers.enable(1); const fill = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fill.position.copy(c); fill.userData.km = 0.14; KM.grp.add(near, far, fill); KM.parts.push(near, far, fill);
+          const near = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.85 })), far = new THREE.LineSegments(eg.clone(), new THREE.LineBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.25, depthTest: false, depthWrite: false }));
+          near.position.copy(c); far.position.copy(c); far.renderOrder = 901; near.layers.enable(1); const fill = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.126, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fill.position.copy(c); fill.userData.km = 0.126; KM.grp.add(near, far, fill); KM.parts.push(near, far, fill);
           if (!top || c.y + sz.y / 2 > top.y) top = new THREE.Vector3(c.x, b.max.y, c.z); }
         if (!top) continue;
-        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 26, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xc6ff3a, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-        beam.position.set(top.x, top.y + 13.4, top.z); beam.layers.enable(1); KM.grp.add(beam); KM.parts.push(beam);
+        /* the beam into the sky was taken out (owner, 2026-11-27) */
         const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.font = '900 96px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(L, 64, 70); g.fillStyle = '#c6ff3a'; g.fillText(L, 64, 70);
-        const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+        const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }));
         sp.position.set(top.x, top.y + 1.4, top.z); sp.scale.set(1.3, 1.3, 1); sp.renderOrder = 902; KM.grp.add(sp); KM.parts.push(sp);
       }
     }
   }
-  if (KM.grp) { KM.grp.visible = true; const k = 0.6 + 0.4 * Math.sin(t * 4); for (const m of KM.parts) { const base = m.isSprite ? 1 : m.userData.km || (m.material.depthTest === false ? 0.28 : m.isMesh ? 0.35 : 0.95); m.material.opacity = base * (m.isSprite ? 1 : k); } }
+  if (KM.grp) { KM.grp.visible = true; const k = 0.6 + 0.4 * Math.sin(t * 4); for (const m of KM.parts) { const base = m.isSprite ? 0.9 : m.userData.km || (m.material.depthTest === false ? 0.25 : 0.85);   /* 10 % more see-through (owner, 2026-11-27) */ m.material.opacity = base * (m.isSprite ? 1 : k); } }
 }
 function onTrick(ev) {
   trainOnEvent(ev); recapEvent(ev); coachEvent(ev);
@@ -193,7 +192,7 @@ function onTrick(ev) {
   lateTrick = r.exec === 'CLEAN' || r.exec === 'SLOPPY' ? { until: drone.time + S.BUMP_LATE, name: r.name, i: recap.events.length - 1 } : null;
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
-  if (r.kwadHit) { kwadShow(4500); if (Object.keys(score.kwad).length === 4) setTimeout(() => flash('<b>K.W.A.D. COMPLETE!</b><small>all four letters · +2,000 bonus</small>', 'metal chainBonus'), 350); }
+  if (r.kwadHit) { kwadShow(); if (Object.keys(score.kwad).length === 4) setTimeout(() => flash('<b>K.W.A.D. COMPLETE!</b><small>all four letters · +2,000 bonus</small>', 'metal chainBonus'), 350); }
   if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); combo.pts += c.pts; renderCombo(); }
   updateBreakdown();
 }

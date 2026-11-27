@@ -99,7 +99,7 @@ document.addEventListener('click', e => {
   const r = e.target.closest('.kwRow[data-kwt]'); if (r && !r.closest('#kwadList')) kwadDef(r);
 });
 let kwadListT = 0;
-function kwadShow(ms) { const el = $('#kwadList'); if (!el) return; el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); el.classList.remove('hide'); clearTimeout(kwadListT); kwadListT = setTimeout(() => el.classList.add('hide'), ms); }
+function kwadShow(ms) { const el = $('#kwadList'); if (!el) return; el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); el.classList.remove('hide'); clearTimeout(kwadListT); if (ms) kwadListT = setTimeout(() => el.classList.add('hide'), ms); }   /* no ms: stays up (owner, 2026-11-27) */
 function kwadMenus() {   // the pause menu's list (owner, 2026-11-21: not on the main menu)
   const p = $('#pauseKwad'); if (p) { const on = mode === 'paused' && !race.on; p.classList.toggle('hide', !on); if (on) p.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); }
 }

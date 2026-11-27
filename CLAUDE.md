@@ -722,7 +722,7 @@ tools/kwadspots.js`: an object is in when the bot's flight of each pool trick is
 hidden school and the Training Room have none and keep the book's fixed set, as do the Node tests: `new ScoreKeeper()` is unchanged).
 The bonus is the calculator's: 250 a letter, 2000 more for all four. `ScoreKeeper(totw, kwad)` takes the set; the game makes its score
 with `newScore()` at each flight start (objects missing from the pilot's own layout are never asked for). Shown: a list under the
-letters for 9 s at the start of a flight and 4.5 s after each letter (`#kwadList`), the pause menu, and per map on the daily board (not on
+letters for the whole flight (`#kwadList`; owner, 2026-11-27: it used to fade after 9 s, 4.5 s after each letter), the pause menu, and per map on the daily board (not on
 the main menu: owner, 2026-11-21, "i don't like kwad being on the main screen"); K.W.A.D. COMPLETE call-out; the results line names the letters. The posted sheet is unchanged
 (`totals.kwad`), so the relay needs no redeploy. Add an object: put it in `CAND` in tools/kwadspots.js, run it, paste the table.
 
@@ -1647,5 +1647,6 @@ K.W.A.D. list a click on a trick opens its difficulty, points and definition und
 searched to that trick; Back returns to the pause menu) and its prowhooper.com page. The in-flight list (`#kwadList`) is not clickable.
 **K.W.A.D. objects glow** (mistawintaz, owner "Yup!", 2026-11-26; `KM`, `kmBounds`, `kwadMarkSync` in play.js, `__pw.kwadMark`): while flying (not
 racing, not in review) every piece named for an open A / D letter has a pulsing acid-green box round its colliders' bounds (bright where
-in sight, faint through walls, a soft additive fill, bloom layer 1), a thin beam rising 26 m from its top and the letter floating over it;
+in sight, faint through walls, a soft additive fill, bloom layer 1) and the letter floating over it (no sky beam, all 10 % more
+see-through: owner, 2026-11-27);
 it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change.

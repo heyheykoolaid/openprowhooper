@@ -87,7 +87,7 @@ function startFlyGo(withSession) {
   combo.names = []; combo.pts = 0; combo.active = false;
   if (!$('#judgeBox').classList.contains('hide')) stopJudge();   // however Judge the Bot was left, its panel, trail and big model go
   initAudio(); if (actx && actx.state === 'suspended') actx.resume();
-  if (race.on || activeWorld !== world) raceOff(); score = newScore(); kwadShow(9000); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
+  if (race.on || activeWorld !== world) raceOff(); score = newScore(); kwadShow(); detector.reset(); drone.reset(world.spawn); flightTime = 0; updateBreakdown();
   session = withSession ? { timeLeft: 120, started: false } : null;
   hubKeepRun(); recapReset(); if (warm.on) stopWarmup(); if (coach.on) coachClock();
   mode = 'fly'; show(null); $('#hud').classList.remove('hide'); camMode = 'fpv'; resize();
