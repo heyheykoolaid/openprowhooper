@@ -32,6 +32,10 @@ street, is removed; a rail closes that side of the top deck.
 **IGOW flag, and K.W.A.D. boxes fade (owner, same day)**: the East Campus flag carries the IGOW logo. The glowing box round a K.W.A.D.
 object now fades out between 22 and 40 m from the quad, on every map; the floating letter always shows, so the object can still be found.
 Open: the distances are a first guess.
+**Maverick Loop by its top (owner, same day: "maverick loop detection is iffy")**: two problems, both in the rule. A real Maverick
+dives steeply down the far side, which broke "stayed upright"; and the over pass was never checked, so the game called Mavericks on moves
+that went over forward or nearly upside-down. Now: over the object upright and flying backward, never on its back. Labelled flights:
+real ones 1 -> 2 of 2, rejected calls 8 -> 0. Open: the owner's two wire Mavericks from today (their flight had not uploaded yet).
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.

@@ -1056,6 +1056,7 @@ const ROLLBACK_ROLL = 100;   // deg of roll travel between the two passes
 const ROLLBACK_SEE = 0.3;   // s after the turn by which a rewind is travelling back toward the object
 const ROLLBACK_BACK = 3.2, ROLLBACK_HOLD = new Set(['Snapback', 'Juicy Flick', 'Roll', 'Yaw Spin']);   // s from the pass under to the pass back under; the calls that wait that long for it
 const CINNAMON_VIEW = 0.35, UHUH_SWING = 25;   /* the share of a Cinnamon Roll with its object within 40 deg of the camera line (a turn made looking anywhere reads about 0.2; a flown orbit of the object 0.4-0.6) */
+const MAV_OVER_UP = 0.5, MAV_OVER_BACK = 0.5, MAV_MIN_UP = -0.3;   // Maverick Loop: up.y and backward travel at the pass over the top; the lowest up.y on the way round
 const TWIST_BEFORE = 0.6, TWIST_AFTER = 1.0, TWIST_FLOW = 0.5, TWIST_UNDER = 2.5;   // Matty Twister: the roll starts this long before / after the over pass at most; the flip starts within this of the roll's end; the pass under within this
 const MAVVEL_BACK = 0.2, MAVVEL_EARLY = 0.5, MAVVEL_LATE = 1.5, MAVVEL_FLICK = 0.8, MAVVEL_PROMPT = 0.7;   // Mavvelmann: the over pass flown backward (fwdDot at most this); the flick from this long before the over pass to this long after it; the flick's longest (s); the longest wait before the roll (s)
 const CORNER_SWINGS = 3, CORNER_MIN = 45, CORNER_UP = 1.0, CORNER_SIDE = 0.4;   // Corner Climb: swings round the corner, each at least this many deg of it, climbing this far (m); how far each side of the corner's diagonal a swing must reach (m)
@@ -1652,7 +1653,13 @@ class TrickDetector {
         const upright = !this.stayedUpright ? true : r1 ? this.stayedUpright(part[0].t, r1.t0 - 0.03) && this.stayedUpright(r1.t1 + 0.03, part[2].t)
           : this.stayedUpright(part[0].t, part[2].t);   // maverick: forward-looking the whole way (body or camera view)
         const sideOver = part[1].kind === 'O' && part[1].latDot > 0.85 && Math.abs(part[1].fwdDot) < 0.3 && part[1].upY < -0.3;   // over the top sideways and upside-down: a Side Loop, never a maverick (owner's review of RodFPV)
-        if (!bigP.length && upright && !sideOver && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
+        // a Maverick Loop (no roll) is judged by its top (owner, 2026-11-27: his Mavericks round Clappy's wires were missed, and every Maverick
+        // call pilots rejected went over forward, sideways or nearly upside-down): over the object upright and travelling backward
+        // (MAV_OVER_UP, MAV_OVER_BACK), and never on its back on the way round (MAV_MIN_UP), so a steep dive down the far side (nose straight
+        // down, up.y ~0) still counts; a Mavvy Roll keeps the old "upright apart from its roll"
+        const mavTop = !rolls.length && part[1].kind === 'O' && (part[1].upY ?? 1) > MAV_OVER_UP && (part[1].fwdDot ?? -1) < -MAV_OVER_BACK;
+        const mavOK = rolls.length ? upright : mavTop && (!this.minUpBetween || Math.max(this.minUpBetween(part[0].t, part[2].t), this.minCamUpBetween(part[0].t, part[2].t)) > MAV_MIN_UP);
+        if (!bigP.length && mavOK && !sideOver && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
           const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : (rolls.length === 0 ? 'Maverick Loop' : null);
           const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
           if (nm && better(cand, best)) best = cand;

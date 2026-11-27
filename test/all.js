@@ -47,6 +47,7 @@ const checks = [
   ['Slackvegan City\'s subway: down the stairs, platforms, through the train', () => { const o = run('subway.js'); const m = o.match(/(\d+)\/(\d+) subway checks/); return m && m[1] === m[2] ? null : o; }],
   ['Battery life, brown-out and which packs fit which whoop', () => { const o = run('battery.js'); const m = o.match(/(\d+)\/(\d+) battery checks/); return m && m[1] === m[2] ? null : o; }],
   ['Map Editor layer: move, turn, scale, remove, add; tags and colliders follow', () => { const o = run('mapedit.js'); const m = o.match(/(\d+)\/(\d+) map edit checks/); return m && m[1] === m[2] ? null : o; }],
+  ['Maverick Loop judged by its top (upright and backward over it, never on its back)', () => { const o = run('maverick.js'); const m = o.match(/(\d+)\/(\d+) maverick checks/); return m && m[1] === m[2] ? null : o; }],
   ['Barani as pilots fly it (front half loop, inverted half yaw, sloppy Matty out)', () => { const o = run('barani.js'); const m = o.match(/(\d+)\/(\d+) barani checks/); return m && m[1] === m[2] ? null : o; }],
   ['Bot replica: a checked trick re-flown from its recorded state with the recorded sticks', () => { const o = run('replica.js'); const m = o.match(/(\d+)\/(\d+) replica checks/); return m && m[1] === m[2] ? null : o; }],
   ['2S whoops, Angle mode and 3D mode with the real physics', () => { const o = run('modes.js'); const m = o.match(/(\d+)\/(\d+) mode and 2S checks/); return m && m[1] === m[2] ? null : o; }],

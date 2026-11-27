@@ -1708,3 +1708,12 @@ and car numbers dropped; the Trick Park keeps its sizes; " Gap" is added only wh
 **INVERTED** pays more the longer it lasts (`INV_STEP` 50, `INV_MAX` 1000, `invPts`): 200 for the first second, 250, 300, … up to 1000.
 **A knock between tricks** waits 2 s (`BUMP_WAIT`, owner: "2s is good"). **Options → Highlight today's K.W.A.D. objects** (`store 'kwadGlow'`).
 tools/probe-label.js takes flight ids after the folder to re-fly only those.
+
+## Maverick Loop judged by its top (owner, 2026-11-27: "maverick loop detection is iffy"; `MAV_OVER_UP`, `MAV_OVER_BACK`, `MAV_MIN_UP` in sim.js; test/maverick.js)
+The maverick branch of `matchObstacle` asked only for UOU of one object, no flip over 200 deg and "stayed upright" (body or camera up.y
+above 0.1 the whole way). A real Maverick dives steeply down the far side (nose straight down, up.y ~0), so the owner's were missed; and
+the over pass itself was never looked at, so every Maverick call pilots rejected (8, re-flown) went over forward, sideways or nearly
+upside-down. Now a Maverick Loop (no roll) needs the over pass upright (`upY` > 0.5) and travelling backward (`fwdDot` < -0.5), and the
+lowest up.y on the way round above -0.3 (never on its back). Mavvy Roll keeps the old test. Re-flown on the 16 flights with Maverick labels:
+real ones found 1 -> 2 of 2, rejected calls still made 8 -> 0; bot 20/20, bench 96.7 % unchanged. The owner's two wire Mavericks of
+2026-11-27 (flight mwzgipl4ivz3) had not uploaded yet when this was written: re-fly them when they do.
