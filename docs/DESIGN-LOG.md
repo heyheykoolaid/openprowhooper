@@ -6,6 +6,16 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy grows east: East Campus and a 60 m walkway (owner, 2026-11-27: "Grow map east!", "Make sure everything works for our tricks too")
+Asked how to lengthen the footbridge, Claude offered four ways; the owner picked growing the map east. **Built**: the walk now runs from
+the plaza over the street (the footbridge, unchanged), down the alley between two shop blocks on a skywalk, over a new street (East
+Lane) on a second cable-stayed bridge, and through a campus hall by a breezeway (an arcade under it) onto a terrace and stairs into a
+quad: about 60 m. A lecture hall and a library beside the hall, the quad with trees, a bell tower, a colonnade, an arch and a flagpole.
+Every new piece that can be flown round or through is tagged (over/unders, poles, gaps with place names, buildings for wall tricks);
+the bot's Powerloop, Matty Flip and Split S are called on each. **Known limits**: in the 3 m alley and the breezeway a loop across the
+deck has no room (only out of an end, as in real life). **Open**: add campus objects to the daily K.W.A.D. (it reshuffles the sets);
+old flights that flew east of the shops (x 46-65, open air before) now meet buildings there when re-flown.
+
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
 Decided: keep the deck, rails and pillars exactly (the K.W.A.D. Footbridge, Rod's Rollback labels, the shared flights all depend on them) and

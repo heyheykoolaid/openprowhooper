@@ -35,7 +35,7 @@ for (const id of ids) {
   for (const o of w.objs) { if (o.kind === 'edge' || o.removed || o.float) continue; for (const v of o.vis) { if (v.float) continue; const b = boxOf(v); if (b) P.push({ o, v, b, weak: !!(v.glow || v.shape === 'sign') }); } }
   // a grid over x/z so touching is checked only among neighbours
   const G = new Map(), cell = 2, key = (i, k) => i + ',' + k;
-  P.forEach((p, n) => { for (let i = Math.floor(p.b.x0 / cell); i <= Math.floor(p.b.x1 / cell); i++) for (let k = Math.floor(p.b.z0 / cell); k <= Math.floor(p.b.z1 / cell); k++) { const q = key(i, k); if (!G.has(q)) G.set(q, []); G.get(q).push(n); } });
+  P.forEach((p, n) => { for (let i = Math.floor((p.b.x0 - TOL) / cell); i <= Math.floor((p.b.x1 + TOL) / cell); i++) for (let k = Math.floor((p.b.z0 - TOL) / cell); k <= Math.floor((p.b.z1 + TOL) / cell); k++) { const q = key(i, k); if (!G.has(q)) G.set(q, []); G.get(q).push(n); } });
   const par = P.map((_, i) => i), find = i => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; };
   const ground = P.map(p => !p.weak && p.b.y0 <= gY + TOL);
   for (const list of G.values()) for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { const i = list[a], j = list[b]; if (find(i) === find(j)) continue; if (P[i].weak && P[j].weak) continue; if (touch(P[i].b, P[j].b)) par[find(i)] = find(j); }

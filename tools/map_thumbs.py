@@ -69,6 +69,10 @@ EXTRA = {
     'clappy-busstop':  ('clappy', [6, 1.6, -18], [11.5, 1.4, -22.9]),
     'clappy-bridge':   ('clappy', [6, 3.5, 4.5], [19, 7.5, -3]),
     'clappy-bridge-deck': ('clappy', [11.2, 6.6, -2.6], [24, 7, -3.2]),
+    'clappy-skywalk':  ('clappy', [25, 6.6, -1.5], [52, 6.4, -1.5]),
+    'clappy-lane':     ('clappy', [46, 2.2, 22], [46, 6, -6]),
+    'clappy-quad':     ('clappy', [92, 4, 16], [60, 6, -4]),
+    'clappy-campus-high': ('clappy', [100, 30, 45], [55, 0, -5]),
     'clappy-sky':      ('clappy', [0, 30, 30], [-30, 60, -120]),
     'clappy-cornerNE': ('clappy', [4, 2.2, -4], [12, 2.5, -12]),
     'clappy-cornerSW': ('clappy', [-17, 2.5, 17], [-10, 2.2, 10]),
@@ -108,7 +112,7 @@ async def main():
             out = pathlib.Path('/tmp/map_shots'); out.mkdir(exist_ok=True)
             only = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--only=')), '')
             for name, (mid, *view) in EXTRA.items():
-                if only and not name.startswith(only): continue
+                if only and not any(name.startswith(o) for o in only.split(',')): continue
                 (await shot(b, mid, view, None)).save(out / (name + '.png')); print('shot', name)
         if '--no-thumbs' not in sys.argv:
             d = ROOT / 'assets' / 'maps'; d.mkdir(parents=True, exist_ok=True)

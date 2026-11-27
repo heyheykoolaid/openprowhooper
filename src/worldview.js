@@ -763,7 +763,7 @@ function parkBackdrop() {
   const [c, g] = cnv(256, 256); g.fillStyle = '#b8b4b0'; g.fillRect(0, 0, 256, 256); for (let y = 10; y < 256; y += 32) for (let x = 8; x < 256; x += 24) { g.fillStyle = R() < 0.5 ? '#8a96a4' : '#a2acb6'; g.fillRect(x, y, 12, 18); }
   const t = tex(c), roofM = new THREE.MeshStandardMaterial({ color: 0x9a989a, roughness: 1 });
   const mats = [0xb8b4b0, 0xa4acb8, 0xbcb4a6, 0x9ca6b2, 0xc4bcb4].map(col => { const side = new THREE.MeshStandardMaterial({ map: t, color: col, roughness: 0.95, emissive: 0x8c98a6, emissiveIntensity: 0.18 }); return [side, side, roofM, roofM, side, side]; });   // pre-hazed: pale, soft, a little blue
-  const CX = -20, placed = [], keep = (x, z, W, D) => { if (x + W / 2 > -110 && x - W / 2 < 70 && z + D / 2 > -70 && z - D / 2 < 70) return false;   // never inside the map's edge walls
+  const CX = 5, placed = [], keep = (x, z, W, D) => { if (x + W / 2 > -110 && x - W / 2 < 128 && z + D / 2 > -70 && z - D / 2 < 70) return false;   // never inside the map's edge walls (East Campus, 2026-11-27: the map reaches x 98, its edge x ~124)
     if (placed.some(p => Math.abs(p.x - x) < (p.W + W) / 2 + 2 && Math.abs(p.z - z) < (p.D + D) / 2 + 2)) return false; placed.push({ x, z, W, D }); return true; };
   for (let i = 0; i < 160; i++) { const near = i < 80, a = R() * Math.PI * 2, rad = near ? 100 + R() * 40 : 150 + R() * 70, W = 10 + R() * 18, D = 10 + R() * 18, H = near ? 8 + R() * 18 : 20 + R() * (R() < 0.2 ? 90 : 45);
     const x = CX + Math.cos(a) * rad, z = Math.sin(a) * rad; if (!keep(x, z, W, D)) continue;
