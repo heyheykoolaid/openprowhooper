@@ -40,8 +40,8 @@ real ones 1 -> 2 of 2, rejected calls 8 -> 0. Open: the owner's two wire Maveric
 2" = on Lecture Hall's roof; then "i don't like it neon … a wooden beam structure, kinda pagoda style")**: a neon version was built and
 dropped before it shipped. What stands is a two-storey timber pagoda: red posts, wooden eave beams with brackets, a flared lower roof all
 round, an upper storey set in, a hipped roof with upswept corners and a finial. Flown in through the lower bays, up the open well and out
-the upper bays; every bay and the well are gaps, the posts poles, both eaves and the roof over/unders. Open: the inside is dark under the
-roofs (no lights there yet).
+the upper bays; every bay and the well are gaps, the posts poles, both eaves and the roof over/unders. Then (owner: "the roofs look weird, can we just make it out of the red"): the
+tile roof panels are gone; both roofs are open frames of the same red beams (rings, rafters, hips, ridge), so the whole pagoda is see-through.
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.

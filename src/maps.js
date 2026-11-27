@@ -449,7 +449,7 @@
       // Open inside: in through the lower bays, up the well, out through the upper bays. Helpers: posts are poles, the eave beams and the
       // whole roof over/unders, every lower and upper bay a gap and the well a flat gap
       { const X0 = 55, X1 = 71, Z0 = -38, Z1 = -24, B = 9.0, EV = B + 4.2, IN = 2.6, U0 = EV + 0.9, UE = EV + 3.3, RG = UE + 2.0, ZM = (Z0 + Z1) / 2, XM = (X0 + X1) / 2;
-        const wd = 'pagodaWood', post = 'pagodaPost', tile = 'pagodaTile', NSP = { noSurvey: true }, NCP = { noCollide: true };
+        const wd = 'pagodaPost', post = 'pagodaPost', NSP = { noSurvey: true }, NCP = { noCollide: true };
         const ix0 = X0 + IN, ix1 = X1 - IN, iz0 = Z0 + IN, iz1 = Z1 - IN;
         // the lower storey: posts every 4 m along the long sides, 7 m on the ends; eave beams all round (the long ones over/unders)
         for (const x of [X0, X0 + 4, X0 + 8, X0 + 12, X1]) for (const z of [Z0, Z1]) { const po = O('Pagoda Post', 'pole'); pipe(po, v3(x, B, z), v3(x, EV, z), 0.13, post); box(po, v3(x, B + 0.1, z), v3(0.26, 0.1, 0.26), 'stairStone', 0, 0, 0, NSP); }
@@ -457,23 +457,27 @@
         for (const z of [Z0, Z1]) bar('Pagoda Eave', v3(X0 - 0.2, EV, z), v3(X1 + 0.2, EV, z), 0.14, wd);
         const pb = O('Pagoda Beam', 'deco'); for (const x of [X0, X1]) pipe(pb, v3(x, EV, Z0 - 0.2), v3(x, EV, Z1 + 0.2), 0.14, wd, NSP);
         for (const z of [Z0, Z1]) for (let x = X0 + 2; x < X1; x += 4) box(pb, v3(x, EV - 0.32, z), v3(0.08, 0.16, 0.22), wd, 0, 0, 0, NSP);   // brackets under the eaves
-        // the flared lower roof: four sloped panels from the upper storey's line out past the eaves, overhanging 1.4 m
-        { const ov = 1.4, yi = U0, yo = EV - 0.25, run = IN + ov, a = Math.atan2(yi - yo, run), L = Math.hypot(run, yi - yo) / 2, ym = (yi + yo) / 2, lr = O('Pagoda Lower Roof', 'deco');
-          box(lr, v3(XM, ym, (iz0 + Z0 - ov) / 2), v3((X1 - X0) / 2 + ov, 0.06, L), tile, 0, -a, 0, NSP); box(lr, v3(XM, ym, (iz1 + Z1 + ov) / 2), v3((X1 - X0) / 2 + ov, 0.06, L), tile, 0, a, 0, NSP);
-          box(lr, v3((ix1 + X1 + ov) / 2, ym, ZM), v3(L, 0.06, (iz1 - iz0) / 2), tile, 0, 0, -a, NSP); box(lr, v3((ix0 + X0 - ov) / 2, ym, ZM), v3(L, 0.06, (iz1 - iz0) / 2), tile, 0, 0, a, NSP);
-          for (const [x, z, sx, sz] of [[X0 - ov, Z0 - ov, -1, -1], [X1 + ov, Z0 - ov, 1, -1], [X0 - ov, Z1 + ov, -1, 1], [X1 + ov, Z1 + ov, 1, 1]]) pipe(lr, v3(x - sx * 0.3, yo + 0.05, z - sz * 0.3), v3(x + sx * 0.45, yo + 0.75, z + sz * 0.45), 0.1, wd, { cone: true, noCollide: true }); }
+        // the flared lower roof as a frame of red beams (owner, same day: "the roofs look weird, can we just make it out of the red"): a ring
+        // at the upper storey's base, a ring at the overhang's edge 1.4 m past the eaves, rafters between them every ~2 m, hips to the corners
+        { const ov = 1.4, yi = U0, yo = EV - 0.25, lr = O('Pagoda Lower Roof', 'deco'), r = 0.075, ox0 = X0 - ov, ox1 = X1 + ov, oz0 = Z0 - ov, oz1 = Z1 + ov;
+          const ring = (x0, x1, z0, z1, y) => { pipe(lr, v3(x0, y, z0), v3(x1, y, z0), r, post, NSP); pipe(lr, v3(x0, y, z1), v3(x1, y, z1), r, post, NSP); pipe(lr, v3(x0, y, z0), v3(x0, y, z1), r, post, NSP); pipe(lr, v3(x1, y, z0), v3(x1, y, z1), r, post, NSP); };
+          ring(ix0, ix1, iz0, iz1, yi); ring(ox0, ox1, oz0, oz1, yo);
+          for (let k = 0; k <= 5; k++) { const x = ix0 + (ix1 - ix0) * k / 5, xo = ox0 + (ox1 - ox0) * k / 5; pipe(lr, v3(x, yi, iz0), v3(xo, yo, oz0), r, post, NSP); pipe(lr, v3(x, yi, iz1), v3(xo, yo, oz1), r, post, NSP); }
+          for (let k = 1; k <= 3; k++) { const z = iz0 + (iz1 - iz0) * k / 4, zo = oz0 + (oz1 - oz0) * k / 4; pipe(lr, v3(ix0, yi, z), v3(ox0, yo, zo), r, post, NSP); pipe(lr, v3(ix1, yi, z), v3(ox1, yo, zo), r, post, NSP); }
+          for (const [x, z, sx, sz] of [[ox0, oz0, -1, -1], [ox1, oz0, 1, -1], [ox0, oz1, -1, 1], [ox1, oz1, 1, 1]]) pipe(lr, v3(x - sx * 0.3, yo, z - sz * 0.3), v3(x + sx * 0.45, yo + 0.75, z + sz * 0.45), 0.09, post, { cone: true, noCollide: true }); }
         // the upper storey: posts on the lower roof's inner edge, eave beams all round (over/unders), then the hipped roof and a finial
         for (const x of [ix0, XM, ix1]) for (const z of [iz0, iz1]) { const po = O('Pagoda Post', 'pole'); pipe(po, v3(x, U0 - 0.1, z), v3(x, UE, z), 0.11, post); }
         for (const z of [iz0, iz1]) bar('Pagoda Upper Eave', v3(ix0 - 0.2, UE, z), v3(ix1 + 0.2, UE, z), 0.12, wd);
         for (const x of [ix0, ix1]) pipe(pb, v3(x, UE, iz0 - 0.2), v3(x, UE, iz1 + 0.2), 0.12, wd, NSP);
-        { const ov = 1.0, yo = UE - 0.2, zr0 = ZM, ur = O('Pagoda Upper Roof', 'deco'), xr0 = XM - 2.2, xr1 = XM + 2.2;
-          const runZ = (iz1 - iz0) / 2 + ov, aZ = Math.atan2(RG - yo, runZ), LZ = Math.hypot(runZ, RG - yo) / 2, runX = ix1 + ov - xr1, aX = Math.atan2(RG - yo, runX), LX = Math.hypot(runX, RG - yo) / 2, ym = (RG + yo) / 2;
-          box(ur, v3(XM, ym, (iz0 - ov + zr0) / 2), v3((ix1 - ix0) / 2 + ov, 0.06, LZ), tile, 0, -aZ, 0, NSP); box(ur, v3(XM, ym, (iz1 + ov + zr0) / 2), v3((ix1 - ix0) / 2 + ov, 0.06, LZ), tile, 0, aZ, 0, NSP);
-          box(ur, v3((xr1 + ix1 + ov) / 2, ym, ZM), v3(LX, 0.06, runZ * 0.82), tile, 0, 0, -aX, NSP); box(ur, v3((xr0 + ix0 - ov) / 2, ym, ZM), v3(LX, 0.06, runZ * 0.82), tile, 0, 0, aX, NSP);
-          pipe(ur, v3(xr0, RG + 0.05, ZM), v3(xr1, RG + 0.05, ZM), 0.12, wd, NSP);
-          for (const [x, z, sx, sz] of [[ix0 - ov, iz0 - ov, -1, -1], [ix1 + ov, iz0 - ov, 1, -1], [ix0 - ov, iz1 + ov, -1, 1], [ix1 + ov, iz1 + ov, 1, 1]]) pipe(ur, v3(x - sx * 0.3, yo + 0.05, z - sz * 0.3), v3(x + sx * 0.4, yo + 0.65, z + sz * 0.4), 0.09, wd, { cone: true, noCollide: true });
-          pipe(ur, v3(XM, RG, ZM), v3(XM, RG + 0.9, ZM), 0.06, wd, NCP); pipe(ur, v3(XM, RG + 0.9, ZM), v3(XM, RG + 1.6, ZM), 0.1, 'pagodaWood', { cone: true, noCollide: true });
-          O('Pagoda Roof', 'overunder', { obstacle: { a: v3(ix0 - ov, 0, ZM), b: v3(ix1 + ov, 0, ZM), under: UE - 0.2, over: RG + 0.1 } }); }
+        { const ov = 1.0, yo = UE - 0.2, ur = O('Pagoda Upper Roof', 'deco'), xr0 = XM - 2.2, xr1 = XM + 2.2, r = 0.075, ox0 = ix0 - ov, ox1 = ix1 + ov, oz0 = iz0 - ov, oz1 = iz1 + ov;
+          // the hipped upper roof as red beams too: an edge ring, a ridge, rafters down both long slopes, hips and end rafters, a finial
+          for (const [a, b] of [[[ox0, oz0], [ox1, oz0]], [[ox0, oz1], [ox1, oz1]], [[ox0, oz0], [ox0, oz1]], [[ox1, oz0], [ox1, oz1]]]) pipe(ur, v3(a[0], yo, a[1]), v3(b[0], yo, b[1]), r, post, NSP);
+          pipe(ur, v3(xr0, RG, ZM), v3(xr1, RG, ZM), 0.1, post, NSP);
+          for (let k = 0; k <= 4; k++) { const x = xr0 + (xr1 - xr0) * k / 4, xo = ox0 + (ox1 - ox0) * (0.2 + 0.6 * k / 4); pipe(ur, v3(x, RG, ZM), v3(xo, yo, oz0), r, post, NSP); pipe(ur, v3(x, RG, ZM), v3(xo, yo, oz1), r, post, NSP); }
+          for (const [xr, xo] of [[xr0, ox0], [xr1, ox1]]) { pipe(ur, v3(xr, RG, ZM), v3(xo, yo, ZM), r, post, NSP); pipe(ur, v3(xr, RG, ZM), v3(xo, yo, oz0), r, post, NSP); pipe(ur, v3(xr, RG, ZM), v3(xo, yo, oz1), r, post, NSP); }
+          for (const [x, z, sx, sz] of [[ox0, oz0, -1, -1], [ox1, oz0, 1, -1], [ox0, oz1, -1, 1], [ox1, oz1, 1, 1]]) pipe(ur, v3(x - sx * 0.3, yo, z - sz * 0.3), v3(x + sx * 0.4, yo + 0.65, z + sz * 0.4), 0.08, post, { cone: true, noCollide: true });
+          pipe(ur, v3(XM, RG, ZM), v3(XM, RG + 0.9, ZM), 0.06, post, NCP); pipe(ur, v3(XM, RG + 0.9, ZM), v3(XM, RG + 1.6, ZM), 0.1, post, { cone: true, noCollide: true });
+          O('Pagoda Roof', 'overunder', { obstacle: { a: v3(ox0, 0, ZM), b: v3(ox1, 0, ZM), under: UE - 0.2, over: RG + 0.1 } }); }
         // the gaps: the lower bays, the upper bays, the well between the storeys
         for (const z of [Z0, Z1]) for (let x = X0; x < X1 - 0.1; x += 4) O('Pagoda Window', 'gap', { gap: { c: v3(x + 2, (B + 0.3 + EV - 0.6) / 2, z), n: v3(0, 0, 1), hu: 1.75, hv: (EV - 0.6 - B - 0.3) / 2, u: v3(1, 0, 0) } });
         for (const x of [X0, X1]) for (const z of [Z0 + 3.5, Z1 - 3.5]) O('Pagoda Window', 'gap', { gap: { c: v3(x, (B + 0.3 + EV - 0.3) / 2, z), n: v3(1, 0, 0), hu: 3.2, hv: (EV - 0.3 - B - 0.3) / 2, u: v3(0, 0, 1) } });

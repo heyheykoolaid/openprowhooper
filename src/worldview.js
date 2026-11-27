@@ -714,9 +714,7 @@ function parkMats() {
   const R = (() => { let s = 2727; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const T = (w, h, draw, clamp) => { const [c, g] = cnv(w, h); draw(g, w, h); const t = tex(c); if (clamp) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
   MAT.trussWhite = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.5, metalness: 0.25 });   // East Campus truss and spiral (2026-11-27)
-  MAT.pagodaWood = new THREE.MeshStandardMaterial({ color: 0x5c3b25, roughness: 0.8 });   // the Rooftop Pagoda (2026-11-27)
-  MAT.pagodaPost = new THREE.MeshStandardMaterial({ color: 0x8a2e1e, roughness: 0.7 });
-  MAT.pagodaTile = new THREE.MeshStandardMaterial({ color: 0x34433f, roughness: 0.85 });
+  MAT.pagodaPost = new THREE.MeshStandardMaterial({ color: 0x8a2e1e, roughness: 0.7 });   // the Rooftop Pagoda, all of it (2026-11-27)
   MAT.sculptSteel = new THREE.MeshStandardMaterial({ color: 0xb9bec2, roughness: 0.35, metalness: 0.6 });
   // the Campus Flagpole's flag: the IGOW logo (assets/flags/igow.webp; at the owner's request, credited on the main menu), on white
   { const [c, g] = cnv(1024, 600); g.fillStyle = '#f4f5f2'; g.fillRect(0, 0, 1024, 600); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
