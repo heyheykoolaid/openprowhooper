@@ -6,7 +6,7 @@ const checks = [
   ['single tricks', () => { const o = run('t3.js'); const want = ['Flip', 'Flip', 'Roll', 'Double Roll', "Cubik's Rube", 'Yaw Spin', 'Inverted Rewind', 'Inverted Yaw Spin', 'Segmented Flips/Rolls', 'Juicy Flick', 'Flip', 'Powerloop', 'Power Roll', 'Split S', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Flip', 'Flip', 'Roll', 'Double Flip', 'Double Roll', 'Yaw Spin', 'Inverted Rewind', 'Inverted Rewind', 'Vanny Roll', "Rubik's Cube", "Cubik's Rube", 'Juicy Flick', 'Inverted Yaw Spin'];
       const got = o.trim().split('\n').map(l => (l.split('-> ')[1] || '').split(' [')[0]); return want.every((w, i) => got[i] === w) ? null : 'got: ' + got.join(', '); }],
   ['obstacle timing', () => { const o = run('t4.js'); return /fake matty[^\n]*Flip \[/.test(o) && (o.match(/Powerloop \[CLEAN/g) || []).length === 3 && /matty flip \(forward[^\n]*Matty Flip/.test(o) ? null : o; }],
-  ['gap points (25-75 by tightness, repeats halved, own line) and low gaps under furniture', () => { const o = run('gaps.js'); return /11\/11 gap checks/.test(o) ? null : o; }],
+  ['gap points (by size, repeats halved, own line), low gaps under furniture, proper names per map', () => { const o = run('gaps.js'); return /12\/12 gap checks/.test(o) ? null : o; }],
   ['knife edge only through narrow gaps', () => { const o = run('knife.js'); return /(\d+)\/\1 knife edge checks/.test(o) ? null : o; }],
   ['fast combos', () => { const o = run('combo.js'); return /15\/15 combos correct/.test(o) ? null : o; }],
   ['powerloop vs maverick', () => { const o = run('loops.js'); return /\n5\/5/.test(o) ? null : o; }],
@@ -40,6 +40,7 @@ const checks = [
   ['community profile (every pilot\'s flying, under the pilot\'s own)', () => { const o = run('community.js'); const m = o.match(/(\d+)\/(\d+) community checks/); return m && m[1] === m[2] ? null : o; }],
   ['learning from review labels (looser only, never against a label)', () => { const o = run('learn.js'); const m = o.match(/(\d+)\/(\d+) learning checks/); return m && m[1] === m[2] ? null : o; }],
   ['Ship Drugs: every gap is really open (5 cm clear of every collider)', () => { const o = run('../tools/gapcheck.js', ['ship']); const m = o.match(/(\d+)\/(\d+) gaps clear/); return m && m[1] === m[2] ? null : o; }],
+  ['Power Roll as pilots fly it (one loop with the roll at the top round an object; not a Rubik\'s Cube)', () => { const o = run('powerroll.js'); const m = o.match(/(\d+)\/(\d+) power roll checks/); return m && m[1] === m[2] ? null : o; }],
   ['Matty Twister by the book (the roll while over the object, the flip at once, out under it)', () => { const o = run('twister.js'); const m = o.match(/(\d+)\/(\d+) twister checks/); return m && m[1] === m[2] ? null : o; }],
   ['Corner Climb (a trippy on a building corner: swings each way, climbing; not flat with the sticks together, not in front of one face)', () => { const o = run('corner.js'); const m = o.match(/(\d+)\/(\d+) corner checks/); return m && m[1] === m[2] ? null : o; }],
   ['Orbits vs trippies round real trees (fast nose-down orbits, thick trunks)', () => { const o = run('orbits.js'); const m = o.match(/(\d+)\/(\d+) orbit checks/); return m && m[1] === m[2] ? null : o; }],

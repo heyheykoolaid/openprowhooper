@@ -98,6 +98,24 @@ document.addEventListener('click', e => {
   const o = e.target.closest('[data-kwopen]'); if (o) { e.preventDefault(); const nm = o.dataset.kwopen; openTricks(); const box = $('#tSearch'); if (box) { box.value = nm; trickFilter(); } return; }
   const r = e.target.closest('.kwRow[data-kwt]'); if (r && !r.closest('#kwadList')) kwadDef(r);
 });
+// How to tell look-alike tricks apart (owner, 2026-11-27: "the difference between a rubiks cube and a power roll, is an over under
+// object, and a power roll, is more of a loop motion, with a roll at the top. can we help our helpers better distinguish?"). Shown to
+// whoever is judging a call (SKITTLES mode, Quick check, the Review Hub's player) when the call or the answer is one of a pair, and
+// under each trick in the Tricktionary. Wording from the owner and the book; edit freely.
+const TELL_APART = [
+  ["Rubik's Cube", 'Power Roll', "A Power Roll goes round an over/under object: under it, a loop up and over the top with a roll at the top, and back down under it. A Rubik's Cube has no object: half a flip, a roll, half a flip, more or less where you are."],
+  ['Immelmann', 'Power Roll', 'An Immelmann is half a loop up and over the object, then a half roll at the top to fly away upright. A Power Roll keeps looping: a full roll at the top and on down the far side, back under the object.'],
+  ['Powerloop', 'Flip', 'A Powerloop is a loop round an object: under it, up and over the top upside-down, and back under it flying on forward. A Flip turns over once in the air with nothing to go round.'],
+  ['Matty Flip', 'Powerloop', 'A Matty Flip goes OVER the object first, flips forward and comes out under it flying backward. A Powerloop goes UNDER first, loops back over the top and flies on forward.'],
+  ['Trippy Spin', 'Orbits', 'Trippy Spin: roll and yaw sticks pushed opposite ways ("wonky nips"), the camera looking up at the object, which stays at the top of the screen. Orbits: the sticks the same way, circling it the ordinary way.'],
+  ['Jump Rope', 'Side Loop', 'A Jump Rope stays upright over the top of the object. A Side Loop is upside-down at the top.'],
+];
+function tellApart(names, short) {
+  const N = (names || []).filter(Boolean).map(x => String(x).replace(/ x2$/, '')), hits = TELL_APART.filter(([a, b]) => N.includes(a) || N.includes(b));
+  if (!hits.length) return '';
+  const pick = N.length > 1 ? (hits.find(([a, b]) => N.includes(a) && N.includes(b)) || hits[0]) : null;
+  return (pick ? [pick] : hits).map(([a, b, t]) => `<div class="tellApart"><b>${esc(a)} or ${esc(b)}?</b> ${esc(t)}</div>`).slice(0, short ? 1 : 3).join('');
+}
 let kwadListT = 0;
 function kwadShow(ms) { const el = $('#kwadList'); if (!el) return; el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad); el.classList.remove('hide'); clearTimeout(kwadListT); if (ms) kwadListT = setTimeout(() => el.classList.add('hide'), ms); }   /* no ms: stays up (owner, 2026-11-27) */
 function kwadMenus() {   // the pause menu's list (owner, 2026-11-21: not on the main menu)

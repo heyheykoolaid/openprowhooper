@@ -1650,3 +1650,25 @@ racing, not in review) every piece named for an open A / D letter has a pulsing 
 in sight, faint through walls, a soft additive fill, bloom layer 1) and the letter floating over it (no sky beam, all 10 % more
 see-through: owner, 2026-11-27);
 it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change.
+
+## Power Roll by its loop, look-alike hints, gap names, INVERTED pays more, a 2 s wait (owner, 2026-11-27; test/powerroll.js, gaps.js, inverted.js)
+**Power Roll** (owner: "the difference between a rubiks cube and a power roll, is an over under object, and a power roll, is more of a
+loop motion, with a roll at the top"; `powerRollWitness` / `powerRollComing`, `POWER_ROLL_SPAN` 4.5 s, `POWER_ROLL_OVER` in sim.js): his
+labelled Power Rolls on Moose's Swing Set measured ONE pitch token of 357-441 deg (the loop) with a 330-365 deg roll inside it at the top,
+under / over / back under the object; the table's `P+180 Ra360 P+180` never fitted, so the game called Immelmann + Split S, or a Rubik's
+Cube. Now, from the raw tokens: P+ 300-460 deg in total from 0.8 s before the first under pass, a 250-460 deg roll centred inside the
+pitch and within 0.7 s of the over pass, no flip the other way inside it, UOU of one object (directions alternating, 4.5 s at most), out
+upright and flying forward = Power Roll; it replaces an Immelmann / Split S / Rubik's Cube / Roll reading and takes the detector's own
+pieces of those rotations (so nothing else is read from them). An Immelmann / Split S / Rubik's / Roll waits (`powerRollComing`: under then
+over one object, 120+ deg of P+ so far and a 250+ deg roll) up to 2.2 s for the pass back under. Re-flown: all 4 of the owner's Power
+Roll labels called (0 before), Rubik's Cube labels unchanged; one label the owner confirmed as an Immelmann (same run, same shape: P+381
+loop, 330 roll at the top, UOU) now reads Power Roll; bench 96.7 % and stress unchanged.
+**Telling look-alikes apart** (`TELL_APART`, `tellApart` in game.js, `.tellApart`): a short note for Rubik's Cube / Power Roll (the
+owner's words), Immelmann / Power Roll, Powerloop / Flip, Matty Flip / Powerloop, Trippy Spin / Orbits, Jump Rope / Side Loop, shown
+under the picked call in SKITTLES mode and the Review Hub's player, in Quick check, and under each trick in the Tricktionary.
+**Gap names** (`GAP_NAMES`, `gapName`, `gapLabel(name, low)` in sim.js; crossings carry `low`): every map's gaps read as places
+("Under the Picnic Table", "Tire Tunnel", "Sky Lobby Round Window", "Down the Spine", "Through the Swing Set"); numbers, compass letters
+and car numbers dropped; the Trick Park keeps its sizes; " Gap" is added only where the name does not already read as a place.
+**INVERTED** pays more the longer it lasts (`INV_STEP` 50, `INV_MAX` 1000, `invPts`): 200 for the first second, 250, 300, … up to 1000.
+**A knock between tricks** waits 2 s (`BUMP_WAIT`, owner: "2s is good"). **Options → Highlight today's K.W.A.D. objects** (`store 'kwadGlow'`).
+tools/probe-label.js takes flight ids after the folder to re-fly only those.

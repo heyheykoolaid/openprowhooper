@@ -9,7 +9,7 @@ check('not right way up or on its side', secs(3, { ...base, upY: -0.5 }).got ===
 check('not disarmed or crashed', secs(3, { ...base, armed: false }).got === 0 && secs(3, { ...base, crashed: true }).got === 0);
 { const r = secs(3.2, t => ({ ...base, contact: t > 1.5 && t < 1.501 })); check('a touch ends the stretch: seconds before it stay, the count starts again', r.got === 2 && r.tm.run === 1, `${r.got} scored, run ${r.tm.run}`); }
 { const k = new S.ScoreKeeper(); let pts = 0; for (let i = 1; i <= 6; i++) pts += k.inverted(i);
-  check('200 a second, no repeat penalty, no streak, its own line', pts === 1200 && k.invBonus === 1200 && k.invN === 6 && k.invBest === 6 && k.total === 1200 && k.trickScore === 0 && k.streak === 1); }
+  check('200, then 50 more each second, no repeat penalty, no streak, its own line', pts === 1950 && k.invBonus === 1950 && k.invN === 6 && k.invBest === 6 && k.total === 1950 && k.trickScore === 0 && k.streak === 1); }
 check('in the trick book as a 200-point extra', S.EXTRA_TRICKS.some(t => t.name === 'INVERTED' && t.pts === 200) && S.DETECTABLE.includes('INVERTED'));
 // the real physics: an Air65 3D rolled upside-down and held there with the stick below the middle
 { const W = { objs: [], prims: [], zones: [], spawn: { pos: S.v3(0, 0.03, 0), yaw: 0 } }, P = S.buildDrone(S.PRESETS['Air65 3D']), tune = S.defaultTune(); tune.flightMode = '3d';
@@ -18,4 +18,5 @@ check('in the trick book as a 200-point extra', S.EXTRA_TRICKS.some(t => t.name 
   d.pos = S.v3(0, 12, 0); d.vel = S.v3(); let got = 0;
   for (let t = 0; t < 3.3; t += 0.001) { d.step({ thr: 0.5 - 0.5 * (hov / P.revEff * 1.05 + 0.05), roll: 0, pitch: 0, yaw: 0 }, 0.001); got += tm.step(0.001, { mode3d: true, armed: d.armed, crashed: d.crashed, contact: d.contactThisStep, upY: d.up().y }); }
   check('an Air65 3D held upside-down for 3.3 s scores 3 seconds', got === 3 && d.up().y < -0.9, `${got} s, up ${d.up().y.toFixed(2)}, height ${d.pos.y.toFixed(1)} m`); }
+check('each second pays more, up to 1000', S.invPts(1) === 200 && S.invPts(2) === 250 && S.invPts(17) === 1000 && S.invPts(40) === 1000);
 console.log(`\n${ok}/${n} INVERTED checks`); if (ok !== n) process.exit(1);

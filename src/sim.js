@@ -1050,7 +1050,7 @@ const EXTRA_TRICKS = [
   { cat: 'Open Air Tricks', name: 'Inverted Uh-uh', diff: 'Intermediate', pts: 125, extra: true,
     desc: 'A quick throttle blip and a half flip or half roll to inverted. Upside-down, yaw 45° left, 90° right, 90° left and 45° right, back to where you were facing, like the whoop shaking its head "uh-uh". Finish with a half flip or half roll back upright. Created by Heads from Infinity Loops (prowhooper.com).' },
   { cat: 'Other Tricks', name: 'INVERTED', diff: 'Intermediate', pts: 200, extra: true,
-    desc: '3D mode only. Fly upside-down: every full second spent inverted in the air scores 200, as long as you like, with no repeat penalty. Touching anything, a bump or a crash ends the count (the seconds already scored stay); turn upside-down again to start a new one.' },
+    desc: '3D mode only. Fly upside-down: every full second spent inverted in the air scores: 200 for the first, 50 more for each one after (250, 300, …, up to 1000 a second), with no repeat penalty. Touching anything, a bump or a crash ends the count (the seconds already scored stay); turn upside-down again to start a new one.' },
   { cat: 'Gaps', name: 'Gaps', diff: 'Beginner', pts: 150, extra: true,
     desc: 'Fly through a small, enclosed gap. Scored by how tight it is on its short side: 150 through 6 inches (15 cm) or less, 125 at 12 inches, 100 at 18 inches, and 25 less for every 6 inches more, down to 25 from 3 feet up. The same gap again in one combo is worth half each time.' },
   { cat: 'Wall Tricks', name: 'Corner Climb', diff: 'Intermediate', pts: 300, extra: true,
@@ -1273,6 +1273,7 @@ const DRT_SPLIT_T = 1.0, DRT_SPLIT_R = 300, DRT_SPLIT_MIN = 540;   // a trippy t
 const DRT_ROLL = 1.8, DRT_SPAN = 120, DRT_RATE = 150, DRT_HOLD = 1.5, DRT_STILL = 2.5, DRT_BACK = 150;   // Double Rolling Trippy: roll per degree round the pole; how much of the trippy; rolling fast (deg/s) in the look (s) keeps the lap alive this long still / this far back
 const STICK_ON = 0.08, TRIPPY_FLAT = 0.8, LOCK_ANG = 50;   // a stick counts as pushed; how upright a sticks-opposed trippy may be flown; 'locked in' = the pole within this of the camera's line, in the top half
 const SPLIT_DROP = 1.0;   // m an open-air Split-S comes out below where its half roll began
+const POWER_ROLL_SPAN = 4.5, POWER_ROLL_OVER = new Set(['Immelmann', 'Split S', "Rubik's Cube", 'Roll']);   // s from the first pass under to the last; what a Power Roll replaces
 const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
 let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
 function matchTokens(pat, toks) {
@@ -1495,7 +1496,7 @@ class TrickDetector {
           const f = d.fwd(), vl = len(d.vel), fwdDot = vl > 0.8 ? dot(f, d.vel) / vl : 0;
           // how narrow the gap is (its short side) and how well the quad's up axis lines up with that side (knife-edged through it)
           const narrow = g.round ? 2 * g.hu : 2 * Math.min(g.hu, g.hv), nAx = g.round ? null : (g.hu <= g.hv ? g.u : vAx), up = d.up(), nAlign = nAx ? Math.abs(dot(up, nAx)) : 1;
-          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl, flat: Math.abs(g.n.y) > 0.7 || undefined, sq: (g.round || Math.min(g.hu, g.hv) / Math.max(g.hu, g.hv) >= 0.7) || undefined });
+          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl, flat: Math.abs(g.n.y) > 0.7 || undefined, sq: (g.round || Math.min(g.hu, g.hv) / Math.max(g.hu, g.hv) >= 0.7) || undefined, low: o.low || undefined });
         }
       }
     }
@@ -1728,7 +1729,30 @@ class TrickDetector {
       const f0 = W[0].f, f1 = W[W.length - 1].f, h0 = Math.hypot(f0.x, f0.z), h1 = Math.hypot(f1.x, f1.z); if (h0 < 0.3 || h1 < 0.3 || (f0.x * f1.x + f0.z * f1.z) / (h0 * h1) > -0.4) continue;
       if (this.watcher && (this.vetoedFor('Split S', r.t0) || !this.watcher.pre('Split S', { toks, part, obj: +id, t0: r.t0 }))) continue;
       const tv = big.filter(x => x === r || x.ax === 'P'); best = { name: 'Split S', toks: tv, err: 0.4, obstacle: seq[0].name, obj: +id, clen: 2, part, ct1: u.t, splitWitness: true }; break; }
+    const pr = this.powerRollWitness && this.powerRollWitness(byObj, toks);
+    if (pr && (!best || (best.clen || 0) < 3 || POWER_ROLL_OVER.has(best.name))) best = pr;
     return best;
+  }
+  // Power Roll as pilots fly it (owner's labels, 2026-11-27: "a power roll is more of a loop motion, with a roll at the top"; the
+  // difference from a Rubik's Cube is the over/under object). Read from the raw rotations: ONE continuous loop on pitch (P+ 300-460
+  // deg; the table's P+180 / P+180 halves are rarely cut apart) with a 250-460 deg roll inside it, over the top, while going under,
+  // over and back under one object, out upright and flying forward. The game cut these into Immelmann + Split S or a Rubik's Cube.
+  powerRollWitness(byObj, given = []) {
+    const T = this.toks; if (!Array.isArray(T) || !this.fbIn) return null;
+    for (const id in byObj) { const seq = byObj[id], kinds = seq.map(c => c.kind).join(''), pos = kinds.lastIndexOf('UOU'); if (pos < 0) continue;
+      const [u0, o, u1] = seq.slice(pos, pos + 3); if (u0.dir === o.dir || o.dir === u1.dir || u1.t - u0.t > POWER_ROLL_SPAN) continue;
+      if (!(u1.upY > 0.5) || !(u1.fwdDot > 0.2)) continue;
+      const P = T.filter(k => k.ax === 'P' && k.dir > 0 && k.t1 > u0.t - 0.8 && k.t0 < u1.t + 0.3), pSum = P.reduce((s, k) => s + k.raw, 0); if (pSum < 300 || pSum > 460) continue;
+      const p0 = Math.min(...P.map(k => k.t0)), p1 = Math.max(...P.map(k => k.t1));
+      const R = T.find(k => k.ax === 'R' && k.raw >= 250 && k.raw <= 460 && (k.t0 + k.t1) / 2 > p0 && (k.t0 + k.t1) / 2 < p1 && o.t > k.t0 - 0.7 && o.t < k.t1 + 0.7); if (!R) continue;
+      if (T.some(k => k.ax === 'P' && k.dir < 0 && k.raw > 120 && k.t1 > p0 && k.t0 < p1)) continue;   // a flip the other way inside it: not a loop with a roll
+      if (this.watcher && (this.vetoedFor('Power Roll', p0) || !this.watcher.pre('Power Roll', { toks: [...P, R], part: [u0, o, u1], obj: +id, t0: p0 }))) continue;
+      // the call takes the detector's own pieces of these rotations (so they are used up and no Rubik's Cube / Roll is read from them too)
+      const own = given.filter(x => x.ax !== 'Y' && x.t1 > p0 - 0.15 && x.t0 < p1 + 0.15);
+      if (!own.some(x => x.ax === 'R' && x.raw >= 200) || own.filter(x => x.ax === 'P').reduce((s, x) => s + x.raw, 0) < 250) continue;
+      return { name: 'Power Roll', toks: own, err: 0.3, obstacle: seq[0].name, obj: +id, clen: 3, part: [u0, o, u1], ct1: u1.t, powerRollWitness: true };
+    }
+    return null;
   }
   nearMiss(toks, crosses) {
     const objs = [...new Set(crosses.filter(c => c.kind !== 'G').map(c => c.obj))];
@@ -2653,6 +2677,7 @@ class StreamDetector extends TrickDetector {
       const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen) ? HOLD_MAX + 1.4 : HOLD_MAX;
       if (!p.lap && t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
       if (this.loopInProgress(p, t)) continue;
+      if (t - p.tDone < 2.2 && this.powerRollComing(p)) continue;   // the loop of a Power Roll still coming round to the pass back under
       if (p.name === 'Jump Rope' && [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 200 && k.t0 >= p.t0 - 0.5)) { this.pend = this.pend.filter(x => x !== p); continue; }   // a big roll came during the wait: a Double Dutch / Burrito / Side Loop, not a plain jump
       if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
       // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
@@ -2833,8 +2858,17 @@ class StreamDetector extends TrickDetector {
     best.deadline = t + best.hold;
     this.pend.push(best);
   }
+  powerRollComing(c, crosses = this.crossWindow(c.t0)) {
+    // a Power Roll on its way: under then over one object, the loop's pitch still going (or just done) round a roll: wait for the pass back under
+    if (!POWER_ROLL_OVER.has(c.name) || !Array.isArray(this.toks)) return false; { const byO = {}; for (const x of crosses) if (x.kind === 'U' || x.kind === 'O') (byO[x.obj] = byO[x.obj] || []).push(x);
+      for (const id in byO) { const L = byO[id]; if (!L.map(x => x.kind).join('').endsWith('UO')) continue; const u0 = L[L.length - 2]; if (u0.t < (c.t0 ?? this.time) - 3) continue;
+        const P = [...this.toks, ...this.cur.filter(Boolean)].filter(k => k.ax === 'P' && k.dir > 0 && (k.t1 == null || k.t1 > u0.t - 0.8)), pSum = P.reduce((s, k) => s + k.raw, 0);
+        if (pSum >= 120 && [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 250 && (k.t1 == null || k.t1 > u0.t))) return true; } }
+    return false;
+  }
   obstaclePrefix(c) {     // a bigger obstacle trick is half-done with these same rotations
     const crosses = this.crossWindow(c.t0);
+    if (this.powerRollComing(c, crosses)) return 'Power Roll';
     const byObj = {}; for (const x of crosses) if (x.kind !== 'G') (byObj[x.obj] = byObj[x.obj] || []).push(x);
     for (const tr of OBSTACLE_TRICKS) {
       if (tr.cross.length <= (c.clen || 0)) continue;
@@ -3283,12 +3317,36 @@ function pendulumStep(chain, p) {
 // flown through, armed, is a small trick that keeps the combo alive, worth GAP_MIN..GAP_MAX by how tight it is for the pilot's
 // whoop (its short side in quad widths: ~3 widths or less = 75, 15 or more = 25), halved each time the same gap repeats in one combo.
 const GAP_MIN = 25, GAP_MAX = 150, GAP_STEP = 0.1524, GAP_PER = 25;   /* the site's Gaps (owner, 2026-11-23): 150 through 6 in or less on the short side, 25 less per 6 in more (125 at 12 in, 100 at 18 in), never under 25 */
-function gapLabel(name) { let n = String(name || 'Gap').replace(/\s+opening$/i, '').replace(/\s+(mouth)$/i, '').replace(/\s+\d+(\.\d+)?( m)?$/, '').trim(); return /gap$/i.test(n) ? n : n + ' Gap'; }
+// Gap call-out names (owner, 2026-11-27: "proper gap names per map"): GAP_NAMES by the object's name (after " opening" / "mouth" are
+// dropped); a gap the Surveyor found under something (`low`) is "Under the <thing>"; otherwise the object's name with trailing numbers
+// dropped. The Trick Park keeps its sizes (its names read like a lab sheet). The call-out shows it as "<NAME> GAP" unless it already
+// reads as a place ("Under the …", "Tunnel", "Door", …).
+const GAP_NAMES = {
+  'Split Birch': 'Split Birch', 'Swing Set': 'Through the Swing Set', 'Tire': 'Tire Tunnel', 'Trunk Gap': 'Trunk Gap',
+  'Race Gate': 'Race Gate', 'Alley': 'Alley Run', 'Cube top': 'Cube Top', 'Cube west': 'Cube Side', 'Cube north': 'Cube Side', 'Cube east': 'Cube Side',
+  'Cube south': 'Cube Side', 'Trailer underside': 'Under the Trailer', 'Box Truck underside': 'Under the Box Truck', 'Rack Upright': 'Under the Rack',
+  'Container Tunnel': 'Container Tunnel', 'War Rig Cab window': 'War Rig Window', 'The Pit Hole': 'The Pit', 'Witness Me Finish': 'Witness Me',
+  'Blood Oath Gantry': 'Blood Oath', 'Labyrinth Entrance': 'Into the Labyrinth', 'Labyrinth Exit': 'Out of the Labyrinth', 'Spine Top': 'Down the Spine',
+  'Spine Bottom': 'Out of the Spine', 'Lobby Arch': 'Lobby Arch', 'Circular Gap': 'Sky Lobby Round Window', 'Spine Window': 'Spine Window',
+  'Subway Car Door': 'Subway Car Door', 'Subway Car End Door': 'Subway Car End Door', 'Yellow Fever Gate': 'Yellow Fever Gate',
+  'Lifeboat Squeeze': 'Lifeboat Squeeze', 'Chandelier Hoop': 'Chandelier Hoop', 'Slide Tube': 'Slide Tube', 'Tunnel': 'Tunnel',
+};
+const GAP_PLACE = /^(under|through|into|out of|down)\b|\b(gap|tunnel|door|doors|doorway|window|arch|squeeze|run|hoop|tube|slot|grid|skylight|bay|alley|spine|pit|witness me|blood oath|top|side|gate|frame|ring)$/i;
+function gapName(name, low) {
+  let n = String(name || 'Gap').replace(/\s+(opening|mouth)$/i, '').trim();
+  if (!GAP_NAMES[n] && !/ \d+(\.\d+)? m$/.test(n)) n = n.replace(/\s+(\d+|[A-Z]\d?)$/, '').replace(/\s+(\d+|[A-Z]\d?)$/, '').replace(/ Car \d+ /, ' Car ').replace(/\s+(North|South|East|West)$/, '').trim();
+  if (GAP_NAMES[n]) return GAP_NAMES[n];
+  if (/ \d+(\.\d+)? m$/.test(n)) return n;   // the Trick Park: "Gap Gate 0.7 m", "Knife Slot 0.2 m"
+  return low ? 'Under the ' + n : n;
+}
+function gapLabel(name, low) { const n = gapName(name, low); return GAP_PLACE.test(n) || / \d+(\.\d+)? m$/.test(n) ? n : n + ' Gap'; }
 function gapPoints(narrow) { const over = Math.max(0, (narrow - GAP_STEP) / GAP_STEP); return Math.max(GAP_MIN, Math.min(GAP_MAX, Math.round((GAP_MAX - GAP_PER * over) / 5) * 5)); }
 // INVERTED (owner, 2026-11-25): in 3D mode, every full second upside-down (up.y under INV_UP: within ~45 deg of flat on its back) in
 // the air, armed, scores INV_PTS. Any touch, a crash or disarming ends the stretch; seconds already scored stay. step() returns how
 // many seconds this step completed (0 or 1) and keeps `run`, the seconds in the current stretch.
-const INV_PTS = 200, INV_UP = -0.7;
+const INV_PTS = 200, INV_UP = -0.7, INV_STEP = 50, INV_MAX = 1000;
+// the longer it lasts, the more each second pays (owner, 2026-11-27): second n of a stretch pays INV_PTS + INV_STEP x (n - 1), up to INV_MAX
+const invPts = n => Math.min(INV_MAX, INV_PTS + INV_STEP * Math.max(0, (n | 0) - 1));
 class InvertedTimer {
   constructor() { this.t = 0; this.run = 0; this.on = false; }
   stop() { const r = this.run; this.t = 0; this.run = 0; this.on = false; return r; }
@@ -3353,7 +3411,7 @@ class ScoreKeeper {
   }   // the combo banked: a new set starts from one, and every gap is fresh again
   gap(c, qW) {   // a gap flown through: { label, pts, base, repeat }
     const k = c.obj, rep = this.gapSeen[k] || 0, base = gapPoints(c.narrow ?? 1, qW), pts = Math.round(base * Math.pow(0.5, rep)); this.gapSeen[k] = rep + 1;
-    this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name), pts, base, repeat: rep };
+    this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name, c.low), pts, base, repeat: rep };
     if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
     this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return r;
   }
@@ -3368,8 +3426,8 @@ class ScoreKeeper {
   }
   // INVERTED (owner, 2026-11-25; 3D mode only): one more full second upside-down in the air. INV_PTS each, no repeat penalty, no
   // streak, its own line like gaps. run = seconds in this stretch so far.
-  inverted(run) { this.invBonus += INV_PTS; this.invN++; this.invBest = Math.max(this.invBest, run | 0);
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return INV_PTS; }
+  inverted(run) { const p = invPts(run || 1); this.invBonus += p; this.invN++; this.invBest = Math.max(this.invBest, run | 0);
+    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return p; }
   // a bump or a ground tap BETWEEN tricks (official rules): no trick loses points, the streak ends. True when there was one to lose.
   bumpBetween() { const had = this.streak > 1; this.streak = 1; this.streakCount = 0; this.last = null; return had; }
   switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
@@ -3612,7 +3670,7 @@ async function learnFromLabels(runs, profile, opts = {}) {
   return { profile: cur, report, changed: report.changes.length > 0 };
 }
 
-root.Sim = { canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, INV_PTS, INV_UP, InvertedTimer, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
+root.Sim = { gapName, GAP_NAMES, canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, INV_PTS, INV_UP, INV_STEP, INV_MAX, invPts, InvertedTimer, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
   TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

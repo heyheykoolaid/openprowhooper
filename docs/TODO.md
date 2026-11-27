@@ -39,8 +39,9 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
    **Tricktionary audit** (2026-11-23): rules, names, points and the three tricks brought in line with prowhooper.com; Rollback and
    Juicy Rollback from RodFPV's labels. Open: Segmented's stall (0.18 s from the demo vs the text's 0.5 s); points for Cube Eject,
    Rollback, Juicy Rollback, Corner Climb; the 16 demo clips not on file; per-object point tiers (gate, cube, indoors).
-9. **Proper gap names per map** for the gap call-outs (they use object names today).
-10. **Known wrong calls still open** (from reviews): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
+9. ~~Proper gap names per map~~ done 2026-11-27 (`GAP_NAMES`).
+10. **Known wrong calls still open** (from reviews; Power Roll read as Immelmann + Split S / Rubik's Cube fixed 2026-11-27; next: open-air
+    Flips read as Powerloop (loop size / climb study), Stall Flip Rewind where pilots said Flip (5 labels)): Cradle vs Juicy Flick on the swing set; Barani read as Split-S + Matty; Flip + Matty
     double call on a slow two-part Matty; Split-S into a wall dive called Dive; two Split-S read as Double Dutch (under, over, under);
     Double Flip that was a Half Matty; a 794 deg Double Roll over the tolerance.
 
@@ -69,15 +70,14 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - **Feel**: the real Air65 measured quicker and springier than the sim (its feedforward). Fit it once a test-card log is in.
 
 ## Waiting on the owner
-- Scoring (2026-11-25): should back-to-back tricks build the streak (they do now), and is 1.5 s the right wait before a knock between
-  tricks ends it?
-- INVERTED (2026-11-25): flat 200 a second, or more the longer it lasts? Should the streak apply to it?
-- K.W.A.D. glow (2026-11-26): an Options switch to turn it off?
+- Scoring: should back-to-back tricks build the streak (they do now)? (The wait is 2 s: answered 2026-11-27.)
+- INVERTED: 200 + 50 a second up to 1000 (built 2026-11-27): right numbers? Should the streak apply to it?
+- Power Roll: one confirmed Immelmann (your run, the Swing Set) has the same shape as your Power Rolls and now reads Power Roll: a slip?
 - Tyrantt's tags: build a linkable page of the game's tricks (`#tricks`, `#trick=<name>`)? (4c above)
 - Burrito Roll: the under-roll-under move has no name and scores as a Roll (decided 2026-11-23); say if that changes.
 - Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points
   (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
-- More Warehouse: look over the detail pass; should the box truck and trailer count as over/unders or only as gaps?
+- More Warehouse: look over the detail pass (the box truck and trailer stay over/unders: "yup", 2026-11-27).
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).
 - Fly the trainer: rolling starts, instant retry, and today's intro / cues / sticks-big view.
 - Fly the Feel Lab test card on the Fractal 65 / 75 and send the logs.

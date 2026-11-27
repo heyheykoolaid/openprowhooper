@@ -118,7 +118,7 @@ function lateBumpCheck() {
 // A bump or a ground tap BETWEEN tricks ends the streak (the official rules; owner, 2026-11-25). A knock of BUMP_AFTER or harder,
 // armed, with a streak to lose, waits BUMP_WAIT s: if a trick that IS a touch (taps, wall rides, slides, a perch, a wall stick) is
 // called or is live in that time, the knock was the trick and nothing happens; a trick graded BUMP takes its own penalty.
-const BUMP_WAIT = 1.5, TOUCH_TRICKS = new Set([...(window.TPW_TRICKS || []).filter(t => t.cat.trim() === 'Wall Tricks').map(t => t.name.trim()), 'Slide Disarm', 'Perch', 'Wall Stick', 'Face Punch']);
+const BUMP_WAIT = 2,   /* owner, 2026-11-27: "2s is good" (was 1.5) */ TOUCH_TRICKS = new Set([...(window.TPW_TRICKS || []).filter(t => t.cat.trim() === 'Wall Tricks').map(t => t.name.trim()), 'Slide Disarm', 'Perch', 'Wall Stick', 'Face Punch']);
 let bumpWait = null;
 function betweenBumpCheck() {
   if (bumpWait || lateTrick || mode !== 'fly' || race.on || !score || !drone.armed || drone.crashed || score.streak <= 1) return;
@@ -159,7 +159,7 @@ function kmBounds(o) {
   return b;
 }
 function kwadMarkSync(t) {
-  const open = mode === 'fly' && !race.on && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
+  const open = mode === 'fly' && !race.on && store.get('kwadGlow', true) && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
   const sig = MAP_ID + '|' + open.map(L => L + score.kw[L].obj).join(',');
   if (sig !== KM.sig) {
     KM.sig = sig; if (KM.grp) { scene.remove(KM.grp); KM.grp.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } }); } KM.grp = null; KM.parts = [];

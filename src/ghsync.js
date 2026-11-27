@@ -76,6 +76,7 @@ function openOptions() {
     <label>Render resolution <select id="optRes"><option value="auto" ${PERF.resAuto ? 'selected' : ''}>Auto (drops when the frame rate does)</option>${[[1, '100%'], [0.85, '85%'], [0.7, '70%'], [0.5, '50%']].map(([v, l]) => `<option value="${v}" ${!PERF.resAuto && Math.abs(PERF.res - v) < 0.01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <p class="note">Graphics card: ${esc(GPU || 'unknown')}${GPU_SOFT ? ' — <b style="color:#ff8b7d">the browser is drawing without your graphics card (hardware acceleration is off)</b>: Chrome / Edge: Settings → System → "Use graphics acceleration when available", then relaunch. Firefox: Settings → General → Performance.' : ''}</p>
     <label class="chk big" title="Frame rate, where the time goes (physics, trick detection, drawing, the rest), draw calls, resolution and memory"><input type="checkbox" id="optPerf" ${PERF.on ? 'checked' : ''}> Performance overlay <small>(F3)</small></label>
+    <label class="chk big" title="A green outline and the letter over the objects named for today's A and D, until you take the letter"><input type="checkbox" id="optKwGlow" ${store.get('kwadGlow', true) ? 'checked' : ''}> Highlight today's K.W.A.D. objects</label>
     <label class="chk big" title="The trick library's guesses (never scored) always wait for you in SKITTLES mode; this also shows them on screen while you fly"><input type="checkbox" id="optMaybe" ${store.get('maybeFlash', false) ? 'checked' : ''}> Show "maybe" guesses while flying</label>
     <p class="note">Turn it off if the game runs slowly on that map.</p>
     <label class="chk big"><input type="checkbox" id="optPass" ${passUI.on ? 'checked' : ''}> Show what counted while flying (over / under / gap / pole) — Z</label>
@@ -109,6 +110,7 @@ function openOptions() {
 }
 document.addEventListener('change', e => {
   if (e.target.id === 'telOn') telSet(e.target.checked);
+  if (e.target.id === 'optKwGlow') store.set('kwadGlow', e.target.checked);
   if (e.target.id === 'optPass') { passUI.on = e.target.checked; store.set('passFeed', passUI.on); }
   if (e.target.id === 'optBloom') { BLOOM.on = e.target.checked; store.set('bloom', BLOOM.on); }
   if (e.target.id === 'optShadows') { PERF.shadows = e.target.checked; store.set('shadows', PERF.shadows); perfApply(); }

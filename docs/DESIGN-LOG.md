@@ -6,6 +6,23 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### The owner's answers on the waiting list, and Power Roll vs Rubik's Cube (2026-11-27)
+"Ready to build, 1, 2 and 6. waiting: 1: 2s is good. pay more the longer it lasts, yes. yes to glow option. box truck, yup!"
+- **Decided / built**: a knock between tricks now waits 2 s before it ends the streak; INVERTED pays more the longer it lasts (200, then
+  50 more each second, capped at 1000 a second: Claude's numbers, say if wrong); an Options switch for the K.W.A.D. glow; gap call-outs
+  read as places on every map.
+- **Read as**: "box truck, yup" = the box truck and trailer stay over/unders (nothing changed); "yes" on INVERTED = pay more, not the
+  streak on it (left off). Say if either was meant the other way. Back-to-back tricks still build the streak (not answered).
+- **Power Roll vs Rubik's Cube** (owner: "the difference … is an over under object, and a power roll is more of a loop motion, with a roll
+  at the top. can we help our helpers better distinguish?"). Built both ways: the detector reads a Power Roll from one pitch loop with
+  the roll at the top round an object (his 4 labelled ones were called Immelmann + Split S or Rubik's Cube; now all 4 are Power Rolls),
+  and the people judging calls get a short "how to tell them apart" note for that pair and five other look-alike pairs.
+- **Open**: one Immelmann he confirmed (same run, the Swing Set) has the very same shape and now reads Power Roll: a slip, or a real
+  difference to keep? The hint wording for the other pairs is Claude's from the book: edit freely.
+- **Looked at, not changed**: Flip vs Powerloop on bars: the remaining Powerloop labels read as Flip are a bump, a crash and a loop through
+  a race gate that never crossed its top bar; the Flips read as Powerloop are open-air 315-340 deg backward flips while moving, which the
+  open-loop rule takes for small loops. Telling those apart needs a study of loop size and climb on confirmed open loops: next round.
+
 ### K.W.A.D. marker and list (owner, 2026-11-27)
 "remove the column from the sky on kwad, and make the marker about 10% more transparent"; the list under the K W A D letters should
 show in game "like it did before" (not clickable). **Done**: no beam; outline, fill and letter 10 % fainter; the list stays up for the
