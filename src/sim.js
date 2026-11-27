@@ -726,6 +726,24 @@ function surveyLowGaps(world, nid) {
 
 // ================================================================= DRONE PHYSICS
 const NEAR_M = 1.0, NEAR_M2 = 2 * NEAR_M;   // collision broad phase: list everything within 2 m, trust the list for 1 m of travel
+// Thrust with the rotor's own inflow (tune.inflow; owner, 2026-11-27, after reading WebFPV's plant: ideas only, written from the
+// textbook). Blade element says thrust falls as the air arriving at the blade speeds up: T/T0 = 1 - (x + y - 1) / k, where x is the
+// axial speed and y the induced velocity, both over vi0 (the induced velocity at rest), and k is fixed by the prop's pitch speed
+// (thrust reaches zero at x = 1 + k: the old line's jmax). Momentum theory says what induced velocity that thrust needs:
+// T/T0 = y sqrt(xp^2 + (x + y)^2), xp the edgewise speed over vi0. Both together: climbing costs less thrust than the straight line
+// (the rotor needs less induced velocity), and edgewise flow gives translational lift. Hover (x = xp = 0) is y = 1, T = T0 exactly.
+// Edgewise speed is taken at 0.8 (the induced velocity is not even over a real disc in forward flight: the induced power factor).
+// Descending (x < 0) keeps the old line's gain (the ring state is handled after) times the edgewise gain at x = 0.
+const INFLOW_EDGE = 0.8;
+function inflowRatio(vAx, vIn, vPitch, vi0, ctFold) {
+  if (!(vi0 > 0.05) || !(vPitch > 0)) return ctFold;
+  const k = Math.max(0.2, vPitch / vi0 - 1), xp = INFLOW_EDGE * vIn / vi0, x = Math.max(0, vAx / vi0);
+  // the axial root (xp = 0) in closed form, then three Newton steps down to the edgewise root (g rises and is convex in y)
+  const b = x + 1 / k, c = (x - 1) / k - 1; let y = Math.max(0, (-b + Math.sqrt(Math.max(0, b * b - 4 * c))) / 2);
+  if (xp > 1e-4) for (let it = 0; it < 3; it++) { const s = x + y, r = Math.sqrt(xp * xp + s * s), g = y * r - (1 - (s - 1) / k), dg = r + y * s / r + 1 / k; if (!(dg > 0)) break; y = Math.max(0, y - g / dg); }
+  const ratio = Math.max(0, 1 - (x + y - 1) / k);
+  return vAx >= 0 ? ratio : ctFold * ratio;
+}
 class Drone {
   constructor(params, tune, world) {
     this.world = world; this.rng = makeRng(1234);
@@ -750,8 +768,12 @@ class Drone {
     // tune.inertiaFeel (absent = 1, the physics as it was): roll and pitch inertia only (sim x = pitch, z = roll), fitted from real
     // Blackbox logs (tools/inertiafit.js; owner, 2026-11-27)
     const pin = Number.isFinite(+tune.inertiaFeel) ? clamp(+tune.inertiaFeel, 0.2, 3) : 1;
-    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1 && pin === 1;
-    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel * pin, params.I.y * F.weightFeel, params.I.z * F.weightFeel * pin),
+    // tune.propFM (absent: cq as above): the props' torque from their thrust by a figure of merit (ideal power over shaft power at
+    // rest: FM = ct^1.5 / (2 pi sqrt(pi / 2) cq) for a disc of the prop's diameter). The game's fitted whoop props sit at 0.35
+    // (the 3D props 0.25-0.27); one number for every prop instead of a cq each, 3D props at 0.73 of it (owner, 2026-11-27, after reading WebFPV)
+    const pfm = Number.isFinite(+tune.propFM) ? clamp(+tune.propFM, 0.15, 0.8) * (params.revEff > 0.8 ? 0.73 : 1) : 0, cqFM = pfm ? Math.pow(params.ct * pct, 1.5) / (2 * Math.PI * Math.sqrt(Math.PI / 2) * pfm) : 0;   // 3D props lose about a quarter (symmetrical blades)
+    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1 && pin === 1 && !pfm;
+    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: pfm ? cqFM : params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel * pin, params.I.y * F.weightFeel, params.I.z * F.weightFeel * pin),
       cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel), rotorDrag: params.rotorDrag * F.dragFeel,
       rotorJ: params.rotorJ / F.motorFeel, bat: { ...params.bat, r: params.bat.r * F.sagFeel } };
     this.tune = tune;
@@ -830,9 +852,10 @@ class Drone {
       let ctF = J >= 0 ? clamp(1 - J / p.jmax, 0, 1) : clamp(1 - 0.35 * J, 1, 1.25);
       // translational lift (edgewise flow) small gain
       const vIn = Math.hypot(vp.x, vp.z);
-      let T = p.ct * RHO * n * n * Math.pow(p.D, 4) * ctF;
+      let T;
+      if (this.tune.inflow) T = p.ct * RHO * n * n * Math.pow(p.D, 4) * inflowRatio(vAx, vIn, nn * p.D * p.jmax, Math.sqrt(p.ct * RHO * n * n * Math.pow(p.D, 4) / (2 * RHO * p.A)), ctF);   // tune.inflow: momentum theory, translational lift inside it
+      else { T = p.ct * RHO * n * n * Math.pow(p.D, 4) * ctF; const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A)); T *= 1 + 0.08 * Math.min(1, vIn / (vi + 0.5)); }
       const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A));
-      T *= 1 + 0.08 * Math.min(1, vIn / (vi + 0.5));
       // vortex ring state / propwash when descending into own wash
       const desc = -vAx;
       let vrs = 0;
@@ -3678,5 +3701,5 @@ async function learnFromLabels(runs, profile, opts = {}) {
 
 root.Sim = { gapName, GAP_NAMES, canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, INV_PTS, INV_UP, INV_STEP, INV_MAX, invPts, InvertedTimer, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
   primDist,
-  TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
+  inflowRatio, TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
 })(typeof window !== 'undefined' ? window : globalThis);

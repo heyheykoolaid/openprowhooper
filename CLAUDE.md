@@ -148,6 +148,18 @@ rpm-squared difference from bidirectional DShot) explains under a third of a who
 on the sim's own flights), so it was dropped. `FeelFit.series` / `simulate` carry per-motor rpm (`rpm4`, Betaflight's motor order) for
 later work. A test-card log (roll / pitch snaps) would give a sharper read.
 
+**Inflow and prop load against the logs** (owner, 2026-11-27, "2 and 3" after WebFPV; `inflowRatio`, `tune.inflow`, `tune.propFM` in
+sim.js, `node tools/propfit.js [variants JSON] [--curves]`, test/inflow.js): **`tune.inflow`** (absent = the old straight line in advance
+ratio plus the 8 % translational lift; **the game sets 1**, Advanced physics → Feel → "Prop thrust in moving air"): blade element and
+momentum theory solved together (`INFLOW_EDGE` 0.8 on edgewise speed); hover identical, a full-throttle climb ~6 % faster, ~10 % more lift
+at 8 m/s edgewise; the log step responses do not move (logs have no position, so the lift itself cannot be checked). **`tune.propFM`**
+(absent: cq as the parts and propCq give it): cq from ct by a figure of merit, 3D props at 0.73 of it; the game's props sit at 0.38. The
+logs' **rpm at each throttle** says the sim's props are far too easy to turn: at 50 % throttle 53k sim vs 37k real, 33 % off, the gap
+growing with throttle. Prop grip 1.7 with FM 0.15 (the floor; ~x6.8 prop load on an Air65: props plus the motors' own losses) brings it
+to 7 %, hovers at 29k rpm / 32 % (real 29-31k, 30-34 %) and draws 3.9 A / 16 W (real 3-4 A, 10-14 W, so drain 1), but thrust to weight
+falls from ~5 to ~3 (the log's one held punch: ~2.8 on a sagging pack; the spec the owner collected says 4.5-7). **Not the default: the
+owner decides**; it is the "Logged Air65 load" button (`LOG_LOAD` in game.js). The 2S presets' motors are estimates and would fall to ~2.2.
+
 ## The Watcher (src/sim.js `Watcher`, `WATCH`)
 A second, live judge behind the detector: every call is cross-checked against independent witnesses (path, camera view,
 sticks/throttle, demo timing scaled to the pilot's learned speed) and the TPW description. Hard checks veto (the

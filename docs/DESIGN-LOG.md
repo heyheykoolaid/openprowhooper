@@ -6,6 +6,20 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Prop thrust in moving air, and how hard the props are to turn (owner: "Okay, now 2 and 3", 2026-11-27)
+From WebFPV's plant (ideas only). **(2) Inflow, on in the game**: thrust is worked out from the rotor's own inflow (blade element and
+momentum theory together) instead of a straight line in advance ratio plus an 8 % translational-lift bump. Hover is exactly as before; a
+full-throttle climb is ~6 % faster, forward flight at 8 m/s gets ~10 % more lift. The logs cannot check the lift (no position), and the
+roll / pitch / yaw step responses against them do not move. "Straight line (old)" stays in Advanced physics → Feel. **(3) Figure of merit,
+a finding and a question**: the game's props sit at a figure of merit of 0.38 (a real whoop prop: 0.3-0.4), so as a number it looked
+right. But flown with the logs' own sticks, the sim's motors spin 33 % faster than the owner's Air65s at the same throttle (50 %: 53k
+against 37k rpm), the gap growing with throttle: the props are far too easy to turn. Prop grip 1.7 with a figure of merit of 0.15 (that
+is the props plus the motors' own losses, about 6.8 times the prop load on an Air65) matches the rpm at every throttle within 7 %, hovers
+at 29k rpm and 32 % (real 29-31k, 30-34 %), and draws 3.9 A (real 3-4 A: the battery drain factor of 2.4 would no longer be needed). The
+catch: thrust to weight falls from about 5 to about 3. The one held punch in the logs reads ~2.8 on a sagging pack, but the whoop spec
+the owner collected says 4.5-7. **Open, the owner's call**: make the logged load the default, or keep the punchier props? It is the
+"Logged Air65 load" button in Advanced physics → Feel to fly first. The 2S presets would fall to ~2.2 with it (their motors are guesses).
+
 ### Inertia measured from the Blackbox logs (owner: "let's do 1", 2026-11-27)
 **Result: the sim's roll / pitch inertia is right for the owner's quad; nothing changed in the game.** Two ways tried. (1) WebFPV's
 open-loop fit (angular acceleration against the left-right / front-back difference in rpm squared, scaled by the hover): it recovers the

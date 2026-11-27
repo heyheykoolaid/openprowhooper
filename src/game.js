@@ -43,6 +43,10 @@ const DEAD_SPIN_DEF = 0.1; if (tune.deadSpin == null) tune.deadSpin = DEAD_SPIN_
 const PROP_FIT = { ct: 1.31, cq: 1.8 }, DRAIN_DEF = 2.4;
 if (tune.propCt == null) { tune.propCt = PROP_FIT.ct; tune.propCq = PROP_FIT.cq; if (tune.drain === 3.2) tune.drain = DRAIN_DEF; }   // the 3.2 of the first fit went with the old props
 if (tune.drain == null) tune.drain = DRAIN_DEF;
+// tune.inflow (owner, 2026-11-27, "2 and 3" after reading WebFPV): thrust from the rotor's own inflow (momentum theory), on in the game
+if (tune.inflow == null) tune.inflow = 1;
+// the load the owner's Air65 logs measure (the motors' rpm at every throttle, hover rpm and current; tools/propfit.js): a preset, not the default
+const LOG_LOAD = { propCt: 1.7, propFM: 0.15, drain: 1 };
 // Battery life off by default (owner, 2026-11-20: "not necessary in our sim"): the pack never runs down unless the pilot ticks
 // Garage → Battery life. Everyone is switched off once (`store 'batOff'`); the physics (Node) keeps it on when absent.
 if (!store.get('batOff', false)) { tune.batteryLife = false; store.set('batOff', true); store.set('tune', tune); } else if (tune.batteryLife == null) tune.batteryLife = false;

@@ -70,6 +70,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - **Feel**: the real Air65 measured quicker and springier than the sim (its feedforward). Fit it once a test-card log is in.
 
 ## Waiting on the owner
+- Prop load (2026-11-27): fly "Logged Air65 load" (Advanced physics → Feel). Default or not? It matches the logs' rpm, hover and current, but
+  thrust to weight drops from ~5 to ~3. Momentum-theory inflow is on by default ("Straight line (old)" brings back the old thrust).
 - Scoring: should back-to-back tricks build the streak (they do now)? (The wait is 2 s: answered 2026-11-27.)
 - INVERTED: 200 + 50 a second up to 1000 (built 2026-11-27): right numbers? Should the streak apply to it?
 - Tyrantt's tags: build a linkable page of the game's tricks (`#tricks`, `#trick=<name>`)? (4c above)
