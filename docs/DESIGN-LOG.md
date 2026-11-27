@@ -42,6 +42,7 @@ dropped before it shipped. What stands is a two-storey timber pagoda: red posts,
 round, an upper storey set in, a hipped roof with upswept corners and a finial. Flown in through the lower bays, up the open well and out
 the upper bays; every bay and the well are gaps, the posts poles, both eaves and the roof over/unders. Then (owner: "the roofs look weird, can we just make it out of the red"): the
 tile roof panels are gone; both roofs are open frames of the same red beams (rings, rafters, hips, ridge), so the whole pagoda is see-through.
+Then: the eave brackets, corner spikes and finial came off, and a rail round the lower storey gives every bay the frame's double-stacked windows (each window its own gap).
 
 ### Clappy's footbridge after JD's "The Bridge" (owner, 2026-11-27)
 RodFPV pointed at fpvwithjd's reel "THE BRIDGE PART 10" (a campus footbridge); the owner asked to make Clappy's walking bridge look like it.
