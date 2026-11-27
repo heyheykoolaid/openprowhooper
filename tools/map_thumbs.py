@@ -67,6 +67,8 @@ EXTRA = {
     'clappy-high':   ('clappy', [20, 16, 20], [-4, 0, -4]),
     'clappy-fountain': ('clappy', [5, 2.6, 7], [0, 1.2, 0]),
     'clappy-busstop':  ('clappy', [6, 1.6, -18], [11.5, 1.4, -22.9]),
+    'clappy-bridge':   ('clappy', [6, 3.5, 4.5], [19, 7.5, -3]),
+    'clappy-bridge-deck': ('clappy', [11.2, 6.6, -2.6], [24, 7, -3.2]),
     'clappy-sky':      ('clappy', [0, 30, 30], [-30, 60, -120]),
     'clappy-cornerNE': ('clappy', [4, 2.2, -4], [12, 2.5, -12]),
     'clappy-cornerSW': ('clappy', [-17, 2.5, 17], [-10, 2.2, 10]),

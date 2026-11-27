@@ -304,6 +304,31 @@
       for (const [x, z, alongX, col] of [[12, 20.9, true, 'carRed'], [-12, -20.9, true, 'carBlue'], [5.5, -20.9, true, 'carSilver'], [20.9, -12, false, 'carBlack'], [-20.9, 11, false, 'carRed']]) { const c = O('Parked Car', 'deco');
         box(c, v3(x, 0.62, z), alongX ? v3(2.3, 0.36, 0.9) : v3(0.9, 0.36, 2.3), col); box(c, alongX ? v3(x - 0.2, 1.2, z) : v3(x, 1.2, z - 0.2), alongX ? v3(1.25, 0.25, 0.82) : v3(0.82, 0.25, 1.25), 'carGlass'); box(c, alongX ? v3(x - 0.2, 1.47, z) : v3(x, 1.47, z - 0.2), alongX ? v3(1.2, 0.03, 0.8) : v3(0.8, 0.03, 1.2), col, 0, 0, 0, NS);
         for (const d of [-1.45, 1.45]) pipe(c, alongX ? v3(x + d, 0.33, z - 0.92) : v3(x - 0.92, 0.33, z + d), alongX ? v3(x + d, 0.33, z + 0.92) : v3(x + 0.92, 0.33, z + d), 0.32, 'rubberBlack', NS); } }
+    // ---- the footbridge after JD's "The Bridge" (owner, 2026-11-27, via RodFPV): a campus footbridge in dark steel. A portal frame at
+    // each end of the deck (two square posts on concrete plinths, a beam 3 m over the deck), a tower of two masts beside the street with
+    // two crossbeams and finials, stays from the mast tops down to the deck edges, dark railing posts, a pale panelled deck with dark
+    // joints and dark fascia beams. The deck, its rails and pillars are unchanged (Footbridge stays the K.W.A.D. object; every piece is
+    // named "Footbridge …" so a call on it counts for it). Helpers: the portal beams and tower beams are over/unders, the masts poles,
+    // the portals and the tower gaps. Stays are drawn only (like the street wires).
+    { const BZ = -3, DY = 5.1, NS = { noSurvey: true }, ND = { noCollide: true }, dark = 'darkMetal';
+      for (const [px, nm] of [[12.45, 'West'], [23.55, 'East']]) { const pt = O('Footbridge Portal Post', 'deco');
+        for (const z of [BZ - 1.02, BZ + 1.02]) { box(pt, v3(px, DY + 0.12, z), v3(0.16, 0.12, 0.16), 'concrete', 0, 0, 0, NS); box(pt, v3(px, DY + 0.24 + 1.4, z), v3(0.09, 1.4, 0.09), dark, 0, 0, 0, NS); }
+        const bm = O('Footbridge Portal', 'overunder', { obstacle: { a: v3(px, 0, BZ - 1.11), b: v3(px, 0, BZ + 1.11), under: DY + 3.04 - 0.1, over: DY + 3.04 + 0.1 } }); box(bm, v3(px, DY + 3.04 + 0.0, BZ), v3(0.1, 0.1, 1.11), dark);
+        O('Footbridge Portal ' + nm, 'gap', { gap: { c: v3(px, DY + 1.65, BZ), n: v3(1, 0, 0), hu: 0.78, hv: 1.22, u: v3(0, 0, 1) } }); }
+      // the tower: two masts in the street at x 19.6, either side of the deck, two crossbeams above it, finials, stays to the deck edges
+      const TX = 19.6, MZ = [BZ - 3.2, BZ + 3.2], TOP = 13.2;
+      for (const z of MZ) { const m = O('Footbridge Mast', 'pole'); pipe(m, v3(TX, 0, z), v3(TX, TOP, z), 0.19, dark); box(m, v3(TX, 0.2, z), v3(0.42, 0.2, 0.42), 'concrete', 0, 0, 0, NS);
+        pipe(m, v3(TX, TOP, z), v3(TX, TOP + 0.9, z), 0.12, dark, { cone: true, noCollide: true }); }
+      for (const [y, nm] of [[9.4, 'Footbridge Tower Beam'], [12.4, 'Footbridge Tower Top']]) bar(nm, v3(TX, y, MZ[0] + 0.2), v3(TX, y, MZ[1] - 0.2), 0.13, dark);
+      O('Footbridge Tower', 'gap', { gap: { c: v3(TX, (6.15 + 9.2) / 2, BZ), n: v3(1, 0, 0), hu: 2.9, hv: (9.2 - 6.15) / 2, u: v3(0, 0, 1) } });
+      O('Footbridge Tower Top Gap', 'gap', { gap: { c: v3(TX, 10.9, BZ), n: v3(1, 0, 0), hu: 2.9, hv: 1.25, u: v3(0, 0, 1) } });
+      const st = O('Footbridge Stays', 'deco'); for (const z of MZ) { const side = z < BZ ? -1.17 : 1.17; for (const dx of [-6.2, -3.9, 3.0]) pipe(st, v3(TX, TOP - 0.35, z), v3(TX + dx, DY + 0.06, BZ + side), 0.014, 'galv', ND); }
+      // the deck: pale panels with dark joints every 1.5 m (decals), dark fascia beams on both edges, railing posts every 1.5 m
+      const dk = O('Footbridge Deck Finish', 'deco');
+      box(dk, v3(18, DY + 0.004, BZ), v3(6.15, 0.004, 1.15), 'plazaPave', 0, 0, 0, { noCollide: true, decal: 1 });
+      for (let x = 12.75; x <= 23.3; x += 1.5) box(dk, v3(x, DY + 0.009, BZ), v3(0.03, 0.004, 1.15), dark, 0, 0, 0, { noCollide: true, decal: 2 });
+      for (const z of [BZ - 1.23, BZ + 1.23]) box(dk, v3(18, DY - 0.24, z), v3(6.2, 0.22, 0.03), dark, 0, 0, 0, NS);
+      for (let x = 13.2; x <= 23.0; x += 1.5) for (const z of [BZ - 1.15, BZ + 1.15]) box(dk, v3(x, DY + 0.45, z), v3(0.025, 0.45, 0.025), dark, 0, 0, 0, NS); }
     // drawn-only clean-up where the corner blocks overlap and where balconies meet windows (owner, 2026-11-27: "textures … just on its
     // surface"). Colliders are never touched: only what is drawn. Each corner of the outer ring has two blocks in the same square, the
     // lower one's faces in the same planes as the taller one's: the lower one's pieces stop at the taller block's face (or go, if they
