@@ -420,6 +420,7 @@ function frame(now) {
   if (world.theme === 'vice') viceTick(Math.min(0.1, dt || 0.016), drone.pos);
   if (world.theme === 'dusk') duskTick(Math.min(0.1, dt || 0.016));
   if (world.theme === 'nyc') nycTick(Math.min(0.1, dt || 0.016));
+  if (world.theme === 'park') parkTick(Math.min(0.1, dt || 0.016));
   if (world.belts) beltTick(Math.min(0.1, dt || 0.016));
   meowTick(Math.min(0.1, dt || 0.016)); kwadMarkSync(performance.now() / 1000);
   renderer.render(scene, cam);

@@ -19,4 +19,12 @@ for (const id of Object.keys(S.MAPS)) {
 // and trim, and used to be called three times (bot run, 2026-11-18)
 { const w = S.MAPS.clappy.build(); for (const [name, seed] of [['Matty Flip', 7], ['Matty 360', 7]]) { const calls = MV.detect(MV.make(name, w, seed, { object: 'Sakura Tree' }), w, 20).map(e => e.name);
   check(`clappy: one ${name} over the sakura by the shops is one call`, calls.length === 1 && calls[0] === name, calls.join(', ')); } }
+// Clappy's visual pass (2026-11-27): the new things carry their helpers, flown and logged like the old ones
+{ const w = S.MAPS.clappy.build();
+  for (const obj of ['Fountain Bowl', 'Street Tree', 'Bus Shelter Roof', 'Parked Car']) { const calls = MV.detect(MV.make('Powerloop', w, 11, { object: obj }), w, 30).map(e => e.name); check(`clappy: a Powerloop on the ${obj}`, calls.includes('Powerloop'), calls.join(', ')); }
+  for (const nm of ['Fountain Column', 'Street Tree', 'Bus Stop Sign']) check(`clappy: the ${nm} is a pole`, w.objs.some(o => o.name === nm && o.kind === 'pole'), '');
+  const flyThrough = g => { const det = new S.TrickDetector(w), d = Object.create(S.Drone.prototype), v3 = S.v3, dt = 0.002; Object.assign(d, { armed: true, crashed: false, contactThisStep: false, w: v3() });
+    const n0 = S.norm(g.gap.n), face = S.qaxis(v3(0, 1, 0), Math.atan2(n0.x, n0.z)); for (let t = 0; t < 2; t += dt) { d.pos = S.add(g.gap.c, S.mul(n0, -2 + t * 2)); d.vel = S.mul(n0, 2); d.q = face; det.update(d, dt); det.drain(); }
+    return det.crossLog.some(c => c.kind === 'G' && c.obj === g.id); };
+  for (const nm of ['Bus Shelter', 'Parked Car', 'Bench']) { const g = w.objs.find(o => o.name === nm && o.gap && (nm === 'Bus Shelter' || o.low)); check(`clappy: flown through the ${nm} gap: a gap pass`, !!g && flyThrough(g), g ? S.gapLabel(g.name, g.low) : 'no gap'); } }
 console.log(`\n${ok}/${n} map checks`);

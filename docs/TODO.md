@@ -77,6 +77,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points
   (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
 - More Warehouse: look over the detail pass (the box truck and trailer stay over/unders: "yup", 2026-11-27).
+- Clappy Park's new look (2026-11-27): the shade, the haze, the eight shop names (Clappy Cafe, Ramen, Boba Tea, Books, Flowers,
+  Arcade, Whoop Shop, Laundry), the fountain, the bus stop, the parked cars. Shop names and the cloud count are easy to change.
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).
 - Fly the trainer: rolling starts, instant retry, and today's intro / cues / sticks-big view.
 - Fly the Feel Lab test card on the Fractal 65 / 75 and send the logs.

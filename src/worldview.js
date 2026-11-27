@@ -356,7 +356,7 @@ function mats() {
     MAT.signWhite = new THREE.MeshStandardMaterial({ color: 0xe6e4dc, roughness: 0.6 });
     MAT.houseSage = P('#8a9476'); MAT.houseTan = P('#b3a486'); MAT.houseBlue = P('#7c8c9a'); MAT.houseCream = P('#d2c8ae'); MAT.houseRed = P('#8e5a4a'); MAT.roofDark = P('#3c3d40', { roughness: 0.9 });
     MAT.truckRed = P('#7e2e28', { metalness: 0.5, roughness: 0.4 }); MAT.truckGrey = P('#8a8e90', { metalness: 0.5, roughness: 0.4 }); MAT.truckBlue = P('#34485e', { metalness: 0.5, roughness: 0.4 }); }
-  vaporMats(); viceMats(); duskMats(); nycMats();
+  vaporMats(); viceMats(); duskMats(); nycMats(); parkMats();
 }
 // More Warehouse's conveyor (world.belts, owner 2026-11-21): cleats that travel with the belt so it is seen to move (the physics
 // that carries the quad is sim.js's surf.belt). Built on first use, and again whenever the scene was rebuilt
@@ -697,6 +697,100 @@ function nycTick(dt) {
   NYC.t += dt; const t = NYC.t;
   for (const s of NYC.flick) { const k = Math.sin(t * 0.6 + s.p * 3) > 0.96 ? (Math.random() < 0.5 ? 0.2 : 1) : 1; s.m.color.copy(s.base).multiplyScalar(k); }   // a tired neon tube now and then
 }
+// ============================================================ Clappy Park (theme 'park'): shop windows and signs, paving, petals, the
+// sky's clouds and the city round the block (owner, 2026-11-27: "get it all done"). Its own random stream, so no other map changes.
+const PARK = { t: 0, petals: null, pv: null, clouds: null };
+const PARK_SHOPS = [['CLAPPY CAFE', '#2e5a46', '#f4e6c4', 'cafe'], ['RAMEN', '#9a2a22', '#fff2dc', 'ramen'], ['BOBA TEA', '#f2b8d2', '#5a2a48', 'boba'], ['BOOKS', '#2a3a5e', '#f0d890', 'books'],
+  ['FLOWERS', '#f4f0e6', '#c0446a', 'flowers'], ['ARCADE', '#2a1a40', '#7af0ff', 'arcade'], ['WHOOP SHOP', '#e0a020', '#1a1a1a', 'whoop'], ['LAUNDRY', '#8ac4dc', '#1e3c5a', 'laundry']];
+function parkMats() {
+  const R = (() => { let s = 2727; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const T = (w, h, draw, clamp) => { const [c, g] = cnv(w, h); draw(g, w, h); const t = tex(c); if (clamp) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
+  MAT.blossom2 = new THREE.MeshStandardMaterial({ color: 0xf9cfe0, roughness: 0.85, flatShading: true });   // paler
+  MAT.blossom3 = new THREE.MeshStandardMaterial({ color: 0xe98db4, roughness: 0.85, flatShading: true });   // deeper
+  MAT.streetLeaf = new THREE.MeshStandardMaterial({ color: 0x6f9a3e, roughness: 0.9, flatShading: true });
+  // fallen petals: a round patch, thick in the middle and thinning out (laid flat once across it)
+  MAT.petals = new THREE.MeshStandardMaterial({ alphaTest: 0.4, roughness: 0.9, map: T(256, 256, (g, w, h) => { g.clearRect(0, 0, w, h);
+    for (let i = 0; i < 2600; i++) { const a = R() * Math.PI * 2, r = Math.sqrt(R()) * w / 2 * (R() < 0.85 ? 0.8 : 1); if (R() > 1.15 - r / (w / 2)) continue;
+      g.fillStyle = ['#f6b3cf', '#f9cfe0', '#e98db4', '#fbe2ec'][(R() * 4) | 0]; g.beginPath(); g.ellipse(w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r, 2.2 + R() * 1.6, 1.3 + R(), R() * 3, 0, 7); g.fill(); } }, true) });
+  // the plaza's pavers: 50 cm squares in two warm greys, a joint round each (1 m to the tile)
+  MAT.plazaPave = new THREE.MeshStandardMaterial({ roughness: 0.85, map: T(256, 256, (g, w, h) => { for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = ['#c9bfae', '#b9ad9a', '#d3c9b8', '#bfb3a2'][(R() * 4) | 0]; g.fillRect(x * 128, y * 128, 128, 128); }
+    for (let i = 0; i < 3000; i++) { g.globalAlpha = 0.25 * R(); g.fillStyle = ['#8a8070', '#e6ddcc', '#6a6258'][(R() * 3) | 0]; g.fillRect(R() * w, R() * h, 1 + R() * 2, 1 + R() * 2); } g.globalAlpha = 1;
+    g.strokeStyle = '#857a6a'; g.lineWidth = 5; for (let k = 0; k <= 256; k += 128) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, h); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(w, k); g.stroke(); } }) });
+  MAT.paveBorder = new THREE.MeshStandardMaterial({ color: 0x8e8478, roughness: 0.85, map: TX.concrete });
+  MAT.playPad = new THREE.MeshStandardMaterial({ color: 0x5a9a86, roughness: 1, map: TX.rubberMat });
+  MAT.parkGrass = new THREE.MeshStandardMaterial({ roughness: 0.95, map: T(128, 128, (g, w, h) => { g.fillStyle = '#5e8a3a'; g.fillRect(0, 0, w, h); for (let i = 0; i < 2600; i++) { g.globalAlpha = 0.5 * R(); g.fillStyle = ['#4a7430', '#78a44a', '#3e6228', '#8ab45a'][(R() * 4) | 0]; g.fillRect(R() * w, R() * h, 1, 2 + R() * 3); } g.globalAlpha = 1; }) });
+  MAT.soil = new THREE.MeshStandardMaterial({ roughness: 1, map: T(64, 64, (g, w, h) => { g.fillStyle = '#4a3626'; g.fillRect(0, 0, w, h); for (let i = 0; i < 500; i++) { g.fillStyle = ['#3a2a1e', '#6a5038', '#2e2018'][(R() * 3) | 0]; g.fillRect(R() * w, R() * h, 1 + R() * 2, 1 + R() * 2); } }) });
+  MAT.planterStone = new THREE.MeshStandardMaterial({ color: 0xb8ab98, roughness: 0.8, map: TX.concrete });
+  for (const [k, hex] of [['flowerRed', 0xd8344a], ['flowerYellow', 0xf2c838], ['flowerWhite', 0xf2eee6], ['flowerPurple', 0x8a5ac8]]) MAT[k] = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.8, flatShading: true });
+  MAT.fountainWater = new THREE.MeshStandardMaterial({ color: 0x5a9ab8, roughness: 0.08, metalness: 0.3, emissive: 0x0e2a38, emissiveIntensity: 0.6 });
+  MAT.fountainStone = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.7, map: TX.concrete });
+  MAT.kerb = new THREE.MeshStandardMaterial({ color: 0xa8a49c, roughness: 0.85, map: TX.concrete });
+  MAT.manhole = new THREE.MeshStandardMaterial({ alphaTest: 0.4, roughness: 0.55, metalness: 0.4, map: T(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#3a3a3c'; g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill();
+    g.strokeStyle = '#59595c'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 56, 0, 7); g.stroke(); g.save(); g.beginPath(); g.arc(64, 64, 50, 0, 7); g.clip(); g.lineWidth = 4; for (let k = -64; k < 64; k += 12) { g.beginPath(); g.moveTo(64 + k, 0); g.lineTo(64 + k, 128); g.stroke(); g.beginPath(); g.moveTo(0, 64 + k); g.lineTo(128, 64 + k); g.stroke(); } g.restore(); }, true) });
+  MAT.bikeLane = new THREE.MeshStandardMaterial({ color: 0x3f7f52, roughness: 0.85, map: TX.asphalt });
+  MAT.shelterGlass = new THREE.MeshStandardMaterial({ color: 0xa8c8d8, roughness: 0.1, metalness: 0.4, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+  MAT.busSign = new THREE.MeshStandardMaterial({ roughness: 0.5, map: T(128, 128, (g, w, h) => { g.fillStyle = '#1e5aa8'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = "900 56px Arial, sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BUS', 64, 52); g.font = "700 26px Arial, sans-serif"; g.fillText('CLAPPY PK', 64, 98); }, true) });
+  // shops: a sign board and a lit window (display, counter, a glass door on the right) for each
+  for (const [name, bg, fg, kind] of PARK_SHOPS) { const id = kind;
+    MAT['shopSign_' + id] = new THREE.MeshStandardMaterial({ roughness: 0.6, map: T(512, 96, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.strokeStyle = fg; g.globalAlpha = 0.5; g.lineWidth = 4; g.strokeRect(8, 8, w - 16, h - 16); g.globalAlpha = 1;
+      g.fillStyle = fg; g.font = `900 ${name.length > 9 ? 46 : 54}px 'Arial Black', Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(name, w / 2, h / 2 + 3); }, true) });
+    const win = T(512, 416, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#fff1d0'); gr.addColorStop(1, '#d8b888'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      // goods on two shelves and a counter, by kind
+      const col = { cafe: ['#6a3e22', '#e8d8b8', '#2e5a46'], ramen: ['#c83a2a', '#f4e2c0', '#3a2218'], boba: ['#f2a8c8', '#c89a6a', '#7ac8a8'], books: ['#3a4a8a', '#a83a2a', '#d8a838', '#2a6a4a'],
+        flowers: ['#d8344a', '#f2c838', '#8a5ac8', '#4a8a3a'], arcade: ['#ff3fd0', '#55f6ff', '#2a1a40'], whoop: ['#1a1a1a', '#e0a020', '#c8323a'], laundry: ['#e8e8ec', '#9aa8b4', '#5a6a7a'] }[kind];
+      for (const y of [120, 210]) { g.fillStyle = '#6a5038'; g.fillRect(14, y, w * 0.68, 8); for (let x = 22; x < w * 0.66; x += 18 + R() * 16) { g.fillStyle = col[(R() * col.length) | 0]; const s = kind === 'books' ? [10, 34] : kind === 'arcade' ? [26, 40] : [16, 18 + R() * 14]; g.fillRect(x, y - s[1], s[0], s[1]); } }
+      g.fillStyle = '#8a6a4a'; g.fillRect(14, 300, w * 0.68, 70); g.fillStyle = '#00000022'; g.fillRect(14, 300, w * 0.68, 8);
+      if (kind === 'arcade') { g.fillStyle = '#1a0e2a'; g.fillRect(0, 0, w * 0.72, h); for (let x = 30; x < w * 0.66; x += 80) { g.fillStyle = '#2a2440'; g.fillRect(x, 150, 56, 220); g.fillStyle = ['#ff3fd0', '#55f6ff', '#b6ff3c'][(x / 80 | 0) % 3]; g.fillRect(x + 8, 170, 40, 34); } }
+      if (kind === 'laundry') { for (let x = 40; x < w * 0.66; x += 90) { g.fillStyle = '#e8e8ec'; g.fillRect(x, 250, 70, 110); g.fillStyle = '#5a6a7a'; g.beginPath(); g.arc(x + 35, 305, 24, 0, 7); g.fill(); } }
+      // mullions and the door
+      g.fillStyle = '#2a2a2e'; g.fillRect(0, 0, w, 10); g.fillRect(0, h - 10, w, 10); g.fillRect(0, 0, 10, h); g.fillRect(w * 0.72, 0, 12, h); g.fillRect(w - 10, 0, 10, h);
+      g.fillStyle = '#3e4a56'; g.fillRect(w * 0.72 + 12, 10, w * 0.28 - 22, h - 20); g.fillStyle = '#fff1d0aa'; g.fillRect(w * 0.72 + 26, 26, w * 0.28 - 50, h * 0.55); g.fillStyle = '#c8a040'; g.fillRect(w * 0.72 + 22, h * 0.55, 8, 30);
+      g.fillStyle = '#ffffff55'; g.beginPath(); g.moveTo(40, 10); g.lineTo(110, 10); g.lineTo(30, h - 10); g.lineTo(10, h - 10); g.fill();   // a glint
+      g.fillStyle = bg; g.font = "700 30px Georgia, serif"; g.textAlign = 'center'; g.fillText(name.toLowerCase(), w * 0.36, 60); }, true);
+    MAT['shopWin_' + id] = new THREE.MeshStandardMaterial({ map: win, emissive: 0xffffff, emissiveMap: win, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.1 }); }
+}
+// the city round the block: low blocks past the map's edge, towers beyond, hazy; clouds in the sky (drawn behind everything)
+function parkBackdrop() {
+  const R = (() => { let s = 5151; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const [c, g] = cnv(256, 256); g.fillStyle = '#b8b4b0'; g.fillRect(0, 0, 256, 256); for (let y = 10; y < 256; y += 32) for (let x = 8; x < 256; x += 24) { g.fillStyle = R() < 0.5 ? '#8a96a4' : '#a2acb6'; g.fillRect(x, y, 12, 18); }
+  const t = tex(c), roofM = new THREE.MeshStandardMaterial({ color: 0x9a989a, roughness: 1 });
+  const mats = [0xb8b4b0, 0xa4acb8, 0xbcb4a6, 0x9ca6b2, 0xc4bcb4].map(col => { const side = new THREE.MeshStandardMaterial({ map: t, color: col, roughness: 0.95, emissive: 0x8c98a6, emissiveIntensity: 0.18 }); return [side, side, roofM, roofM, side, side]; });   // pre-hazed: pale, soft, a little blue
+  const CX = -20, placed = [], keep = (x, z, W, D) => { if (x + W / 2 > -110 && x - W / 2 < 70 && z + D / 2 > -70 && z - D / 2 < 70) return false;   // never inside the map's edge walls
+    if (placed.some(p => Math.abs(p.x - x) < (p.W + W) / 2 + 2 && Math.abs(p.z - z) < (p.D + D) / 2 + 2)) return false; placed.push({ x, z, W, D }); return true; };
+  for (let i = 0; i < 160; i++) { const near = i < 80, a = R() * Math.PI * 2, rad = near ? 100 + R() * 40 : 150 + R() * 70, W = 10 + R() * 18, D = 10 + R() * 18, H = near ? 8 + R() * 18 : 20 + R() * (R() < 0.2 ? 90 : 45);
+    const x = CX + Math.cos(a) * rad, z = Math.sin(a) * rad; if (!keep(x, z, W, D)) continue;
+    const geo = new THREE.BoxGeometry(W, H, D), uv = geo.attributes.uv, p = geo.attributes.position, n = geo.attributes.normal;
+    for (let k = 0; k < p.count; k++) { const X = p.getX(k) + W / 2, Y = p.getY(k) + H / 2, Z = p.getZ(k) + D / 2; if (Math.abs(n.getX(k)) > 0.5) uv.setXY(k, Z / 8, Y / 8); else if (Math.abs(n.getY(k)) > 0.5) uv.setXY(k, 0, 0); else uv.setXY(k, X / 8, Y / 8); }
+    const m = new THREE.Mesh(geo, mats[i % 5]); m.position.set(x, H / 2, z); playRoot.add(m); }
+  // clouds: flattened white clusters, within the cameras' 400 m reach from anywhere on the map
+  const top = new THREE.MeshBasicMaterial({ color: 0xf4f6fa, fog: false }), belly = top;   // one white: where the puffs cross nothing can flicker
+  const grp = new THREE.Group(); grp.renderOrder = -3500;
+  for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2 + R() * 0.3, rad = 140 + R() * 50, y = 62 + R() * 30, s = 10 + R() * 12, cx = CX + Math.cos(a) * rad, cz = Math.sin(a) * rad, n = 5 + (R() * 4 | 0);
+    const parts = []; for (let k = 0; k < n; k++) parts.push([(R() - 0.5) * s * 3.2, (R() - 0.3) * s * 0.5, (R() - 0.5) * s * 1.4, s * (0.6 + R() * 0.6)]);
+    parts.sort((p, q) => p[1] - q[1]);
+    for (const [dx, dy, dz, r] of parts) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), dy < 0 ? belly : top); m.scale.set(1, 0.55, 1); m.position.set(cx + dx, y + dy, cz + dz); m.renderOrder = -3500 + (dy < 0 ? 0 : 1); grp.add(m); } }
+  playRoot.add(grp); PARK.clouds = grp; window.__pwPark = PARK;   // for the check shots
+  // drifting petals round the sakura trees
+  const trees = world.objs.filter(o => o.name === 'Sakura Tree' && o.round).map(o => ({ x: o.round.c.x, z: o.round.c.z, y: (o.round.under + o.round.over) / 2, r: o.round.r, g: o.round.under - 2.2 * o.round.r / 1.8 }));
+  if (!trees.length) { PARK.petals = null; return; }
+  const N = 360, pos = new Float32Array(N * 3), pv = [];
+  const spawn = (i, anyY) => { const tr = trees[i % trees.length], a = R() * Math.PI * 2, r = Math.sqrt(R()) * tr.r; pv[i] = { tr, vy: 0.25 + R() * 0.3, ph: R() * 6, sw: 0.2 + R() * 0.4 };
+    pos[i * 3] = tr.x + Math.cos(a) * r; pos[i * 3 + 2] = tr.z + Math.sin(a) * r; pos[i * 3 + 1] = anyY ? tr.g + R() * (tr.y - tr.g) : tr.y - R() * 0.8; };
+  for (let i = 0; i < N; i++) spawn(i, true);
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const sp = (() => { const [c2, g2] = cnv(32, 32); g2.fillStyle = '#fff'; g2.beginPath(); g2.ellipse(16, 16, 14, 8, 0.5, 0, 7); g2.fill(); return new THREE.CanvasTexture(c2); })();
+  const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xf8bcd4, size: 0.07, map: sp, alphaTest: 0.5, transparent: false })); pts.frustumCulled = false; playRoot.add(pts);
+  PARK.petals = pts; PARK.pv = { pv, spawn, R };
+}
+function parkTick(dt) {
+  PARK.t += dt; const t = PARK.t;
+  if (PARK.clouds) PARK.clouds.rotation.y = t * 0.0015;   // about one turn in an hour
+  if (!PARK.petals) return;
+  const a = PARK.petals.geometry.attributes.position, { pv, spawn } = PARK.pv;
+  for (let i = 0; i < a.count; i++) { const p = pv[i]; let y = a.getY(i) - p.vy * dt; const x = a.getX(i) + (0.35 + Math.sin(t * 0.9 + p.ph) * p.sw) * dt, z = a.getZ(i) + Math.cos(t * 0.7 + p.ph * 1.3) * p.sw * 0.6 * dt;
+    if (y < p.tr.g + 0.02) { spawn(i, false); continue; } a.setXYZ(i, x, y, z); }
+  a.needsUpdate = true;
+}
 // the ground with holes in it (world.groundCuts [{ x0, x1, z0, z1 }]: Slackvegan's subway stair), laid in the x-y plane and turned
 // flat like the plain ground; one texture tile per 4 m
 function groundWithCuts(GS, cuts) {
@@ -722,14 +816,14 @@ function buildScene() {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.renderOrder = -4000; playRoot.add(sky);   // drawn first: the backdrops' mountains paint over it
   // lights
-  if (LAB) playRoot.add(new THREE.HemisphereLight(0xf2f5f7, 0x9a9da0, 2.7)); else playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, (NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9) * LIFT));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  if (LAB) playRoot.add(new THREE.HemisphereLight(0xf2f5f7, 0x9a9da0, 2.7)); else playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : PARK_ ? 0xb4c8e4 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : PARK_ ? 0x7d6a52 : 0x5a4532, (NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : PARK_ ? 1.2 : 0.9) * LIFT));   /* Clappy: the shade lifted (owner, 2026-11-27) */   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
   // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
   const sun = new THREE.DirectionalLight(NYC_ ? 0xffb066 : PNW ? 0xffe2bc : 0xffcf98, (NYC_ ? 3.1 : PNW ? 2.7 : 2.6) * LIFT);
   if (NYC_) sun.position.set(-62, 17, 9); else if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18);   /* Slackvegan: low in the west, straight down the avenue: long golden shadows */ sun.castShadow = !LAB; if (LAB) sun.intensity = 0.55;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);
   // ground
-  const GS = NYC_ ? 480 : 240, gnd = new THREE.Mesh(world.groundCuts ? groundWithCuts(GS, world.groundCuts) : new THREE.PlaneGeometry(GS, GS), LAB ? MAT.labFloor : PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
+  const GS = NYC_ || PARK_ ? 480 : 240, gnd = new THREE.Mesh(world.groundCuts ? groundWithCuts(GS, world.groundCuts) : new THREE.PlaneGeometry(GS, GS), LAB ? MAT.labFloor : PNW ? MAT.grass : MAT.asphalt); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; gnd.renderOrder = -10;   /* Slackvegan: a bigger ground, the city's towers stand out past the usual one */
   TX.asphalt.repeat.set(1, 1); const guv = gnd.geometry.attributes.uv; if (!world.groundCuts) for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * GS / 4, guv.getY(i) * GS / 4);
   playRoot.add(gnd);
   }
@@ -750,6 +844,7 @@ function buildScene() {
   if (LAB) scene.fog = new THREE.Fog(0xb9bdc0, 60, 220);
   if (PNW) { scene.fog = new THREE.Fog(0xc6d4de, 60, 220); pnwBackdrop(); }
   if (NYC_) { scene.fog = new THREE.Fog(0xd8b08a, 55, 230); nycBackdrop(); }
+  if (PARK_) { scene.fog = new THREE.Fog(0xbcc6ce, 50, 270); parkBackdrop(); }   // Clappy: a clear blue haze, so the city round the block reads
   // lamp lights are made with the objects (buildObjects)
   if (world.id !== 'playground') return;   // the skyline and power lines are the playground's own surroundings
   // skyline beyond the fence (no collision)

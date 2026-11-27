@@ -3329,7 +3329,7 @@ const GAP_NAMES = {
   'Blood Oath Gantry': 'Blood Oath', 'Labyrinth Entrance': 'Into the Labyrinth', 'Labyrinth Exit': 'Out of the Labyrinth', 'Spine Top': 'Down the Spine',
   'Spine Bottom': 'Out of the Spine', 'Lobby Arch': 'Lobby Arch', 'Circular Gap': 'Sky Lobby Round Window', 'Spine Window': 'Spine Window',
   'Subway Car Door': 'Subway Car Door', 'Subway Car End Door': 'Subway Car End Door', 'Yellow Fever Gate': 'Yellow Fever Gate',
-  'Lifeboat Squeeze': 'Lifeboat Squeeze', 'Chandelier Hoop': 'Chandelier Hoop', 'Slide Tube': 'Slide Tube', 'Tunnel': 'Tunnel',
+  'Bus Shelter': 'Through the Bus Shelter', 'Lifeboat Squeeze': 'Lifeboat Squeeze', 'Chandelier Hoop': 'Chandelier Hoop', 'Slide Tube': 'Slide Tube', 'Tunnel': 'Tunnel',
 };
 const GAP_PLACE = /^(under|through|into|out of|down)\b|\b(gap|tunnel|door|doors|doorway|window|arch|squeeze|run|hoop|tube|slot|grid|skylight|bay|alley|spine|pit|witness me|blood oath|top|side|gate|frame|ring)$/i;
 function gapName(name, low) {

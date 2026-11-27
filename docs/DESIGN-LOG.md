@@ -6,6 +6,20 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy Park: all seven refinements built, every new thing counts (owner, 2026-11-27)
+"Get it all done, but make sure all of the helpers are added for the changes. we still want all the tricks/gaps to count." **Built**:
+the shade lifted (sky fill 0.9 -> 1.2, warmer ground bounce, a clear blue haze instead of the tan one); kerbs, the inner sidewalk, a
+broken centre line and zebra crossings at the four stairs, manholes; pavers with a border over the plaza, rubber pads and sand under
+the play pieces, a fountain with four flower planters round it; three pinks in the sakura, fallen petals under each and petals drifting
+down; lit shop windows with a glass door, eight shop signs (not over the murals), white valances on the awnings; clouds and a city of
+low blocks and towers round the block (outside the map's edge walls); street trees, benches with backs and bins, two more bike racks, a
+bus stop, five parked cars. **Helpers**: street trees, the fountain column and the bus-stop sign are poles; tree crowns, the fountain bowl,
+bike rails and the shelter roof are over/unders; the shelter is a gap; benches and cars get low gaps from the Surveyor (legs at the ends
+on purpose). The bot's Powerloop / Matty / Split S are called on all of them, a straight flight through the shelter, under a car and
+under a bench is logged as a gap. **Nothing old changed**: every over/under line, gap and pole on the map is identical (compared object
+by object with the previous build), the new gaps are all clear (tools/gapcheck.js), nothing new floats, K.W.A.D. objects unchanged.
+Paint on the plaza deck has to be a thin drawn box: ground paint (zones) never showed on the deck.
+
 ### Clappy Park: 5 % brighter, and refinements proposed (owner, 2026-11-27)
 "clappy park is a little dark, can we brighten it by about 5%? what visual refinements could we make to the map?" **Done**: the sky
 fill and sun 5 % brighter on Clappy only. **Proposed, not built** (from four check views): lift the shadows themselves (the shade is

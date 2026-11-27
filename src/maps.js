@@ -152,14 +152,15 @@
     for (const [x0, x1, y, z] of [[-2, 2, 0.45, 9.5], [-1.5, 2.5, 0.7, -9.5]]) { const b = bar('Balance Beam', v3(x0, Y + y, z), v3(x1, Y + y, z), 0.06, 'wood');
       for (const x of [x0 + 0.2, (x0 + x1) / 2, x1 - 0.2]) { pipe(b, v3(x, Y, z), v3(x, Y + y - 0.05, z), 0.045, 'galv'); box(b, v3(x, Y + 0.02, z), v3(0.12, 0.02, 0.12), 'metalPlate'); } }
     // ---- sakura trees: four on the plaza corners, more along the outer sidewalks
-    const sakura = (x, z, y0, s) => { const tr = O('Sakura Tree', 'pole');
+    let sakN = 0; const sakura = (x, z, y0, s) => { const tr = O('Sakura Tree', 'pole');
       tr.round = { c: v3(x, 0, z), r: 1.8 * s, under: y0 + 2.2 * s, over: y0 + 5.0 * s }; tr.obstacle = { a: v3(x - 1.8 * s, 0, z), b: v3(x + 1.8 * s, 0, z), under: y0 + 2.2 * s, over: y0 + 5.0 * s };
       pipe(tr, v3(x, y0, z), v3(x, y0 + 2.9 * s, z), 0.14 * s, 'bark');
-      ball(tr, v3(x, y0 + 3.7 * s, z), 1.4 * s, 'blossom'); ball(tr, v3(x + 0.9 * s, y0 + 3.2 * s, z + 0.4), 0.9 * s, 'blossom'); ball(tr, v3(x - 0.8 * s, y0 + 3.4 * s, z - 0.5), 1.0 * s, 'blossom'); };
+      const bm = ['blossom', 'blossom2', 'blossom3'], q = sakN++;   /* three pinks, mixed per tree (2026-11-27) */ ball(tr, v3(x, y0 + 3.7 * s, z), 1.4 * s, bm[q % 3]); ball(tr, v3(x + 0.9 * s, y0 + 3.2 * s, z + 0.4), 0.9 * s, bm[(q + 1) % 3]); ball(tr, v3(x - 0.8 * s, y0 + 3.4 * s, z - 0.5), 1.0 * s, bm[(q + 2) % 3]); };
     for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) sakura(x, z, Y, 1);
     for (const [x, z] of [[-18, 23], [6, 23], [23, -9], [-23, 9], [-6, -23], [23, 15]]) sakura(x, z, 0, 0.9);
     // benches, bins and lamps round the plaza
-    for (const [x, z, ry] of [[-3, 11, 0], [3, 11, 0], [-11, 3, Math.PI / 2], [11, -3, Math.PI / 2], [0, -11, 0]]) { const b = O('Bench', 'deco'); box(b, v3(x, Y + 0.42, z), v3(0.8, 0.04, 0.22), 'wood', ry); box(b, v3(x, Y + 0.2, z), v3(0.7, 0.2, 0.05), 'metal', ry); }
+    for (const [x, z, ry] of [[-3, 11, 0], [3, 11, 0], [-11, 3, Math.PI / 2], [11, -3, Math.PI / 2], [0, -11, 0]]) { const b = O('Bench', 'deco'); box(b, v3(x, Y + 0.42, z), v3(0.8, 0.04, 0.22), 'wood', ry); box(b, v3(x, Y + 0.2, z), v3(0.7, 0.2, 0.05), 'metal', ry);
+      const bx = ry ? Math.sign(x) * 0.2 : 0, bz = ry ? 0 : Math.sign(z) * 0.2; box(b, v3(x + bx, Y + 0.61, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, { noSurvey: true }); }   /* a back, on the plaza's edge side (2026-11-27) */
     for (const [x, z] of [[-11.2, -11.2], [11.2, -11.2], [-11.2, 11.2], [11.2, 11.2]]) { const l = O('Park Lamp', 'pole', { light: v3(x, Y + 4.2, z) }); pipe(l, v3(x, Y, z), v3(x, Y + 4.2, z), 0.06, 'metal'); ball(l, v3(x, Y + 4.3, z), 0.2, 'lampHead', { noCollide: true }); }
     // ---- the street ring: sidewalks 12-14 and 22-24, the road between; utility poles and wires; race gates
     const up = O('Utility Pole', 'pole'), poles = [];
@@ -236,11 +237,76 @@
     // bike racks and bollards on the inner sidewalk
     for (const [x, z] of [[-8, 13.2], [8, -13.2]]) { const br = O('Bike Rack', 'deco'); for (let k = 0; k < 4; k++) { pipe(br, v3(x - 1.2 + k * 0.8, 0, z), v3(x - 1.2 + k * 0.8, 0.8, z), 0.025, 'galv'); } bar('Bike Rack Rail', v3(x - 1.2, 0.8, z), v3(x + 1.2, 0.8, z), 0.025, 'galv'); }
     const park = trickPark(K, -46, 0, -1, { post: 'galv', bar: 'paintRed', pole: 'galv', slab: 'metalPlate', wall: 'concrete', tower: 'brick', accent: 'plasticYellow', glow: false, zone: 'concrete' });
+    // ---- the visual pass (owner, 2026-11-27: "get it all done … make sure all of the helpers are added"): added last, so every key,
+    // id and place above is unchanged. Flyable things carry their helpers: trees and the fountain column are poles, the fountain bowl,
+    // tree crowns, bike rails and the bus shelter roof are over/unders, the shelter is a gap; benches and cars get low gaps from the
+    // Surveyor (legs at the ends, nothing under the middle). Paint, paving, petals, signs and windows never collide.
+    { const NC = { noCollide: true }, NS = { noSurvey: true }, flat = (o, x, y, z, w, d, mat) => o.vis.push({ shape: 'sign', c: v3(x, y, z), w, h: d, rx: -Math.PI / 2, ry: 0, mat, alpha: true });
+      // the plaza: pavers with a darker border, rubber pads under the play pieces, sand under the dome (laid on the deck: paint can't show there)
+      const pv = O('Plaza Paving', 'deco'); box(pv, v3(0, Y + 0.006, 0), v3(11.98, 0.006, 11.98), 'plazaPave', 0, 0, 0, NC);
+      for (const [c, h] of [[v3(0, Y + 0.008, -11.7), v3(11.98, 0.008, 0.28)], [v3(0, Y + 0.008, 11.7), v3(11.98, 0.008, 0.28)], [v3(-11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.4)], [v3(11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.4)]]) box(pv, c, h, 'paveBorder', 0, 0, 0, NC);
+      for (const [x, z, hx, hz, m] of [[-6, -6, 2.3, 2.3, 'playPad'], [6, -6, 2.4, 2.4, 'playPad'], [6, 6, 2.8, 1.1, 'playPad'], [-6, 6, 2.3, 2.3, 'sand']]) box(pv, v3(x, Y + 0.01, z), v3(hx, 0.01, hz), m, 0, 0, 0, NC);
+      // the fountain: a round basin, a column (a pole: trippies and orbits round it) and a bowl up top (an over/under, flown from any side)
+      const fo = O('Fountain', 'deco'), FR = 1.65;
+      for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * Math.PI * 2, L = 2 * FR * Math.sin(Math.PI / 16) / 2 + 0.03; box(fo, v3(Math.cos(a) * FR, Y + 0.19, Math.sin(a) * FR), v3(L, 0.19, 0.11), 'fountainStone', -a - Math.PI / 2, 0, 0, NS); }
+      disc(fo, v3(0, Y + 0.2, 0), FR - 0.08, 0.02, 'fountainWater');
+      const fc = O('Fountain Column', 'pole'); pipe(fc, v3(0, Y, 0), v3(0, Y + 2.55, 0), 0.16, 'fountainStone'); ball(fc, v3(0, Y + 2.68, 0), 0.17, 'fountainStone');
+      const fb = O('Fountain Bowl', 'overunder'); fb.round = { c: v3(0, 0, 0), r: 0.8, under: Y + 1.62, over: Y + 1.78 }; fb.obstacle = { a: v3(-0.8, 0, 0), b: v3(0.8, 0, 0), under: Y + 1.62, over: Y + 1.78 };
+      disc(fb, v3(0, Y + 1.7, 0), 0.8, 0.08, 'fountainStone'); fb.vis.push({ shape: 'disc', c: v3(0, Y + 1.79, 0), r: 0.7, th: 0.012, mat: 'fountainWater' });
+      for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; pipe(fo, v3(Math.cos(a) * 0.74, Y + 1.66, Math.sin(a) * 0.74), v3(Math.cos(a) * 0.86, Y + 0.22, Math.sin(a) * 0.86), 0.025, 'fountainWater', NC); }   // water falling from the bowl's rim (seen, never hit)
+      // four raised planters round it: grass, a stone edge, flowers
+      const pl = O('Planter', 'deco');
+      for (const [x, z, hx, hz] of [[-3.7, 0, 0.7, 1.5], [3.7, 0, 0.7, 1.5], [0, -3.7, 1.5, 0.7], [0, 3.7, 1.5, 0.7]]) { box(pl, v3(x, Y + 0.17, z), v3(hx, 0.17, hz), 'planterStone', 0, 0, 0, NS); box(pl, v3(x, Y + 0.345, z), v3(hx - 0.1, 0.008, hz - 0.1), 'parkGrass', 0, 0, 0, NC);
+        for (let i = 0; i < 16; i++) { const u = ((i * 0.618) % 1) * 2 - 1, w = ((i * 0.382 + 0.2) % 1) * 2 - 1; ball(pl, v3(x + u * (hx - 0.25), Y + 0.4, z + w * (hz - 0.25)), 0.06 + (i % 3) * 0.015, ['flowerRed', 'flowerYellow', 'flowerWhite', 'flowerPurple'][i % 4], NC); } }
+      // fallen petals under every sakura
+      const pe = O('Fallen Petals', 'deco'); for (const o of K.objs.filter(q => q.name === 'Sakura Tree')) { const c = o.round.c, y0 = o.round.under - 2.2 * o.round.r / 1.8; flat(pe, c.x + 0.3, y0 + 0.018, c.z, 5 * o.round.r / 1.8, 5 * o.round.r / 1.8, 'petals'); }
+      // the street: kerbs, the inner sidewalk, lane dashes, crosswalks at the four stairs, manholes
+      const kb = O('Kerb', 'deco'); for (const d of [14, 22]) { box(kb, v3(0, 0.06, -d), v3(d + 0.1, 0.06, 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(0, 0.06, d), v3(d + 0.1, 0.06, 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(-d, 0.06, 0), v3(0.1, 0.06, d - 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(d, 0.06, 0), v3(0.1, 0.06, d - 0.1), 'kerb', 0, 0, 0, NS); }
+      const mh = O('Manhole', 'deco'); for (const [x, z] of [[-9, 17], [10.5, -19], [19, -10], [-19.2, 11], [16.5, 19.5]]) flat(mh, x, 0.012, z, 0.75, 0.75, 'manhole');
+      // the shops: a lit window with a glass door, a sign over the awning (not over the murals), a white valance on each awning
+      const sw = O('Shop Window', 'deco'), sg = O('Shop Sign', 'deco'), va = O('Awning Valance', 'deco'), SHOP_KINDS = ['cafe', 'ramen', 'boba', 'books', 'flowers', 'arcade', 'whoop', 'laundry']; let si = 0;   // worldview.js PARK_SHOPS
+      for (const [name, along, out, n] of [['North Shops', 'x', -1, 0], ['South Flats', 'x', 1, 2], ['East Shops', 'z', 1, 1], ['West Flats', 'z', -1, 3]])
+        [[-40, -22], [-19, -3], [0, 14], [17, 40]].forEach(([a0, a1], i) => { const ax = along === 'x', ry = ax ? (out < 0 ? 0 : Math.PI) : (out > 0 ? -Math.PI / 2 : Math.PI / 2), mural = (name === 'North Shops' && (i === 1 || i === 2)) || (name === 'South Flats' && i === 1);
+          for (let k = 0; k < Math.floor((a1 - a0) / 5); k += 2) { const m = a0 + 2.5 + k * 5, P = (d, y) => ax ? v3(m, y, out * d) : v3(out * d, y, m), kind = SHOP_KINDS[(si++ * 3 + n) % SHOP_KINDS.length];
+            sw.vis.push({ shape: 'sign', c: P(24 - 0.062, 1.32), w: 3.1, h: 2.45, ry, mat: 'shopWin_' + kind });
+            if (!mural) sg.vis.push({ shape: 'sign', c: P(24 - 0.012, 3.4), w: 3.0, h: 0.56, ry, mat: 'shopSign_' + kind });
+            box(va, ax ? v3(m, 2.72, out * 22.79) : v3(out * 22.79, 2.72, m), ax ? v3(1.9, 0.13, 0.012) : v3(0.012, 0.13, 1.9), 'signWhite', 0, 0, 0, NC); } });
+      // street trees in pits along the inner sidewalk (each a pole with its crown an over/under, like the sakura)
+      const street = (x, z) => { const tr = O('Street Tree', 'pole'); tr.round = { c: v3(x, 0, z), r: 1.1, under: 2.3, over: 4.5 }; tr.obstacle = { a: v3(x - 1.1, 0, z), b: v3(x + 1.1, 0, z), under: 2.3, over: 4.5 };
+        pipe(tr, v3(x, 0, z), v3(x, 2.7, z), 0.09, 'bark'); ball(tr, v3(x, 3.4, z), 1.05, 'streetLeaf'); ball(tr, v3(x + 0.5, 3.0, z + 0.3), 0.6, 'streetLeaf'); ball(tr, v3(x - 0.45, 3.1, z - 0.35), 0.65, 'streetLeaf');
+        box(tr, v3(x, 0.014, z), v3(0.6, 0.012, 0.6), 'soil', 0, 0, 0, NC); };
+      for (const x of [-11, -5, 5, 10]) street(x, 13.2); for (const x of [-10, -5, 4.5, 11]) street(x, -13.2); for (const z of [-10, 5, 10.5]) street(13.2, z); for (const z of [-10.5, -4.2, 4.2, 10]) street(-13.2, z);
+      // benches with backs on the outer sidewalk (legs at the ends: a low gap under each), a bin beside each
+      const bench = (x, z, ry, bx, bz) => { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);
+        for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.2, z - u * s), v3(0.04, 0.2, 0.2), 'metal', ry); box(b, v3(x + bx, 0.75, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, NS);
+        for (const u of [-0.7, 0.7]) box(b, v3(x + u * c + bx, 0.6, z - u * s + bz), v3(0.025, 0.14, 0.025), 'metal', ry, 0, 0, NS);
+        const bn = O('Bin', 'deco'); pipe(bn, v3(x + 1.25 * c, 0, z - 1.25 * s), v3(x + 1.25 * c, 0.8, z - 1.25 * s), 0.24, 'binGreen'); };
+      bench(-12, -22.55, 0, 0, -0.2); bench(11.5, 22.55, 0, 0, 0.2); bench(22.55, 11, Math.PI / 2, 0.2, 0); bench(-22.55, -12, Math.PI / 2, -0.2, 0);
+      // bike racks (their rails are over/unders, like the two by the plaza)
+      for (const [x, z, ax] of [[-12, 22.7, 'x'], [-22.7, 12, 'z']]) { const br = O('Bike Rack', 'deco'), A = ax === 'x' ? v3(x - 1.2, 0.8, z) : v3(x, 0.8, z - 1.2), B2 = ax === 'x' ? v3(x + 1.2, 0.8, z) : v3(x, 0.8, z + 1.2);
+        for (let k = 0; k < 4; k++) { const t = k / 3; pipe(br, v3(A.x + (B2.x - A.x) * t, 0, A.z + (B2.z - A.z) * t), v3(A.x + (B2.x - A.x) * t, 0.8, A.z + (B2.z - A.z) * t), 0.025, 'galv'); } bar('Bike Rack Rail', A, B2, 0.025, 'galv'); }
+      // the bus stop: a roof on four posts (an over/under), a glass back, a sign on a post; flown through end to end (a gap)
+      { const bx = 11.5, bz = -22.9, st = slabOU('Bus Shelter Roof', v3(bx, 2.46, bz), v3(1.35, 0.05, 0.68), 'metal');
+        for (const [u, w] of [[-1.25, -0.58], [1.25, -0.58], [-1.25, 0.58], [1.25, 0.58]]) pipe(st, v3(bx + u, 0, bz + w), v3(bx + u, 2.41, bz + w), 0.04, 'galv');
+        box(st, v3(bx, 1.33, bz - 0.6), v3(1.2, 1.0, 0.012), 'shelterGlass', 0, 0, 0, NS);
+        const bs = O('Bus Stop Sign', 'pole'); pipe(bs, v3(bx + 2.1, 0, bz + 0.5), v3(bx + 2.1, 2.6, bz + 0.5), 0.035, 'galv'); box(bs, v3(bx + 2.1, 2.35, bz + 0.5), v3(0.012, 0.22, 0.22), 'busSign', 0, 0, 0, NS);
+        O('Bus Shelter', 'gap', { gap: { c: v3(bx, 1.25, bz + 0.07), n: v3(1, 0, 0), hu: 0.45, hv: 1.1, u: v3(0, 0, 1) } }); }
+      // parked cars along the kerbs (the Surveyor finds the gap under each)
+      for (const [x, z, alongX, col] of [[12, 20.9, true, 'carRed'], [-12, -20.9, true, 'carBlue'], [5.5, -20.9, true, 'carSilver'], [20.9, -12, false, 'carBlack'], [-20.9, 11, false, 'carRed']]) { const c = O('Parked Car', 'deco');
+        box(c, v3(x, 0.62, z), alongX ? v3(2.3, 0.36, 0.9) : v3(0.9, 0.36, 2.3), col); box(c, alongX ? v3(x - 0.2, 1.2, z) : v3(x, 1.2, z - 0.2), alongX ? v3(1.25, 0.25, 0.82) : v3(0.82, 0.25, 1.25), 'carGlass'); box(c, alongX ? v3(x - 0.2, 1.47, z) : v3(x, 1.47, z - 0.2), alongX ? v3(1.2, 0.03, 0.8) : v3(0.8, 0.03, 1.2), col, 0, 0, 0, NS);
+        for (const d of [-1.45, 1.45]) pipe(c, alongX ? v3(x + d, 0.33, z - 0.92) : v3(x - 0.92, 0.33, z + d), alongX ? v3(x + d, 0.33, z + 0.92) : v3(x + 0.92, 0.33, z + d), 0.32, 'rubberBlack', NS); } }
     const zones = [park.zone,
       { shape: 'zone', mat: 'asphalt', c: v3(0, 0.004, 0), h: v3(23, 0, 23) },
       { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, -23), h: v3(24, 0, 1) }, { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, 23), h: v3(24, 0, 1) },
       { shape: 'zone', mat: 'concrete', c: v3(-23, 0.006, 0), h: v3(1, 0, 22) }, { shape: 'zone', mat: 'concrete', c: v3(23, 0.006, 0), h: v3(1, 0, 22) },
-      { shape: 'zone', mat: 'rubberMat', c: v3(0, Y + 0.004, 0), h: v3(11.5, 0, 11.5) }, { shape: 'zone', mat: 'sand', c: v3(-6, Y + 0.008, 6), h: v3(2.6, 0, 2.6) }];
+      { shape: 'zone', mat: 'rubberMat', c: v3(0, Y + 0.004, 0), h: v3(11.5, 0, 11.5) }, { shape: 'zone', mat: 'sand', c: v3(-6, Y + 0.008, 6), h: v3(2.6, 0, 2.6) },
+      // the inner sidewalk, the centre line (broken at the crosswalks), the crosswalks at the four stairs (2026-11-27)
+      { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, -13), h: v3(14, 0, 1) }, { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, 13), h: v3(14, 0, 1) },
+      { shape: 'zone', mat: 'concrete', c: v3(-13, 0.006, 0), h: v3(1, 0, 12) }, { shape: 'zone', mat: 'concrete', c: v3(13, 0.006, 0), h: v3(1, 0, 12) },
+      ...[-1, 1].flatMap(sg => [{ shape: 'zone', mat: 'laneDash', c: v3(sg * 7.6, 0.007, -18), h: v3(5.4, 0, 0.08) }, { shape: 'zone', mat: 'laneDash', c: v3(sg * 7.6, 0.007, 18), h: v3(5.4, 0, 0.08) },
+        { shape: 'zone', mat: 'laneDash', c: v3(-18, 0.007, sg * 7.6), h: v3(5.4, 0, 0.08), ry: Math.PI / 2 }, { shape: 'zone', mat: 'laneDash', c: v3(18, 0.007, sg * 7.6), h: v3(5.4, 0, 0.08), ry: Math.PI / 2 }]),
+      { shape: 'zone', mat: 'crosswalk', c: v3(0, 0.008, -18), h: v3(1.5, 0, 3.9) }, { shape: 'zone', mat: 'crosswalk', c: v3(0, 0.008, 18), h: v3(1.5, 0, 3.9) },
+      { shape: 'zone', mat: 'crosswalk', c: v3(-18, 0.008, 0), h: v3(1.5, 0, 3.9), ry: Math.PI / 2 }, { shape: 'zone', mat: 'crosswalk', c: v3(18, 0.008, 0), h: v3(1.5, 0, 3.9), ry: Math.PI / 2 }];
     return K.done({ id: 'clappy', title: 'Clappy Park', theme: 'park', zones, spawn: { pos: v3(-8, 0.03, 18), yaw: 0 }, bounds: { x: [-80, 40], z: [-40, 40] } });
   }
 
