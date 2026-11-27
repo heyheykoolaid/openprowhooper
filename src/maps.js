@@ -346,7 +346,8 @@
       slabOU('Skywalk', v3(32.1, 5.0, BZ), v3(7.9, 0.1, 1.2), 'concrete');   // down the alley (z -4.5..-1.5), on the footbridge's line
       { const bm = O('Skywalk Beam', 'deco'); for (const x of [26, 30, 34, 38]) box(bm, v3(x, 4.8, BZ), v3(0.08, 0.1, 1.5), dark, 0, 0, 0, NS); }
       deckFinish('Skywalk Finish', 24.2, 40); rails('Skywalk Rail', 24.25, 40);
-      { const lt = O('Skywalk Light', 'deco'); for (const x of [28, 36]) box(lt, v3(x, 8.85, BZ), v3(0.5, 0.025, 0.08), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); }
+      for (const x of [28, 36]) { const lt = O('Skywalk Light', 'deco');   // under the deck, like the footbridge's (they hung in mid-air: owner, 2026-11-27)
+        box(lt, v3(x, 4.8875, BZ), v3(0.55, 0.0125, 0.14), 'metal', 0, 0, 0, { noCollide: true }); box(lt, v3(x, 4.85, BZ), v3(0.5, 0.025, 0.1), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); }
       // the Campus Bridge over East Lane: pillars on the sidewalks, a portal at each end, a tower of two masts in the lane, stays
       { const o = slabOU('Campus Bridge', v3(46, 5.0, BZ), v3(6, 0.1, 1.2), 'concrete'); for (const x of [41.2, 50.8]) pipe(o, v3(x, 0, BZ), v3(x, 4.9, BZ), 0.22, 'concrete'); }
       deckFinish('Campus Bridge Finish', 40, 52); rails('Campus Bridge Rail', 40, 51.8);
