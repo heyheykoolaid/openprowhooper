@@ -747,8 +747,11 @@ class Drone {
     // them so a whoop hovers at the rpm a real one does (Blackbox, 2026-11-19: the sim's props were too efficient), keeping its
     // top-end thrust (PROP_FIT in game.js)
     const pct = Number.isFinite(+tune.propCt) ? clamp(+tune.propCt, 0.5, 3) : 1, pcq = Number.isFinite(+tune.propCq) ? clamp(+tune.propCq, 0.5, 4) : 1;
-    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1;
-    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel, params.I.y * F.weightFeel, params.I.z * F.weightFeel),
+    // tune.inertiaFeel (absent = 1, the physics as it was): roll and pitch inertia only (sim x = pitch, z = roll), fitted from real
+    // Blackbox logs (tools/inertiafit.js; owner, 2026-11-27)
+    const pin = Number.isFinite(+tune.inertiaFeel) ? clamp(+tune.inertiaFeel, 0.2, 3) : 1;
+    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1 && pin === 1;
+    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel * pin, params.I.y * F.weightFeel, params.I.z * F.weightFeel * pin),
       cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel), rotorDrag: params.rotorDrag * F.dragFeel,
       rotorJ: params.rotorJ / F.motorFeel, bat: { ...params.bat, r: params.bat.r * F.sagFeel } };
     this.tune = tune;

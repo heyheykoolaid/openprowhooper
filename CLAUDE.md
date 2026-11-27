@@ -138,6 +138,16 @@ overshoot 18-40 % real vs 5-19 % sim, yaw 19-50 % vs 4-6 %: the real quad is qui
 changed from it yet. The **test card** (hover, throttle blips, chops, roll / pitch / yaw snaps, coast, punch-out; ~70 s) is in the
 doc and in Feel Lab's first panel: ask for it with every new quad's log.
 
+**Inertia against the logs** (owner, 2026-11-27, after WebFPV's blackbox fit; `node tools/inertiafit.js`, `tune.inertiaFeel` in
+`Drone.setParams`: roll / pitch inertia only, absent = 1, the physics and its hash unchanged, the game sets nothing): each long flight
+flown again with the log's own sticks, rates, PIDs and feedforward (`importDiff` of its headers), roll / pitch inertia scaled, the step
+response (half way, overshoot) and lag compared. The owner's Air65 (choppoop 2026-11-19) fits best at x1 (0.85-1.2 close), the other
+30000KV whoop is flat from x1 to x1.4, bum-darts wants ~x2 but the sim matches that quad 4x worse overall (its EVO motor / prop numbers,
+not inertia): **the sim's inertia stays as it is.** The open-loop fit WebFPV uses on a five inch (angular acceleration against the
+rpm-squared difference from bidirectional DShot) explains under a third of a whoop's acceleration in these logs (r² 0.03-0.27; 0.8-0.99
+on the sim's own flights), so it was dropped. `FeelFit.series` / `simulate` carry per-motor rpm (`rpm4`, Betaflight's motor order) for
+later work. A test-card log (roll / pitch snaps) would give a sharper read.
+
 ## The Watcher (src/sim.js `Watcher`, `WATCH`)
 A second, live judge behind the detector: every call is cross-checked against independent witnesses (path, camera view,
 sticks/throttle, demo timing scaled to the pilot's learned speed) and the TPW description. Hard checks veto (the

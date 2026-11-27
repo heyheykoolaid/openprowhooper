@@ -23,7 +23,7 @@
     const t0 = R[0][ix('time')], from = opts.from ?? 0, to = opts.to ?? Infinity, out = { t: [], thr: [], stick: [[], [], []], sp: [[], [], []], gyro: [[], [], []], unf: [[], [], []], duty: [], rpm: [], vbat: [] };
     for (const r of R) { const t = (r[ix('time')] - t0) / 1e6; if (t < from || t > to) continue; out.t.push(t);
       out.thr.push(clamp((r[ix('rcCommand[3]')] - 1000) / 1000, 0, 1)); for (let k = 0; k < 3; k++) { out.stick[k].push(clamp(r[ix(`rcCommand[${k}]`)] / 500, -1, 1)); out.sp[k].push(r[ix(`setpoint[${k}]`)]); out.gyro[k].push(r[ix(`gyroADC[${k}]`)]); out.unf[k].push(hasU ? r[ix(`gyroUnfilt[${k}]`)] : r[ix(`gyroADC[${k}]`)]); }
-      let m = 0, e = 0; for (let k = 0; k < 4; k++) { m += r[ix(`motor[${k}]`)]; if (hasE) e += r[ix(`eRPM[${k}]`)]; } out.duty.push(clamp((m / 4 - m0) / (m1 - m0), 0, 1)); out.rpm.push(hasE ? e / 4 : NaN);
+      let m = 0, e = 0; for (let k = 0; k < 4; k++) { m += r[ix(`motor[${k}]`)]; if (hasE) e += r[ix(`eRPM[${k}]`)]; } out.duty.push(clamp((m / 4 - m0) / (m1 - m0), 0, 1)); out.rpm.push(hasE ? e / 4 : NaN); if (hasE) for (let k = 0; k < 4; k++) (out.rpm4 || (out.rpm4 = [[], [], [], []]))[k].push(r[ix(`eRPM[${k}]`)]);
       out.vbat.push(ix('vbatLatest') >= 0 ? r[ix('vbatLatest')] / 100 : NaN); }
     const n = out.t.length; out.hz = n > 1 ? (n - 1) / (out.t[n - 1] - out.t[0]) : 1000; out.headers = H; out.hasRpm = hasE; return out;
   }
@@ -111,14 +111,17 @@
     if (R && opts.logRates !== false) { tune.ratesType = R.type; tune.rates = JSON.parse(JSON.stringify(R.rates)); for (const ax of ['roll', 'pitch', 'yaw']) tune.rates[ax] = { ...S.defaultTune().rates[ax], ...R.rates[ax] }; }
     tune.thrMid = 0.5; tune.thrExpo = 0; tune.flightMode = 'acro'; tune.batteryLife = false;   // the log's throttle is already through its curve
     const W = { objs: [], prims: [], zones: [], spawn: { pos: S.v3(0, 400, 0), yaw: 0 } }, d = new S.Drone(S.buildDrone(spec), tune, W); d.reset(W.spawn); d.armed = true;
-    const out = { t: [], thr: s.thr, stick: s.stick, sp: s.sp, gyro: [[], [], []], unf: [[], [], []], duty: [], rpm: [], hz: s.hz, hasRpm: true };
+    const out = { t: [], thr: s.thr, stick: s.stick, sp: s.sp, gyro: [[], [], []], unf: [[], [], []], duty: [], rpm: [], rpm4: [[], [], [], []], hz: s.hz, hasRpm: true };
+    // the sim's motors in Betaflight's order (0 rear right, 1 front right, 2 rear left, 3 front left; the sim's front is -z, right +x)
+    const bf = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => d.p.motors.findIndex(m => Math.sign(m.pos.x) === sx && Math.sign(m.pos.z) === sz));
     const n = s.t.length, sub = Math.max(1, Math.round(1000 / s.hz)), dt = 1 / (s.hz * sub); let wMax = 1;
     for (const m of d.p.motors) wMax = Math.max(wMax, m.wMax || 1);
     for (let i = 0; i < n; i++) { const rc = { thr: s.thr[i], roll: s.stick[0][i], pitch: -s.stick[1][i], yaw: s.stick[2][i] };
       for (let j = 0; j < sub; j++) d.step(rc, dt);
       if (d.pos.y < 50) { d.pos = S.v3(d.pos.x, 400, d.pos.z); }   // fell a long way: lift it back up (only the rotation matters)
       const R2 = d.pilotRates(); out.t.push(s.t[i]); for (let k = 0; k < 3; k++) { out.gyro[k].push(R2[k]); out.unf[k].push(R2[k]); }
-      const o = d.duty; out.duty.push(o ? avg(Array.from(o, Math.abs)) : NaN); out.rpm.push(avg(d.motorW.map(Math.abs))); }
+      const o = d.duty; out.duty.push(o ? avg(Array.from(o, Math.abs)) : NaN); out.rpm.push(avg(d.motorW.map(Math.abs)));
+      for (let k = 0; k < 4; k++) out.rpm4[k].push(Math.abs(d.motorW[bf[k]])); }
     return out;
   }
 

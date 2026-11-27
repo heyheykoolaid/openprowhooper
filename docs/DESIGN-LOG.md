@@ -6,6 +6,18 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Inertia measured from the Blackbox logs (owner: "let's do 1", 2026-11-27)
+**Result: the sim's roll / pitch inertia is right for the owner's quad; nothing changed in the game.** Two ways tried. (1) WebFPV's
+open-loop fit (angular acceleration against the left-right / front-back difference in rpm squared, scaled by the hover): it recovers the
+sim's own inertia from the sim's flights (r² 0.8-0.99), but on the real whoop logs it explains under a third of the acceleration (r²
+0.03-0.27) and gives numbers 5-35x too big: noise, not inertia (ducts, the D-term fighting gyro noise, eRPM rounding; a five inch's clean
+snaps are a much easier case). Dropped. (2) The closed loop: each flight flown again with the log's own sticks, rates, PIDs and
+feedforward, inertia scaled 0.7-1.4 (2.5 for bum-darts), and the step response and lag compared: the owner's Air65 (choppoop 2026-11-19,
+the closest match by far) fits best at x1; the other 30000KV whoop is flat from x1 to x1.4; bum-darts leans to ~x2 but the sim matches
+that quad four times worse overall, which points at its EVO motor / prop numbers, not its inertia. Left in: a `tune.inertiaFeel` knob
+(unused by default) and `node tools/inertiafit.js`. Next of WebFPV's list if wanted: (2) the inflow solve with (3) yaw from thrust.
+A test-card log with roll and pitch snaps would sharpen this read.
+
 ### What WebFPV's physics could teach ours (owner asked, 2026-11-27; nothing built)
 Read Mathew-Harvey/WebFPVSimulator's plant (src/native/plant.c). It is GPL-3.0: ideas only, no code copied. Already in ours: the DC motor
 model, thrust loss with climb, a little translational lift, vortex ring state faded by edgewise speed, a wake trail the quad can fly
