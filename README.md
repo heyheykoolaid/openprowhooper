@@ -81,6 +81,7 @@ Trick names, descriptions and point values: Tyrantt's Pro Whooper (prowhooper.co
 - **Music:** 8BiT_ and the Infinity Loops community. The in-game byTe_me Radio streams their free-to-use collection from archive.org; rights remain with the artists.
 - **Whoop model:** the Air65 frame is BetaFPV's design and the "Beast Brain" canopy is by _tcmore; the game draws them from their model files (`assets/meshes/`). They belong to their makers and are used in this game only.
 - **Slackvegan City:** the start box is painted with the Static Massive logo (`assets/flags/staticmassive.webp`), added at the owner's request, for this game only; it belongs to its makers.
+- **Clappy Park:** the East Campus flag carries the IGOW logo (`assets/flags/igow.webp`), added at the owner's request, for this game only; it belongs to its makers.
 - **The Murderdome:** made in the spirit of the Dirtbag FPV club and Spider Sugar FPV. The start flag is the Dirtbag FPV logo (`assets/flags/dirtbag.webp`), added at the pilot's request, for this game only; it belongs to the club.
 - **The Playground's sign gantry** carries the Metal Craft FPV logo (`assets/flags/metalcraft.webp`), added at the owner's request, for this game only; it belongs to Metal Craft FPV.
 - **Graffiti:** the MoPenguinz FPV, ByTe_Me, Rogue Monkey FPV, FPV Your World, RidgeRipper FPV, RodFpv and Alligator Man logos appear on the walls alongside the pilot's own pieces. They belong to their makers and are used in this game only.

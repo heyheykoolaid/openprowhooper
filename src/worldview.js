@@ -715,6 +715,10 @@ function parkMats() {
   const T = (w, h, draw, clamp) => { const [c, g] = cnv(w, h); draw(g, w, h); const t = tex(c); if (clamp) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
   MAT.trussWhite = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.5, metalness: 0.25 });   // East Campus truss and spiral (2026-11-27)
   MAT.sculptSteel = new THREE.MeshStandardMaterial({ color: 0xb9bec2, roughness: 0.35, metalness: 0.6 });
+  // the Campus Flagpole's flag: the IGOW logo (assets/flags/igow.webp; at the owner's request, credited on the main menu), on white
+  { const [c, g] = cnv(1024, 600); g.fillStyle = '#f4f5f2'; g.fillRect(0, 0, 1024, 600); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    MAT.igowFlag = new THREE.MeshStandardMaterial({ roughness: 0.9, map: t });
+    const src = (window.PW_FLAGS || {}).igow; if (src) { const im = new Image(); im.onload = () => { const w = 880, h = w * im.height / im.width; g.drawImage(im, (1024 - w) / 2, (600 - h) / 2, w, h); t.needsUpdate = true; }; im.src = src; } }
   MAT.blossom2 = new THREE.MeshStandardMaterial({ color: 0xf9cfe0, roughness: 0.85, flatShading: true });   // paler
   MAT.blossom3 = new THREE.MeshStandardMaterial({ color: 0xe98db4, roughness: 0.85, flatShading: true });   // deeper
   MAT.streetLeaf = new THREE.MeshStandardMaterial({ color: 0x6f9a3e, roughness: 0.9, flatShading: true });

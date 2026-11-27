@@ -435,7 +435,8 @@
         for (let k = 0; k < N; k++) box(sp, v3(sx, 0.9 + k * 0.16, sz), v3(2.5, 0.035, 0.22), 'sculptSteel', sg * k * Math.PI / 20, 0, 0, { noSurvey: true }); }
       frame('Campus Arch', 82, 22, 3.0, 3.2, 'x', dark);
       { const fp = O('Campus Flagpole', 'pole'); pipe(fp, v3(84, 0, 3), v3(84, 11, 3), 0.07, 'galv'); box(fp, v3(84, 0.15, 3), v3(0.5, 0.15, 0.5), 'concrete', 0, 0, 0, NS);
-        box(fp, v3(84.9, 10.2, 3), v3(0.85, 0.5, 0.015), 'paintBlue', 0, 0, 0, NC); }
+        box(fp, v3(85.07, 10.2, 3), v3(1.0, 0.585, 0.012), 'signWhite', 0, 0, 0, NC);   // the IGOW flag (owner, 2026-11-27): the logo on both faces
+        for (const [dz, ry] of [[0.0135, 0], [-0.0135, Math.PI]]) fp.vis.push({ shape: 'sign', c: v3(85.07, 10.2, 3 + dz), w: 1.98, h: 1.16, ry, mat: 'igowFlag', decal: 1 }); }
       for (const [x, z, lit] of [[70.5, 6.2, 1], [80, -1.5, 0], [88, 6.2, 1], [80, -22, 0]]) { const l = O('Campus Lamp', 'pole', lit ? { light: v3(x, 4.2, z), lightColor: 0xfff1d6, lightPower: 26, lightRange: 18 } : {});
         pipe(l, v3(x, 0, z), v3(x, 4.2, z), 0.06, 'metal'); ball(l, v3(x, 4.3, z), 0.2, 'lampHead', NC); }
       for (const [x, z, ry, bx, bz] of [[78, 10.1, 0, 0, 0.2], [86, 10.1, 0, 0, 0.2], [78, -6, 0, 0, -0.2]]) { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);

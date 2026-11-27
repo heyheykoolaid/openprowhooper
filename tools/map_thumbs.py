@@ -75,6 +75,7 @@ EXTRA = {
     'clappy-quad':     ('clappy', [92, 4, 16], [60, 6, -4]),
     'clappy-spiral':   ('clappy', [78, 3, -18], [87, 9, -28]),
     'clappy-towers':   ('clappy', [64, 13, 46], [88, 7, -6]),
+    'clappy-flag':     ('clappy', [80.5, 9.6, 8], [85, 10, 3]),
     'clappy-twister':  ('clappy', [-18, 3, -4], [-6, 2.5, -6]),
     'clappy-truss':    ('clappy', [94, 1.8, -24], [94, 2.2, 10]),
     'clappy-truss-side': ('clappy', [80, 6, 2], [94, 3, -4]),
