@@ -6,6 +6,22 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### What WebFPV's physics could teach ours (owner asked, 2026-11-27; nothing built)
+Read Mathew-Harvey/WebFPVSimulator's plant (src/native/plant.c). It is GPL-3.0: ideas only, no code copied. Already in ours: the DC motor
+model, thrust loss with climb, a little translational lift, vortex ring state faded by edgewise speed, a wake trail the quad can fly
+back into, Cheeseman-Bennett ground effect, quadratic body drag plus rotor H-drag, the gyroscopic term, pack sag, a wobble term.
+**What they have that we do not, best first**: (1) **inertia fitted from Blackbox logs** (inertia over mass and arm read off full-rate
+snaps; theirs came out well under their hand table) and motor lag read as rpm following its command: we have three whoop logs and
+fit only delay and shake; (2) **thrust from a momentum-theory inflow solve** (one constant from the prop's pitch speed) instead of our
+straight line in advance ratio: climb costs about half as much near hover, and heave damping grows with forward speed;
+(3) **yaw torque tied to thrust by a figure of merit** (kq from kt; 0.30-0.40 for a 31 mm whoop prop): yaw authority stops being a free
+number (ours was hand-scaled x1.8); (4) **rear rotors in the front rotors' wake** at speed, 10-25 % less thrust behind, so the
+controller holds the nose with more rear motor; (5) **two-band prop-wash buffet** (30 Hz and 3 Hz, normalised so the setting is a
+thrust fraction); (6) a fixed small **per-motor inflow asymmetry**; (7) **dynamic inflow** lag (a few ms, small); (8) a **slow second pack
+resistance** (punch fades over a second and recovers; moot with battery life off by default); (9) "gates" scripts holding every
+number inside a band with its source. Proposed order: (1), then (2)+(3) together, then (4)-(5), each checked in Feel Lab against the
+logs. Open: the owner's pick.
+
 ### Clappy's street trees thinned (owner, 2026-11-27)
 "a bit too crowded around the lightpoles and gives you no space to trippy with the green trees". **Done**: of the 15 new street trees,
 the 8 at the plaza's corners (beside the sakura and the park lamps) and the one by the Twister slide's end are gone; six stay, mid-side,
