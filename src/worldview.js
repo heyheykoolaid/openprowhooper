@@ -448,13 +448,21 @@ function visMesh(v, art) {
   else if (v.shape === 'sign') { m = new THREE.Mesh(new THREE.PlaneGeometry(v.w, v.h), MAT[v.mat] || MAT.concrete); m.position.set(v.c.x, v.c.y, v.c.z); m.rotation.set(v.rx || 0, v.ry || 0, 0, 'YXZ'); }   // a flat picture (a neon sign, a flag): its texture once across it
   return m || null;
 }
+// Decals (owner, 2026-11-27: "ensure that textures aren't sitting inside of the object model, and just on its surface"): paint, paving,
+// petals, shop windows and signs lie a few millimetres on another face. The FPV camera's near plane is 4 mm, so the depth buffer cannot
+// tell a few millimetres apart beyond ~20 m and they flickered. A piece marked `decal` (1, 2, 3: one layer on another) is drawn with a
+// depth offset, which is measured in the depth buffer's own steps and so holds at any distance; it casts no shadow of its own.
+const DECAL = new Map();
+function decalMat(mat, lvl) { const n = Math.max(1, Math.min(4, +lvl || 1)), k = mat.uuid + '|' + n; let d = DECAL.get(k);
+  if (!d) { d = mat.clone(); d.polygonOffset = true; d.polygonOffsetFactor = -1 * n; d.polygonOffsetUnits = -4 * n; DECAL.set(k, d); } return d; }
 let objRoot = null;
 function buildObjects(merge = MERGE_STATIC) {
   if (objRoot) { playRoot.remove(objRoot); objRoot.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
   objRoot = new THREE.Group(); playRoot.add(objRoot);
   for (const o of world.objs) for (const v of o.vis) {
     const m = visMesh(v, true); if (!m) continue;
-    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
+    m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha && !v.decal; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
+    if (v.decal) m.material = decalMat(m.material, v.decal);
     m.userData.oid = o.id; if (!merge) objRoot.add(m); else staticAdd(m, v);
   }
   staticFlush();

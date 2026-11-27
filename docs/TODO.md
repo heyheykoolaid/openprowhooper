@@ -79,6 +79,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points
   (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
 - More Warehouse: look over the detail pass (the box truck and trailer stay over/unders: "yup", 2026-11-27).
+- Clappy clean-up (2026-11-27): lamps off the corners, sidewalk sakura moved, the clipping fixed. Fly it; say if other maps should get the
+  same pass (tools/clipcheck.js lists flicker on Slackvegan 36, Ship 25, Warehouse 7, School 4, Murderdome 3, Playground 3).
 - Clappy Park's new look (2026-11-27): the shade, the haze, the eight shop names (Clappy Cafe, Ramen, Boba Tea, Books, Flowers,
   Arcade, Whoop Shop, Laundry), the fountain, the bus stop, the parked cars. Shop names and the cloud count are easy to change.
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).

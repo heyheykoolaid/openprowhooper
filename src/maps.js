@@ -50,7 +50,7 @@
   // (dir -1 = towards -x). M = the map's materials.
   function trickPark(K, X0, Z0, dir, M) {
     const { O, box, pipe } = K, X = lx => X0 + dir * lx, Zw = lz => Z0 + lz, n = v3(-dir, 0, 0);
-    const mark = (o, c, h) => box(o, c, h, M.accent, 0, 0, 0, { noCollide: true, glow: M.glow });
+    const mark = (o, c, h) => box(o, c, h, M.accent, 0, 0, 0, { noCollide: true, glow: M.glow, decal: 1 });
     // the over/under lane: bars 2.6 m wide, across the lane, at 1.0 / 1.6 / 2.2 / 3.0 m
     [[4, 1.0], [10, 1.6], [16, 2.2], [22, 3.0]].forEach(([lx, h]) => { const x = X(lx), za = Zw(-13.3), zb = Zw(-10.7), r = 0.04;
       const o = O(`Test Bar ${h.toFixed(1)} m`, 'overunder', { obstacle: { a: v3(x, 0, za), b: v3(x, 0, zb), under: h - r, over: h + r } });
@@ -157,11 +157,15 @@
       pipe(tr, v3(x, y0, z), v3(x, y0 + 2.9 * s, z), 0.14 * s, 'bark');
       const bm = ['blossom', 'blossom2', 'blossom3'], q = sakN++;   /* three pinks, mixed per tree (2026-11-27) */ ball(tr, v3(x, y0 + 3.7 * s, z), 1.4 * s, bm[q % 3]); ball(tr, v3(x + 0.9 * s, y0 + 3.2 * s, z + 0.4), 0.9 * s, bm[(q + 1) % 3]); ball(tr, v3(x - 0.8 * s, y0 + 3.4 * s, z - 0.5), 1.0 * s, bm[(q + 2) % 3]); };
     for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) sakura(x, z, Y, 1);
-    for (const [x, z] of [[-18, 23], [6, 23], [23, -9], [-23, 9], [-6, -23], [23, 15]]) sakura(x, z, 0, 0.9);
+    // the six on the outer sidewalks stand between the awnings and clear of the utility poles, benches and racks, 1.5 m off the shop
+    // fronts, a little smaller: their crowns went through awnings and into the walls (owner, 2026-11-27: "objects … clipping")
+    for (const [x, z] of [[-9.9, 22.5], [9.5, 22.5], [22.5, 8.5], [22.5, -10], [-22.5, 8.5], [-10, -22.5]]) sakura(x, z, 0, 0.8);
     // benches, bins and lamps round the plaza
     for (const [x, z, ry] of [[-3, 11, 0], [3, 11, 0], [-11, 3, Math.PI / 2], [11, -3, Math.PI / 2], [0, -11, 0]]) { const b = O('Bench', 'deco'); box(b, v3(x, Y + 0.42, z), v3(0.8, 0.04, 0.22), 'wood', ry); box(b, v3(x, Y + 0.2, z), v3(0.7, 0.2, 0.05), 'metal', ry);
       const bx = ry ? Math.sign(x) * 0.2 : 0, bz = ry ? 0 : Math.sign(z) * 0.2; box(b, v3(x + bx, Y + 0.61, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, { noSurvey: true }); }   /* a back, on the plaza's edge side (2026-11-27) */
-    for (const [x, z] of [[-11.2, -11.2], [11.2, -11.2], [-11.2, 11.2], [11.2, 11.2]]) { const l = O('Park Lamp', 'pole', { light: v3(x, Y + 4.2, z) }); pipe(l, v3(x, Y, z), v3(x, Y + 4.2, z), 0.06, 'metal'); ball(l, v3(x, Y + 4.3, z), 0.2, 'lampHead', { noCollide: true }); }
+    // the lamps stand on the inner sidewalk's corners, 4.5 m from the corner sakura (owner, 2026-11-27: on the plaza's corners, 1.7 m
+    // from the trees, they left no room to trippy round either)
+    for (const [x, z] of [[-13.3, -13.3], [13.3, -13.3], [-13.3, 13.3], [13.3, 13.3]]) { const l = O('Park Lamp', 'pole', { light: v3(x, 4.8, z) }); pipe(l, v3(x, 0, z), v3(x, 4.8, z), 0.06, 'metal'); ball(l, v3(x, 4.9, z), 0.2, 'lampHead', { noCollide: true }); }
     // ---- the street ring: sidewalks 12-14 and 22-24, the road between; utility poles and wires; race gates
     const up = O('Utility Pole', 'pole'), poles = [];
     for (const t of [-18, -6, 6, 18]) for (const [x, z] of [[t, -23.3], [t, 23.3], [-23.3, t], [23.3, t]]) { pipe(up, v3(x, 0, z), v3(x, 8, z), 0.12, 'wood'); pipe(up, v3(x - 0.7, 7.5, z), v3(x + 0.7, 7.5, z), 0.05, 'wood', { noCollide: true }); poles.push(v3(x, 7.5, z)); }
@@ -174,7 +178,7 @@
       for (const z of [-4.15, -1.85]) bar('Footbridge Rail', v3(12, 6.0, z), v3(24, 6.0, z), 0.03, 'galv');
       // lights under the deck (the pilot found it too dark under there): three fittings along the underside, real lights
       for (const x of [13.2, 18, 22.8]) { const l = O('Underpass Light', 'deco', { light: v3(x, 4.85, -3), lightColor: 0xfff1d6, lightPower: 22, lightRange: 14 });
-        box(l, v3(x, 4.86, -3), v3(0.6, 0.03, 0.12), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, 4.89, -3), v3(0.65, 0.015, 0.16), 'metal', 0, 0, 0, { noCollide: true }); }
+        box(l, v3(x, 4.85, -3), v3(0.6, 0.025, 0.12), 'fluoro', 0, 0, 0, { noCollide: true, glow: true }); box(l, v3(x, 4.8875, -3), v3(0.65, 0.0125, 0.16), 'metal', 0, 0, 0, { noCollide: true }); }
       // stairs straight up from the plaza onto the bridge's west end (12 steps of 0.5 m, 0.37 m rise), with handrails
       const st = O('Footbridge Stairs', 'deco'), N = 12, run = 0.5, rise = (5.1 - Y) / N, x1 = 11.8;
       for (let i = 0; i < N; i++) { const top = Y + rise * (i + 1), x = x1 - (N - 1 - i) * run - run / 2; box(st, v3(x, top / 2, -3), v3(run / 2, top / 2, 0.9), 'concrete'); }
@@ -203,8 +207,8 @@
         const win = O('Window', 'deco'), trim = O('Facade Trim', 'deco'), floors = Math.floor(h / 3);
         // no window painted over: a piece with its width given (`w`, metres) keeps the wall behind it clear (the facade's u runs
         // west to east facing south, east to west facing north)
-        const behindArt = (m, y) => (art.art || []).some(p => { if (!p.w || !ax) return false; const u = (art.graffiti === 'north' ? a1 - m : m - a0) / (a1 - a0) * (a1 - a0);
-          return Math.abs(u - p.x * (a1 - a0)) < p.w / 2 + 0.6 && Math.abs(y - p.y) < p.h / 2 + 0.75; });
+        const behindArt = (m, y) => (art.art || []).some(p => { if (!ax) return false; const u = (art.graffiti === 'north' ? a1 - m : m - a0) / (a1 - a0) * (a1 - a0), pw = p.w || p.h * 1.2;   // a piece with no width given: about as wide as tall (2026-11-27: a window sat on the HeyHey piece)
+          return Math.abs(u - p.x * (a1 - a0)) < pw / 2 + 0.6 && Math.abs(y - p.y) < p.h / 2 + 0.75; });
         for (let fl = 1; fl < floors; fl++) { const yb = fl * 3; box(trim, P(c, yb, 0.06), Sz(hl, 0.06, 0.06), 'concrete');
           for (let m = a0 + 1.5; m < a1 - 1.0; m += 2.4) { if (behindArt(m, yb + 1.55)) continue; box(win, P(m, yb + 1.55, 0.025), Sz(0.55, 0.72, 0.02), 'glass', 0, 0, 0, { noCollide: true }); box(win, P(m, yb + 0.78, 0.07), Sz(0.66, 0.04, 0.07), 'concrete'); } }
         for (const e of [a0, a1]) { if (e === -40 || e === 40) continue; const sx = e === a0 ? -1 : 1;
@@ -241,47 +245,50 @@
     // id and place above is unchanged. Flyable things carry their helpers: trees and the fountain column are poles, the fountain bowl,
     // tree crowns, bike rails and the bus shelter roof are over/unders, the shelter is a gap; benches and cars get low gaps from the
     // Surveyor (legs at the ends, nothing under the middle). Paint, paving, petals, signs and windows never collide.
-    { const NC = { noCollide: true }, NS = { noSurvey: true }, flat = (o, x, y, z, w, d, mat) => o.vis.push({ shape: 'sign', c: v3(x, y, z), w, h: d, rx: -Math.PI / 2, ry: 0, mat, alpha: true });
+    { const NC = { noCollide: true }, NS = { noSurvey: true }, flat = (o, x, y, z, w, d, mat, decal = 1) => o.vis.push({ shape: 'sign', c: v3(x, y, z), w, h: d, rx: -Math.PI / 2, ry: 0, mat, alpha: true, decal });
       // the plaza: pavers with a darker border, rubber pads under the play pieces, sand under the dome (laid on the deck: paint can't show there)
-      const pv = O('Plaza Paving', 'deco'); box(pv, v3(0, Y + 0.006, 0), v3(11.98, 0.006, 11.98), 'plazaPave', 0, 0, 0, NC);
-      for (const [c, h] of [[v3(0, Y + 0.008, -11.7), v3(11.98, 0.008, 0.28)], [v3(0, Y + 0.008, 11.7), v3(11.98, 0.008, 0.28)], [v3(-11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.4)], [v3(11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.4)]]) box(pv, c, h, 'paveBorder', 0, 0, 0, NC);
-      for (const [x, z, hx, hz, m] of [[-6, -6, 2.3, 2.3, 'playPad'], [6, -6, 2.4, 2.4, 'playPad'], [6, 6, 2.8, 1.1, 'playPad'], [-6, 6, 2.3, 2.3, 'sand']]) box(pv, v3(x, Y + 0.01, z), v3(hx, 0.01, hz), m, 0, 0, 0, NC);
+      const pv = O('Plaza Paving', 'deco'), D1 = { noCollide: true, decal: 1 }, D2 = { noCollide: true, decal: 2 }; box(pv, v3(0, Y + 0.006, 0), v3(11.42, 0.006, 11.42), 'plazaPave', 0, 0, 0, D1);   // inside the border, not under it (2026-11-27: the two fought)
+      for (const [c, h] of [[v3(0, Y + 0.008, -11.7), v3(11.98, 0.008, 0.28)], [v3(0, Y + 0.008, 11.7), v3(11.98, 0.008, 0.28)], [v3(-11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.4)], [v3(11.7, Y + 0.008, 0), v3(0.28, 0.008, 11.42)]]) box(pv, c, h, 'paveBorder', 0, 0, 0, D1);
+      for (const [x, z, hx, hz, m] of [[-6, -6, 2.3, 2.3, 'playPad'], [6, -6, 2.4, 2.4, 'playPad'], [6, 6, 2.8, 1.1, 'playPad'], [-6, 6, 2.3, 2.3, 'sand']]) box(pv, v3(x, Y + 0.01, z), v3(hx, 0.01, hz), m, 0, 0, 0, D2);
       // the fountain: a round basin, a column (a pole: trippies and orbits round it) and a bowl up top (an over/under, flown from any side)
       const fo = O('Fountain', 'deco'), FR = 1.65;
       for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * Math.PI * 2, L = 2 * FR * Math.sin(Math.PI / 16) / 2 + 0.03; box(fo, v3(Math.cos(a) * FR, Y + 0.19, Math.sin(a) * FR), v3(L, 0.19, 0.11), 'fountainStone', -a - Math.PI / 2, 0, 0, NS); }
       disc(fo, v3(0, Y + 0.2, 0), FR - 0.08, 0.02, 'fountainWater');
       const fc = O('Fountain Column', 'pole'); pipe(fc, v3(0, Y, 0), v3(0, Y + 2.55, 0), 0.16, 'fountainStone'); ball(fc, v3(0, Y + 2.68, 0), 0.17, 'fountainStone');
       const fb = O('Fountain Bowl', 'overunder'); fb.round = { c: v3(0, 0, 0), r: 0.8, under: Y + 1.62, over: Y + 1.78 }; fb.obstacle = { a: v3(-0.8, 0, 0), b: v3(0.8, 0, 0), under: Y + 1.62, over: Y + 1.78 };
-      disc(fb, v3(0, Y + 1.7, 0), 0.8, 0.08, 'fountainStone'); fb.vis.push({ shape: 'disc', c: v3(0, Y + 1.79, 0), r: 0.7, th: 0.012, mat: 'fountainWater' });
+      disc(fb, v3(0, Y + 1.7, 0), 0.8, 0.08, 'fountainStone'); fb.vis.push({ shape: 'disc', c: v3(0, Y + 1.79, 0), r: 0.7, th: 0.012, mat: 'fountainWater', decal: 1 });
       for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; pipe(fo, v3(Math.cos(a) * 0.74, Y + 1.66, Math.sin(a) * 0.74), v3(Math.cos(a) * 0.86, Y + 0.22, Math.sin(a) * 0.86), 0.025, 'fountainWater', NC); }   // water falling from the bowl's rim (seen, never hit)
       // four raised planters round it: grass, a stone edge, flowers
       const pl = O('Planter', 'deco');
-      for (const [x, z, hx, hz] of [[-3.7, 0, 0.7, 1.5], [3.7, 0, 0.7, 1.5], [0, -3.7, 1.5, 0.7], [0, 3.7, 1.5, 0.7]]) { box(pl, v3(x, Y + 0.17, z), v3(hx, 0.17, hz), 'planterStone', 0, 0, 0, NS); box(pl, v3(x, Y + 0.345, z), v3(hx - 0.1, 0.008, hz - 0.1), 'parkGrass', 0, 0, 0, NC);
+      for (const [x, z, hx, hz] of [[-3.7, 0, 0.7, 1.5], [3.7, 0, 0.7, 1.5], [0, -3.7, 1.5, 0.7], [0, 3.7, 1.5, 0.7]]) { box(pl, v3(x, Y + 0.17, z), v3(hx, 0.17, hz), 'planterStone', 0, 0, 0, NS); box(pl, v3(x, Y + 0.345, z), v3(hx - 0.1, 0.008, hz - 0.1), 'parkGrass', 0, 0, 0, D1);
         for (let i = 0; i < 16; i++) { const u = ((i * 0.618) % 1) * 2 - 1, w = ((i * 0.382 + 0.2) % 1) * 2 - 1; ball(pl, v3(x + u * (hx - 0.25), Y + 0.4, z + w * (hz - 0.25)), 0.06 + (i % 3) * 0.015, ['flowerRed', 'flowerYellow', 'flowerWhite', 'flowerPurple'][i % 4], NC); } }
       // fallen petals under every sakura
-      const pe = O('Fallen Petals', 'deco'); for (const o of K.objs.filter(q => q.name === 'Sakura Tree')) { const c = o.round.c, y0 = o.round.under - 2.2 * o.round.r / 1.8; flat(pe, c.x + 0.3, y0 + 0.018, c.z, 5 * o.round.r / 1.8, 5 * o.round.r / 1.8, 'petals'); }
+      const pe = O('Fallen Petals', 'deco'); for (const o of K.objs.filter(q => q.name === 'Sakura Tree')) { const c = o.round.c, y0 = o.round.under - 2.2 * o.round.r / 1.8;
+        if (y0 > 0.3) { const W = 4, cl = v => Math.max(-11.9 + W / 2, Math.min(11.9 - W / 2, v)); flat(pe, cl(c.x + 0.3), y0 + 0.026, cl(c.z), W, W, 'petals', 3); }   // on the deck, inside its edge (it hung over the steps)
+        else { const acrossX = Math.abs(c.x) > Math.abs(c.z), a = (Math.abs(acrossX ? c.x : c.z) > 22.9 ? 23.02 : 13) * Math.sign(acrossX ? c.x : c.z), S2 = 1.8;   // on the sidewalk, kerb to wall
+          for (const t of [-0.9, 0.9]) flat(pe, acrossX ? a : c.x + t, 0.022, acrossX ? c.z + t : a, S2, S2, 'petals', 2); } }
       // the street: kerbs, the inner sidewalk, lane dashes, crosswalks at the four stairs, manholes
       const kb = O('Kerb', 'deco'); for (const d of [14, 22]) { box(kb, v3(0, 0.06, -d), v3(d + 0.1, 0.06, 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(0, 0.06, d), v3(d + 0.1, 0.06, 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(-d, 0.06, 0), v3(0.1, 0.06, d - 0.1), 'kerb', 0, 0, 0, NS); box(kb, v3(d, 0.06, 0), v3(0.1, 0.06, d - 0.1), 'kerb', 0, 0, 0, NS); }
-      const mh = O('Manhole', 'deco'); for (const [x, z] of [[-9, 17], [10.5, -19], [19, -10], [-19.2, 11], [16.5, 19.5]]) flat(mh, x, 0.012, z, 0.75, 0.75, 'manhole');
+      const mh = O('Manhole', 'deco'); for (const [x, z] of [[-9, 17], [10.5, -19], [19, -10], [-19.2, 11], [16.5, 19.5]]) flat(mh, x, 0.012, z, 0.75, 0.75, 'manhole', 1);
       // the shops: a lit window with a glass door, a sign over the awning (not over the murals), a white valance on each awning
       const sw = O('Shop Window', 'deco'), sg = O('Shop Sign', 'deco'), va = O('Awning Valance', 'deco'), SHOP_KINDS = ['cafe', 'ramen', 'boba', 'books', 'flowers', 'arcade', 'whoop', 'laundry']; let si = 0;   // worldview.js PARK_SHOPS
       for (const [name, along, out, n] of [['North Shops', 'x', -1, 0], ['South Flats', 'x', 1, 2], ['East Shops', 'z', 1, 1], ['West Flats', 'z', -1, 3]])
         [[-40, -22], [-19, -3], [0, 14], [17, 40]].forEach(([a0, a1], i) => { const ax = along === 'x', ry = ax ? (out < 0 ? 0 : Math.PI) : (out > 0 ? -Math.PI / 2 : Math.PI / 2), mural = (name === 'North Shops' && (i === 1 || i === 2)) || (name === 'South Flats' && i === 1);
           for (let k = 0; k < Math.floor((a1 - a0) / 5); k += 2) { const m = a0 + 2.5 + k * 5, P = (d, y) => ax ? v3(m, y, out * d) : v3(out * d, y, m), kind = SHOP_KINDS[(si++ * 3 + n) % SHOP_KINDS.length];
-            sw.vis.push({ shape: 'sign', c: P(24 - 0.062, 1.32), w: 3.1, h: 2.45, ry, mat: 'shopWin_' + kind });
-            if (!mural) sg.vis.push({ shape: 'sign', c: P(24 - 0.012, 3.4), w: 3.0, h: 0.56, ry, mat: 'shopSign_' + kind });
-            box(va, ax ? v3(m, 2.72, out * 22.79) : v3(out * 22.79, 2.72, m), ax ? v3(1.9, 0.13, 0.012) : v3(0.012, 0.13, 1.9), 'signWhite', 0, 0, 0, NC); } });
+            sw.vis.push({ shape: 'sign', c: P(24 - 0.062, 1.32), w: 3.1, h: 2.45, ry, mat: 'shopWin_' + kind, decal: 1 });
+            if (!mural) sg.vis.push({ shape: 'sign', c: P(24 - 0.012, 3.4), w: 3.0, h: 0.56, ry, mat: 'shopSign_' + kind, decal: 1 });
+            box(va, ax ? v3(m, 2.72, out * 22.767) : v3(out * 22.767, 2.72, m), ax ? v3(1.9, 0.13, 0.012) : v3(0.012, 0.13, 1.9), 'signWhite', 0, 0, 0, NC); /* in front of the awning's edge (it was half inside it) */ } });
       // street trees in pits along the inner sidewalk (each a pole with its crown an over/under, like the sakura)
       const street = (x, z) => { const tr = O('Street Tree', 'pole'); tr.round = { c: v3(x, 0, z), r: 1.1, under: 2.3, over: 4.5 }; tr.obstacle = { a: v3(x - 1.1, 0, z), b: v3(x + 1.1, 0, z), under: 2.3, over: 4.5 };
         pipe(tr, v3(x, 0, z), v3(x, 2.7, z), 0.09, 'bark'); ball(tr, v3(x, 3.4, z), 1.05, 'streetLeaf'); ball(tr, v3(x + 0.5, 3.0, z + 0.3), 0.6, 'streetLeaf'); ball(tr, v3(x - 0.45, 3.1, z - 0.35), 0.65, 'streetLeaf');
-        box(tr, v3(x, 0.014, z), v3(0.6, 0.012, 0.6), 'soil', 0, 0, 0, NC); };
+        box(tr, v3(x, 0.014, z), v3(0.6, 0.012, 0.6), 'soil', 0, 0, 0, { noCollide: true, decal: 1 }); };
       // none near the corners, where the plaza's sakura and lamps already stand (owner, 2026-11-27: "too crowded around the lightpoles … no space
       // to trippy"): six, each with room to circle
       for (const x of [-5, 5]) street(x, 13.2); for (const x of [-5, 4.5]) street(x, -13.2); street(13.2, 5); street(-13.2, 4.2);
       // benches with backs on the outer sidewalk (legs at the ends: a low gap under each), a bin beside each
       const bench = (x, z, ry, bx, bz) => { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);
         for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.2, z - u * s), v3(0.04, 0.2, 0.2), 'metal', ry); box(b, v3(x + bx, 0.75, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, NS);
-        for (const u of [-0.7, 0.7]) box(b, v3(x + u * c + bx, 0.6, z - u * s + bz), v3(0.025, 0.14, 0.025), 'metal', ry, 0, 0, NS);
+        for (const u of [-0.7, 0.7]) box(b, v3(x + u * c + bx, 0.6, z - u * s + bz), v3(0.02, 0.14, 0.018), 'metal', ry, 0, 0, NS);   // inside the back's faces (the same faces fought)
         const bn = O('Bin', 'deco'); pipe(bn, v3(x + 1.25 * c, 0, z - 1.25 * s), v3(x + 1.25 * c, 0.8, z - 1.25 * s), 0.24, 'binGreen'); };
       bench(-12, -22.55, 0, 0, -0.2); bench(11.5, 22.55, 0, 0, 0.2); bench(22.55, 11, Math.PI / 2, 0.2, 0); bench(-22.55, -12, Math.PI / 2, -0.2, 0);
       // bike racks (their rails are over/unders, like the two by the plaza)
@@ -297,6 +304,28 @@
       for (const [x, z, alongX, col] of [[12, 20.9, true, 'carRed'], [-12, -20.9, true, 'carBlue'], [5.5, -20.9, true, 'carSilver'], [20.9, -12, false, 'carBlack'], [-20.9, 11, false, 'carRed']]) { const c = O('Parked Car', 'deco');
         box(c, v3(x, 0.62, z), alongX ? v3(2.3, 0.36, 0.9) : v3(0.9, 0.36, 2.3), col); box(c, alongX ? v3(x - 0.2, 1.2, z) : v3(x, 1.2, z - 0.2), alongX ? v3(1.25, 0.25, 0.82) : v3(0.82, 0.25, 1.25), 'carGlass'); box(c, alongX ? v3(x - 0.2, 1.47, z) : v3(x, 1.47, z - 0.2), alongX ? v3(1.2, 0.03, 0.8) : v3(0.8, 0.03, 1.2), col, 0, 0, 0, NS);
         for (const d of [-1.45, 1.45]) pipe(c, alongX ? v3(x + d, 0.33, z - 0.92) : v3(x - 0.92, 0.33, z + d), alongX ? v3(x + d, 0.33, z + 0.92) : v3(x + 0.92, 0.33, z + d), 0.32, 'rubberBlack', NS); } }
+    // drawn-only clean-up where the corner blocks overlap and where balconies meet windows (owner, 2026-11-27: "textures … just on its
+    // surface"). Colliders are never touched: only what is drawn. Each corner of the outer ring has two blocks in the same square, the
+    // lower one's faces in the same planes as the taller one's: the lower one's pieces stop at the taller block's face (or go, if they
+    // are wholly inside it), and a window that runs into another block (or a balcony) is not drawn.
+    { const bb = v => { const [rx, ry, rz] = v.euler || [0, 0, 0]; if (v.shape !== 'box' || rx || ry || rz) return null; return { x0: v.c.x - v.h.x, x1: v.c.x + v.h.x, y0: v.c.y - v.h.y, y1: v.c.y + v.h.y, z0: v.c.z - v.h.z, z1: v.c.z + v.h.z }; };
+      const hit = (a, b, e = 0.001) => a.x0 < b.x1 - e && a.x1 > b.x0 + e && a.y0 < b.y1 - e && a.y1 > b.y0 + e && a.z0 < b.z1 - e && a.z1 > b.z0 + e;
+      const inBox = (a, b) => a.x0 >= b.x0 - 1e-3 && a.x1 <= b.x1 + 1e-3 && a.y0 >= b.y0 - 1e-3 && a.y1 <= b.y1 + 1e-3 && a.z0 >= b.z0 - 1e-3 && a.z1 <= b.z1 + 1e-3;
+      const BL = K.objs.filter(o => o.kind === 'building' && o.vis[0]).map(o => ({ o, b: bb(o.vis[0]) })).filter(x => x.b);
+      const BAL = K.objs.filter(o => o.name === 'Balcony').flatMap(o => o.vis.map(bb).filter(Boolean));
+      const DEC = new Set(['Window', 'Parapet', 'Facade Trim', 'Rooftop Unit', 'AC Unit', 'Stair Hut']);
+      for (const o of K.objs.filter(q => q.name === 'Balcony')) o.vis = o.vis.map(v => { const c = v3(v.c.x, v.c.y, v.c.z), h = v3(v.h.x, v.h.y, v.h.z), ax = Math.abs(c.x) > Math.abs(c.z) ? 'x' : 'z', sg = Math.sign(c[ax]), far = Math.abs(c[ax]) + h[ax];
+        if (far < 24 && far > 23.9) { const near = Math.abs(c[ax]) - h[ax]; c[ax] = sg * (near + 24) / 2; h[ax] = (24 - near) / 2; } return { ...v, c, h }; });   // drawn up to the wall (it stood 2 cm off it)
+      for (const o of K.objs) { if (!(o.kind === 'building' || DEC.has(o.name))) continue;
+        o.vis = o.vis.flatMap(v => { let a = bb(v); if (!a) return [v];
+          if (o.name === 'Window' && (BL.some(k => hit(a, k.b)) || BAL.some(q => hit(a, q)))) return [];
+          for (const k of BL) { if (k.o === o || !hit(a, k.b) || a.y1 > k.b.y1 + 1e-3) continue;
+            if (inBox(a, k.b)) return [];
+            const ax = (a.x1 - a.x0) >= (a.z1 - a.z0) ? 'x' : 'z', lo = a[ax + '0'], hi = a[ax + '1'];
+            const nlo = k.b[ax + '0'] <= lo + 1e-3 ? Math.max(lo, k.b[ax + '1']) : lo, nhi = k.b[ax + '1'] >= hi - 1e-3 ? Math.min(hi, k.b[ax + '0']) : hi;   // end on the taller block's face: no face left in the same plane as its own
+            if (nhi - nlo < 0.02) return [];
+            const c = v3(v.c.x, v.c.y, v.c.z), h = v3(v.h.x, v.h.y, v.h.z); c[ax] = (nlo + nhi) / 2; h[ax] = (nhi - nlo) / 2; v = { ...v, c, h }; a = bb(v); }
+          return [v]; }); } }
     const zones = [park.zone,
       { shape: 'zone', mat: 'asphalt', c: v3(0, 0.004, 0), h: v3(23, 0, 23) },
       { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, -23), h: v3(24, 0, 1) }, { shape: 'zone', mat: 'concrete', c: v3(0, 0.006, 23), h: v3(24, 0, 1) },

@@ -6,6 +6,18 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy Park: room round the corner trees, and no more clipping (owner, 2026-11-27)
+"on the corners of clappy park, there's a light post and a cherry tree, can we space these out more? they make it hard to trippy. there's
+also a lot of objects and textures clipping now creating odd visual errors." **Done**: the four lamps moved off the deck's corners onto the
+inner sidewalk's corners, 4.5 m from the sakura (1.7 m before). A new check (tools/clipcheck.js) found 80 places where two faces shared a
+plane in different colours, 39 thin layers with nothing to keep them on top, and 26 pieces cut by a solid; a sphere check found the six
+sidewalk sakura's crowns through awnings, walls, shop windows and utility poles. All fixed for Clappy: the sidewalk sakura are a little
+smaller and stand between the awnings; paint, paving, petals, shop windows and signs are drawn as decals (a depth offset that holds at any
+distance: the FPV camera's 4 mm near plane made a few mm of separation flicker from ~20 m); windows that ran into balconies, the other
+corner block or the HeyHey / Clappy graffiti are not drawn; the overlapping corner blocks no longer share faces. Only what is drawn changed,
+except the moved lamps and sakura (colliders, poles and over/unders, so trippies there now have room). **Open**: the same check lists
+flicker on Slackvegan (36), the ship (25) and others: a pass per map when wanted.
+
 ### Prop thrust in moving air, and how hard the props are to turn (owner: "Okay, now 2 and 3", 2026-11-27)
 From WebFPV's plant (ideas only). **(2) Inflow, on in the game**: thrust is worked out from the rotor's own inflow (blade element and
 momentum theory together) instead of a straight line in advance ratio plus an 8 % translational-lift bump. Hover is exactly as before; a
