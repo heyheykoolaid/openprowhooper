@@ -6,6 +6,12 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy's street trees thinned (owner, 2026-11-27)
+"a bit too crowded around the lightpoles and gives you no space to trippy with the green trees". **Done**: of the 15 new street trees,
+the 8 at the plaza's corners (beside the sakura and the park lamps) and the one by the Twister slide's end are gone; six stay, mid-side,
+each with room to circle. **Not changed**: the four park lamps still stand under the corner sakura's crowns (1.7 m from the trunks; the
+original layout). Open: move them out to the plaza's edge if that corner still feels tight.
+
 ### Real Betaflight on one secret test whoop? (owner asked, 2026-11-27; nothing built)
 Owner, after reading pilots' feel settings ("Not our game" on a full switch): could the firmware be tried on one hidden whoop? Answer:
 yes: Betaflight's SITL build compiled to WebAssembly, stepped by our 1 kHz loop (our physics feed it gyro / accel and the sticks, it

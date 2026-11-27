@@ -275,7 +275,9 @@
       const street = (x, z) => { const tr = O('Street Tree', 'pole'); tr.round = { c: v3(x, 0, z), r: 1.1, under: 2.3, over: 4.5 }; tr.obstacle = { a: v3(x - 1.1, 0, z), b: v3(x + 1.1, 0, z), under: 2.3, over: 4.5 };
         pipe(tr, v3(x, 0, z), v3(x, 2.7, z), 0.09, 'bark'); ball(tr, v3(x, 3.4, z), 1.05, 'streetLeaf'); ball(tr, v3(x + 0.5, 3.0, z + 0.3), 0.6, 'streetLeaf'); ball(tr, v3(x - 0.45, 3.1, z - 0.35), 0.65, 'streetLeaf');
         box(tr, v3(x, 0.014, z), v3(0.6, 0.012, 0.6), 'soil', 0, 0, 0, NC); };
-      for (const x of [-11, -5, 5, 10]) street(x, 13.2); for (const x of [-10, -5, 4.5, 11]) street(x, -13.2); for (const z of [-10, 5, 10.5]) street(13.2, z); for (const z of [-10.5, -4.2, 4.2, 10]) street(-13.2, z);
+      // none near the corners, where the plaza's sakura and lamps already stand (owner, 2026-11-27: "too crowded around the lightpoles … no space
+      // to trippy"): six, each with room to circle
+      for (const x of [-5, 5]) street(x, 13.2); for (const x of [-5, 4.5]) street(x, -13.2); street(13.2, 5); street(-13.2, 4.2);
       // benches with backs on the outer sidewalk (legs at the ends: a low gap under each), a bin beside each
       const bench = (x, z, ry, bx, bz) => { const b = O('Bench', 'deco'), c = Math.cos(ry), s = Math.sin(ry); box(b, v3(x, 0.44, z), v3(0.8, 0.04, 0.22), 'wood', ry);
         for (const u of [-0.7, 0.7]) box(b, v3(x + u * c, 0.2, z - u * s), v3(0.04, 0.2, 0.2), 'metal', ry); box(b, v3(x + bx, 0.75, z + bz), v3(0.8, 0.15, 0.025), 'wood', ry, 0, 0, NS);
