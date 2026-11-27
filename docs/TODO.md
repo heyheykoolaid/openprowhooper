@@ -1,4 +1,4 @@
-# To do (one ordered list; audited 2026-11-21)
+# To do (one ordered list; audited 2026-11-21, brought up to date 2026-11-27)
 
 How this file works: one list, in the order to do things. When an item is done, its story goes to CLAUDE.md (what was built) and the
 line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LOG.md (the rolling design doc) on the day they are made.
@@ -57,6 +57,10 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 18. **Review Hub**: a "withdraw a sent verdict" note if wanted. The "incomplete" grade waits (owner chose "crash" first).
 
 ## Watching (nothing to build; look at the data)
+- **Official scoring rules** (2026-11-25): the streak by base value to x2, bumps between tricks ending it. Watch the board and pilots'
+  comments; scores from before 2026-11-25 were made under the old rules.
+- **Double Rolling Trippy Spin** (2026-11-25): the 1.8x roll-per-lap rule is from one pilot's flights. Watch other pilots' DRT calls.
+- **Rollback / Juicy Rollback** (2026-11-23): written from RodFPV's labels; 10 unlabelled calls on other pilots' flights to look at.
 - **Open-air Split-S** and the **late-bump grade** (both 2026-11-21): no real-flight review yet. Look mid-week at what the Review queue says.
 - 12 new **Burrito Roll** calls where Jump Rope / Double Dutch used to be, and the extra slow-sweep Rolls / Flips / Powerloops: unreviewed.
 - **Bump / crash line**: tune from `node tools/grades.js` once crash grades come in.
@@ -65,6 +69,12 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - **Feel**: the real Air65 measured quicker and springier than the sim (its feedforward). Fit it once a test-card log is in.
 
 ## Waiting on the owner
+- Scoring (2026-11-25): should back-to-back tricks build the streak (they do now), and is 1.5 s the right wait before a knock between
+  tricks ends it?
+- INVERTED (2026-11-25): flat 200 a second, or more the longer it lasts? Should the streak apply to it?
+- K.W.A.D. glow (2026-11-26): an Options switch to turn it off?
+- Tyrantt's tags: build a linkable page of the game's tricks (`#tricks`, `#trick=<name>`)? (4c above)
+- Burrito Roll: the under-roll-under move has no name and scores as a Roll (decided 2026-11-23); say if that changes.
 - Disarm tricks: fly them and say whether the spin carries right (Advanced physics → Disarmed spin drag, 10 %); set the points
   (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
 - More Warehouse: look over the detail pass; should the box truck and trailer count as over/unders or only as gaps?
