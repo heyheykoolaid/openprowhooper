@@ -6,6 +6,18 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Inverted Yaw Tracking: the owner's tutorial link (2026-11-27; nothing built)
+Owner sent headmazta's "How To: Inverted Yaw Track" (YouTube, 4:56): "see how it's focused on tracking an object as you pass by it while
+inverted?" **The video could not be watched from here** (YouTube is blocked for downloads and the cloud browser showed "Video
+unavailable"); only the page text was read: the description ("an inverted yaw spin with an object at the side … which direction your yaw
+input should be depending on which side of the obstacle you're going") and two comments (slow and focused on the object; a small pitch
+before the roll so the quad ends level). Against our rule (half roll in, inverted yaw of ~180 / 270 / 360, pitch or roll out, some pole or
+tagged obstacle within 8 m and 40 deg of the camera centre for 70 % of the yaw): **proposed** (a) judge the PASS: the quad travels past one
+object and its bearing sweeps, the yaw following that sweep in direction and amount (so any amount from ~90 deg, not only 180+), which
+also tells it from an Inverted Yaw Spin beside a pole; (b) yaw direction must fit the side the object is on; (c) track any solid thing
+(buildings, cars, the fountain), not only poles and tagged bars; (d) allow the small pitch with the roll in; (e) grade clean by how
+centred the object stays. Only two labelled moments exist (one pilot). Open: the owner's go, and ideally a few labelled flights of his own.
+
 ### What else WebFPV can teach, for RaceGOW mode (owner asked, 2026-11-27; nothing built)
 Read its racing code (race.js, ghost.js, raceline.js, guide.js), its RaceGOW spec file (racegow.js, which quotes RaceGOW's own published
 rules), its track builder (warnings.js, passes.js, path.js) and its freestyle scoring (closecall.js, trickdetect.js). GPL-3.0: ideas only;
