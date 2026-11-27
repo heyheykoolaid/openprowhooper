@@ -6,6 +6,23 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### What else WebFPV can teach, for RaceGOW mode (owner asked, 2026-11-27; nothing built)
+Read its racing code (race.js, ghost.js, raceline.js, guide.js), its RaceGOW spec file (racegow.js, which quotes RaceGOW's own published
+rules), its track builder (warnings.js, passes.js, path.js) and its freestyle scoring (closecall.js, trickdetect.js). GPL-3.0: ideas only;
+RaceGOW's rules are RaceGOW's public documents, read from there. Already ours: gates in order, wrong-way, laps, sectors, deltas, 30 Hz
+ghosts, repeated / both-way passes, a lap estimate, the 25 real layouts; timing runs on the 1 kHz physics step, so a crossing needs no
+interpolation. **Ours does not have, best first**: (1) RaceGOW's actual metric, the **fastest three consecutive laps** from the one start
+gate (we keep the best single lap); (2) a **racing line to follow**: an optimised line through each opening (knots slide inside the hole,
+lean off square, cost = lap time at a cornering load, a wall for touching pipe or crossing an opening out of turn), drawn as breadcrumbs;
+our flow line is a straight polyline and the older layouts' own flight lines (`guide`) sit unused in the repo; (3) **RaceGOW's build
+rules as "Make raceable" checks**: gates enclosed (a pipe on the floor), all gates one size, adjacent centres 27-33 in apart, ground gate
+centres at 20 in or lower, a second stacked gate 42 in up, a third 69 in, 14 in from a gate centre to a pole, 36 in between poles, and
+rule 7 (no flying a gate backward to shortcut); (4) **close calls** for the trick side: skims along walls and roofs, threading between two
+things, under a deck, low passes, scored by clearance like a manual (a freestyle idea, not racing). **A question for the owner**: RaceGOW's
+rules cut the pipe at 26.5-27.25 in (a 28 in opening); 24 in is their minimum gate size, with the whole track scaled to it. Our layouts are
+built at 24 in sections (owner, 2026-11-25): so every track is at the smallest allowed scale, about 12 % smaller than the organiser's own.
+Open: which of (1)-(4) to build, and whether to move the tracks to 27 in.
+
 ### Clappy Park: room round the corner trees, and no more clipping (owner, 2026-11-27)
 "on the corners of clappy park, there's a light post and a cherry tree, can we space these out more? they make it hard to trippy. there's
 also a lot of objects and textures clipping now creating odd visual errors." **Done**: the four lamps moved off the deck's corners onto the

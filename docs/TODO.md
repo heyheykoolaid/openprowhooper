@@ -70,6 +70,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - **Feel**: the real Air65 measured quicker and springier than the sim (its feedforward). Fit it once a test-card log is in.
 
 ## Waiting on the owner
+- RaceGOW from WebFPV (2026-11-27): best 3 consecutive laps, a racing line, RaceGOW's build rules as checks, close-call scoring: which?
+  And: 24 in sections (the minimum gate) or the rules' 27 in pipe?
 - Prop load (2026-11-27): fly "Logged Air65 load" (Advanced physics → Feel). Default or not? It matches the logs' rpm, hover and current, but
   thrust to weight drops from ~5 to ~3. Momentum-theory inflow is on by default ("Straight line (old)" brings back the old thrust).
 - Scoring: should back-to-back tricks build the streak (they do now)? (The wait is 2 s: answered 2026-11-27.)
