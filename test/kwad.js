@@ -28,4 +28,8 @@ const str = k => `${k.K.trick}|${k.W.trick}|${k.A.trick}@${k.A.obj}|${k.D.trick}
       for (const t of [okT[i % okT.length], okT[(i + 3) % okT.length]]) { tot++; let hit = false; try { hit = MV.detect(MV.make(t, w, 11, { object: obj }), w, 20).some(e => e.name === t && e.obstacle === obj); } catch { hit = false; } if (hit) got++; else miss.push(`${m}: ${t} on ${obj}`); }
       i++; } }
   check('every K.W.A.D. object is on its map and the bot\'s tricks are called on it', !gone && got === tot, `${got}/${tot}${miss.length ? ' · ' + miss.slice(0, 4).join(' · ') : ''}`); }
+// a call on a part of the named object counts (owner, 2026-11-27: Powerloops round Clappy's Footbridge are called on its rail)
+{ const set = { K: { trick: 'Yaw Spin' }, W: { trick: 'Juicy Flick' }, A: { trick: 'Powerloop', obj: 'Footbridge' }, D: { trick: 'Maverick Loop', obj: 'Overhead Wires' } };
+  const k = new S.ScoreKeeper(null, set), a = k.add({ name: 'Powerloop', exec: 'CLEAN', obstacle: 'Footbridge Rail' }), b = k.add({ name: 'Maverick Loop', exec: 'CLEAN', obstacle: 'Footbridgeish' });
+  check('a Powerloop on the Footbridge Rail lights A (Footbridge); another object does not', a.kwadHit === 'A' && !b.kwadHit, `${a.kwadHit} ${b.kwadHit}`); }
 console.log(`${ok}/${n} daily K.W.A.D. checks`); if (ok < n) process.exit(1);

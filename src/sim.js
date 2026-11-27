@@ -3291,6 +3291,9 @@ const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' }
 // is the calculator's: 250 a letter, 2000 more for all four. A map with no table (the hidden ones) keeps the book's fixed set.
 const KWAD_K = ['Flip', 'Roll', 'Yaw Spin', 'Inverted Rewind'], KWAD_W = ['Double Flip', 'Double Roll', 'Juicy Flick', 'Inverted Yaw Spin', 'Vanny Roll', "Rubik's Cube"];
 const KWAD_A = ['Powerloop', 'Matty Flip', 'Split S'], KWAD_D = ['Power Flip', 'Maverick Loop', 'Matty 360', 'Immelmann', 'Power Roll'], KWAD_OBJ_TRICKS = [...KWAD_A, ...KWAD_D];
+// a call on a part of the named object counts for it: "Footbridge Rail" / "Footbridge Stairs" are the Footbridge (owner, 2026-11-27: pilots'
+// powerloops round the bridge are mostly called on its rail, which sits over the deck, so today's Powerloop on the Footbridge never lit)
+const kwadOn = (obs, ob) => !!obs && (obs === ob || obs.startsWith(ob + ' '));
 const KWAD_SPOTS = {"playground": {"Test Bar 1.6 m": [], "Test Bar 2.2 m": [], "Swing Set": [], "Monkey Bars": [], "Jungle Gym": [], "Power Lines": []}, "moose": {"Swing Set": [], "Climbing Bars": [], "Power Lines": []}, "clappy": {"Footbridge": [], "Alley Walkway": [], "Overhead Wires": [], "Test Bar 2.2 m": []}, "warehouse": {"Rack Beam": [], "Catwalk": ["Split S"], "Crane Bridge": [], "Hanging Sign": [], "Cable Tray": [], "Yard Gate": []}, "ship": {"Sawhorse Barricade": [], "Lifeboat": [], "Crime Scene Tape": []}, "slackvegan": {"Bakery Low Gate": [], "Water Tower": [], "Laundry Line": []}, "murderdome": {"Blood Oath Gantry": [], "Witness Me Finish": [], "Ring Truss": []}};
 function dailyKwad(map, day, has) {
   const T = KWAD_SPOTS[map]; if (!T || !/^\d{4}-\d\d-\d\d$/.test(String(day))) return null;
@@ -3388,7 +3391,7 @@ class ScoreKeeper {
     this.prev = ev.name;
     let kwadHit = null;
     for (const L in KWAD) { const k = this.kw ? this.kw[L] : KWAD[L], nm = k && (k.trick || k), ob = k && k.obj;   // a daily A / D letter needs its named object
-      if (nm === ev.name && (!ob || ev.obstacle === ob) && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; } }
+      if (nm === ev.name && (!ob || kwadOn(ev.obstacle, ob)) && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; } }
     let chainHit = null;
     if (CHAIN_BONUS[ev.name] && ev.exec !== 'MISSED') {
       this.chain = this.chain && this.chain.name === ev.name ? { name: ev.name, n: this.chain.n + 1 } : { name: ev.name, n: 1 };

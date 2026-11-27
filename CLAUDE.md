@@ -720,7 +720,7 @@ Flip, Maverick Loop, Matty 360, Immelmann Turn, Power Roll), each on a NAMED obj
 call's `obstacle` must be that name). `KWAD_SPOTS` (map -> object -> pool tricks not to ask for there) comes from `node
 tools/kwadspots.js`: an object is in when the bot's flight of each pool trick is called on it 3 seeds of 3 (7 maps, 28 objects; the
 hidden school and the Training Room have none and keep the book's fixed set, as do the Node tests: `new ScoreKeeper()` is unchanged).
-The bonus is the calculator's: 250 a letter, 2000 more for all four. `ScoreKeeper(totw, kwad)` takes the set; the game makes its score
+A call on a PART of the named object counts (`kwadOn`: "Footbridge Rail" is the Footbridge; owner, 2026-11-27: pilots' Powerloops round the bridge are mostly called on its rail). The bonus is the calculator's: 250 a letter, 2000 more for all four. `ScoreKeeper(totw, kwad)` takes the set; the game makes its score
 with `newScore()` at each flight start (objects missing from the pilot's own layout are never asked for). Shown: a list under the
 letters for the whole flight (`#kwadList`; owner, 2026-11-27: it used to fade after 9 s, 4.5 s after each letter), the pause menu, and per map on the daily board (not on
 the main menu: owner, 2026-11-21, "i don't like kwad being on the main screen"); K.W.A.D. COMPLETE call-out; the results line names the letters. The posted sheet is unchanged

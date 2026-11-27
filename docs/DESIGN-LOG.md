@@ -6,6 +6,13 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Today's K.W.A.D. Powerloop on Clappy's Footbridge never lit (owner asked, 2026-11-27)
+"is today's powerloop kwad objective on clappy map working for you?" The bot's Powerloop on the Footbridge was called right (6 / 6),
+but re-flying the shared Clappy flights showed pilots' Powerloops round the bridge are called on the **Footbridge Rail** 97 times and on
+the Footbridge 15 (the rail's line sits over the deck, so it wins), and the letter wanted the name exactly. Not caused by the facelift
+(the same before it). **Fixed**: a call on a part of the named object counts for the letter (`kwadOn`: "Footbridge Rail" and "Footbridge
+Stairs" are the Footbridge). Today's set: K Yaw Spin, W Juicy Flick, A Powerloop on the Footbridge, D Maverick Loop on the Overhead Wires.
+
 ### Clappy Park: all seven refinements built, every new thing counts (owner, 2026-11-27)
 "Get it all done, but make sure all of the helpers are added for the changes. we still want all the tricks/gaps to count." **Built**:
 the shade lifted (sky fill 0.9 -> 1.2, warmer ground bounce, a clear blue haze instead of the tan one); kerbs, the inner sidewalk, a
