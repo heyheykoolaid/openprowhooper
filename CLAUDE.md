@@ -1673,6 +1673,20 @@ in sight, faint through walls, a soft additive fill, bloom layer 1) and the lett
 see-through: owner, 2026-11-27);
 it goes when the letter is taken. Drawn only, rebuilt when the set, the map or the taken letters change.
 
+## Inverted Yaw Tracking is a tracked pass (owner, 2026-11-27, after headmazta's tutorial; `iyTrack`, `trackTargets`, `IYT_*` in sim.js, in `uhTick`; test/iyt.js)
+Owner: "it's focused on tracking an object as you pass by it while inverted". (The video itself could not be played from the workspace;
+the rule is from his words and the page's description.) The old table rule (half roll, inverted yaw of ~180+, something near the middle
+of the view) fired on Inverted Yaw Spins near poles. Now it is judged as the quad comes upright again (`uhTick`, 0.6-6 s on its back):
+**`iyTrack`**: held on its back (up.y under -0.8 for `IYT_FLAT` 55 %), travelling `IYT_TRAVEL` 1.2 m or more on a fairly straight path
+(chord 70 % of it) past ONE solid thing within `IYT_NEAR` 8 m (`trackTargets`: poles, and any object up to `IYT_BIG` 12 m across: cars,
+benches, the fountain), whose bearing sweeps `IYT_SWEEP` 45-220 deg, the camera's heading following it the same way (at least half the
+sweep) and within `IYT_VIEW` 35 deg of it for `IYT_FRAC` 60 % of the time; no over / under pass on its back (a Barani yaws over its
+object), no orbit of 250 deg. Read from attitude, not tokens: a slow track (under 95 deg/s) counts, any yaw amount that matches the pass;
+the right yaw direction is implied. Clean % from how centred it stayed (notes 'locked on' / 'the object drifted off centre'); the call
+names the object. The table entry stays for Train's steps; its `req.track` is the same witness. On the two labelled moments (MoPenguinz:
+the old rule's IYT calls were really Inverted Yaw Spins) the game now says Inverted Yaw Spin; over the last two days' 57 shared flights
+13 old IYT calls go and 10 new ones appear, none labelled; bench 96.7 % and stress unchanged. No confirmed real flight of one yet.
+
 ## Power Roll by its loop, look-alike hints, gap names, INVERTED pays more, a 2 s wait (owner, 2026-11-27; test/powerroll.js, gaps.js, inverted.js)
 **Power Roll** (owner: "the difference between a rubiks cube and a power roll, is an over under object, and a power roll, is more of a
 loop motion, with a roll at the top"; `powerRollWitness` / `powerRollComing`, `POWER_ROLL_SPAN` 4.5 s, `POWER_ROLL_OVER` in sim.js): his

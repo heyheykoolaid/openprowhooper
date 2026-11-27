@@ -58,6 +58,7 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 18. **Review Hub**: a "withdraw a sent verdict" note if wanted. The "incomplete" grade waits (owner chose "crash" first).
 
 ## Watching (nothing to build; look at the data)
+- **Inverted Yaw Tracking** (2026-11-27): rebuilt as a tracked pass with no confirmed real flight; needs the owner's (and others') labels.
 - **Official scoring rules** (2026-11-25): the streak by base value to x2, bumps between tricks ending it. Watch the board and pilots'
   comments; scores from before 2026-11-25 were made under the old rules.
 - **Double Rolling Trippy Spin** (2026-11-25): the 1.8x roll-per-lap rule is from one pilot's flights. Watch other pilots' DRT calls.

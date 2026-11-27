@@ -17,6 +17,12 @@ object and its bearing sweeps, the yaw following that sweep in direction and amo
 also tells it from an Inverted Yaw Spin beside a pole; (b) yaw direction must fit the side the object is on; (c) track any solid thing
 (buildings, cars, the fountain), not only poles and tagged bars; (d) allow the small pitch with the roll in; (e) grade clean by how
 centred the object stays. Only two labelled moments exist (one pilot). Open: the owner's go, and ideally a few labelled flights of his own.
+**Built (owner, same day: "Build it.")**: all five. Inverted Yaw Tracking is now a tracked pass: on its back, flying past one solid thing
+(poles, and now cars, benches, the fountain and the like), the yaw following it so it stays centred; any yaw amount, slow tracks included;
+graded by how centred the object stays. A spin on the spot, the same pass with no yaw, yawing the wrong way, a Barani's yaw over its
+object and a barrel roll round a pole are not one. The two labelled moments turned out to be corrections (the old rule's calls were really
+Inverted Yaw Spins): the game now calls both Inverted Yaw Spin. Numbers (1.2 m of travel, 45 deg of sweep, 35 deg off centre, 60 % of the
+time) are first guesses with no confirmed real flight behind them. Open: the owner flies some and labels them.
 
 ### What else WebFPV can teach, for RaceGOW mode (owner asked, 2026-11-27; nothing built)
 Read its racing code (race.js, ghost.js, raceline.js, guide.js), its RaceGOW spec file (racegow.js, which quotes RaceGOW's own published

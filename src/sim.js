@@ -1931,11 +1931,40 @@ class TrickDetector {
   uhTick(d, t) { const uy = d.up().y, U = this.uh || (this.uh = { inv: false, t0: 0 });
     if (!d.armed || d.crashed) { U.inv = false; return; }
     if (!U.inv) { if (uy < -0.6) { U.inv = true; U.t0 = t; } return; }
-    if (uy > 0.6) { U.inv = false; const T = t - U.t0; if (T >= 0.5 && T <= 4 && !this.live && this.uhuh(U.t0, t)) {
-      for (const k of this.toks) if (k.t1 > U.t0 - 0.7 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c) c.usedUntil = t;
-      this.pend = (this.pend || []).filter(p => !(p.tDone > U.t0 - 0.7));
-      this.emit({ name: 'Inverted Uh-uh', exec: 'CLEAN', clean: 88, toks: [], dur: +(T).toFixed(2), draft: true }); } }
-    else if (t - U.t0 > 4) U.inv = false; }
+    if (uy > 0.6) { U.inv = false; const T = t - U.t0, own = () => { for (const k of this.toks) if (k.t1 > U.t0 - 0.7 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c) c.usedUntil = t;
+        this.pend = (this.pend || []).filter(p => !(p.tDone > U.t0 - 0.7)); };
+      if (T >= 0.5 && T <= 4 && !this.live && this.uhuh(U.t0, t)) { own(); this.emit({ name: 'Inverted Uh-uh', exec: 'CLEAN', clean: 88, toks: [], dur: +(T).toFixed(2), draft: true }); }
+      else if (T >= IYT_MIN && T <= IYT_MAX && !Object.values(this.orb).some(o => o && this.orbSpan(o) > 250)) {   /* a pass looks like the start of an orbit to the orbit tracker: only a real lap rules it out */ const tk = this.iyTrack(U.t0, t);   // Inverted Yaw Tracking: the pass, judged as it comes upright
+        if (tk) { own(); const cl = Math.round(clamp(100 - tk.off * 1.6 - (1 - tk.frac) * 40, 40, 98));
+          this.emit({ name: 'Inverted Yaw Tracking', exec: cl >= 72 ? 'CLEAN' : 'SLOPPY', clean: cl, toks: [], dur: +(T).toFixed(2), obstacle: tk.name, draft: true,
+            notes: [`tracked ${tk.name} through ${Math.round(Math.abs(tk.sweep))}°`, tk.off < 15 ? 'locked on' : 'the object drifted off centre'] }); } } }
+    else if (t - U.t0 > IYT_MAX) U.inv = false; }
+  // Inverted Yaw Tracking's witness (owner, 2026-11-27, after headmazta's tutorial: "it's focused on tracking an object as you pass by
+  // it while inverted"): upside-down from a to b, the quad travels past ONE solid thing, the thing's bearing sweeps by, and the yaw
+  // follows it so it stays in the middle of the picture left to right. Any amount of yaw that matches the pass (a slow track makes no
+  // rotation token at all, so this reads the attitude, not tokens); the right yaw direction for the side it is on is implied (yawing
+  // the other way loses it). A spin on the spot beside a pole has no sweep; an orbit is not a pass (the path must be fairly straight).
+  trackTargets(pos, R) { if (!this.trkObjs) { const poleObj = new Set(this.poles.map(P => P.objId)); this.trkObjs = [];
+      for (const o of this.world.objs) { if (o.kind === 'edge' || o.removed || poleObj.has(o.id) || !o.prims || !o.prims.length) continue; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+        for (const q of o.prims) { if (!q.aabb) continue; x0 = Math.min(x0, q.aabb.min.x); x1 = Math.max(x1, q.aabb.max.x); y0 = Math.min(y0, q.aabb.min.y); y1 = Math.max(y1, q.aabb.max.y); z0 = Math.min(z0, q.aabb.min.z); z1 = Math.max(z1, q.aabb.max.z); }
+        if (x1 < x0 || y1 < 0.4 || Math.max(x1 - x0, z1 - z0) > IYT_BIG) continue; const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; this.trkObjs.push({ name: o.name, x: cx, z: cz, point: y => v3(cx, clamp(y, y0, y1), cz) }); } }
+    return [...this.poles, ...this.trkObjs].filter(P => Math.hypot(P.x - pos.x, P.z - pos.z) < R); }
+  iyTrack(a, b) { const A = this.fbIn(a, b), W = A.filter(x => x.up.y < -0.3); if (W.length < 20) return null;
+    if (A.filter(x => x.up.y < -0.8).length < A.length * IYT_FLAT) return null;   // held on its back, not rolling through it (a barrel roll round a pole)
+    if (this.crossLog.some(c => (c.kind === 'O' || c.kind === 'U') && c.t >= a - 0.3 && c.t <= b + 0.1)) return null;   // over or under something on its back is a loop's top (a Barani yaws there too), not a pass beside a thing
+    const c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R), wrap = v => Math.atan2(Math.sin(v), Math.cos(v)), mid = W[W.length >> 1];
+    let path = 0; for (let i = 1; i < W.length; i++) path += Math.hypot(W[i].p.x - W[i - 1].p.x, W[i].p.z - W[i - 1].p.z);
+    const chord = Math.hypot(W[W.length - 1].p.x - W[0].p.x, W[W.length - 1].p.z - W[0].p.z); if (path < IYT_TRAVEL || chord < path * 0.7) return null;
+    const cam = W.map(x => { const vx = x.f.x * c + x.up.x * s, vz = x.f.z * c + x.up.z * s; return Math.hypot(vx, vz) > 0.3 ? Math.atan2(vx, vz) : null; });
+    let yaw = 0, prev = null; for (const h of cam) { if (h == null) continue; if (prev != null) yaw += wrap(h - prev); prev = h; }
+    let best = null;
+    for (const P of this.trackTargets(mid.p, IYT_NEAR + 4)) { let sweep = 0, pb = null, k = 0, n = 0, off = 0, dmin = 1e9;
+      for (let i = 0; i < W.length; i++) { const x = W[i], dx = P.x - x.p.x, dz = P.z - x.p.z, dd = Math.hypot(dx, dz); dmin = Math.min(dmin, dd); const be = Math.atan2(dx, dz); if (pb != null) sweep += wrap(be - pb); pb = be;
+        n++; if (cam[i] != null) { const e = Math.abs(wrap(cam[i] - be)) * R2D; if (e < IYT_VIEW) { k++; off += e; } } }
+      if (dmin > IYT_NEAR || dmin < 0.25 || Math.abs(sweep) * R2D < IYT_SWEEP || Math.abs(sweep) * R2D > 220) continue;
+      if (yaw * sweep <= 0 || Math.abs(yaw) < Math.abs(sweep) * 0.5) continue; const frac = k / n; if (frac < IYT_FRAC) continue;
+      if (!best || frac > best.frac) best = { name: P.name, frac, off: off / Math.max(1, k), sweep: sweep * R2D, yaw: yaw * R2D }; }
+    return best; }
   // Corner Climb (owner, 2026-11-23: the masterclass's building-corner trippy "is its own trick"): in the trippy's look (the corner held
   // up in the picture; rolled over, or flown flatter with roll and yaw opposed), swinging round an upright corner of a wall or
   // building one way and back the other, never a full lap, and climbing. Each swing must reach both faces of the corner (a pass
@@ -2126,6 +2155,9 @@ class TrickDetector {
 const SEG_GAP = 0.18;
 const SLOW_TH = 30, SLOW_MAX = 2.5;   // slow-pitch continuation inside loops near an obstacle
 const KNIFE_X = 4, NINJA_X = 3, SWITCH_LAPS = 1, HORIZON_VIEW = 55, QUAD_W = 0.09;   /* the site's sizes (owner, 2026-11-23): Knife Edge through a gap up to 4 whoops wide, Ninja Star up to 3; a Trippy Switch needs a whole lap the other way; a Barani's yaw starts once the horizon is in view (camera at most this far above it), else it is a Power Swap */   // Knife Edge: gaps no wider than ~2.75 quad widths (owner: "about two" — an Air65 is 0.082 m across, so the playground's 0.22 m Wall Slot is one; a 0.7 m gate is not)
+// Inverted Yaw Tracking: 0.6-6 s upside-down, 1.2 m or more travelled past a thing no further than 8 m (no wider than 12 m), its bearing
+// sweeping 45 deg or more, held within 35 deg of the picture's centre line for 60 % of it
+const IYT_MIN = 0.6, IYT_MAX = 6, IYT_TRAVEL = 1.2, IYT_NEAR = 8, IYT_BIG = 12, IYT_SWEEP = 45, IYT_VIEW = 35, IYT_FRAC = 0.6, IYT_FLAT = 0.55;
 const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
 // "air" between the segments of a trick (pilot feedback): whoop tricks are built from basic segments, and real pilots
 // leave some space between them (to set up for an object, or just float). Up to AIR_OPEN s between two rotations still
@@ -2157,7 +2189,7 @@ class StreamDetector extends TrickDetector {
     for (const o of this.world.objs) { if (o.kind !== 'building' && o.kind !== 'wall') continue;
       for (const p of o.prims || []) { if (p.type !== 'box' || p.leaf || Math.abs(p.m[4]) < 0.99 || p.h.y < 1.5 || Math.max(p.h.x, p.h.z) < 0.5) continue;
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) this.corners.push({ name: o.name, objId: o.id, x: p.c.x + p.m[0] * p.h.x * sx + p.m[2] * p.h.z * sz, z: p.c.z + p.m[6] * p.h.x * sx + p.m[8] * p.h.z * sz, y0: p.c.y - p.h.y, y1: p.c.y + p.h.y, n1: { x: p.m[0] * sx, z: p.m[6] * sx }, n2: { x: p.m[2] * sz, z: p.m[8] * sz } }); } }
-    this.poles = [];
+    this.poles = []; this.trkObjs = null;
     for (const o of this.world.objs) {
       if (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall') continue;
       if (o.kind === 'pilot') { const c = o.prims.find(p => p.type === 'sphere').c; this.poles.push({ id: o.id * 100, objId: o.id, name: 'the pilot', x: c.x, z: c.z, y0: 0, y1: 1.8, point: y => v3(c.x, clamp(y, 0, 1.8), c.z) }); continue; }
@@ -2569,7 +2601,7 @@ class StreamDetector extends TrickDetector {
     if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
     if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
     if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
-    if (req.track) { const yk = toks.find(k => k.ax === 'Y'); if (this.trackFrac(yk ? yk.t0 : t0, yk ? yk.t1 : t1) < req.track) return null; }   // the yaw segment itself keeps it centred (not the air around it)
+    if (req.track) { const yk = toks.find(k => k.ax === 'Y'), tk = this.iyTrack((yk ? yk.t0 : t0) - 0.1, (yk ? yk.t1 : t1) + 0.1); if (!tk) return null; out.obstacle = out.obstacle || tk.name; }   // the yaw segment itself keeps it centred (not the air around it)
     if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2) && !(toks.length >= 2 && toks[1].t0 - toks[0].t1 >= 0.2)) return null;
     return out;
   }
@@ -2583,7 +2615,7 @@ class StreamDetector extends TrickDetector {
     if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2)) return false;   // a continuous flip can't become a segmented one
     if (req.rewindIn && !(this.hst.slowT != null || this.rewinds.some(x => x.t1 >= t0 - 0.3))) return false;
     if (req.endBack && Math.hypot(d.vel.x, d.vel.z) > 2.5 && this.backFrac(this.time - 0.2, this.time) < 0.2) return false;
-    if (req.track && !this.poles.some(P => Math.hypot(d.pos.x - P.x, d.pos.z - P.z) < 6)) return false;
+    if (req.track && !this.trackTargets(d.pos, IYT_NEAR + 2).length) return false;
     return true;
   }
   toksIn(a, b) { return this.normalized().filter(x => x.t1 > a && x.t0 < b); }
