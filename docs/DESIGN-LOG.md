@@ -6,6 +6,12 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Clappy Park: 5 % brighter, and refinements proposed (owner, 2026-11-27)
+"clappy park is a little dark, can we brighten it by about 5%? what visual refinements could we make to the map?" **Done**: the sky
+fill and sun 5 % brighter on Clappy only. **Proposed, not built** (from four check views): lift the shadows themselves (the shade is
+near-black because the sky fill is low), road paint and crosswalks, a paved plaza with planters, petals and variety in the sakura,
+storefronts and more facade detail, clouds and a distant skyline. Open: which of these to do.
+
 ### The owner's answers on the waiting list, and Power Roll vs Rubik's Cube (2026-11-27)
 "Ready to build, 1, 2 and 6. waiting: 1: 2s is good. pay more the longer it lasts, yes. yes to glow option. box truck, yup!"
 - **Decided / built**: a knock between tricks now waits 2 s before it ends the streak; INVERTED pays more the longer it lasts (200, then

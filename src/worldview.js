@@ -709,6 +709,7 @@ function buildScene() {
   const IND = world.theme === 'industrial';   // More Warehouse: indoors, under a roof with skylights; lit mostly by its own lights
   const PNW = world.theme === 'pnw';   // Moose Knuckle Park: cool, leafy shade in an inland-BC mountain town
   const VICE_ = world.theme === 'vice', DUSK_ = world.theme === 'dusk', NYC_ = world.theme === 'nyc';
+  const PARK_ = world.theme === 'park', LIFT = PARK_ ? 1.05 : 1;   // Clappy Park: 5 % brighter (owner, 2026-11-27: "a little dark")
   const LAB = world.theme === 'lab';   // the Training Room: flat, even, shadowless light from the high windows; nothing else   // Slackvegan City: golden hour down the avenue
   if (VAPOR) vaporBackdrop(); else if (VICE_) viceBackdrop(); else if (DUSK_) duskBackdrop(); else {
   // sky
@@ -721,9 +722,9 @@ function buildScene() {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.renderOrder = -4000; playRoot.add(sky);   // drawn first: the backdrops' mountains paint over it
   // lights
-  if (LAB) playRoot.add(new THREE.HemisphereLight(0xf2f5f7, 0x9a9da0, 2.7)); else playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
+  if (LAB) playRoot.add(new THREE.HemisphereLight(0xf2f5f7, 0x9a9da0, 2.7)); else playRoot.add(new THREE.HemisphereLight(NYC_ ? 0xffd8b4 : IND ? 0xdfe6f0 : PNW ? 0xb8cfe6 : 0xa9c0e0, NYC_ ? 0x6a5244 : IND ? 0x6a645a : PNW ? 0x74684e : 0x5a4532, (NYC_ ? 1.7 : IND ? 1.9 : PNW ? 2.1 : 0.9) * LIFT));   // Moose: brighter sky fill and ground bounce, so the shade under the cedars stays readable for trippies (owner, 2026-11-19)
   // Moose: a clear winter afternoon, low sun from the south-west (the owner's photos from the four corners, 2026-11-19)
-  const sun = new THREE.DirectionalLight(NYC_ ? 0xffb066 : PNW ? 0xffe2bc : 0xffcf98, NYC_ ? 3.1 : PNW ? 2.7 : 2.6);
+  const sun = new THREE.DirectionalLight(NYC_ ? 0xffb066 : PNW ? 0xffe2bc : 0xffcf98, (NYC_ ? 3.1 : PNW ? 2.7 : 2.6) * LIFT);
   if (NYC_) sun.position.set(-62, 17, 9); else if (PNW) sun.position.set(-26, 17, 30); else sun.position.set(-30, 22, 18);   /* Slackvegan: low in the west, straight down the avenue: long golden shadows */ sun.castShadow = !LAB; if (LAB) sun.intensity = 0.55;   /* (a comment ending the line above once swallowed this: no sun position or shadows on any map) */
   sun.shadow.mapSize.set(2048, 2048); const sh = sun.shadow.camera; { const B = world.bounds || { x: [-32, 32], z: [-32, 32] }, R = Math.max(32, ...B.x.map(Math.abs), ...B.z.map(Math.abs)) + 4; if (world.id === 'playground') { sh.left = -56; sh.right = 32; } else { sh.left = -R; sh.right = R; sh.top = R; sh.bottom = -R; if (R > 48) sun.shadow.mapSize.set(4096, 4096); } if (world.id === 'playground') { sh.top = 32; sh.bottom = -32; } sh.far = Math.max(120, R * 2.6); } sh.near = 1; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   playRoot.add(sun); playRoot.add(sun.target);

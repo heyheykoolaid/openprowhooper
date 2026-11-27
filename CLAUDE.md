@@ -313,7 +313,7 @@ stacks, barrels, a forklift, and outside a Loading Dock and a Trailer. Its 18 Hi
 brightens the hemisphere (1.9: the pilot found the first version far too dark). Detail pass (2026-11-17): Clappy's
 buildings have windows, floor bands, parapets, rooftop units, water tanks (over/unders) and stair huts (`MAT.glass`);
 the footbridge stairs climb from the plaza onto its west end; balance beams stand on posts; the ladder has rails.
-Destructible or moving props from the brief are not in (the physics world is static). **2026-11-21** (owner): the Mezzanine Stairs stand
+Destructible or moving props from the brief are not in (the physics world is static). **2026-11-27** (owner: "a little dark"): Clappy's sky fill and sun are 5 % brighter (`LIFT` in worldview.js, theme 'park' only); `tools/map_thumbs.py --extra --only=clappy` shoots plaza / street / shops / high views. **2026-11-21** (owner): the Mezzanine Stairs stand
 flush against the deck's west end and rise to its top, with a handrail each side, a rail along the deck's west edge that stops where
 the top steps come on and a corner post; `Trailer underside` is a gap (between its legs and wheels: the low-gap survey skips boxes
 over 6 m long). **The detail pass and the moving conveyor** (owner, same day; the block at the end of `buildWarehouse`, its own random
