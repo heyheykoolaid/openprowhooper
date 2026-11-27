@@ -6,6 +6,15 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### Real Betaflight on one secret test whoop? (owner asked, 2026-11-27; nothing built)
+Owner, after reading pilots' feel settings ("Not our game" on a full switch): could the firmware be tried on one hidden whoop? Answer:
+yes: Betaflight's SITL build compiled to WebAssembly, stepped by our 1 kHz loop (our physics feed it gyro / accel and the sticks, it
+hands back motor outputs) in place of `FlightController`, for one preset only, shown to the owner like Train; its flights tagged so the
+tools know which controller flew them; then the same Blackbox-log comparison as Feel Lab against our controller. **The catch to decide
+first**: Betaflight is GPL-3.0 and the repo has no licence, so serving the compiled firmware in the public build (even hidden) would
+make the game a GPL work. Way round it: the owner builds or downloads the .wasm himself and loads it from his own disk (never in the
+repo or the build). Open: which way, and whether to try it at all.
+
 ### WebFPV runs real Betaflight in WebAssembly: does ours? (owner asked, 2026-11-27; nothing built)
 No: ours is a Betaflight-style flight controller written in JS (`FlightController` in sim.js): Actual and Betaflight rates, PID with
 feedforward, airmode, I-term relax, gyro / D-term lowpass filters (types and dynamic cutoffs as Betaflight's), TPA, anti-gravity, thrust
