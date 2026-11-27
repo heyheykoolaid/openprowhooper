@@ -588,10 +588,10 @@ function deskQueue() {
   const guestQ = deskVia() === 'guest';
   for (const it of desk.list || []) { const i = desk.info[it.file]; if (!i || i.bad) continue; if (guestQ && mine(i.p.name)) continue; const p = i.p, spans = deskLabsFor(i.id).flatMap(x => x.T || []);
     const near = (t, T) => t >= T[0] - 1.5 && t <= T[1] + 2.5, answered = t => spans.some(T => near(t, T) && !(T[2] && !mine(T[4]))), age = Math.max(0, (Date.now() - it.at) / 86400000), per = [];
-    const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), `; ${k} other pilot${k === 1 ? ' has' : 's have'} labelled this trick on other flights`] : [0, '']; };
+    const boost = n => { const k = others[n] ? others[n].size : 0; return k ? [Math.min(20, 10 * k), ''] : [0, ''];  /* owner, 2026-11-27: the count still ranks the row, but is not shown */ };
     // what was said AT this moment, by whom (owner, 2026-11-25: "see what other people have labelled the trick as"): every label whose span covers it
-    const saidAt = t => { const seen = new Set(), o = []; for (const T of spans) if (near(t, T)) { const k = `${String(T[4]).toLowerCase()}|${T[3]}`; if (!seen.has(k)) { seen.add(k); o.push(`${T[4] || 'a pilot'}: ${T[3]}`); } } return o.slice(0, 4); };
-    const hereTxt = t => { const o = saidAt(t); return o.length ? `; labelled here: ${o.join(', ')}` : '; nobody has labelled this moment yet'; };
+    const saidAt = t => { const seen = new Set(), o = []; for (const T of spans) if (near(t, T)) { const k = `${String(T[4]).toLowerCase()}|${T[3]}`; if (!seen.has(k)) { seen.add(k); o.push(T[3] === 'not a trick' ? `${T[4] || 'a pilot'} said it was not a trick` : `${T[4] || 'a pilot'} labelled it ${T[3]}`); } } return o.slice(0, 4); };
+    const hereTxt = t => { const o = saidAt(t); return o.length ? `; ${o.join('; ')}` : '; nobody has labelled this moment yet'; };
     for (const e of Array.isArray(p.events) ? p.events : []) { if (!e || !Number.isFinite(e.t) || typeof e.name !== 'string' || e.name === 'Crash' || e.name === 'near') continue;
       const c = Number.isFinite(e.conf) ? e.conf : 1, pc = `${Math.round(c * 100)} %`;
       const r = e.flagged ? [100, 'the pilot flagged this call as wrong (F)'] : e.maybe ? [60, "the trick library's guess (a maybe)"] : c < 0.5 ? [50 + (0.5 - c) * 40, `the game was very unsure (${pc})`] : c < 0.7 ? [30 + (0.7 - c) * 50, `the game was unsure (${pc})`] : null;

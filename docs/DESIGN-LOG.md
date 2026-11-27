@@ -4,6 +4,14 @@ A running record of what the owner and Claude decide and why, newest first. One 
 decided, what was left open. docs/TODO.md is the ordered list of what to do; CLAUDE.md says how things are built; this file keeps
 the reasoning so it is not lost between sessions. **Add an entry whenever a design question is discussed, even when nothing is built.**
 
+## 2026-11-27
+
+### Review queue rows: who labelled it, not how many labelled the trick elsewhere
+The owner: the row should not say "6 other pilots have labelled this trick", "as that's kinda irrelevant to the person clicking on it,
+what it should show, is if someone else labelled it, and what they labelled it as." **Done**: that sentence is gone (the count still
+moves such rows up the queue, unseen); each label at the moment reads "RodFPV labelled it Trippy Spin" or "RodFPV said it was not a
+trick"; with none, "nobody has labelled this moment yet".
+
 ## 2026-11-26
 
 - **K.W.A.D. objects glow** (mistawintaz: "had too much trouble finding the cable tray"; owner: "Yup!"). Only the A / D objects of the

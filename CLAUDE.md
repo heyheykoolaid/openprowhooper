@@ -1556,7 +1556,7 @@ lights Auto drops to Few on slow machines.
 ## Queue rows say who labelled what; Tricktionary search (owner, 2026-11-25)
 `deskQueue` (dropoff.js): each row's `why` names the game's call, the labels whose span covers that moment with their pilot
 (`saidAt`, `hereTxt`: "labelled here: <name>: <trick>" or "nobody has labelled this moment yet"; `q.said`), and the ranking boost
-reads "N other pilots have labelled this trick on other flights" (it was read as "at this moment"). Vote rows carry `isVote`.
+is no longer shown (owner, 2026-11-27: "kinda irrelevant to the person clicking on it"; the count still ranks the row). Each label at the moment reads "<name> labelled it <trick>" (or "said it was not a trick"). Vote rows carry `isVote`.
 The Tricktionary has a search box in its top bar (`#tSearch`, `trickFilter` in menus.js; rows carry `data-tq` = name, category,
 difficulty in lower case; every typed word must match; categories with no match hide; Esc clears it).
 
