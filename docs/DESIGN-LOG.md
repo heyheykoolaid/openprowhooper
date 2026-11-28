@@ -6,6 +6,11 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-28
 
+### The source reformatted (owner, 2026-11-28: "If reformatting helps you and the health of this game, then do it")
+Done as its own commit: every game source file is now one statement a line (Prettier). No behaviour change: the syntax trees are identical,
+all tests pass, the built game was loaded and a flight played back in a browser. The page is 3 % bigger compressed. The two data files and
+the test / tool scripts were left as they were. From now on the formatter is run after each edit.
+
 ### Wall pull and ceiling pull built; the reformat question (owner, 2026-11-28: "1 and 2, yes")
 - **Built from the papers' own fits**: beside a wall a whoop is drawn toward it (and tips toward it); right under a ceiling it lifts a
   little more. On by default in the game, a slider each, off in the tests.

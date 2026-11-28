@@ -432,7 +432,7 @@ local hosts (name, builds, tune moved; owner key and token not).
 ## Performance (2026-11-17, testers reported heavy CPU) — the overlay is Options → Graphics or F3
 - **Static batching** (`staticAdd` / `staticFlush` in worldview.js): scenery pieces that share a material, shadow settings,
   glow and a 32 m patch are merged into one mesh (draw calls 800–2000 → 180–400). `store 'mergeStatic'` false turns it off
-  for comparison. Never add a `//` comment mid-line in these one-line statements: it swallowed `playRoot.add` once.
+  for comparison. (The source was one long line per function then, and a `//` comment mid-line swallowed `playRoot.add` once; since the 2026-11-28 reformat that cannot happen.)
 - **Input lag** (2026-11-19, low-end testers: "fps looked fine, the controls felt sluggish"): the detector ran inside the physics
   loop, before the frame was drawn (Moose: 4.2 ms of detector a frame on a fast PC vs 1.3 ms of physics; several times that on a
   slow one), so it sat between reading the sticks and the picture. Now play.js runs the physics, draws, and only then judges the
@@ -1744,7 +1744,7 @@ to learn which suites the checks ask for, runs them together, then the checks re
 queue use the same code). **.github/workflows/relay.yml** uploads tools/dropoff-worker.mjs to the Cloudflare Worker when it changes (code
 only: variables, secrets and KV bindings stay), once the repo has the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; without
 them it does nothing. **Not run against Cloudflare from here.** **Map thumbnails** re-shot (2026-11-28); Clappy's view takes in the
-footbridge, pagoda and East Campus, Slackvegan's looks down the avenue beside the El. Not done: reformatting the one-line source, trimming this file.
+footbridge, pagoda and East Campus, Slackvegan's looks down the avenue beside the El. Not done: trimming this file.
 
 ## Air near surfaces: wall pull and ceiling pull (owner, 2026-11-28: "1 and 2, yes"; `tune.wallPull`, `tune.ceilPull` in `Drone.step`; test/surfaces.js)
 From published measurements, not by feel. Both absent = the physics and its hash unchanged; the game fills in 1 for each (`WALL_PULL_DEF`,
@@ -1758,3 +1758,11 @@ onto it in ~0.6 s; 0.5 m away nothing. **Ceiling** (Hsiao and Chirarattananon's 
 (1/2 + 1/2 sqrt(1 + 1 / (8 z²))), z = gap / R, capped +50 %, upright only; a whoop's props cannot get nearer a flat ceiling than ~1.5 R, so
 it is under 1 % of throttle at touching distance and gone 5 cm below. **Not built**: a duct thrust term for forward flight (no usable numbers found),
 the stronger micro-scale ground effect the same paper measured (about twice Cheeseman-Bennett, to 4 R: the Ground cushion slider at 200 % is close).
+
+## Source format (owner, 2026-11-28: "If reformatting helps you and the health of this game, then do it")
+`src/*.js` is formatted by Prettier 3.3.3 (`.prettierrc.json`: 140 columns, single quotes, no trailing commas; `.prettierignore` leaves
+`meshes.js` and `tricks.js`, which are data). **Run `npm run format` after editing src/** (`npm run format:check` to see); write new code
+one statement a line. The reformat commit is in `.git-blame-ignore-revs`. It changed no behaviour: every file's syntax tree is identical
+before and after, all suites pass, and the built page was loaded and flown back in a browser. src went from 15,400 to 48,900 lines;
+the page 3.18 -> 3.39 MB (1.06 -> 1.09 MB gzipped). test/ and tools/ are still in the old dense style. Tests that read source as
+text must allow for line breaks (test/browser.js, powerroll.js, coach.js were adjusted).
