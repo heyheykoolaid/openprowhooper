@@ -6,6 +6,17 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-28
 
+### Wall pull and ceiling pull built; the reformat question (owner, 2026-11-28: "1 and 2, yes")
+- **Built from the papers' own fits**: beside a wall a whoop is drawn toward it (and tips toward it); right under a ceiling it lifts a
+  little more. On by default in the game, a slider each, off in the tests.
+- **What the numbers say**: the wall pull is gentle (about 3 % of the whoop's weight with the ducts on the wall, nothing beyond a few
+  centimetres). The ceiling effect is tiny for a whoop (under 1 % of throttle), because the props sit too far under the top of the frame;
+  the papers' big ceiling numbers are for bare props a few millimetres from the ceiling. If real whoops stick to ceilings more than this,
+  the ducts are doing it and no paper found gives that number: the owner's feel is the guide (slider to 200 %).
+- **Not built**: a duct term for forward flight (no numbers), a stronger ground cushion (the Ground cushion slider already does it).
+- **Reformat**: no branch is open now, so nothing would need redoing; the weekly community run opens one each week, and if the reformat
+  landed while one was open Claude would redo that branch's changes. Waiting for the owner's yes.
+
 ### Upkeep and map polish (owner, 2026-11-28: "6 and 7"; then "update the screenshots for the maps")
 - **Flicker**: instead of editing five maps piece by piece, the game now finds coplanar faces and thin overlays when it builds a map and
   draws the smaller one a hair in front. Only what is drawn changes. The checker reads 0 flicker on every map; five small "cut" cases are left.

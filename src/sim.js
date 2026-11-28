@@ -829,6 +829,25 @@ class Drone {
     let sumW = 0;
     // ground effect: height under thrust axis (approx world-down to ground or top surfaces)
     const hGround = this.heightAbove();
+    // Air near surfaces (owner, 2026-11-28; absent = none, the physics and its hash unchanged; the game fills both in):
+    //   tune.wallPull  a ducted rotor beside a wall is drawn toward it and lifts a little more: per rotor a force of
+    //                  0.21 x 0.34^(d/R) of its thrust toward the wall and thrust x (1 + 0.06 x 0.54^(d/R)), d from the rotor's centre
+    //                  (the fits of Ding, Bai, Dong and Chirarattananon, npj Robotics 2023, measured on a small ducted quadrotor)
+    //   tune.ceilPull  under a ceiling a rotor lifts more, thrust x (1/2 + 1/2 sqrt(1 + 1 / (8 z^2))), z = gap / R (Hsiao and
+    //                  Chirarattananon's model, which Carter et al. found to hold on a micro quadrotor down to z ~ 0.5)
+    // Flat faces of boxes only (walls, slabs, decks); poles and round things have none.
+    const WPl = +this.tune.wallPull || 0, CPl = +this.tune.ceilPull || 0; let nearW = null, nearC = null, offW = null;
+    if ((WPl || CPl) && this._hb && this._hb.list.length) {
+      const P = this.pos, RNG = p.arm + 2.5 * p.D; let dW = RNG, dC = RNG;
+      for (const pr of this._hb.list) { const a = pr.aabb; if (P.x + RNG < a.min.x || P.x - RNG > a.max.x || P.z + RNG < a.min.z || P.z - RNG > a.max.z || P.y + RNG < a.min.y || P.y - RNG > a.max.y) continue;
+        const M = pr.m, h = pr.h, dx = P.x - pr.c.x, dy = P.y - pr.c.y, dz = P.z - pr.c.z;
+        const lx = M[0] * dx + M[3] * dy + M[6] * dz, ly = M[1] * dx + M[4] * dy + M[7] * dz, lz = M[2] * dx + M[5] * dy + M[8] * dz;
+        const ex = lx - clamp(lx, -h.x, h.x), ey = ly - clamp(ly, -h.y, h.y), ez = lz - clamp(lz, -h.z, h.z), d = Math.hypot(ex, ey, ez); if (d < 1e-4 || d >= RNG) continue;
+        const n = v3(-(M[0] * ex + M[1] * ey + M[2] * ez) / d, -(M[3] * ex + M[4] * ey + M[5] * ez) / d, -(M[6] * ex + M[7] * ey + M[8] * ez) / d);   // from the quad to the surface
+        if (WPl && Math.abs(n.y) < 0.5 && d < dW) { dW = d; nearW = { n, d }; }
+        if (CPl && n.y > 0.7 && d < dC) { dC = d; nearC = { n, d }; } }
+      if (nearW || nearC) { offW = p.motors.map(m => qrot(this.q, m.pos)); if (nearW) { nearW.nB = qinv(this.q, nearW.n); nearW.k = WPl * (1 - Math.abs(dot(up, nearW.n))); } }
+    }
     for (let i = 0; i < 4; i++) {
       const m = p.motors[i];
       const duty = outD[i] || 0;   // signed in 3D mode: a negative duty drives the motor backward
@@ -869,12 +888,17 @@ class Drone {
       { const wf = this.feel ? this.feel.washFeel : 1; T *= (1 - 0.22 * vrs * wf) * (1 + 0.38 * turb * wf * this.noise[i]); }
       // ground effect (Cheeseman-Bennett), only when roughly upright over a surface
       if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6), ge = clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); T *= 1 + (ge - 1) * (this.feel ? this.feel.groundFeel : 1); }
+      let side = 0;
+      if (offW && sW > 0) { const R = p.D / 2;
+        if (nearC && up.y > 0.5) { const z = Math.max(0.3, (nearC.d - dot(offW[i], nearC.n)) / R); if (z < 3) T *= 1 + Math.min(0.5, 0.5 * Math.sqrt(1 + 1 / (8 * z * z)) - 0.5) * CPl; }
+        if (nearW && nearW.k > 0) { const db = Math.max(0, nearW.d - dot(offW[i], nearW.n)) / R; if (db < 5) { T *= 1 + 0.06 * Math.pow(0.54, db) * nearW.k; side = 0.21 * Math.pow(0.34, db) * nearW.k * Math.max(0, T); } } }
       T = Math.max(0, T); if (sW < 0) T *= -p.revEff;   // spun backward the prop pushes the other way, and (unless it is a 3D prop) not as hard
       this.thrust[i] = T;
       sumW += Math.abs(w);
       Fb.y += T;
       const tq = cross(m.pos, v3(0, T, 0));
       Tb.x += tq.x; Tb.y += tq.y; Tb.z += tq.z;
+      if (side) { const f = mul(nearW.nB, side), t2 = cross(m.pos, f); Fb.x += f.x; Fb.y += f.y; Fb.z += f.z; Tb.x += t2.x; Tb.y += t2.y; Tb.z += t2.z; }
       Tb.y += -m.spin * sW * (p.cq * RHO * n * n * Math.pow(p.D, 5));
     }
     Tb.y += rotorAccelYaw;

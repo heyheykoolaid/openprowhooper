@@ -90,7 +90,7 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - Old review screens: off the menus since 2026-11-28 (say if either should come back).
 - Relay auto-deploy: add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the repo (see .github/workflows/relay.yml).
 - Source reformat (every statement on its own lines): yes or no? It rewrites every file once.
-- Physics from outside research (2026-11-28): duct thrust and wall suction, a ceiling effect, checking inflow against NeuroBEM. Which?
+- Wall pull and ceiling pull (2026-11-28, on by default): fly beside walls and under ceilings; say if either should be stronger (sliders in Advanced physics → Feel). Still open from the research: checking inflow against NeuroBEM.
 - Set real points for Half Matty Pendulum (1050), Juicy Tornado (350) and Wall Stick (200): placeholders today.
 - Daily K.W.A.D.: are the four pools right (K basics, W a step up, A the three classics, D harder), and should Free Fly count letters?
 - Edit the coaching cues' wording.

@@ -35,6 +35,9 @@ const WALL_GRIP_DEF = 0.9; if (tune.wallGrip == null) tune.wallGrip = WALL_GRIP_
 // feels. At 1 (the physics as built) a cut flip stopped within a quarter turn; a real whoop tumbles on. The game fills in 0.1: a
 // first guess, to be set from the owner's own disarm flips. Node keeps none, so the physics hash is unchanged.
 const DEAD_SPIN_DEF = 0.1; if (tune.deadSpin == null) tune.deadSpin = DEAD_SPIN_DEF;
+// Air near surfaces (tune.wallPull, tune.ceilPull; owner, 2026-11-28, from published measurements: sim.js Drone.step): a ducted whoop
+// beside a wall is drawn toward it, and right under a ceiling it lifts a little more. Node keeps neither, so the physics hash is unchanged.
+const WALL_PULL_DEF = 1, CEIL_PULL_DEF = 1; if (tune.wallPull == null) tune.wallPull = WALL_PULL_DEF; if (tune.ceilPull == null) tune.ceilPull = CEIL_PULL_DEF;
 // Battery drain (tune.drain): the motor model alone draws a third of what a real whoop does (Blackbox, 2026-11-19: a real Air65 hovers
 // on 10-14 W, the sim on 5-6 W); fitted on three quads' logs to 3.0-3.3 (4.3 on a cold, windy day). Absent in the physics = 1.
 // Props fitted to a real whoop's hover rpm (owner, 2026-11-19: "about 34,000 rpm, just to try"): thrust ×1.31, torque ×1.8

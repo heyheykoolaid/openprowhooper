@@ -64,6 +64,7 @@ const checks = [
   ['prop inflow and figure of merit (momentum theory thrust, cq from ct)', () => { const o = run('inflow.js'); const m = o.match(/(\d+)\/(\d+) inflow checks/); return m && m[1] === m[2] ? null : o; }],
   ['inverted yaw tracking (a pass tracked while upside-down; not a spin, not the wrong way)', () => { const o = run('iyt.js'); const m = o.match(/(\d+)\/(\d+) inverted yaw tracking checks/); return m && m[1] === m[2] ? null : o; }],
   ['wall grip (a whoop pushed into a wall sticks; idle, it falls)', () => { const o = run('wallgrip.js'); const m = o.match(/(\d+)\/(\d+) wall grip checks/); return m && m[1] === m[2] ? null : o; }],
+  ['air near surfaces: a wall draws a hovering whoop in, a ceiling lifts it a little, off = the physics as it was', () => { const o = run('surfaces.js'); return /(\d+)\/\1 surface checks/.test(o) ? null : o; }],
   ['long runs in pieces, idle squeezed out (flight telemetry)', () => { const o = run('pieces.js'); const m = o.match(/(\d+)\/(\d+) piece checks/); return m && m[1] === m[2] ? null : o; }],
   ['knowledge bot (Judge the Bot flies the trick library\'s confirmed examples)', () => { const o = run('knowledgebot.js'); const m = o.match(/(\d+)\/(\d+) knowledge bot checks/); return m && m[1] === m[2] ? null : o; }],
   ['half matty pendulum (three chained half mattys = one trick)', () => { const o = run('pendulum.js'); const m = o.match(/(\d+)\/(\d+) pendulum checks/); return m && m[1] === m[2] ? null : o; }],

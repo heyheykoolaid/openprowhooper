@@ -1745,3 +1745,16 @@ queue use the same code). **.github/workflows/relay.yml** uploads tools/dropoff-
 only: variables, secrets and KV bindings stay), once the repo has the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; without
 them it does nothing. **Not run against Cloudflare from here.** **Map thumbnails** re-shot (2026-11-28); Clappy's view takes in the
 footbridge, pagoda and East Campus, Slackvegan's looks down the avenue beside the El. Not done: reformatting the one-line source, trimming this file.
+
+## Air near surfaces: wall pull and ceiling pull (owner, 2026-11-28: "1 and 2, yes"; `tune.wallPull`, `tune.ceilPull` in `Drone.step`; test/surfaces.js)
+From published measurements, not by feel. Both absent = the physics and its hash unchanged; the game fills in 1 for each (`WALL_PULL_DEF`,
+`CEIL_PULL_DEF` in game.js; Advanced physics → Feel → Wall pull / Ceiling pull, 0-200 %; in `summary.feel`). Each step the nearest flat face of
+a box within arm + 2.5 D of the quad is found (the ground-effect near list `_hb`; OBB closest point; a sideways face = wall, a face above =
+ceiling; poles and round things have none). **Wall** (Ding, Bai, Dong, Chirarattananon, npj Robotics 2023, a small ducted quadrotor): per
+rotor, a force toward the wall of 0.21 x 0.34^(d/R) of its thrust and thrust x (1 + 0.06 x 0.54^(d/R)), d from the rotor's centre (the paper's
+zero is not stated in what could be read: the centre is the cautious reading, about 6 % of a near rotor's thrust with its duct on the wall),
+scaled by how level the quad is to the wall; applied at the rotor, so it also tips the quad. An Air65 hovering 1.5 cm off a wall drifts
+onto it in ~0.6 s; 0.5 m away nothing. **Ceiling** (Hsiao and Chirarattananon's model, checked on a Crazyflie by Carter et al.): thrust x
+(1/2 + 1/2 sqrt(1 + 1 / (8 z²))), z = gap / R, capped +50 %, upright only; a whoop's props cannot get nearer a flat ceiling than ~1.5 R, so
+it is under 1 % of throttle at touching distance and gone 5 cm below. **Not built**: a duct thrust term for forward flight (no usable numbers found),
+the stronger micro-scale ground effect the same paper measured (about twice Cheeseman-Bennett, to 4 R: the Ground cushion slider at 200 % is close).
