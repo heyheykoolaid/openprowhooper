@@ -6,6 +6,22 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-28
 
+### Upkeep and map polish (owner, 2026-11-28: "6 and 7"; then "update the screenshots for the maps")
+- **Flicker**: instead of editing five maps piece by piece, the game now finds coplanar faces and thin overlays when it builds a map and
+  draws the smaller one a hair in front. Only what is drawn changes. The checker reads 0 flicker on every map; five small "cut" cases are left.
+- **Tests** run side by side (one suite per core). **Old screens**: Judge the community and the Flight desk are off the menus; the Hub
+  covers them. **Relay**: a GitHub Action uploads the relay's code when it changes, once two Cloudflare secrets are added to the repo.
+- **Map screenshots** re-shot; Clappy's and Slackvegan's views moved.
+- **Left for the owner to decide**: an automatic reformat of the source (every statement on its own lines). It would make the code far
+  easier to change, but it rewrites every line of every file once, so open branches (the weekly community PR) would have to be redone.
+
+### Outside research for physics and feel (owner asked, 2026-11-28; nothing built)
+Found and proposed, best first: ducted-rotor studies (the duct carries a large share of the thrust and strengthens wall effect: our whoops
+have no duct term and no wall suction); measured ground / ceiling / wall effect on micro quadrotors (a ceiling term for the sim's indoor
+maps); NeuroBEM (UZH: blade-element model and an open motion-capture flight dataset, a check for our inflow model at speed); system
+identification from a minute of flight with motor delay (NYU, sysid.tools: what our Feel Lab does by hand); and a TU Delft thesis that
+identifies what ducts do from flight data. Open: the owner's pick.
+
 ### Where the game as a whole could improve (owner asked, 2026-11-28; nothing built)
 Claude's read, best first: (1) **a new pilot's first ten minutes**: Train is still hidden to three pilots, the menus have grown many
 screens, and nothing tells a beginner what to try first; (2) **explaining calls**: when a trick does not count the game mostly says

@@ -1,0 +1,42 @@
+# Puts tools/dropoff-worker.mjs on the Cloudflare relay whenever it changes on main (it used to be pasted in by hand).
+# One-time setup, repo Settings -> Secrets and variables -> Actions:
+#   secret CLOUDFLARE_API_TOKEN   a Cloudflare API token with "Workers Scripts: Edit" on the account
+#   secret CLOUDFLARE_ACCOUNT_ID  the account id (Workers & Pages -> Overview, right-hand side)
+#   variable RELAY_NAME           optional: the Worker's name (default prowhooper-dropoff)
+# Only the script's code is replaced (Cloudflare's "upload Worker content" call): variables, the OWNER_KEY and GITHUB_TOKEN secrets and
+# the KV bindings stay exactly as they are in the dashboard. Without the two secrets this job does nothing.
+name: Deploy the relay
+on:
+  push:
+    branches: [main]
+    paths: ['tools/dropoff-worker.mjs', '.github/workflows/relay.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: relay
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      RELAY_NAME: ${{ vars.RELAY_NAME || 'prowhooper-dropoff' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: The relay's own tests
+        run: node test/dropoff.js && node test/challenges.js && node test/badges.js
+      - name: Upload the script
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then echo "No Cloudflare secrets set: nothing deployed."; exit 0; fi
+          cp tools/dropoff-worker.mjs worker.mjs
+          code=$(curl -sS -o out.json -w '%{http_code}' -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/$RELAY_NAME/content" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            --form-string 'metadata={"main_module":"worker.mjs"}' \
+            -F 'worker.mjs=@worker.mjs;type=application/javascript+module')
+          echo "Cloudflare answered $code"
+          node -e "const r=JSON.parse(require('fs').readFileSync('out.json','utf8'));if(!r.success){console.error(JSON.stringify(r.errors));process.exit(1)}"

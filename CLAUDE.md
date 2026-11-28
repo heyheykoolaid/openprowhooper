@@ -1730,3 +1730,18 @@ scrubbed agree. The bar (`#fvBar`): ✕, ◂ ▸ the flight before / after in th
 a timeline with a tick per call (orange bump, red crash) to click or drag, ×0.25-×4, FPV / chase, sticks. Keys: Space, ← → (Shift 1 s),
 , . (0.1 s, paused), [ ], Home / End, C, V, H, Tab (the score breakdown), Esc. Nothing is reviewed, saved or sent. Not in it: gap
 points and INVERTED (not in the flight files) and combos kept alive by passes. `window.__pw.fv`.
+
+## Upkeep and map polish (owner, 2026-11-28: "6 and 7")
+**Flicker put right on every map at build time** (`clipScan`, `deflicker` in maps.js, run first thing in `closeIn`; drawn-only): where two
+drawn faces share a plane in different materials the smaller piece gets `prio` (worldview.js draws it with `decalMat`'s depth offset but it
+keeps its shadow), and a thin piece lying under 2 cm on another face becomes a `decal`. Nothing moves, no collider changes; Clappy and Moose
+were already clean and are untouched. Faces nobody can see (both flat against a third solid: a parapet and the roofing on a building's top)
+are not counted (`buried`). tools/clipcheck.js now prints what is still wrong AFTER that: every map 0 flicker / 0 layered; five "cut" cases
+left (a sign or strip running into a solid: Slackvegan's finish sign in the El deck and a stair edge, the ship's pool line and crime tape,
+the warehouse cable tray). **`npm test` runs its suites side by side**, one per core (`--jobs=N`, `--serial`; test/all.js does a dry pass
+to learn which suites the checks ask for, runs them together, then the checks read the stored output): 10 min of CPU, ~7 min on 2 cores.
+**Judge the community and the Flight desk are off the menus** (their buttons stay hidden; the Review Hub's Community / All flights / Review
+queue use the same code). **.github/workflows/relay.yml** uploads tools/dropoff-worker.mjs to the Cloudflare Worker when it changes (code
+only: variables, secrets and KV bindings stay), once the repo has the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; without
+them it does nothing. **Not run against Cloudflare from here.** **Map thumbnails** re-shot (2026-11-28); Clappy's view takes in the
+footbridge, pagoda and East Campus, Slackvegan's looks down the avenue beside the El. Not done: reformatting the one-line source, trimming this file.

@@ -81,13 +81,16 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
   (placeholders 200 / 200 / 200 / 350 / 400) and how much of the turn must be with the motors off.
 - More Warehouse: look over the detail pass (the box truck and trailer stay over/unders: "yup", 2026-11-27).
 - Clappy clean-up (2026-11-27): lamps off the corners, sidewalk sakura moved, the clipping fixed. Fly it; say if other maps should get the
-  same pass (tools/clipcheck.js lists flicker on Slackvegan 36, Ship 25, Warehouse 7, School 4, Murderdome 3, Playground 3).
+  same pass (done for every map 2026-11-28, automatically at build: `deflicker`; five small "cut" cases left).
 - Clappy Park's new look (2026-11-27): the shade, the haze, the eight shop names (Clappy Cafe, Ramen, Boba Tea, Books, Flowers,
   Arcade, Whoop Shop, Laundry), the fountain, the bus stop, the parked cars. Shop names and the cloud count are easy to change.
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).
 - Fly the trainer: rolling starts, instant retry, and today's intro / cues / sticks-big view.
 - Fly the Feel Lab test card on the Fractal 65 / 75 and send the logs.
-- Decide whether to retire the old review screens (Flight desk, Judge the community) now that the Hub covers them.
+- Old review screens: off the menus since 2026-11-28 (say if either should come back).
+- Relay auto-deploy: add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the repo (see .github/workflows/relay.yml).
+- Source reformat (every statement on its own lines): yes or no? It rewrites every file once.
+- Physics from outside research (2026-11-28): duct thrust and wall suction, a ceiling effect, checking inflow against NeuroBEM. Which?
 - Set real points for Half Matty Pendulum (1050), Juicy Tornado (350) and Wall Stick (200): placeholders today.
 - Daily K.W.A.D.: are the four pools right (K basics, W a step up, A the three classics, D harder), and should Free Fly count letters?
 - Edit the coaching cues' wording.

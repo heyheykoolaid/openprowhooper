@@ -9,13 +9,13 @@ from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VIEWS = {
     'school':     ([22, 16, 40], [-4, 2, 2]),
-    'clappy':     ([-12, 19, 22], [1, 1, -4]),
+    'clappy':     ([-17, 13, 9], [40, 5, -5]),   # the plaza in front, the footbridge and East Campus behind (2026-11-28)
     'warehouse':  ([-27, 9, 17], [6, 3, -6]),
     'playground': ([14, 9, 16], [-6, 1.5, -2]),
     'moose':      ([-22, 3.2, 10], [-34, 1.4, 0]),
     'ship':       ([-52, 17, -34], [4, 9, 2]),
     'murderdome': ([30, 13, 44], [-4, 1, 8]),
-    'slackvegan': ([4, 2.2, 13.6], [34, 12, 20]),
+    'slackvegan': ([-34, 9, 15], [20, 9, 8]),   # down the avenue beside the El, the Spine Tower at the end (2026-11-28)
 }
 EXTRA = {
     'sv-start':  ('slackvegan', [-42.5, 1.6, 6], [-20, 3, 7]),

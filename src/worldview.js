@@ -462,7 +462,7 @@ function buildObjects(merge = MERGE_STATIC) {
   for (const o of world.objs) for (const v of o.vis) {
     const m = visMesh(v, true); if (!m) continue;
     m.castShadow = v.mat !== 'chainlink' && !v.glow && !v.alpha && !v.decal; m.receiveShadow = !v.glow; if (v.glow) m.layers.enable(1);
-    if (v.decal) m.material = decalMat(m.material, v.decal);
+    if (v.decal) m.material = decalMat(m.material, v.decal); else if (v.prio) m.material = decalMat(m.material, v.prio);   /* prio: maps.js deflicker */
     m.userData.oid = o.id; if (!merge) objRoot.add(m); else staticAdd(m, v);
   }
   staticFlush();

@@ -1,6 +1,9 @@
 // Runs every suite and fails if any regresses. `npm test`
-const { execFileSync } = require('child_process'); const path = require('path');
-const run = (f, args = []) => { try { return execFileSync('node', [path.join(__dirname, f), ...args], { encoding: 'utf8' }); } catch (e) { return (e.stdout || '') + (e.stderr || ''); } };
+// The suites run side by side, one per core (`--jobs=N`, `--serial` for one at a time): each check below asks `run()` for a suite's
+// output; a first dry pass notes which suites are wanted, they are run together, and the checks then read the stored output.
+const { execFile } = require('child_process'); const path = require('path'), os = require('os');
+const key = (f, args) => f + '\u0000' + args.join('\u0000'), OUT = new Map(), WANT = new Map(); let dry = true;
+const run = (f, args = []) => { const k = key(f, args); if (dry) { WANT.set(k, [f, args]); return ''; } return OUT.get(k) || ''; };
 const checks = [
   ['the page as a browser gets it (no Node globals; every script runs, every map builds, the game module compiles)', () => { const o = run('browser.js'); const m = o.match(/(\d+)\/(\d+) browser checks/); return m && m[1] === m[2] ? null : o.split('\n').filter(l => l.startsWith('✗')).join('\n') || o; }],
   ['single tricks', () => { const o = run('t3.js'); const want = ['Flip', 'Flip', 'Roll', 'Double Roll', "Cubik's Rube", 'Yaw Spin', 'Inverted Rewind', 'Inverted Yaw Spin', 'Segmented Flips/Rolls', 'Juicy Flick', 'Flip', 'Powerloop', 'Power Roll', 'Split S', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Segmented Flips/Rolls', 'Flip', 'Flip', 'Roll', 'Double Flip', 'Double Roll', 'Yaw Spin', 'Inverted Rewind', 'Inverted Rewind', 'Vanny Roll', "Rubik's Cube", "Cubik's Rube", 'Juicy Flick', 'Inverted Yaw Spin'];
@@ -70,6 +73,14 @@ const checks = [
   ['no false tricks near obstacles', () => { const o = run('fpsweep.js'); return /tricks: \{\}/.test(o) ? null : o; }],
   ...['session-flips-rolls.json', 'upload-roll-x5.json', 'training-v1-flip.json'].map(f => [`replay fixture ${f}`, () => { const o = run('replay.js', [path.join(__dirname, 'fixtures', f)]); const m = o.match(/(\d+)\/(\d+) labels agree/); return m && m[1] === m[2] ? null : o; }]),
 ];
-let bad = 0;
-for (const [name, fn] of checks) { const err = fn(); console.log(`${err ? '✗' : '✓'} ${name}`); if (err) { bad++; console.log(String(err).split('\n').slice(0, 25).map(l => '    ' + l).join('\n')); } }
-console.log(bad ? `\n${bad} suite(s) failing` : '\nall suites passing'); process.exitCode = bad ? 1 : 0;
+for (const [, fn] of checks) { try { fn(); } catch { /* the dry pass: only which suites are asked for */ } }
+dry = false;
+const jobsArg = process.argv.find(a => a.startsWith('--jobs=')), JOBS = process.argv.includes('--serial') ? 1 : Math.max(1, jobsArg ? +jobsArg.split('=')[1] : os.cpus().length);
+const todo = [...WANT.entries()];
+const one = ([k, [f, args]]) => new Promise(res => execFile('node', [path.join(__dirname, f), ...args], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }, (err, so, se) => { OUT.set(k, err ? (so || '') + (se || '') : so); res(); }));
+(async () => {
+  let n = 0; await Promise.all(Array.from({ length: JOBS }, async () => { while (n < todo.length) await one(todo[n++]); }));
+  let bad = 0;
+  for (const [name, fn] of checks) { let err; try { err = fn(); } catch (e) { err = String(e && e.stack || e); } console.log(`${err ? '✗' : '✓'} ${name}`); if (err) { bad++; console.log(String(err).split('\n').slice(0, 25).map(l => '    ' + l).join('\n')); } }
+  console.log(bad ? `\n${bad} suite(s) failing` : '\nall suites passing'); process.exitCode = bad ? 1 : 0;
+})();

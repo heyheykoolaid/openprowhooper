@@ -80,7 +80,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-mapi
 setTimeout(menuMapLabels, 0);
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.add('hide'); if (id) $(id).classList.remove('hide'); if (id === '#mainMenu' || id === '#pause') { try { quickLabels(); } catch { /* not ready at start-up */ } try { kwadMenus(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') { try { hubBadge(); } catch { /* not ready at start-up */ } } if (id === '#mainMenu') ownerMenus(); }   // Judge the community, Tools & labs and RaceGOW: the project owner's for now
 // owner-only buttons (owner, 2026-11-18): shown only when the pilot name is heyheykoolaid
-function ownerMenus() { const own = ghMenus(); for (const sel of ['#judgeBtn', '#mainMenu [data-act="tools"]', '#mainMenu [data-act="race"]', '#mainMenu [data-act="mapedit"]']) { const b = $(sel); if (b) b.classList.toggle('hide', !own); } }
+function ownerMenus() { const own = ghMenus(); { const j = $('#judgeBtn'); if (j) j.classList.add('hide'); }   /* Judge the community and the Flight desk are retired from the menus (owner, 2026-11-28): the Review Hub's Community / All flights / Review queue open the same things */ for (const sel of ['#mainMenu [data-act="tools"]', '#mainMenu [data-act="race"]', '#mainMenu [data-act="mapedit"]']) { const b = $(sel); if (b) b.classList.toggle('hide', !own); } }
 // a shared flight is packed and sent BEFORE the next one starts (no stutter in the air)
 function startFly(withSession) { const job = telCapture('restart'); if (job) procFlight(job, () => startFlyGo(withSession)); else startFlyGo(withSession); }
 function startFlyGo(withSession) {
@@ -119,7 +119,7 @@ document.addEventListener('click', e => {
   if (a === 'back') { show(mode === 'menu' ? '#mainMenu' : '#pause'); }
   if (a === 'blackbox') show('#bbScreen');
   if (a === 'judge') { if (needPlayground('Judge the Bot')) return; startJudge(); }
-  if (a === 'map') openMaps(); if (a === 'tools' && ghMenus()) { show('#toolsScreen'); $('#deskBtn').classList.toggle('hide', !ghMenus()); }
+  if (a === 'map') openMaps(); if (a === 'tools' && ghMenus()) { show('#toolsScreen'); $('#deskBtn').classList.add('hide'); }
   if (a === 'race' && RACEGOW_ON && ghMenus()) openRaceMenu();
 });
 
