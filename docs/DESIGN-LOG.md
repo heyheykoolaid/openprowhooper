@@ -4,6 +4,18 @@ A running record of what the owner and Claude decide and why, newest first. One 
 decided, what was left open. docs/TODO.md is the ordered list of what to do; CLAUDE.md says how things are built; this file keeps
 the reasoning so it is not lost between sessions. **Add an entry whenever a design question is discussed, even when nothing is built.**
 
+## 2026-11-28
+
+### Where the game as a whole could improve (owner asked, 2026-11-28; nothing built)
+Claude's read, best first: (1) **a new pilot's first ten minutes**: Train is still hidden to three pilots, the menus have grown many
+screens, and nothing tells a beginner what to try first; (2) **explaining calls**: when a trick does not count the game mostly says
+nothing ("Why not?" and the Trick X-ray, to-do 14-15), and several rules rest on one pilot's labels; (3) **finishing drafts**: about a
+dozen tricks carry placeholder points, and a list of owner decisions is waiting (prop load, INVERTED, disarm tricks); (4) **board
+trust**: scores are client-reported and never re-flown; (5) **multiplayer**: the project brief says sp/mp and there is none (ghost
+races against board runs would be the cheap first step); (6) **upkeep**: one-line-statement source, a very long CLAUDE.md, a test run
+over two minutes, old review screens the Hub duplicates, the relay redeployed by hand; (7) **map polish** on the maps clipcheck still
+flags. Open: the owner's pick.
+
 ## 2026-11-27
 
 ### FLIGHT VIEWER (owner, 2026-11-27)
