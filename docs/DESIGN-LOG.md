@@ -6,6 +6,14 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-27
 
+### FLIGHT VIEWER (owner, 2026-11-27)
+Owner: an owner-only section in the Review Hub, "FLIGHT VIEWER": a list of all the flights, watched back "with the hud and scoring
+as if it was the live flight", then "i want to be able to have playback controls on it though". Decided: it plays in the ordinary
+flying view, not the review player; the score comes from the calls the game made at the time (what the pilot saw), not a re-fly
+with today's detector; seeking rebuilds the score up to the playhead. Controls: play / pause, ±5 s, frame steps, a timeline with
+the calls marked, ×0.25-×4, camera, sticks, previous / next flight. Left out for now: gap points and INVERTED seconds (the flight
+files do not record them). Open: re-fly with today's detector as a switch, if he wants to compare then and now.
+
 ### Clappy grows east: East Campus and a 60 m walkway (owner, 2026-11-27: "Grow map east!", "Make sure everything works for our tricks too")
 Asked how to lengthen the footbridge, Claude offered four ways; the owner picked growing the map east. **Built**: the walk now runs from
 the plaza over the street (the footbridge, unchanged), down the alley between two shop blocks on a skywalk, over a new street (East
@@ -709,11 +717,3 @@ against another roll. He said yes to requiring the Jump Rope first.
 The owner: "whenever i press to select another trick in the trick review, it won't let me select it or keep the option." The answer
 was being kept (the line above the buttons said so) but the list snapped back to "No, it was…". Now the list keeps showing what was
 picked. Open: if it still fails for him after this, it is something else (it could not be reproduced as a lost answer here).
-
-## 2026-11-27 · FLIGHT VIEWER
-Owner: an owner-only section in the Review Hub, "FLIGHT VIEWER": a list of all the flights, watched back "with the hud and scoring
-as if it was the live flight", then "i want to be able to have playback controls on it though". Decided: it plays in the ordinary
-flying view, not the review player; the score comes from the calls the game made at the time (what the pilot saw), not a re-fly
-with today's detector; seeking rebuilds the score up to the playhead. Controls: play / pause, ±5 s, frame steps, a timeline with
-the calls marked, ×0.25-×4, camera, sticks, previous / next flight. Left out for now: gap points and INVERTED seconds (the flight
-files do not record them). Open: re-fly with today's detector as a switch, if he wants to compare then and now.
