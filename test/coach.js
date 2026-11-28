@@ -47,6 +47,16 @@ for (const b of bad) console.log('  ✗ ' + b);
   const g = Cc.coachCue('Power Roll', Cc.coachPlan('Power Roll').alts[0], 1, { T: 0.05, dT: -1 });
   const okc = !bad && fit === Object.keys(Cc.COACH_CUES).length && /Cut the throttle/.test(g); console.log(`${okc ? '✓' : '✗'} coaching cues: ${steps} steps have one, ${fit} tricks hand-written, the bot's throttle is read ("${g}")`); if (!okc) process.exitCode = 1; }
 // the ladder, the five tries and the stick modes (2026-11-21)
+// the drill loop (owner, 2026-11-28): the streak, the help that grows after misses, the rungs
+{ const D = new Function('S', 'window', 'env', 'esc', `const detector = {};\n${src}\nreturn { drillStep, DRILL_STREAK, DRILL_GHOST, DRILL_SLOW };`)(S, { TPW_TRICKS: globalThis.TPW_TRICKS }, {}, x => x);
+  const run = (vs, d = {}) => vs.reduce((s, v) => D.drillStep(s, v), d), z = { streak: 0, miss: 0, help: 0, rung: 0 };
+  const a = run(['land', 'land', 'land'], z), b = run(['land', 'land', 'miss'], z), c = run(['miss', 'miss'], z), e = run(['miss', 'miss', 'miss', 'miss'], z),
+    f = D.drillStep(e, 'land'), g = D.drillStep(f, 'land'), h = run(['close'], z), i = run(['land', 'close'], z), k = run(['land', 'land', 'land', 'land'], z);
+  const ok = D.DRILL_STREAK === 3 && a.streak === 3 && a.rung === 3 && a.learned && b.streak === 0 && b.rung === 2 && b.help === 0 && c.help === 1 && c.note === 'ghostOn' &&
+    e.help === 2 && e.note === 'slowOn' && f.streak === 0 && !f.counted && f.help === 1 && f.rung === 2 && g.streak === 1 && g.help === 0 && h.rung === 1 && h.streak === 0 &&
+    i.streak === 1 && i.miss === 1 && k.streak === 4 && !k.learned && k.rung === 3 && run(['land'], { rung: 3 }).rung === 3;
+  console.log(`${ok ? '✓' : '✗'} the drill: three landed in a row is learned, a miss ends the streak, a ghost after ${D.DRILL_GHOST} misses and slow motion after ${D.DRILL_SLOW}, a slow-motion landing does not count, a landing takes help away`);
+  if (!ok) process.exitCode = 1; }
 { const L = new Function('S', 'window', 'env', 'esc', `const detector = {};\n${src}\nreturn { coachPlan, coachPhaseOf, coachRungOf, coachLadder, COACH_TRIES, coachCan };`)(S, { TPW_TRICKS: globalThis.TPW_TRICKS }, env, x => x);
   const ph = [1, 2, 3, 4, 5].map(L.coachPhaseOf).join(' '), r = L.coachRungOf;
   const rungs = r([]) === 0 && r([{ ok: false, phase: 'live' }]) === 0 && r([{ ok: true, phase: 'parts' }]) === 1 && r([{ ok: true, phase: 'parts' }, { ok: true, phase: 'live' }]) === 2 && r([{ ok: false, phase: 'live' }, { ok: true, phase: 'connect' }]) === 3;

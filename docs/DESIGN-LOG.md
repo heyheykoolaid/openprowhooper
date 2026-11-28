@@ -6,6 +6,15 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-28
 
+### Train's drill loop, built (owner, 2026-11-28: "Yup.")
+Built as proposed below. Decided on the way: LANDED is the game's own call; "every part there, no call" is CLOSE (rung 1, neither adds
+to nor ends the streak, but counts toward help); a ghost after 2 misses in a row, slow motion with the stick arrows after 4; a landing
+takes one level of help away and one in slow motion does not count toward the three; rungs are now close / landed / learned (the old
+"connect it" is gone); Next goes to the next unlearned trick on the ladder in the same room. The old step-by-step code (pauses,
+checkpoints, the five tries) is still in coach.js, unreachable: **open**: delete it once the owner has flown the drill and is happy.
+Also open: the ghost only exists on the bar, the Big Square and in open air (wall, pole, gap, tower stations get the step list);
+the Trippy Spin's ladder has no Next button; whether CLOSE should end a streak; whether 2 / 4 misses are the right numbers.
+
 ### Train's flow (owner asked, 2026-11-28: "training mode does not have a good flow to it, what can be improved?"; nothing built)
 Claude's read of why it drags: (1) a long wait before the first stick touch (a reload into the room, then up to seven shown flights);
 (2) the step-by-step tries stop the game at every part and want the sticks held 1.5 s, so the trick is never felt as one motion;

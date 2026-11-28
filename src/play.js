@@ -1145,6 +1145,7 @@ function frame(now) {
     }
     if (pf) PERF.acc.steps += n;
     if (coach.on) coachLive(n * DT); // Train: pause as a step's rotation comes round
+    coachGhost(dt, n * DT); // Train's drill: the ghost to follow
     renderCombo();
     // Forgiving crashes: the pilot does not have to cycle the arm switch. After a crash, drop the throttle to zero and
     // the quad is righted and armed again (as long as the arm switch is still on / it was armed when it crashed).

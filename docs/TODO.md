@@ -85,7 +85,8 @@ line is dropped here. Decisions and the reasons behind them go in docs/DESIGN-LO
 - Clappy Park's new look (2026-11-27): the shade, the haze, the eight shop names (Clappy Cafe, Ramen, Boba Tea, Books, Flowers,
   Arcade, Whoop Shop, Laundry), the fountain, the bus stop, the parked cars. Shop names and the cloud count are easy to change.
 - Confirm the Review queue fills for a second pilot after the last relay deploy (and that a verdict arrives as a vote).
-- Fly the trainer: rolling starts, instant retry, and today's intro / cues / sticks-big view.
+- **Fly Train's new drill loop** (2026-11-28): the verdicts, the ghost after 2 misses, slow motion after 4, three in a row, Next trick.
+  Say whether the numbers feel right, whether CLOSE should end a streak, and whether the old step-by-step code can be deleted.
 - Fly the Feel Lab test card on the Fractal 65 / 75 and send the logs.
 - Old review screens: off the menus since 2026-11-28 (say if either should come back).
 - Relay auto-deploy: add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the repo (see .github/workflows/relay.yml).

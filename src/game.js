@@ -267,6 +267,10 @@ let kwadListT = 0;
 function kwadShow(ms) {
   const el = $('#kwadList');
   if (!el) return;
+  if (world.id === 'training') {
+    el.classList.add('hide');
+    return;
+  } // the Training Room is for one trick at a time: no K.W.A.D. list over it
   el.innerHTML = `<small>${score.kw ? "TODAY'S K.W.A.D." : 'K.W.A.D.'}</small>` + kwadHtml(score.kw, score.kwad);
   el.classList.remove('hide');
   clearTimeout(kwadListT);

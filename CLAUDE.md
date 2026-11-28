@@ -1766,3 +1766,22 @@ one statement a line. The reformat commit is in `.git-blame-ignore-revs`. It cha
 before and after, all suites pass, and the built page was loaded and flown back in a browser. src went from 15,400 to 48,900 lines;
 the page 3.18 -> 3.39 MB (1.06 -> 1.09 MB gzipped). test/ and tools/ are still in the old dense style. Tests that read source as
 text must allow for line breaks (test/browser.js, powerroll.js, coach.js were adjusted).
+
+## Train is one drill loop (owner, 2026-11-28: "training mode does not have a good flow to it", then "Yup."; `drillStep`, `coachVerdict`, `coachDrillTick`, `coachGhost*`, `renderDrill`, `coachNext` in src/coach.js; test/coach.js)
+**This replaces the five tries described above** (parts / live / connect, the pauses, checkpoints, "was it really one?"): that code is
+still in coach.js but nothing reaches it (`coach.drill` is always true for a rule trick; `coachPhaseOf` only for the old test). Now: the
+trick once at full speed (`coachDemo('short')`, Space skips), a rolling start, fly the whole trick, a one-line verdict, back at the
+start ~1.2 s later. **Verdicts** (`coachDrillTick`, every 150 ms): LANDED = the game's own call of the trick; CLOSE = every part there by
+the sloppy step judge and no call within `DRILL_CLOSE_WAIT` 2.5 s; a miss = a crash, a part flown wrong (`o.retry`), or another trick
+called with no call of this one within `DRILL_CALL_WAIT` 1.2 s (the step judge's reason is the line). `DRILL_IDLE` 14 s of flying with
+nothing: back to the start, not a miss. No questions, no Y / N / Q, nothing kept. **Help grows only after misses in a row**
+(`drillStep`, pure): `DRILL_GHOST` 2 = the bot's flight as a see-through ghost with its whole path as the yellow line and each part's
+cue as the caption (it loops while the quad is held at the start, flies once from GO); `DRILL_SLOW` 4 = the game at half speed
+(`DRILL_SLOW_X`, through `coachTimeScale`) with the bot's sticks as the GoldenEye arrows. A landing takes one level away; a landing in
+slow motion does not count toward the streak. `DRILL_STREAK` 3 landed in a row = learned. **Rungs** (same store): 1 close, 2 landed,
+3 learned. The ghost (`coachGhostSetup`) is only there when the bot's flight is on the station's own bar / Big Square (turned half way
+round it when it came from the other side) or the station is open air (laid 3 m in front of the rolling start); other stations get the
+step list instead. **Panel**: streak dots, the last verdict, 👻 Show me (the old player: sticks, steps, scrubbing), **Next: <trick> ▸**
+(`coachNextName`: the next unlearned trick on the ladder, started in the same room with no reload), and a foot row: Steps, Help (off /
+ghost / slow motion, by hand), Examples, Done. No K.W.A.D. list in the Training Room. The Trippy Spin's own five stages are unchanged.
+Checked in a browser by sending verdicts and calls in (panel, ghost, slow motion, arrows, Next); **not flown by hand**. `window.__pw.coach`.

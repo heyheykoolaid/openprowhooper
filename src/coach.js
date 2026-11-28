@@ -80,7 +80,7 @@ const coachPhaseOf = n => (n <= COACH_PARTS ? 'parts' : n >= COACH_TRIES ? 'conn
 // ---- The ladder (owner, 2026-11-21: "a ladder, with a learned mark in the Tricktionary"). Three rungs per trick, from the tries
 // passed: 1 walked it (a step-by-step try), 2 landed it (a live try), 3 connected it (into or out of another trick) = learned.
 // Kept in this browser only (store 'coachRungs': { trick: { r, at } }): it is the pilot's own progress, not flight data.
-const COACH_RUNGS = ['', 'walked', 'landed', 'learned'],
+const COACH_RUNGS = ['', 'close', 'landed', 'learned'],
   COACH_DIFF = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Master'];
 const coachRungOf = log =>
   (log || []).reduce((r, l) => (l && l.ok ? Math.max(r, l.phase === 'connect' ? 3 : l.phase === 'live' ? 2 : 1) : r), 0);
@@ -500,6 +500,42 @@ function coachCue(name, steps, k, sk) {
   }
   return out;
 }
+// the drill loop's numbers and its state after a verdict (the loop itself: coachVerdict, coachDrillTick below)
+const DRILL_STREAK = 3,
+  DRILL_GHOST = 2,
+  DRILL_SLOW = 4,
+  DRILL_SLOW_X = 0.5,
+  DRILL_CALL_WAIT = 1.2, // s another trick's call waits for the trick's own call beside it
+  DRILL_CLOSE_WAIT = 2.5, // s every part done waits for the game's call (a roll is called ~1.4 s after it ends)
+  DRILL_IDLE = 14; // s of flying with no verdict: back to the start (not a miss)
+// pure: the state after a verdict ('land' | 'close' | 'miss')
+function drillStep(d, v) {
+  const n = { streak: d.streak || 0, miss: d.miss || 0, help: d.help || 0, rung: d.rung || 0, counted: false, learned: false, note: '' };
+  if (v === 'land') {
+    n.miss = 0;
+    if (n.help >= 2) n.note = 'slow';
+    else {
+      n.streak++;
+      n.counted = true;
+    }
+    n.help = Math.max(0, n.help - 1);
+    n.rung = Math.max(n.rung, 2);
+    if (n.streak >= DRILL_STREAK) {
+      n.learned = n.rung < 3;
+      n.rung = 3;
+    }
+    return n;
+  }
+  if (v === 'miss') n.streak = 0;
+  else n.rung = Math.max(n.rung, 1);
+  n.miss++;
+  const want = n.miss >= DRILL_SLOW ? 2 : n.miss >= DRILL_GHOST ? 1 : 0;
+  if (want > n.help) {
+    n.help = want;
+    n.note = want === 2 ? 'slowOn' : 'ghostOn';
+  }
+  return n;
+}
 // ---- the session
 // ---- The Training Room (owner, 2026-11-20): Train always happens there. From any other map it stores the trick and where
 // the pilot came from, loads the room (a reload, like any map change) and starts on arrival; Done / Free fly / Menu load the
@@ -771,7 +807,16 @@ function coachStart(name) {
     cross: plan.cross,
     end: plan.end,
     tryN: 1,
-    phase: 'parts',
+    phase: 'drill',
+    drill: true,
+    lap: null,
+    d: { streak: 0, miss: 0, help: 0, rung: (store.get('coachRungs', {})[name] || {}).r || 0 },
+    reps: 0,
+    lastV: null,
+    showSteps: false,
+    called: null,
+    other: null,
+    allAt: null,
     msg: '',
     result: null,
     ask: null,
@@ -788,16 +833,17 @@ function coachStart(name) {
   drone.reset(world.spawn);
   coach.sticks = coachStepSticks();
   coach.entry = coachEntry(stn, coach.sticks && coach.sticks.bot); // the bot's flight from this station: the pause arrows and the rolling start
+  coachGhostSetup();
   coachHoldStart();
   renderCoach();
-  flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>tries 1-2 step by step · 3-4 the whole trick, live · 5 connect it</small>`);
+  flash(`<b>TRAIN: ${esc(name).toUpperCase()}</b><small>fly it · ${DRILL_STREAK} landed in a row and it is learned</small>`);
   if (store.get('coachIntro', true) && coach.fly && coachIntroSeen !== name) {
     coachIntroSeen = name;
-    coachDemo(true);
-  } // the payoff first: the trick at full speed, then one slow pass with the cues
+    coachDemo('short');
+  } // the payoff first: the trick once at full speed (Space skips it); the slow pass and the examples are on Show me
 }
 function coachNewTry() {
-  coach.phase = coachPhaseOf(coach.tryN);
+  coach.phase = coach.drill ? 'drill' : coachPhaseOf(coach.tryN);
   coach.chain = [];
   coach.since = detector.time;
   coach.steps = coach.alts[0];
@@ -838,6 +884,11 @@ function coachClock(start) {
   coach.since = 0;
   coach.last = null;
   coach.chain = [];
+  coach.called = null;
+  coach.other = null;
+  coach.allAt = null;
+  if (coach.drill) coach.result = null;
+  coachGhostHide();
   if (coach.ask) coach.ask = null;
   if (ck) {
     coach.steps = ck.steps;
@@ -864,10 +915,240 @@ function coachAgain() {
   coachNewTry();
   renderCoach();
 }
+// ---- The drill loop (owner, 2026-11-28: "training mode does not have a good flow to it", then "Yup." to the proposal). Train is one
+// loop now: a rolling start, fly the whole trick, a one-line verdict, back at the start a second later. No questions, no stops.
+// The verdict: LANDED = the game's own call of the trick; CLOSE = every part was there by the sloppy step judge and the game said
+// nothing; a miss = a crash, a part flown wrong, or another trick called instead (with the step judge's reason).
+// Help only grows after misses in a row (`drillStep`): from DRILL_GHOST a ghost of the bot's flight and its path to follow, with
+// the cue for each part; from DRILL_SLOW the game itself at half speed with the bot's sticks as arrows. A landing takes one level
+// of help away again; one in slow motion does not count toward the streak. DRILL_STREAK landed in a row = learned.
+// Rungs (this browser only, as before): 1 close, 2 landed, 3 learned.
+function coachVerdict(v, how) {
+  if (coach.result || !coach.d) return;
+  const d = drillStep(coach.d, v);
+  coach.d = d;
+  coach.result = { v, how };
+  coach.msg = '';
+  coach.lastV = coach.result;
+  coach.reps = (coach.reps || 0) + 1;
+  const R = store.get('coachRungs', {}),
+    was = (R[coach.name] || {}).r || 0;
+  if (d.rung > was) {
+    R[coach.name] = { r: d.rung, at: Date.now() };
+    store.set('coachRungs', R);
+  }
+  if (d.note === 'ghostOn' && !cgh.at) coach.showSteps = true; // no ghost for this trick here: the step list instead
+  const next = {
+    ghostOn: cgh.at ? 'next: a ghost flies it ahead of you' : 'next: the steps are in the panel',
+    slowOn: 'next: slow motion, with the sticks as arrows'
+  }[d.note];
+  if (v === 'land')
+    flash(
+      d.learned
+        ? `<b>★ ${esc(coach.name).toUpperCase()} LEARNED</b><small>${DRILL_STREAK} in a row</small>`
+        : d.note === 'slow'
+          ? '<b>✓ LANDED IN SLOW MOTION</b><small>now at full speed</small>'
+          : `<b>✓ LANDED</b><small>${esc(how)} · ${Math.min(d.streak, DRILL_STREAK)} of ${DRILL_STREAK}${d.streak > DRILL_STREAK ? ' · ' + d.streak + ' in a row' : ''}</small>`
+    );
+  else if (v === 'close') flash(`<b>≈ CLOSE</b><small>every part was there: tighten it up${next ? ' · ' + next : ''}</small>`, 'near');
+  else flash(`<b>✗ ${how.toUpperCase()}</b>${next ? `<small>${next}</small>` : ''}`, 'near');
+  coachGhostHide();
+  clearTimeout(coach.retryT);
+  const again = () => {
+    coach.retryT = null;
+    if (!coach.on || !coach.drill) return;
+    if (mode !== 'fly') {
+      coach.retryT = setTimeout(again, 300);
+      return;
+    } // paused in between: once it flies again
+    coach.result = null;
+    coachRetry(true);
+  };
+  coach.retryT = setTimeout(again, v === 'land' ? 1300 : 1100);
+  renderCoach();
+}
+// what went wrong, from the step judge: the first part not done
+function coachWhy(j, other) {
+  const o = j && j.out[j.done];
+  if (o && o.msg) return `Step ${j.done + 1}: ${o.msg}`;
+  if (other) return `the game saw a ${other}`;
+  return j && j.done ? `step ${j.done + 1} did not come` : 'not this time';
+}
+function coachDrillTick() {
+  // every 150 ms while flying a rep
+  if (coach.result || coach.hold || judge.demo) return;
+  const j = coachJudgeAny(coach.alts, coach.since, true),
+    t = detector.time;
+  coach.last = j;
+  if (j.objName) coach.obj = j.objName;
+  coach.steps = j.steps;
+  if (coach.called) {
+    const c = coach.called;
+    coachVerdict('land', c.exec ? String(c.exec).toLowerCase() + (c.clean != null ? ' ' + c.clean + '%' : '') : 'called');
+    return;
+  }
+  if (drone.crashed) {
+    coachVerdict('miss', j.done ? `crashed after step ${j.done}` : 'crashed');
+    return;
+  }
+  if (coach.other && t - coach.other.t > DRILL_CALL_WAIT) {
+    coachVerdict('miss', coachWhy(j, coach.other.name));
+    return;
+  }
+  if (j.done >= j.steps.length) {
+    if (coach.allAt == null) coach.allAt = t;
+    if (t - coach.allAt > DRILL_CLOSE_WAIT) coachVerdict('close', 'every part');
+    return;
+  }
+  coach.allAt = null;
+  const o = j.out[j.done];
+  if (o && o.retry && t >= o.at) {
+    coachVerdict('miss', coachWhy(j));
+    return;
+  }
+  if (t > DRILL_IDLE && !coach.other) {
+    coach.msg = 'Back at the start.';
+    coachRetry(true);
+  }
+}
+function coachNextName() {
+  const L = coachLadder(window.TPW_TRICKS, store.get('coachRungs', {}), coachCan).next.map(t => t.name.trim()),
+    i = L.indexOf(coach.name);
+  return L.find((n, k) => k > i && n !== coach.name) || L.find(n => n !== coach.name) || null;
+}
+function coachNext() {
+  const n = coachNextName();
+  if (!n) {
+    flash('<b>NOTHING LEFT</b><small>every trainable trick is learned</small>');
+    return;
+  }
+  coachGhostHide();
+  coachStart(n);
+}
+// ---- the ghost (help 1 and up): the bot's own flight of the trick from this station, see-through, with its whole path drawn as a
+// line. While the quad is held at the start it flies the trick over and over; on GO it starts again and flies it once, on the game's
+// clock (so in slow motion it slows down too). Only where the bot's flight is on the station's own object (bar, big square) or in
+// open air: a flight that came at the bar from the other side is turned half way round the bar (a turn, not a mirror: the sticks stay
+// the bot's), an open-air one is laid 3 m in front of the rolling start, heading the same way.
+const cgh = { at: null, a: 0, b: 0, t: 0, live: false, vis: false, cues: [] };
+function coachGhostSetup() {
+  Object.assign(cgh, { at: null, live: false, t: 0, cues: [] });
+  const f = coach.fly,
+    E = coach.entry,
+    spot = COACH_SPOTS[coach.stn];
+  if (!f || !f.m || !spot) return;
+  const open = coach.stn === 'open', // whatever the flight was laid on: it is moved in front of the rolling start
+    onObj = (coach.stn === 'bar' || coach.stn === 'big') && f.object === spot[0];
+  if (!E || (!open && !onObj)) return;
+  const out = (f.j && f.j.out) || [],
+    t0s = out.map(o => (o ? o.t0 : null)).filter(x => x != null),
+    t1s = out.map(o => (o ? (o.t ?? o.t0) : null)).filter(x => x != null),
+    T = f.m.T || 0;
+  const a = t0s.length ? Math.max(0, Math.min(...t0s) - 1) : 0,
+    b = t1s.length ? Math.min(T, Math.max(...t1s) + 1) : T;
+  if (!(b > a + 0.3)) return;
+  const p0 = f.m.at(a).pos,
+    p1 = f.m.at(Math.min(T, a + 0.15)).pos,
+    bv = { x: p1.x - p0.x, z: p1.z - p0.z },
+    ev = Math.hypot(E.vel.x, E.vel.z) > 0.3 ? E.vel : S.qrot(E.q, S.v3(0, 0, -1));
+  let ang = 0,
+    piv = p0,
+    d = S.v3(0, 0, 0);
+  if (open) {
+    if (Math.hypot(bv.x, bv.z) > 0.02) ang = Math.atan2(-ev.x, -ev.z) - Math.atan2(-bv.x, -bv.z);
+    const el = Math.hypot(ev.x, ev.z) || 1;
+    d = S.v3(E.pos.x + (ev.x / el) * 3 - p0.x, E.pos.y - p0.y, E.pos.z + (ev.z / el) * 3 - p0.z);
+  } else {
+    const o = world.objs.find(x => x.name === spot[0]);
+    if (!o) return;
+    const B = kmBounds(o);
+    piv = S.v3((B.min.x + B.max.x) / 2, 0, (B.min.z + B.max.z) / 2);
+    if (bv.x * ev.x + bv.z * ev.z < 0) ang = Math.PI;
+  }
+  const qy = S.qaxis(S.v3(0, 1, 0), ang);
+  cgh.at = t => {
+    const s = f.m.at(t);
+    return ang || open ? { pos: S.add(S.add(piv, S.qrot(qy, S.sub(s.pos, piv))), d), q: S.qmul(qy, s.q) } : s;
+  };
+  cgh.a = a;
+  cgh.b = b;
+  cgh.cues = out.map(o => (o && o.t0 != null ? o.t0 : null));
+  cgh.rows = f.got && f.got.rows && f.got.rows.length > 1 ? f.got.rows : null;
+}
+function coachGhostHide() {
+  if (cgh.vis) {
+    cgh.vis = false;
+    if (ghost.mesh) ghost.mesh.visible = false;
+    trailClear();
+  }
+  if (coach.arrowsOn) {
+    coach.arrowsOn = false;
+    $('#demoArrows').classList.add('hide');
+  }
+}
+const coachGhostCue = () => {
+  // the part the ghost is at (its cue shows from half a second before)
+  let k = 0;
+  cgh.cues.forEach((t, i) => {
+    if (t != null && cgh.t >= t - 0.5) k = i;
+  });
+  return k;
+};
+function coachGhost(dtReal, dtSim) {
+  // every frame while flying (play.js)
+  const d = coach.d,
+    on = coach.on && coach.drill && mode === 'fly' && d && d.help >= 1 && cgh.at && !coach.result && !ghost.on;
+  if (!on) {
+    coachGhostHide();
+    return;
+  }
+  if (!cgh.vis) {
+    cgh.vis = true;
+    trailClear();
+    const n = Math.min(380, Math.ceil((cgh.b - cgh.a) / 0.04));
+    for (let i = 0; i <= n; i++) trailPush(cgh.at(cgh.a + ((cgh.b - cgh.a) * i) / n).pos);
+    cgh.t = cgh.a;
+    cgh.live = false;
+  }
+  if (coach.hold) {
+    cgh.live = false;
+    cgh.t += dtReal;
+    if (cgh.t > cgh.b + 0.6) cgh.t = cgh.a;
+  } else {
+    if (!cgh.live) {
+      cgh.live = true;
+      cgh.t = cgh.a;
+    }
+    cgh.t += dtSim;
+  }
+  const g = ghostMesh(),
+    s = cgh.at(Math.min(cgh.t, cgh.b));
+  g.visible = coach.hold || cgh.t < cgh.b + 0.5;
+  g.position.set(s.pos.x, s.pos.y, s.pos.z);
+  g.quaternion.set(s.q.x, s.q.y, s.q.z, s.q.w);
+  // slow motion: the bot's sticks as arrows, where the ghost is in the trick
+  const arrows = d.help >= 2 && cgh.live && cgh.rows && cgh.t <= cgh.b;
+  if (arrows) {
+    const rows = cgh.rows,
+      dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1),
+      at = t => rows[Math.max(0, Math.min(rows.length - 1, Math.round((t - rows[0][0]) / dtR)))],
+      r = at(cgh.t),
+      r0 = at(cgh.t - 0.15),
+      dT = (r[11] - r0[11]) / 0.15,
+      q = v => (Math.abs(v) >= 0.25 ? v : 0);
+    coach.arrowsOn = true;
+    drawStickArrows(q(r[25]), q(r[24]), q(r[26]), Math.abs(dT) > 0.5 ? r[11] : null, dT);
+  } else if (coach.arrowsOn) {
+    coach.arrowsOn = false;
+    $('#demoArrows').classList.add('hide');
+  }
+}
 function coachStop(save = true) {
   if (!coach.on) return;
   coach.on = false;
   coach.lap = null;
+  coach.drill = false;
+  coachGhostHide();
   tripHud(false);
   coach.hold = null;
   clearTimeout(coach.retryT);
@@ -915,6 +1196,13 @@ function coachEvent(ev) {
   if (!coach.on || coach.done || mode !== 'fly' || ev.name === 'near') return;
   if (coach.lap) {
     tripEvent(ev);
+    return;
+  }
+  if (coach.drill) {
+    // the drill: the game's own calls decide (coachDrillTick gives the verdict)
+    if (ev.maybe || coach.result || coach.hold || ev.name === 'Crash' || ev.exec === 'CRASH') return;
+    if (ev.name === coach.name) coach.called = { exec: ev.exec, clean: ev.clean };
+    else if (!coach.other) coach.other = { name: ev.name, t: detector.time };
     return;
   }
   if (ev.name === 'Crash' || ev.exec === 'CRASH') {
@@ -1002,7 +1290,7 @@ function coachAnswer(a) {
 }
 function coachMissed() {
   // "I did it, the game missed it" (Q)
-  if (!coach.on || (coach.phase !== 'live' && coach.phase !== 'connect') || coach.ask || coach.result) return;
+  if (!coach.on || coach.drill || (coach.phase !== 'live' && coach.phase !== 'connect') || coach.ask || coach.result) return;
   const t = drone.time;
   recap.flags.push({ t0: +Math.max(0, t - 3).toFixed(3), t: +t.toFixed(3), actual: coach.name, added: true });
   recap.dirty = true;
@@ -1015,6 +1303,11 @@ setInterval(() => {
     return;
   }
   coachCollect();
+  if (coach.drill) {
+    coachDrillTick();
+    renderCoach();
+    return;
+  }
   const auto = store.get('coachRetry', true) && !coach.retryT && !coach.hold && !coach.done && !coach.result;
   if (auto && drone.crashed && !coach.ask) {
     coach.retryT = setTimeout(() => {
@@ -1098,6 +1391,10 @@ function renderCoach() {
     tripRender(box);
     return;
   }
+  if (coach.drill) {
+    renderDrill(box);
+    return;
+  }
   const vars = new Set(),
     dots = Array.from({ length: COACH_TRIES }, (_, k) => {
       const L = coach.log[k];
@@ -1166,6 +1463,48 @@ function renderCoach() {
     box.innerHTML = html;
   } // it is checked 7 times a second: rewriting it each time ate clicks (a click needs the same button under the press and the release)
 }
+function renderDrill(box) {
+  const d = coach.d,
+    V = coach.lastV,
+    vars = new Set(),
+    j = coach.last || { out: coach.steps.map(() => ({ ok: false, msg: '' })), done: 0 },
+    next = coachNextName(),
+    canShow = !!coach.fly,
+    dots = Array.from({ length: DRILL_STREAK }, (_, k) => `<i class="${k < d.streak ? 'ok' : k === d.streak ? 'on' : ''}"></i>`).join('');
+  const verdict = V
+    ? V.v === 'land'
+      ? `<div class="coRes ok">✓ Landed <small>${esc(V.how)}</small></div>`
+      : V.v === 'close'
+        ? `<div class="coRes">≈ Close <small>every part was there; the game did not call it yet</small></div>`
+        : `<div class="coRes no">✗ <small>${esc0(V.how)}</small></div>`
+    : `<div class="trLast">Fly the whole trick. The game says how it went and puts you back at the start.</div>`;
+  const help =
+    d.help >= 2
+      ? `🐢 Slow motion${cgh.at ? ', the ghost ahead of you and its sticks as arrows' : ''}.`
+      : d.help === 1
+        ? cgh.at
+          ? '👻 Follow the ghost along the yellow line.'
+          : 'The steps are below.'
+        : '';
+  const steps = coach.showSteps
+    ? `<ol class="coSteps">${coach.steps
+        .map((s, k) => {
+          const o = j.out[k] || { ok: false, msg: '' };
+          return `<li class="${o.ok ? 'ok' : ''}">${o.ok ? '✓ ' : ''}${coachStepText(s, vars)}${o.ok && o.msg ? ` <small class="coGot">${o.msg}</small>` : ''}</li>`;
+        })
+        .join('')}</ol>`
+    : '';
+  const html = `<div class="trHead"><small>🎓 TRAIN</small><span class="coDots" title="${DRILL_STREAK} landed in a row = learned">${dots}</span></div><div class="trTarget">${esc(coach.name)}${d.rung >= 3 ? ' <small class="coRung r3">★ learned</small>' : ''}</div>
+    <div class="trObs">${coach.obj ? `on <b>${esc(coach.obj)}</b>` : `fly it on: <b>${esc((coach.spots || []).join(', '))}</b>`}${coach.end === 'back' ? ' · ends flying backward' : ''}</div>
+    ${verdict}${help ? `<div class="trMsg">${help}</div>` : ''}${coach.msg ? `<div class="trMsg">${esc(coach.msg)}</div>` : ''}${steps}
+    <div class="trBtns">${canShow ? '<button data-co="ghost" title="Watch it flown from the bot\'s own camera: sticks, steps, slow motion, scrubbing">👻 Show me</button>' : ''}${next ? `<button data-co="next" class="${d.rung >= 3 ? '' : 'ghost'}" title="The next trick on your ladder, in this room">Next: ${esc(next)} ▸</button>` : ''}</div>
+    <div class="trFoot"><button data-co="steps" class="ghost">${coach.showSteps ? 'Steps ▴' : 'Steps ▾'}</button><button data-co="help" class="ghost" title="Help comes by itself after a few misses; click to change it">Help: ${['off', 'ghost', 'slow motion'][d.help]}</button>${canShow ? '<button data-co="examples" class="ghost" title="Other flights of it: other pilots, other objects">🎞 Examples</button>' : ''}<button data-co="done" class="ghost" title="Back to the Tricktionary">✓ Done</button></div>`;
+  coachCaption(d.help >= 1 && cgh.at && cgh.vis && !coach.result && !coach.arrowsOn ? { k: coachGhostCue(), n: coach.steps.length } : null); // (in slow motion the arrows say it)
+  if (html !== box.__h) {
+    box.__h = html;
+    box.innerHTML = html;
+  }
+}
 // the Tricktionary: a mark by each trained trick, and the ladder box on top (what is learned, what to train next)
 function coachMark(name) {
   const r = (store.get('coachRungs', {})[name] || {}).r || 0;
@@ -1177,7 +1516,7 @@ function coachLadderHtml() {
   const L = coachLadder(window.TPW_TRICKS, store.get('coachRungs', {}), coachCan),
     nx = L.next.slice(0, 4);
   if (!L.total) return '';
-  return `<div class="coLadderBox"><b>🎓 Your ladder</b> · ${L.learned} of ${L.total} learned${nx.length ? ` · next up: ${nx.map(t => `<a href="#" class="watch train" data-train="${encodeURIComponent(t.name.trim())}" title="${esc(String(t.diff || '').trim())} · ${t.pts} pts">${esc(t.name.trim())}</a>${coachMark(t.name.trim())}`).join(' ')}` : ' · every one of them. Nice.'}<br><small>Each trick has three rungs: walk it (step by step), land it (live), connect it (into another trick). Kept in this browser only.</small></div>`;
+  return `<div class="coLadderBox"><b>🎓 Your ladder</b> · ${L.learned} of ${L.total} learned${nx.length ? ` · next up: ${nx.map(t => `<a href="#" class="watch train" data-train="${encodeURIComponent(t.name.trim())}" title="${esc(String(t.diff || '').trim())} · ${t.pts} pts">${esc(t.name.trim())}</a>${coachMark(t.name.trim())}`).join(' ')}` : ' · every one of them. Nice.'}<br><small>Each trick has three rungs: close (every part there), landed (the game calls it), learned (three landed in a row). Kept in this browser only.</small></div>`;
 }
 const COACH_LINK = 3; // s between the two calls of a connected pair (the combo's own 3 s)
 const esc0 = s => s;
@@ -1201,8 +1540,20 @@ document.addEventListener('click', e => {
   const a = b.dataset.co;
   if (a === 'yes' || a === 'no' || a === 'mine') coachAnswer(a);
   if (a === 'again') {
-    if (coach.done) coachStart(coach.name);
+    if (coach.done || coach.drill) coachStart(coach.name);
     else coachAnswer('again');
+  }
+  if (a === 'next') coachNext();
+  if (a === 'steps') {
+    coach.showSteps = !coach.showSteps;
+    renderCoach();
+  }
+  if (a === 'help' && coach.d) {
+    coach.d.help = (coach.d.help + 1) % 3;
+    coach.d.miss = 0;
+    if (coach.d.help && !cgh.at) coach.showSteps = true;
+    coachGhostHide();
+    renderCoach();
   }
   if (a === 'lapskip') tripPass('skipped', true);
   if (a === 'missed') coachMissed();
@@ -1245,7 +1596,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyY' && A) coachAnswer(A.ok ? 'yes' : 'mine');
   if (e.code === 'KeyN' && A) coachAnswer(A.ok ? 'no' : 'again');
   if (e.code === 'KeyQ' && !A) coachMissed();
-  if (e.code === 'KeyK' && !coach.done) {
+  if (e.code === 'KeyK' && !coach.done && !coach.drill) {
     if (coach.lap) tripPass('skipped', true);
     else {
       coach.ask = null;
@@ -1677,7 +2028,7 @@ function coachDemo(intro) {
     return;
   }
   let f = intro && coach.fly ? coach.fly : demoFly(coach.name),
-    I = intro ? { phase: 'payoff', n: 0 } : null;
+    I = intro ? { phase: 'payoff', n: 0, short: intro === 'short' } : null;
   if (intro === 'examples') {
     const list = demoExamples(coach.name, coach.fly);
     if (!list.length) {
@@ -1724,7 +2075,7 @@ function demoBack() {
   renderCoach();
   flash(
     was
-      ? '<b>YOUR TURN</b><small>step by step first: the caption says what to do</small>'
+      ? `<b>YOUR TURN</b><small>${coach.drill ? 'fly it: the game says how it went' : 'step by step first: the caption says what to do'}</small>`
       : '<b>YOUR TURN</b><small>back at the start</small>'
   );
 }
@@ -1736,6 +2087,10 @@ function demoLoop() {
   const I = judge.intro;
   if (!I) return true;
   I.n++;
+  if (I.phase === 'payoff' && I.short) {
+    demoBack();
+    return false;
+  } // the drill's intro: once at full speed, then fly
   if (I.phase === 'payoff' && I.n < INTRO_PASSES) return true;
   if (I.phase === 'payoff') {
     I.phase = 'walk';
@@ -2086,7 +2441,7 @@ function demoArrows() {
   if (!cv) return;
   const on = !!(judge.demo && mode === 'judge' && rows && rows.length > 1);
   if (!on) {
-    if (!coach.freeze) cv.classList.add('hide');
+    if (!coach.freeze && !coach.arrowsOn) cv.classList.add('hide');
     return;
   }
   const dtR = (rows[rows.length - 1][0] - rows[0][0]) / (rows.length - 1),
@@ -2239,17 +2594,17 @@ function drawStickArrows(P, R, Y, T, dT, live) {
   // throttle gauge, left of the crosshair (not in the pauses when the throttle is not asked for)
   if (T == null) return;
   const gx = cx - 300 * u,
-    gh = 220 * u,
+    cgh = 220 * u,
     gw = 26 * u,
-    gy = cy - gh / 2;
+    gy = cy - cgh / 2;
   g.fillStyle = 'rgba(0,0,0,.55)';
-  g.fillRect(gx - 3 * u, gy - 3 * u, gw + 6 * u, gh + 6 * u);
+  g.fillRect(gx - 3 * u, gy - 3 * u, gw + 6 * u, cgh + 6 * u);
   g.fillStyle = col(T);
-  g.fillRect(gx, gy + gh * (1 - T), gw, gh * T);
-  label(`THR ${Math.round(T * 100)}%`, gx + gw / 2, gy + gh + 26 * u, T);
+  g.fillRect(gx, gy + cgh * (1 - T), gw, cgh * T);
+  label(`THR ${Math.round(T * 100)}%`, gx + gw / 2, gy + cgh + 26 * u, T);
   if (Math.abs(dT) > 0.6) {
     const up = dT > 0,
-      ay = up ? gy - 18 * u : gy + gh + 44 * u,
+      ay = up ? gy - 18 * u : gy + cgh + 44 * u,
       s = 18 * u;
     g.beginPath();
     g.moveTo(gx + gw / 2, ay + (up ? -s : s));
@@ -2285,8 +2640,9 @@ function coachFrozen() {
 coach.scale = 1;
 function coachTimeScale(dt) {
   if (!coach.on || mode !== 'fly') return (coach.scale = 1);
-  const want = coach.freeze ? 0 : 1;
-  coach.scale = want ? Math.min(1, coach.scale + dt / 0.5) : Math.max(0, coach.scale - dt / 0.3);
+  const slow = coach.drill && coach.d && coach.d.help >= 2 && !coach.hold && !coach.result, // the drill's slow motion
+    want = coach.freeze ? 0 : slow ? DRILL_SLOW_X : 1;
+  coach.scale = coach.scale < want ? Math.min(want, coach.scale + dt / 0.5) : Math.max(want, coach.scale - dt / 0.3);
   const x = coach.scale;
   return x * x * (3 - 2 * x); // smoothstep: no jolt at either end
 }
@@ -2627,6 +2983,7 @@ function tripStart(name) {
   Object.assign(coach, {
     on: true,
     lap: { name, stages: LAP_TRAIN[name], k: 0, done: [], msg: '', base: null, passAt: 0 },
+    drill: false,
     stn: 'pole',
     name,
     t,
@@ -2856,3 +3213,13 @@ setInterval(() => {
   if (coach.on && coach.lap && mode === 'fly' && !coach.done && !coach.hold) tripHud(true);
   else if (trip.hudOn) tripHud(false);
 }, 70);
+
+window.__pw = window.__pw || {};
+window.__pw.coach = {
+  state: coach,
+  gh: cgh,
+  start: n => coachStart(n),
+  event: ev => coachEvent(ev),
+  verdict: (v, how) => coachVerdict(v, how),
+  next: () => coachNextName()
+};
