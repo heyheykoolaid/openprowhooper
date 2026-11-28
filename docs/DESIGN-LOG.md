@@ -6,6 +6,17 @@ the reasoning so it is not lost between sessions. **Add an entry whenever a desi
 
 ## 2026-11-28
 
+### Train's flow (owner asked, 2026-11-28: "training mode does not have a good flow to it, what can be improved?"; nothing built)
+Claude's read of why it drags: (1) a long wait before the first stick touch (a reload into the room, then up to seven shown flights);
+(2) the step-by-step tries stop the game at every part and want the sticks held 1.5 s, so the trick is never felt as one motion;
+(3) every pilot gets the same five tries whatever happens (land it first go and you still walk the parts twice); (4) the live tries
+ask "was it really one?" although nothing from the room is kept any more; (5) each trick is its own trip: Done reloads back to the
+Tricktionary, there is no "next trick"; (6) the panel carries a lot of text and five switches. **Proposed**: one drill loop: rolling
+start, fly it, a one-line verdict, back at the start a second later; help only grows after misses (a miss or two: a slow ghost to follow;
+more: slow motion through the hard part with the arrows, no stops; the full step list only on request); three landed in a row = learned
+and "Next trick" loads the next one in the same room. The intro shrinks to one full-speed pass, skippable, the rest on a Show me button.
+Open: the owner's pick, and what he feels is worst.
+
 ### The source reformatted (owner, 2026-11-28: "If reformatting helps you and the health of this game, then do it")
 Done as its own commit: every game source file is now one statement a line (Prettier). No behaviour change: the syntax trees are identical,
 all tests pass, the built game was loaded and a flight played back in a browser. The page is 3 % bigger compressed. The two data files and
