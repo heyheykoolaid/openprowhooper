@@ -55,7 +55,7 @@ for (const b of bad) console.log('  ✗ ' + b);
   const D = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Master'], di = t => D.indexOf(String(t.diff).trim()), sorted = A.next.every((t, k) => !k || di(A.next[k - 1]) <= di(t));
   const okL = ph === 'parts parts live live connect' && L.COACH_TRIES === 5 && rungs && A.learned === 0 && A.total === A.next.length && A.total >= 25 && sorted && B.learned === 1 && !B.next.some(t => t.name.trim() === first) && (di(A.next[3]) !== di(A.next[0]) || C2.next[0].name.trim() === A.next[3].name.trim());
   console.log(`${okL ? '✓' : '✗'} the ladder: tries are ${ph}; ${A.total} trainable tricks, easiest first (${A.next.slice(0, 3).map(t => t.name.trim()).join(', ')}…), a learned one drops off, a started one comes first in its difficulty`); if (!okL) process.exitCode = 1;
-  const inp = fs.readFileSync(__dirname + '/../src/input.js', 'utf8'), M = new Function(inp.match(/const STICK_MODES = \{[^\n]+\};/)[0] + ' return STICK_MODES;')();
+  const inp = fs.readFileSync(__dirname + '/../src/input.js', 'utf8'), M = new Function(inp.match(/const STICK_MODES = \{[\s\S]+?\};/)[0] + ' return STICK_MODES;')();
   const okM = [1, 2, 3, 4].every(m => M[m].slice().sort().join() === 'pitch,roll,thr,yaw') && M[2].join() === 'yaw,thr,roll,pitch' && M[1].join() === 'yaw,pitch,roll,thr' && M[3].join() === 'roll,pitch,yaw,thr' && M[4].join() === 'roll,thr,yaw,pitch';
   console.log(`${okM ? '✓' : '✗'} stick modes 1-4 each carry all four axes once (mode 2: left throttle / yaw, right pitch / roll)`); if (!okM) process.exitCode = 1; }
 console.log(`${ok}/${n} scripted flights pass every training step (${names.length} tricks)`);

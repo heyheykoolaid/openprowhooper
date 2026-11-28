@@ -1,3768 +1,9385 @@
 // Pro Whooper — simulation core (no rendering). Units: SI (m, kg, s, rad) unless noted.
 // World: +Y up. Drone body frame: +X right, +Y up (thrust), -Z forward (camera).
 (function (root) {
-'use strict';
+  'use strict';
 
-const RHO = 1.225, G = 9.81, D2R = Math.PI / 180, R2D = 180 / Math.PI;
-let SHAKE_A = 30;   // rad/s² per unit of tune.shake: shake 1 = the owner's whoop (tools/feelfit.js --fit on blackbox/2026-11-17-bum-darts, with loopDelayMs 3)
-const setShakeA = a => { SHAKE_A = +a || SHAKE_A; };
-
-// ---------------------------------------------------------------- vector / quat helpers
-const v3 = (x = 0, y = 0, z = 0) => ({ x, y, z });
-const add = (a, b) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
-const sub = (a, b) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
-const mul = (a, s) => v3(a.x * s, a.y * s, a.z * s);
-const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
-const cross = (a, b) => v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-const len = a => Math.sqrt(dot(a, a));
-const norm = a => { const l = len(a) || 1; return mul(a, 1 / l); };
-const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
-// quaternion {w,x,y,z}
-function qmul(a, b) {
-  return { w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-           x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-           y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-           z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w };
-}
-function qnorm(q) { const l = Math.hypot(q.w, q.x, q.y, q.z) || 1; q.w /= l; q.x /= l; q.y /= l; q.z /= l; return q; }
-function qrot(q, v) { // rotate body vector v into world
-  const ix = q.w * v.x + q.y * v.z - q.z * v.y, iy = q.w * v.y + q.z * v.x - q.x * v.z,
-        iz = q.w * v.z + q.x * v.y - q.y * v.x, iw = -q.x * v.x - q.y * v.y - q.z * v.z;
-  return v3(ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y,
-            iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z,
-            iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x);
-}
-const qconj = q => ({ w: q.w, x: -q.x, y: -q.y, z: -q.z });
-const qinv = (q, v) => qrot(qconj(q), v); // world -> body
-function qaxis(axis, ang) { const s = Math.sin(ang / 2); return { w: Math.cos(ang / 2), x: axis.x * s, y: axis.y * s, z: axis.z * s }; }
-
-// deterministic noise
-function makeRng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) / 4294967296) * 2 - 1; }; }
-
-// ================================================================= PARTS CATALOG
-// All numbers are first-pass estimates from spec sheets + typical bench data.
-// They are meant to be replaced by values fitted from real Blackbox logs.
-const PARTS = {
-  frames: {
-    air65:      { name: 'Air65 frame', size: 65, cells: 1, cap: [250, 380], mass: 2.6, propMax: 31, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.38 },
-    air65champ: { name: 'Air65 Champion frame (light)', size: 65, cells: 1, cap: [250, 380], mass: 2.2, propMax: 31, ductDrag: 0.97, ductThrust: 1.06, restitution: 0.42 },
-    meteor65:   { name: 'Meteor65 Pro frame', size: 65, cells: 1, cap: [250, 380], mass: 3.4, propMax: 31, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.32 },
-    air75:      { name: 'Air75 frame', size: 75, cells: 1, cap: [300, 550], mass: 3.0, propMax: 40, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.36 },
-    meteor75:   { name: 'Meteor75 Pro frame', size: 75, cells: 1, cap: [300, 550], mass: 3.9, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
-    // 2S whoops (estimates from typical builds: Mobula7-style 75 mm and Mobula8 / Beta85X-style 85 mm; tune from a Blackbox log when one arrives)
-    whoop75_2s: { name: '75mm 2S frame (Mobula7 style)', size: 75, cells: 2, cap: [300, 450], mass: 4.6, propMax: 40, ductDrag: 1.08, ductThrust: 1.08, restitution: 0.30 },
-    // Fractal Engineering (owner, 2026-11-20): a 1.5 mm carbon base plate with four separate nylon ducts cut from a stock whoop
-    // frame, "squished X" (the motors closer front to back than side to side: `squish` = front-back / side spacing, an estimate
-    // until the pilot's photos and logs), a low board and camera. Weights from the maker: the 65 under 19.5 g and the 75 about
-    // 21 g built with a HappyModel DiamondF4; the 75 Pro is 84 mm motor to motor for 45 mm props. Fit from Blackbox logs.
-    fractal65:  { name: 'Fractal 65 (carbon + ducts)', size: 65, squish: 0.85, cells: 1, cap: [250, 380], mass: 4.6, propMax: 31, ductDrag: 0.98, ductThrust: 1.06, restitution: 0.34 },
-    fractal75:  { name: 'Fractal 75 (carbon + ducts)', size: 75, squish: 0.85, cells: 1, cap: [300, 550], mass: 4.6, propMax: 40, ductDrag: 0.98, ductThrust: 1.06, restitution: 0.32 },
-    fractal75pro: { name: 'Fractal 75 Pro (84 mm, 45 mm props)', size: 84, squish: 0.85, cells: 1, cap: [300, 550], mass: 5.4, propMax: 45, ductDrag: 1.0, ductThrust: 1.06, restitution: 0.30 },
-    whoop85_2s: { name: '85mm 2S frame (Mobula8 style)', size: 85, cells: 2, cap: [450, 650], mass: 6.8, propMax: 51, ductDrag: 1.1, ductThrust: 1.08, restitution: 0.28 },
-  },
-  motors: { // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
-    m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.236, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
-    m0702se_27k: { name: '0702SE 27000KV', kv: 27000, mass: 1.9, rm: 0.318, i0: 0.15, bellJ: 2.6e-9, bearing: 1.15 },
-    m0702ii_30k: { name: '0702 II 30000KV', kv: 30000, mass: 1.9, rm: 0.265, i0: 0.16, bellJ: 2.6e-9, bearing: 1.0 },
-    m0702ii_36k: { name: '0702 II 36000KV', kv: 36000, mass: 1.9, rm: 0.24, i0: 0.19, bellJ: 2.6e-9, bearing: 1.0 },
-    // RCinPower EVO 0702 (pilot's build): 1.15 g without wires, dual NMB ball bearings, 9N12P 0.1 mm laminations; published
-    // 41 g (31800KV) / 43 g (33800KV) at 4.2 V on HQ 1.2x1x3 at ~5.3-5.6 A, 135 mΩ (rotorama.com). Scaled like the other
-    // motors here (the sim reads ~0.8× published static thrust), so it's spicier than the stock Air65 motors
-    evo_31k:     { name: 'RCinPower EVO 0702 31800KV', kv: 31800, mass: 1.45, rm: 0.28, i0: 0.17, bellJ: 2.4e-9, bearing: 0.9 },
-    evo_33k:     { name: 'RCinPower EVO 0702 33800KV', kv: 33800, mass: 1.45, rm: 0.27, i0: 0.18, bellJ: 2.4e-9, bearing: 0.9 },
-    m0802_19k:   { name: '0802SE 19500KV', kv: 19500, mass: 2.3, rm: 0.52, i0: 0.12, bellJ: 3.6e-9, bearing: 1.15 },
-    m1002_19k:   { name: '1002 19000KV', kv: 19000, mass: 2.9, rm: 0.40, i0: 0.15, bellJ: 5.0e-9, bearing: 1.0 },
-    // 2S motors: about half the KV of their 1S cousins, more copper
-    m0802_16k:   { name: '0802 16000KV (2S)', kv: 16000, mass: 2.4, rm: 1.05, i0: 0.11, bellJ: 3.6e-9, bearing: 1.1 },
-    m1102_13k:   { name: '1102 13500KV (2S)', kv: 13500, mass: 3.2, rm: 0.85, i0: 0.13, bellJ: 6.0e-9, bearing: 1.0 },
-    m1103_11k:   { name: '1103 11000KV (2S)', kv: 11000, mass: 3.9, rm: 0.66, i0: 0.14, bellJ: 8.5e-9, bearing: 1.0 },
-    // Flywoo ROBO 1003 14800KV (Metal Craft Fpv's toothpick, 2026-11-19): 1-2S, 10 x 3 mm stator, 9N12P, 13.5 mm bell, dual
-    // bearings, 3.3 g with 4 cm of wire (flywoo.net). No published resistance or thrust: winding and idle current estimated
-    // from the 1102 13500KV (copper scaled by KV² and stator volume); fit them from his Blackbox log when it arrives
-    m1003_15k:   { name: 'Flywoo ROBO 1003 14800KV (1-2S)', kv: 14800, mass: 3.3, rm: 0.65, i0: 0.14, bellJ: 6.5e-9, bearing: 0.9 },
-  },
-  props: { // Ct/Cq: static coefficients, jmax: advance ratio where thrust ~0, mass per prop (g)
-    gf1219s: { name: 'Gemfan 1219S 3-blade 31mm', d: 31, blades: 3, ct: 0.120, cq: 0.0125, jmax: 0.95, mass: 0.23 },
-    hq31ul:  { name: 'HQ 31mm Ultralight 3-blade', d: 31, blades: 3, ct: 0.108, cq: 0.0108, jmax: 0.9, mass: 0.17 },
-    gf1207:  { name: 'Gemfan 1207 3-blade 31mm', d: 31, blades: 3, ct: 0.097, cq: 0.0090, jmax: 0.75, mass: 0.20 },
-    p40_2b:  { name: '40mm 2-blade', d: 40, blades: 2, ct: 0.095, cq: 0.0085, jmax: 0.85, mass: 0.32 },
-    p40_3b:  { name: '40mm 3-blade', d: 40, blades: 3, ct: 0.112, cq: 0.0110, jmax: 0.85, mass: 0.40 },
-    // 45 mm (1.8 inch): toothpick / 85 mm-class props (estimates between the 40 and 51 mm ones)
-    p45_2b:  { name: '45mm (1.8 inch) 2-blade', d: 45, blades: 2, ct: 0.098, cq: 0.0088, jmax: 0.87, mass: 0.40 },
-    p45_3b:  { name: '45mm (1.8 inch) 3-blade', d: 45, blades: 3, ct: 0.110, cq: 0.0106, jmax: 0.87, mass: 0.50 },
-    p51_3b:  { name: '2 inch (51mm) 3-blade', d: 51, blades: 3, ct: 0.105, cq: 0.0100, jmax: 0.9, mass: 0.62 },
-    p51_4b:  { name: '2 inch (51mm) 4-blade', d: 51, blades: 4, ct: 0.118, cq: 0.0122, jmax: 0.88, mass: 0.75 },
-    // 3D props: symmetrical blades push the same both ways (rev = share of normal thrust when spun backward; ordinary props ~0.55)
-    p31_3d:  { name: '31mm 3D (symmetrical) 3-blade', d: 31, blades: 3, ct: 0.092, cq: 0.0118, jmax: 0.8, mass: 0.22, rev: 0.95 },
-    p40_3d:  { name: '40mm 3D (symmetrical) 3-blade', d: 40, blades: 3, ct: 0.094, cq: 0.0112, jmax: 0.8, mass: 0.40, rev: 0.95 },
-  },
-  batteries: { // r: internal resistance incl. connector (ohm) when fresh
-    b260:   { name: '1S 260mAh LiHV', cap: 260, mass: 6.3, r: 0.075, hv: true },
-    b300:   { name: '1S 300mAh LiHV', cap: 300, mass: 7.4, r: 0.065, hv: true },
-    b380:   { name: '1S 380mAh LiHV', cap: 380, mass: 9.4, r: 0.058, hv: true },
-    // BETAFPV LAVA II (95C): published weights; resistance from the owner's Blackbox log (2026-11-19: 0.074-0.089 ohm at the FC on a
-    // cold day, connector and leads included), taken back to a mild day (cold raises a LiPo's resistance by about a third)
-    lava280: { name: 'LAVA II 1S 280mAh LiHV', cap: 280, mass: 6.8, r: 0.062, hv: true },
-    lava320: { name: 'LAVA II 1S 320mAh LiHV', cap: 320, mass: 8.2, r: 0.057, hv: true },
-    b450:   { name: '1S 450mAh LiPo', cap: 450, mass: 11.6, r: 0.050, hv: false },
-    b550:   { name: '1S 550mAh LiHV', cap: 550, mass: 13.8, r: 0.045, hv: true },
-    b2s300: { name: '2S 300mAh LiHV', cap: 300, mass: 16.5, r: 0.135, hv: true, cells: 2 },
-    b2s450: { name: '2S 450mAh LiHV', cap: 450, mass: 24.5, r: 0.105, hv: true, cells: 2 },
-    b2s550: { name: '2S 550mAh LiHV', cap: 550, mass: 30.0, r: 0.090, hv: true, cells: 2 },
-  },
-  electronics: { // AIO + VTX + RX + canopy + camera
-    air:    { name: 'Air AIO 5-in-1 + C03 cam + Air canopy', mass: 5.9, cells: 1 },
-    std:    { name: 'Standard AIO + micro cam + canopy', mass: 6.9, cells: 1 },
-    aio2s:  { name: '2S 12A AIO + micro cam + canopy', mass: 8.6, cells: 2 },
-  },
-};
-
-const PRESETS = {
-  'Air65 Racing':    { frame: 'air65', motor: 'm0702se_27k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
-  'Air65 Freestyle': { frame: 'air65', motor: 'm0702se_23k', prop: 'hq31ul', battery: 'b300', electronics: 'air' },
-  'Air65 Champion':  { frame: 'air65champ', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b260', electronics: 'air' },
-  'Air65 II Champion': { frame: 'air65champ', motor: 'm0702ii_36k', prop: 'gf1207', battery: 'b260', electronics: 'air' },
-  'Air65 + RCinPower EVO': { frame: 'air65', motor: 'evo_31k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
-  '75mm build':      { frame: 'air75', motor: 'm1002_19k', prop: 'p40_2b', battery: 'b450', electronics: 'air' },
-  '75mm 2S (Mobula7 style)': { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3b', battery: 'b2s300', electronics: 'aio2s' },
-  '75mm 2S light (0802)':    { frame: 'whoop75_2s', motor: 'm0802_16k', prop: 'p40_2b', battery: 'b2s300', electronics: 'aio2s' },
-  'Fractal 65':      { frame: 'fractal65', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
-  'Fractal 75':      { frame: 'fractal75', motor: 'm0802_19k', prop: 'p40_3b', battery: 'b300', electronics: 'air' },
-  'Fractal 75 Pro':  { frame: 'fractal75pro', motor: 'm1002_19k', prop: 'p45_3b', battery: 'b380', electronics: 'air' },
-  '85mm 2S (Mobula8 style)': { frame: 'whoop85_2s', motor: 'm1103_11k', prop: 'p51_4b', battery: 'b2s450', electronics: 'aio2s' },
-  'Air65 3D':        { frame: 'air65', motor: 'm0702ii_30k', prop: 'p31_3d', battery: 'b300', electronics: 'air' },
-  '75mm 2S 3D':      { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3d', battery: 'b2s300', electronics: 'aio2s' },
-};
-
-// Betaflight-like default tune (whoop-ish). User can paste their own `diff`.
-function defaultTune() {
-  return {
-    ratesType: 'ACTUAL',
-    rates: { // ACTUAL: center (deg/s), max (deg/s), expo (0-1). BETAFLIGHT: rcRate, superRate, expo
-      // pilot's request: 150 centre, 680 max, 0.5 expo on all three
-      roll:  { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
-      pitch: { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.70, rcExpo: 0.0 },
-      yaw:   { center: 150, max: 680, expo: 0.50, rcRate: 1.0, superRate: 0.65, rcExpo: 0.0 },
-    },
-    pid: {
-      roll:  { p: 60, i: 80, d: 42, f: 120 },
-      pitch: { p: 64, i: 84, d: 46, f: 125 },
-      yaw:   { p: 60, i: 80, d: 0,  f: 120 },
-    },
-    idle: 0.055, airmode: true, thrMid: 0.5, thrExpo: 0.0,
-    itermRelax: true, camTilt: 20, camFov: 118,
+  const RHO = 1.225,
+    G = 9.81,
+    D2R = Math.PI / 180,
+    R2D = 180 / Math.PI;
+  let SHAKE_A = 30; // rad/s² per unit of tune.shake: shake 1 = the owner's whoop (tools/feelfit.js --fit on blackbox/2026-11-17-bum-darts, with loopDelayMs 3)
+  const setShakeA = a => {
+    SHAKE_A = +a || SHAKE_A;
   };
-}
 
-// ================================================================= BUILD → physical params
-function buildDrone(spec) {
-  const fr = PARTS.frames[spec.frame], mo = PARTS.motors[spec.motor], pr = PARTS.props[spec.prop],
-        ba = PARTS.batteries[spec.battery], el = PARTS.electronics[spec.electronics];
-  const warnings = [];
-  if (spec.frame && spec.battery && !batteryFits(spec.frame, spec.battery)) warnings.push(`${(PARTS.batteries[spec.battery] || {}).name || 'This battery'} does not fit the ${(PARTS.frames[spec.frame] || {}).name || 'frame'}`);
-  if (pr.d > fr.propMax) warnings.push(`${pr.name} is too big for ${fr.name} (max ${fr.propMax}mm)`);
-  const sq = fr.squish || 1, hd = (fr.size / 1000) / 2, arm = sq === 1 ? hd / Math.SQRT2 : hd / Math.hypot(1, sq), armZ = arm * sq;   // motor offset on x (and z: squished X frames sit closer front to back)
-  const mMotor = (mo.mass + pr.mass) / 1000, mFrame = fr.mass / 1000, mEl = el.mass / 1000, mBat = ba.mass / 1000;
-  const mass = 4 * mMotor + mFrame + mEl + mBat;
-  const rDuct = pr.d / 2000 + 0.0025;
-  // inertia (diagonal) from point / simple shapes
-  let Ixx = 0, Iyy = 0, Izz = 0;
-  const pts = [[arm, 0, armZ], [-arm, 0, armZ], [arm, 0, -armZ], [-arm, 0, -armZ]];
-  for (const [x, y, z] of pts) {
-    Ixx += mMotor * (y * y + z * z); Iyy += mMotor * (x * x + z * z); Izz += mMotor * (x * x + y * y);
-    const mr = mFrame / 4; // duct ring at motor
-    Ixx += mr * (rDuct * rDuct / 2 + z * z); Iyy += mr * (rDuct * rDuct + x * x + z * z); Izz += mr * (rDuct * rDuct / 2 + x * x);
+  // ---------------------------------------------------------------- vector / quat helpers
+  const v3 = (x = 0, y = 0, z = 0) => ({ x, y, z });
+  const add = (a, b) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
+  const sub = (a, b) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
+  const mul = (a, s) => v3(a.x * s, a.y * s, a.z * s);
+  const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+  const cross = (a, b) => v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+  const len = a => Math.sqrt(dot(a, a));
+  const norm = a => {
+    const l = len(a) || 1;
+    return mul(a, 1 / l);
+  };
+  const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+  // quaternion {w,x,y,z}
+  function qmul(a, b) {
+    return {
+      w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+      x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
+    };
   }
-  const s = 0.026; Ixx += mEl * (s * s / 6 + 0.008 * 0.008); Iyy += mEl * s * s / 6; Izz += mEl * (s * s / 6 + 0.008 * 0.008);
-  const bl = 0.045, bh = 0.012; // battery along z
-  Ixx += mBat * ((bl * bl + bh * bh) / 12 + 0.01 * 0.01); Iyy += mBat * (bl * bl + bh * bh) / 12; Izz += mBat * (bh * bh * 2 / 12 + 0.01 * 0.01);
-  const D = pr.d / 1000, A = Math.PI * D * D / 4;
-  const kvRad = mo.kv * 2 * Math.PI / 60;
-  // a whoop prop's mass sits mostly in its hub and the thick roots of the blades (the chord and thickness taper to the tip):
-  // about m r² / 6, not the uniform rod's / 3 (2026-11-18: with / 3.2 a throttle step took 40-110 ms, real whoop motors 10-30)
-  const propJ = (pr.mass / 1000) * (D / 2) * (D / 2) / 6;
-  const motors = pts.map(([x, y, z], i) => ({
-    pos: v3(x, 0.004, z),
-    // props-in quad X: front-right & rear-left spin CCW from above (+Y), others CW
-    spin: ((x > 0) === (z < 0)) ? 1 : -1,
-  }));
-  const p = {
-    spec: { ...spec }, names: { frame: fr.name, motor: mo.name, prop: pr.name, battery: ba.name, electronics: el.name },
-    warnings, mass, I: v3(Ixx, Iyy, Izz), arm, D, A, rDuct, motors,
-    ct: pr.ct * fr.ductThrust, cq: pr.cq, jmax: pr.jmax,
-    kvRad, kt: 1 / kvRad, rm: mo.rm, i0: mo.i0 * mo.bearing, rotorJ: mo.bellJ + propJ,
-    bat: { cap: ba.cap, r: ba.r, hv: ba.hv, cells: ba.cells || 1 }, revEff: pr.rev ?? 0.55,
-    restitution: fr.restitution, friction: 0.45,
-    // body drag areas (Cd*A, m^2) — ducted whoops are draggy edge-on and very draggy flat
-    cdA: v3(0.0022 * fr.ductDrag * (fr.size / 65), 0.0058 * fr.ductDrag * Math.pow(fr.size / 65, 2), 0.0022 * fr.ductDrag * (fr.size / 65)),
-    rotorDrag: 0.85e-6 * (pr.d / 31) * fr.ductDrag, // in-plane H-force per (rad/s * m/s)
-    angDrag: 0.8e-8 * Math.pow(fr.size / 65, 4),
-    colliders: [
-      ...motors.map(m => ({ c: v3(m.pos.x, 0.002, m.pos.z), r: rDuct + 0.0012 })),
-      { c: v3(0, 0.011, -0.002), r: 0.012 }, { c: v3(0, -0.009, 0.002), r: 0.009 },
-    ],
-    camPos: v3(0, 0.017, -0.017),
+  function qnorm(q) {
+    const l = Math.hypot(q.w, q.x, q.y, q.z) || 1;
+    q.w /= l;
+    q.x /= l;
+    q.y /= l;
+    q.z /= l;
+    return q;
+  }
+  function qrot(q, v) {
+    // rotate body vector v into world
+    const ix = q.w * v.x + q.y * v.z - q.z * v.y,
+      iy = q.w * v.y + q.z * v.x - q.x * v.z,
+      iz = q.w * v.z + q.x * v.y - q.y * v.x,
+      iw = -q.x * v.x - q.y * v.y - q.z * v.z;
+    return v3(
+      ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y,
+      iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z,
+      iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x
+    );
+  }
+  const qconj = q => ({ w: q.w, x: -q.x, y: -q.y, z: -q.z });
+  const qinv = (q, v) => qrot(qconj(q), v); // world -> body
+  function qaxis(axis, ang) {
+    const s = Math.sin(ang / 2);
+    return { w: Math.cos(ang / 2), x: axis.x * s, y: axis.y * s, z: axis.z * s };
+  }
+
+  // deterministic noise
+  function makeRng(seed) {
+    let s = seed >>> 0 || 1;
+    return () => {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      return ((s >>> 0) / 4294967296) * 2 - 1;
+    };
+  }
+
+  // ================================================================= PARTS CATALOG
+  // All numbers are first-pass estimates from spec sheets + typical bench data.
+  // They are meant to be replaced by values fitted from real Blackbox logs.
+  const PARTS = {
+    frames: {
+      air65: {
+        name: 'Air65 frame',
+        size: 65,
+        cells: 1,
+        cap: [250, 380],
+        mass: 2.6,
+        propMax: 31,
+        ductDrag: 1.0,
+        ductThrust: 1.06,
+        restitution: 0.38
+      },
+      air65champ: {
+        name: 'Air65 Champion frame (light)',
+        size: 65,
+        cells: 1,
+        cap: [250, 380],
+        mass: 2.2,
+        propMax: 31,
+        ductDrag: 0.97,
+        ductThrust: 1.06,
+        restitution: 0.42
+      },
+      meteor65: {
+        name: 'Meteor65 Pro frame',
+        size: 65,
+        cells: 1,
+        cap: [250, 380],
+        mass: 3.4,
+        propMax: 31,
+        ductDrag: 1.08,
+        ductThrust: 1.08,
+        restitution: 0.32
+      },
+      air75: {
+        name: 'Air75 frame',
+        size: 75,
+        cells: 1,
+        cap: [300, 550],
+        mass: 3.0,
+        propMax: 40,
+        ductDrag: 1.0,
+        ductThrust: 1.06,
+        restitution: 0.36
+      },
+      meteor75: {
+        name: 'Meteor75 Pro frame',
+        size: 75,
+        cells: 1,
+        cap: [300, 550],
+        mass: 3.9,
+        propMax: 40,
+        ductDrag: 1.08,
+        ductThrust: 1.08,
+        restitution: 0.3
+      },
+      // 2S whoops (estimates from typical builds: Mobula7-style 75 mm and Mobula8 / Beta85X-style 85 mm; tune from a Blackbox log when one arrives)
+      whoop75_2s: {
+        name: '75mm 2S frame (Mobula7 style)',
+        size: 75,
+        cells: 2,
+        cap: [300, 450],
+        mass: 4.6,
+        propMax: 40,
+        ductDrag: 1.08,
+        ductThrust: 1.08,
+        restitution: 0.3
+      },
+      // Fractal Engineering (owner, 2026-11-20): a 1.5 mm carbon base plate with four separate nylon ducts cut from a stock whoop
+      // frame, "squished X" (the motors closer front to back than side to side: `squish` = front-back / side spacing, an estimate
+      // until the pilot's photos and logs), a low board and camera. Weights from the maker: the 65 under 19.5 g and the 75 about
+      // 21 g built with a HappyModel DiamondF4; the 75 Pro is 84 mm motor to motor for 45 mm props. Fit from Blackbox logs.
+      fractal65: {
+        name: 'Fractal 65 (carbon + ducts)',
+        size: 65,
+        squish: 0.85,
+        cells: 1,
+        cap: [250, 380],
+        mass: 4.6,
+        propMax: 31,
+        ductDrag: 0.98,
+        ductThrust: 1.06,
+        restitution: 0.34
+      },
+      fractal75: {
+        name: 'Fractal 75 (carbon + ducts)',
+        size: 75,
+        squish: 0.85,
+        cells: 1,
+        cap: [300, 550],
+        mass: 4.6,
+        propMax: 40,
+        ductDrag: 0.98,
+        ductThrust: 1.06,
+        restitution: 0.32
+      },
+      fractal75pro: {
+        name: 'Fractal 75 Pro (84 mm, 45 mm props)',
+        size: 84,
+        squish: 0.85,
+        cells: 1,
+        cap: [300, 550],
+        mass: 5.4,
+        propMax: 45,
+        ductDrag: 1.0,
+        ductThrust: 1.06,
+        restitution: 0.3
+      },
+      whoop85_2s: {
+        name: '85mm 2S frame (Mobula8 style)',
+        size: 85,
+        cells: 2,
+        cap: [450, 650],
+        mass: 6.8,
+        propMax: 51,
+        ductDrag: 1.1,
+        ductThrust: 1.08,
+        restitution: 0.28
+      }
+    },
+    motors: {
+      // Rm: phase resistance (ohm), I0: no-load current (A), bearing: friction scale
+      m0702se_23k: { name: '0702SE 23000KV', kv: 23000, mass: 1.9, rm: 0.236, i0: 0.12, bellJ: 2.6e-9, bearing: 1.15 },
+      m0702se_27k: { name: '0702SE 27000KV', kv: 27000, mass: 1.9, rm: 0.318, i0: 0.15, bellJ: 2.6e-9, bearing: 1.15 },
+      m0702ii_30k: { name: '0702 II 30000KV', kv: 30000, mass: 1.9, rm: 0.265, i0: 0.16, bellJ: 2.6e-9, bearing: 1.0 },
+      m0702ii_36k: { name: '0702 II 36000KV', kv: 36000, mass: 1.9, rm: 0.24, i0: 0.19, bellJ: 2.6e-9, bearing: 1.0 },
+      // RCinPower EVO 0702 (pilot's build): 1.15 g without wires, dual NMB ball bearings, 9N12P 0.1 mm laminations; published
+      // 41 g (31800KV) / 43 g (33800KV) at 4.2 V on HQ 1.2x1x3 at ~5.3-5.6 A, 135 mΩ (rotorama.com). Scaled like the other
+      // motors here (the sim reads ~0.8× published static thrust), so it's spicier than the stock Air65 motors
+      evo_31k: { name: 'RCinPower EVO 0702 31800KV', kv: 31800, mass: 1.45, rm: 0.28, i0: 0.17, bellJ: 2.4e-9, bearing: 0.9 },
+      evo_33k: { name: 'RCinPower EVO 0702 33800KV', kv: 33800, mass: 1.45, rm: 0.27, i0: 0.18, bellJ: 2.4e-9, bearing: 0.9 },
+      m0802_19k: { name: '0802SE 19500KV', kv: 19500, mass: 2.3, rm: 0.52, i0: 0.12, bellJ: 3.6e-9, bearing: 1.15 },
+      m1002_19k: { name: '1002 19000KV', kv: 19000, mass: 2.9, rm: 0.4, i0: 0.15, bellJ: 5.0e-9, bearing: 1.0 },
+      // 2S motors: about half the KV of their 1S cousins, more copper
+      m0802_16k: { name: '0802 16000KV (2S)', kv: 16000, mass: 2.4, rm: 1.05, i0: 0.11, bellJ: 3.6e-9, bearing: 1.1 },
+      m1102_13k: { name: '1102 13500KV (2S)', kv: 13500, mass: 3.2, rm: 0.85, i0: 0.13, bellJ: 6.0e-9, bearing: 1.0 },
+      m1103_11k: { name: '1103 11000KV (2S)', kv: 11000, mass: 3.9, rm: 0.66, i0: 0.14, bellJ: 8.5e-9, bearing: 1.0 },
+      // Flywoo ROBO 1003 14800KV (Metal Craft Fpv's toothpick, 2026-11-19): 1-2S, 10 x 3 mm stator, 9N12P, 13.5 mm bell, dual
+      // bearings, 3.3 g with 4 cm of wire (flywoo.net). No published resistance or thrust: winding and idle current estimated
+      // from the 1102 13500KV (copper scaled by KV² and stator volume); fit them from his Blackbox log when it arrives
+      m1003_15k: { name: 'Flywoo ROBO 1003 14800KV (1-2S)', kv: 14800, mass: 3.3, rm: 0.65, i0: 0.14, bellJ: 6.5e-9, bearing: 0.9 }
+    },
+    props: {
+      // Ct/Cq: static coefficients, jmax: advance ratio where thrust ~0, mass per prop (g)
+      gf1219s: { name: 'Gemfan 1219S 3-blade 31mm', d: 31, blades: 3, ct: 0.12, cq: 0.0125, jmax: 0.95, mass: 0.23 },
+      hq31ul: { name: 'HQ 31mm Ultralight 3-blade', d: 31, blades: 3, ct: 0.108, cq: 0.0108, jmax: 0.9, mass: 0.17 },
+      gf1207: { name: 'Gemfan 1207 3-blade 31mm', d: 31, blades: 3, ct: 0.097, cq: 0.009, jmax: 0.75, mass: 0.2 },
+      p40_2b: { name: '40mm 2-blade', d: 40, blades: 2, ct: 0.095, cq: 0.0085, jmax: 0.85, mass: 0.32 },
+      p40_3b: { name: '40mm 3-blade', d: 40, blades: 3, ct: 0.112, cq: 0.011, jmax: 0.85, mass: 0.4 },
+      // 45 mm (1.8 inch): toothpick / 85 mm-class props (estimates between the 40 and 51 mm ones)
+      p45_2b: { name: '45mm (1.8 inch) 2-blade', d: 45, blades: 2, ct: 0.098, cq: 0.0088, jmax: 0.87, mass: 0.4 },
+      p45_3b: { name: '45mm (1.8 inch) 3-blade', d: 45, blades: 3, ct: 0.11, cq: 0.0106, jmax: 0.87, mass: 0.5 },
+      p51_3b: { name: '2 inch (51mm) 3-blade', d: 51, blades: 3, ct: 0.105, cq: 0.01, jmax: 0.9, mass: 0.62 },
+      p51_4b: { name: '2 inch (51mm) 4-blade', d: 51, blades: 4, ct: 0.118, cq: 0.0122, jmax: 0.88, mass: 0.75 },
+      // 3D props: symmetrical blades push the same both ways (rev = share of normal thrust when spun backward; ordinary props ~0.55)
+      p31_3d: { name: '31mm 3D (symmetrical) 3-blade', d: 31, blades: 3, ct: 0.092, cq: 0.0118, jmax: 0.8, mass: 0.22, rev: 0.95 },
+      p40_3d: { name: '40mm 3D (symmetrical) 3-blade', d: 40, blades: 3, ct: 0.094, cq: 0.0112, jmax: 0.8, mass: 0.4, rev: 0.95 }
+    },
+    batteries: {
+      // r: internal resistance incl. connector (ohm) when fresh
+      b260: { name: '1S 260mAh LiHV', cap: 260, mass: 6.3, r: 0.075, hv: true },
+      b300: { name: '1S 300mAh LiHV', cap: 300, mass: 7.4, r: 0.065, hv: true },
+      b380: { name: '1S 380mAh LiHV', cap: 380, mass: 9.4, r: 0.058, hv: true },
+      // BETAFPV LAVA II (95C): published weights; resistance from the owner's Blackbox log (2026-11-19: 0.074-0.089 ohm at the FC on a
+      // cold day, connector and leads included), taken back to a mild day (cold raises a LiPo's resistance by about a third)
+      lava280: { name: 'LAVA II 1S 280mAh LiHV', cap: 280, mass: 6.8, r: 0.062, hv: true },
+      lava320: { name: 'LAVA II 1S 320mAh LiHV', cap: 320, mass: 8.2, r: 0.057, hv: true },
+      b450: { name: '1S 450mAh LiPo', cap: 450, mass: 11.6, r: 0.05, hv: false },
+      b550: { name: '1S 550mAh LiHV', cap: 550, mass: 13.8, r: 0.045, hv: true },
+      b2s300: { name: '2S 300mAh LiHV', cap: 300, mass: 16.5, r: 0.135, hv: true, cells: 2 },
+      b2s450: { name: '2S 450mAh LiHV', cap: 450, mass: 24.5, r: 0.105, hv: true, cells: 2 },
+      b2s550: { name: '2S 550mAh LiHV', cap: 550, mass: 30.0, r: 0.09, hv: true, cells: 2 }
+    },
+    electronics: {
+      // AIO + VTX + RX + canopy + camera
+      air: { name: 'Air AIO 5-in-1 + C03 cam + Air canopy', mass: 5.9, cells: 1 },
+      std: { name: 'Standard AIO + micro cam + canopy', mass: 6.9, cells: 1 },
+      aio2s: { name: '2S 12A AIO + micro cam + canopy', mass: 8.6, cells: 2 }
+    }
   };
-  p.stats = staticStats(p);
-  return p;
-}
 
-// What fits a frame (pilot, 2026-11-17: "restrict battery sizes to the appropriate whoop"): its cell count and a pack size
-// range (65 mm whoops 1S 250-380 mAh, 75 mm 1S 300-550, 75 mm 2S 300-450, 85 mm 2S 450-650), and electronics of the same
-// cell count. fitParts swaps anything that does not fit for the nearest that does (the Garage calls it on every change).
-function batteryFits(frameKey, batKey) { const f = PARTS.frames[frameKey], b = PARTS.batteries[batKey]; if (!f || !b) return false; return (b.cells || 1) === (f.cells || 1) && (!f.cap || (b.cap >= f.cap[0] && b.cap <= f.cap[1])); }
-function electronicsFit(frameKey, eKey) { const f = PARTS.frames[frameKey], e = PARTS.electronics[eKey]; return !!f && !!e && (e.cells || 1) === (f.cells || 1); }
-function fitParts(spec) {
-  const out = { ...spec }, f = PARTS.frames[out.frame]; if (!f) return out;
-  if (!batteryFits(out.frame, out.battery)) { const want = (PARTS.batteries[out.battery] || { cap: 300 }).cap; let best = null; for (const k of Object.keys(PARTS.batteries)) if (batteryFits(out.frame, k) && (!best || Math.abs(PARTS.batteries[k].cap - want) < Math.abs(PARTS.batteries[best].cap - want))) best = k; if (best) out.battery = best; }
-  if (!electronicsFit(out.frame, out.electronics)) { const k = Object.keys(PARTS.electronics).find(x => electronicsFit(out.frame, x)); if (k) out.electronics = k; }
-  return out;
-}
-function ocv(soc, hv, cells = 1) { return cells === 1 ? ocv1(soc, hv) : ocv1(soc, hv) * cells; }
-// world.groundHoles [{ x0, x1, z0, z1 }]: places with no ground plane (an underground station's footprint; its floors are boxes)
-function inGroundHole(H, x, z) { for (const h of H) if (x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1) return true; return false; }
-const BROWNOUT = 2.9;   // V a cell, under load (see Drone.step)
-function ocv1(soc, hv) {
-  const tbl = [3.30, 3.50, 3.62, 3.68, 3.72, 3.76, 3.80, 3.85, 3.92, 4.02, 4.20];
-  const x = clamp(soc, 0, 1) * 10, i = Math.min(9, Math.floor(x)), f = x - i;
-  let v = tbl[i] + (tbl[i + 1] - tbl[i]) * f;
-  if (hv) v += 0.15 * Math.pow(clamp(soc, 0, 1), 1.5);
-  return v;
-}
+  const PRESETS = {
+    'Air65 Racing': { frame: 'air65', motor: 'm0702se_27k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
+    'Air65 Freestyle': { frame: 'air65', motor: 'm0702se_23k', prop: 'hq31ul', battery: 'b300', electronics: 'air' },
+    'Air65 Champion': { frame: 'air65champ', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b260', electronics: 'air' },
+    'Air65 II Champion': { frame: 'air65champ', motor: 'm0702ii_36k', prop: 'gf1207', battery: 'b260', electronics: 'air' },
+    'Air65 + RCinPower EVO': { frame: 'air65', motor: 'evo_31k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
+    '75mm build': { frame: 'air75', motor: 'm1002_19k', prop: 'p40_2b', battery: 'b450', electronics: 'air' },
+    '75mm 2S (Mobula7 style)': { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3b', battery: 'b2s300', electronics: 'aio2s' },
+    '75mm 2S light (0802)': { frame: 'whoop75_2s', motor: 'm0802_16k', prop: 'p40_2b', battery: 'b2s300', electronics: 'aio2s' },
+    'Fractal 65': { frame: 'fractal65', motor: 'm0702ii_30k', prop: 'gf1219s', battery: 'b300', electronics: 'air' },
+    'Fractal 75': { frame: 'fractal75', motor: 'm0802_19k', prop: 'p40_3b', battery: 'b300', electronics: 'air' },
+    'Fractal 75 Pro': { frame: 'fractal75pro', motor: 'm1002_19k', prop: 'p45_3b', battery: 'b380', electronics: 'air' },
+    '85mm 2S (Mobula8 style)': { frame: 'whoop85_2s', motor: 'm1103_11k', prop: 'p51_4b', battery: 'b2s450', electronics: 'aio2s' },
+    'Air65 3D': { frame: 'air65', motor: 'm0702ii_30k', prop: 'p31_3d', battery: 'b300', electronics: 'air' },
+    '75mm 2S 3D': { frame: 'whoop75_2s', motor: 'm1102_13k', prop: 'p40_3d', battery: 'b2s300', electronics: 'aio2s' }
+  };
 
-// steady-state motor solve at voltage V (full duty) → rpm, thrust, current
-function motorSteady(p, V) {
-  let w = p.kvRad * V * 0.7;
-  for (let k = 0; k < 60; k++) {
+  // Betaflight-like default tune (whoop-ish). User can paste their own `diff`.
+  function defaultTune() {
+    return {
+      ratesType: 'ACTUAL',
+      rates: {
+        // ACTUAL: center (deg/s), max (deg/s), expo (0-1). BETAFLIGHT: rcRate, superRate, expo
+        // pilot's request: 150 centre, 680 max, 0.5 expo on all three
+        roll: { center: 150, max: 680, expo: 0.5, rcRate: 1.0, superRate: 0.7, rcExpo: 0.0 },
+        pitch: { center: 150, max: 680, expo: 0.5, rcRate: 1.0, superRate: 0.7, rcExpo: 0.0 },
+        yaw: { center: 150, max: 680, expo: 0.5, rcRate: 1.0, superRate: 0.65, rcExpo: 0.0 }
+      },
+      pid: {
+        roll: { p: 60, i: 80, d: 42, f: 120 },
+        pitch: { p: 64, i: 84, d: 46, f: 125 },
+        yaw: { p: 60, i: 80, d: 0, f: 120 }
+      },
+      idle: 0.055,
+      airmode: true,
+      thrMid: 0.5,
+      thrExpo: 0.0,
+      itermRelax: true,
+      camTilt: 20,
+      camFov: 118
+    };
+  }
+
+  // ================================================================= BUILD → physical params
+  function buildDrone(spec) {
+    const fr = PARTS.frames[spec.frame],
+      mo = PARTS.motors[spec.motor],
+      pr = PARTS.props[spec.prop],
+      ba = PARTS.batteries[spec.battery],
+      el = PARTS.electronics[spec.electronics];
+    const warnings = [];
+    if (spec.frame && spec.battery && !batteryFits(spec.frame, spec.battery))
+      warnings.push(
+        `${(PARTS.batteries[spec.battery] || {}).name || 'This battery'} does not fit the ${(PARTS.frames[spec.frame] || {}).name || 'frame'}`
+      );
+    if (pr.d > fr.propMax) warnings.push(`${pr.name} is too big for ${fr.name} (max ${fr.propMax}mm)`);
+    const sq = fr.squish || 1,
+      hd = fr.size / 1000 / 2,
+      arm = sq === 1 ? hd / Math.SQRT2 : hd / Math.hypot(1, sq),
+      armZ = arm * sq; // motor offset on x (and z: squished X frames sit closer front to back)
+    const mMotor = (mo.mass + pr.mass) / 1000,
+      mFrame = fr.mass / 1000,
+      mEl = el.mass / 1000,
+      mBat = ba.mass / 1000;
+    const mass = 4 * mMotor + mFrame + mEl + mBat;
+    const rDuct = pr.d / 2000 + 0.0025;
+    // inertia (diagonal) from point / simple shapes
+    let Ixx = 0,
+      Iyy = 0,
+      Izz = 0;
+    const pts = [
+      [arm, 0, armZ],
+      [-arm, 0, armZ],
+      [arm, 0, -armZ],
+      [-arm, 0, -armZ]
+    ];
+    for (const [x, y, z] of pts) {
+      Ixx += mMotor * (y * y + z * z);
+      Iyy += mMotor * (x * x + z * z);
+      Izz += mMotor * (x * x + y * y);
+      const mr = mFrame / 4; // duct ring at motor
+      Ixx += mr * ((rDuct * rDuct) / 2 + z * z);
+      Iyy += mr * (rDuct * rDuct + x * x + z * z);
+      Izz += mr * ((rDuct * rDuct) / 2 + x * x);
+    }
+    const s = 0.026;
+    Ixx += mEl * ((s * s) / 6 + 0.008 * 0.008);
+    Iyy += (mEl * s * s) / 6;
+    Izz += mEl * ((s * s) / 6 + 0.008 * 0.008);
+    const bl = 0.045,
+      bh = 0.012; // battery along z
+    Ixx += mBat * ((bl * bl + bh * bh) / 12 + 0.01 * 0.01);
+    Iyy += (mBat * (bl * bl + bh * bh)) / 12;
+    Izz += mBat * ((bh * bh * 2) / 12 + 0.01 * 0.01);
+    const D = pr.d / 1000,
+      A = (Math.PI * D * D) / 4;
+    const kvRad = (mo.kv * 2 * Math.PI) / 60;
+    // a whoop prop's mass sits mostly in its hub and the thick roots of the blades (the chord and thickness taper to the tip):
+    // about m r² / 6, not the uniform rod's / 3 (2026-11-18: with / 3.2 a throttle step took 40-110 ms, real whoop motors 10-30)
+    const propJ = ((pr.mass / 1000) * (D / 2) * (D / 2)) / 6;
+    const motors = pts.map(([x, y, z], i) => ({
+      pos: v3(x, 0.004, z),
+      // props-in quad X: front-right & rear-left spin CCW from above (+Y), others CW
+      spin: x > 0 === z < 0 ? 1 : -1
+    }));
+    const p = {
+      spec: { ...spec },
+      names: { frame: fr.name, motor: mo.name, prop: pr.name, battery: ba.name, electronics: el.name },
+      warnings,
+      mass,
+      I: v3(Ixx, Iyy, Izz),
+      arm,
+      D,
+      A,
+      rDuct,
+      motors,
+      ct: pr.ct * fr.ductThrust,
+      cq: pr.cq,
+      jmax: pr.jmax,
+      kvRad,
+      kt: 1 / kvRad,
+      rm: mo.rm,
+      i0: mo.i0 * mo.bearing,
+      rotorJ: mo.bellJ + propJ,
+      bat: { cap: ba.cap, r: ba.r, hv: ba.hv, cells: ba.cells || 1 },
+      revEff: pr.rev ?? 0.55,
+      restitution: fr.restitution,
+      friction: 0.45,
+      // body drag areas (Cd*A, m^2) — ducted whoops are draggy edge-on and very draggy flat
+      cdA: v3(
+        0.0022 * fr.ductDrag * (fr.size / 65),
+        0.0058 * fr.ductDrag * Math.pow(fr.size / 65, 2),
+        0.0022 * fr.ductDrag * (fr.size / 65)
+      ),
+      rotorDrag: 0.85e-6 * (pr.d / 31) * fr.ductDrag, // in-plane H-force per (rad/s * m/s)
+      angDrag: 0.8e-8 * Math.pow(fr.size / 65, 4),
+      colliders: [
+        ...motors.map(m => ({ c: v3(m.pos.x, 0.002, m.pos.z), r: rDuct + 0.0012 })),
+        { c: v3(0, 0.011, -0.002), r: 0.012 },
+        { c: v3(0, -0.009, 0.002), r: 0.009 }
+      ],
+      camPos: v3(0, 0.017, -0.017)
+    };
+    p.stats = staticStats(p);
+    return p;
+  }
+
+  // What fits a frame (pilot, 2026-11-17: "restrict battery sizes to the appropriate whoop"): its cell count and a pack size
+  // range (65 mm whoops 1S 250-380 mAh, 75 mm 1S 300-550, 75 mm 2S 300-450, 85 mm 2S 450-650), and electronics of the same
+  // cell count. fitParts swaps anything that does not fit for the nearest that does (the Garage calls it on every change).
+  function batteryFits(frameKey, batKey) {
+    const f = PARTS.frames[frameKey],
+      b = PARTS.batteries[batKey];
+    if (!f || !b) return false;
+    return (b.cells || 1) === (f.cells || 1) && (!f.cap || (b.cap >= f.cap[0] && b.cap <= f.cap[1]));
+  }
+  function electronicsFit(frameKey, eKey) {
+    const f = PARTS.frames[frameKey],
+      e = PARTS.electronics[eKey];
+    return !!f && !!e && (e.cells || 1) === (f.cells || 1);
+  }
+  function fitParts(spec) {
+    const out = { ...spec },
+      f = PARTS.frames[out.frame];
+    if (!f) return out;
+    if (!batteryFits(out.frame, out.battery)) {
+      const want = (PARTS.batteries[out.battery] || { cap: 300 }).cap;
+      let best = null;
+      for (const k of Object.keys(PARTS.batteries))
+        if (batteryFits(out.frame, k) && (!best || Math.abs(PARTS.batteries[k].cap - want) < Math.abs(PARTS.batteries[best].cap - want)))
+          best = k;
+      if (best) out.battery = best;
+    }
+    if (!electronicsFit(out.frame, out.electronics)) {
+      const k = Object.keys(PARTS.electronics).find(x => electronicsFit(out.frame, x));
+      if (k) out.electronics = k;
+    }
+    return out;
+  }
+  function ocv(soc, hv, cells = 1) {
+    return cells === 1 ? ocv1(soc, hv) : ocv1(soc, hv) * cells;
+  }
+  // world.groundHoles [{ x0, x1, z0, z1 }]: places with no ground plane (an underground station's footprint; its floors are boxes)
+  function inGroundHole(H, x, z) {
+    for (const h of H) if (x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1) return true;
+    return false;
+  }
+  const BROWNOUT = 2.9; // V a cell, under load (see Drone.step)
+  function ocv1(soc, hv) {
+    const tbl = [3.3, 3.5, 3.62, 3.68, 3.72, 3.76, 3.8, 3.85, 3.92, 4.02, 4.2];
+    const x = clamp(soc, 0, 1) * 10,
+      i = Math.min(9, Math.floor(x)),
+      f = x - i;
+    let v = tbl[i] + (tbl[i + 1] - tbl[i]) * f;
+    if (hv) v += 0.15 * Math.pow(clamp(soc, 0, 1), 1.5);
+    return v;
+  }
+
+  // steady-state motor solve at voltage V (full duty) → rpm, thrust, current
+  function motorSteady(p, V) {
+    let w = p.kvRad * V * 0.7;
+    for (let k = 0; k < 60; k++) {
+      const I = (V - w / p.kvRad) / p.rm;
+      const Q = p.cq * RHO * Math.pow(w / (2 * Math.PI), 2) * Math.pow(p.D, 5);
+      const tau = p.kt * (I - p.i0);
+      w += (tau - Q) * 4e5 * (w > 1 ? 1 : 1);
+      w = Math.max(0, w);
+    }
+    const n = w / (2 * Math.PI);
+    const T = p.ct * RHO * n * n * Math.pow(p.D, 4);
     const I = (V - w / p.kvRad) / p.rm;
-    const Q = p.cq * RHO * Math.pow(w / (2 * Math.PI), 2) * Math.pow(p.D, 5);
-    const tau = p.kt * (I - p.i0);
-    w += (tau - Q) * 4e5 * (w > 1 ? 1 : 1);
-    w = Math.max(0, w);
+    return { rpm: (w * 60) / (2 * Math.PI), thrust: T, current: I };
   }
-  const n = w / (2 * Math.PI);
-  const T = p.ct * RHO * n * n * Math.pow(p.D, 4);
-  const I = (V - w / p.kvRad) / p.rm;
-  return { rpm: w * 60 / (2 * Math.PI), thrust: T, current: I };
-}
-function staticStats(p) {
-  const V = ocv(1, p.bat.hv, p.bat.cells) - 0.4 * p.bat.cells; // rough loaded voltage at full throttle
-  const s = motorSteady(p, V);
-  const thrustG = 4 * s.thrust / G * 1000, auwG = p.mass * 1000;
-  // hover duty: bisection on duty
-  let lo = 0, hi = 1;
-  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, (ocv(0.8, p.bat.hv, p.bat.cells) - 0.15 * p.bat.cells) * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
-  return { auw: auwG, thrust: thrustG, twr: thrustG / auwG, rpmMax: s.rpm, ampsMax: s.current * 4, hoverThrottle: hi,
-           I: p.I, staticPerMotorG: s.thrust / G * 1000 };
-}
+  function staticStats(p) {
+    const V = ocv(1, p.bat.hv, p.bat.cells) - 0.4 * p.bat.cells; // rough loaded voltage at full throttle
+    const s = motorSteady(p, V);
+    const thrustG = ((4 * s.thrust) / G) * 1000,
+      auwG = p.mass * 1000;
+    // hover duty: bisection on duty
+    let lo = 0,
+      hi = 1;
+    for (let k = 0; k < 30; k++) {
+      const mid = (lo + hi) / 2;
+      const t = motorSteady(p, (ocv(0.8, p.bat.hv, p.bat.cells) - 0.15 * p.bat.cells) * mid).thrust * 4;
+      if (t > p.mass * G) hi = mid;
+      else lo = mid;
+    }
+    return {
+      auw: auwG,
+      thrust: thrustG,
+      twr: thrustG / auwG,
+      rpmMax: s.rpm,
+      ampsMax: s.current * 4,
+      hoverThrottle: hi,
+      I: p.I,
+      staticPerMotorG: (s.thrust / G) * 1000
+    };
+  }
 
-// ================================================================= RATES (Betaflight math)
-function applyRate(stick, r, type) {
-  const a = Math.abs(stick), sgn = Math.sign(stick);
-  if (type === 'BETAFLIGHT') {
-    let rc = r.rcRate; if (rc > 2) rc += (rc - 2) * 14.54;
-    let x = a; if (r.rcExpo) x = x * x * x * r.rcExpo + x * (1 - r.rcExpo);
-    let rate = 200 * rc * x;
-    if (r.superRate) rate *= 1 / clamp(1 - x * r.superRate, 0.01, 1);
+  // ================================================================= RATES (Betaflight math)
+  function applyRate(stick, r, type) {
+    const a = Math.abs(stick),
+      sgn = Math.sign(stick);
+    if (type === 'BETAFLIGHT') {
+      let rc = r.rcRate;
+      if (rc > 2) rc += (rc - 2) * 14.54;
+      let x = a;
+      if (r.rcExpo) x = x * x * x * r.rcExpo + x * (1 - r.rcExpo);
+      let rate = 200 * rc * x;
+      if (r.superRate) rate *= 1 / clamp(1 - x * r.superRate, 0.01, 1);
+      return sgn * Math.min(rate, 1998);
+    }
+    // ACTUAL
+    const expof = a * (Math.pow(a, 5) * r.expo + a * (1 - r.expo));
+    const rate = a * r.center + Math.max(0, r.max - r.center) * expof;
     return sgn * Math.min(rate, 1998);
   }
-  // ACTUAL
-  const expof = a * (Math.pow(a, 5) * r.expo + a * (1 - r.expo));
-  const rate = a * r.center + Math.max(0, r.max - r.center) * expof;
-  return sgn * Math.min(rate, 1998);
-}
-function throttleCurve(t, mid, expo) {
-  const tmp = t - mid, y = tmp > 0 ? tmp / (1 - mid) : tmp / mid;
-  return clamp(mid + tmp * (1 - expo + expo * y * y), 0, 1);
-}
+  function throttleCurve(t, mid, expo) {
+    const tmp = t - mid,
+      y = tmp > 0 ? tmp / (1 - mid) : tmp / mid;
+    return clamp(mid + tmp * (1 - expo + expo * y * y), 0, 1);
+  }
 
-// ================================================================= FLIGHT CONTROLLER
-const PTERM = 0.032029, ITERM = 0.244381, DTERM = 0.000529, FFS = 0.013754;
-class FlightController {
-  constructor(params, tune) { this.setup(params, tune); }
-  setup(params, tune) {
-    this.tune = tune; this.p = params;
-    // mixer from geometry: roll right(+), pitch back/nose-up(+), yaw right(+)
-    this.mix = params.motors.map(m => ({ roll: m.pos.x < 0 ? 1 : -1, pitch: m.pos.z < 0 ? 1 : -1, yaw: m.spin }));
-    this.reset();
-  }
-  reset() {
-    this.i = [0, 0, 0]; this.gf = [0, 0, 0]; this.dPrev = [0, 0, 0]; this.dF = [0, 0, 0];
-    this.gS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.g2S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.dS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; this.d2S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];   // Betaflight-style filter stages
-    this.thrLp5 = 0; this.thrLp15 = 0;   // anti-gravity and throttle boost watch the throttle's changes
-    this.spPrev = [0, 0, 0]; this.spF = [0, 0, 0]; this.spLp = [0, 0, 0]; this.ffF = [0, 0, 0];
-    this.out = [0, 0, 0, 0]; this.sp = [0, 0, 0]; this.pidSum = [0, 0, 0];
-    this.link = null; this.sp3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];   // radio link model and Betaflight-style smoothing state
-    this.dir3d = 1; this.wait3d = true;   // 3D mode: no reverse until the throttle stick has been to the middle
-  }
-  // rc: {thr 0..1, roll,pitch,yaw -1..1}; gyro: pilot-axis rates deg/s
-  // Flight modes (tune.flightMode): 'acro' (rate, the default), 'angle' (self-levelling: the sticks ask for a lean of up
-  // to angleLimit degrees and letting go levels the quad; yaw stays rate) and '3d' (rate, with reversible motors: the
-  // throttle stick's middle is zero thrust, above it pushes up through the props as normal and below it spins them
-  // backward to push the other way, so the quad can hover and fly upside-down. Betaflight's 3D feature: a small
-  // deadband round the middle keeps the motors idling in the direction last used).
-  update(rc, gyro, dt, armed, att) {
-    const t = this.tune, axes = ['roll', 'pitch', 'yaw'], fm = this.modeOverride || t.flightMode || 'acro';   // modeOverride: the game's keyboard assist flies in angle mode without changing the pilot's tune
-    this.reversible = fm === '3d';
-    // Advanced (off by default): the radio link. A real link sends the sticks in packets (rcLinkHz a second) and they
-    // arrive a little late (rcDelayMs: radio + receiver + the flight controller's own delay); between packets the
-    // flight controller only has the last one. With both at 0 the sticks reach the controller instantly, every step.
-    const LHz = +t.rcLinkHz || 0, LD = (+t.rcDelayMs || 0) / 1000;
-    if (LHz > 0 || LD > 0) {
-      const L = this.link || (this.link = { t: 0, acc: 1e9, q: [], out: [rc.thr, rc.roll, rc.pitch, rc.yaw] });
-      L.t += dt; L.acc += dt;
-      if (LHz <= 0 || L.acc >= 1 / LHz) { L.acc = LHz > 0 ? (L.acc >= 2 / LHz ? 0 : L.acc - 1 / LHz) : 0; L.q.push([L.t, rc.thr, rc.roll, rc.pitch, rc.yaw]); if (L.q.length > 400) L.q.shift(); }   // a packet leaves the radio
-      while (L.q.length && L.q[0][0] <= L.t - LD) { const k = L.q.shift(); L.out = [k[1], k[2], k[3], k[4]]; }                                                 // …and arrives
-      rc = { thr: L.out[0], roll: L.out[1], pitch: L.out[2], yaw: L.out[3] };
-    } else if (this.link) this.link = null;
-    const stick = [rc.roll, rc.pitch, rc.yaw];
-    // Stick smoothing: 'sim' (the default: one gentle 40 Hz filter), 'off' (the packets' steps go straight in), or 'auto':
-    // Betaflight's own rule, a third-order filter whose cutoff follows the link rate (cutoff = rate x 1.5 / (1 + factor/10),
-    // factor 30 as stock: 56 Hz on a 150 Hz link, 19 Hz on a 50 Hz one), which is what makes a real quad feel rounder.
-    const smooth = t.rcSmooth || 'sim', autoCut = smooth === 'auto' ? Math.max(5, (LHz > 0 ? LHz : 150) * 1.5 / (1 + (t.rcSmoothFactor ?? 30) / 10)) : 0;
-    const lpa = (fc) => 1 - Math.exp(-2 * Math.PI * fc * dt);
-    // Betaflight-style filters and PID extras (Garage → Advanced physics → Betaflight; all absent = the sim as it always was:
-    // one 180 Hz PT1 on the gyro, one 90 Hz PT1 on the D-term, no TPA, anti-gravity, thrust linear, boost or output limit).
-    // Filter types as Betaflight's: PT1, PT2, PT3 (cutoffs corrected so the -3 dB point stays put), BIQUAD (drawn as a PT2).
-    // A cutoff of 0 is off. A dynamic lowpass (…MaxHz above …Hz) opens with the throttle like Betaflight's dyn_lpf curve.
-    const lpf = (S, x, hz, type) => { if (!(hz > 0)) return x; const n = type === 'PT3' ? 3 : (type === 'PT2' || type === 'BIQUAD') ? 2 : 1, a = lpa(hz * (n === 3 ? 1.961 : n === 2 ? 1.553 : 1));
-      S[0] += (x - S[0]) * a; if (n > 1) S[1] += (S[0] - S[1]) * a; if (n > 2) S[2] += (S[1] - S[2]) * a; return S[n - 1]; };
-    const thrIn = clamp(rc.thr, 0, 1), dyn = (lo, hi, ex) => { if (!(hi > lo) || !(lo > 0)) return lo; const e = (ex ?? 5) / 10, c = thrIn * (1 - thrIn) * e + thrIn; return lo + (hi - lo) * c; };
-    const gHz = dyn(t.gyroLpfHz ?? 180, t.gyroLpfMaxHz, t.gyroLpfExpo), dHz = dyn(t.dtermLpfHz ?? 90, t.dtermLpfMaxHz, t.dtermLpfExpo);
-    // TPA: above the breakpoint the D (or P and D) gains fade, reaching tpaRate % less at full throttle
-    const tpaR = (+t.tpaRate || 0) / 100, tpaB = t.tpaBreakpoint ?? 0.35, tpa = tpaR > 0 && thrIn > tpaB ? 1 - tpaR * Math.min(1, (thrIn - tpaB) / Math.max(0.01, 1 - tpaB)) : 1;
-    // anti-gravity: quick throttle changes speed up the I-term so the nose does not dip on a punch or a chop
-    this.thrLp5 += (thrIn - this.thrLp5) * lpa(5); const agG = +t.antiGravity || 0, iMul = agG > 0 ? 1 + (agG / 10) * Math.min(1, Math.abs(thrIn - this.thrLp5) * 10) : 1;
-    // Betaflight's simplified tuning sliders, here on top of the PIDs in the table (1 = as typed)
-    const sM = t.simMaster ?? 1, sP = sM * (t.simPI ?? 1), sD = sM * (t.simD ?? 1), sF = sM * (t.simFF ?? 1);
-    for (let k = 0; k < 3; k++) {
-      const name = axes[k];
-      // pitch stick forward = nose down => setpoint pitch-back negative
-      let sp = applyRate(stick[k], t.rates[name], t.ratesType);
-      if (k === 1) sp = -sp;
-      if (fm === 'angle' && att && k < 2) { const lim = t.angleLimit ?? 55, want = (k === 1 ? -stick[k] : stick[k]) * lim; sp = clamp((want - att[k]) * (t.angleStrength ?? 6), -600, 600); }
-      if (smooth === 'auto') { const a = lpa(autoCut * 1.961), S3 = this.sp3[k]; S3[0] += (sp - S3[0]) * a; S3[1] += (S3[0] - S3[1]) * a; S3[2] += (S3[1] - S3[2]) * a; this.spF[k] = S3[2]; }   // PT3
-      else if (smooth === 'off') this.spF[k] = sp;
-      else this.spF[k] += (sp - this.spF[k]) * lpa(40);            // RC smoothing
-      this.sp[k] = this.spF[k];
-      this.gf[k] = lpf(this.gS[k], gyro[k], gHz, t.gyroLpfType);   // gyro LPF1 (180 Hz PT1 unless set)
-      if (t.gyroLpf2Hz > 0) this.gf[k] = lpf(this.g2S[k], this.gf[k], t.gyroLpf2Hz, t.gyroLpf2Type);
-      const pid = t.pid[name];
-      const err = this.sp[k] - this.gf[k];
-      const P = pid.p * sP * PTERM * err * (t.tpaMode === 'PD' ? tpa : 1);
-      // iterm relax (setpoint based)
-      this.spLp[k] += (this.sp[k] - this.spLp[k]) * lpa(15);
-      let iErr = err;
-      if (t.itermRelax && k < 2) { const hp = Math.abs(this.sp[k] - this.spLp[k]); iErr *= Math.max(0, 1 - hp / 40); }
-      if (armed) this.i[k] = clamp(this.i[k] + pid.i * sP * ITERM * iErr * iMul * dt, -400, 400); else this.i[k] = 0;
-      const dg = (this.gf[k] - this.dPrev[k]) / dt; this.dPrev[k] = this.gf[k];
-      this.dF[k] = lpf(this.dS[k], dg, dHz, t.dtermLpfType);       // D-term LPF1 (90 Hz PT1 unless set)
-      if (t.dtermLpf2Hz > 0) this.dF[k] = lpf(this.d2S[k], this.dF[k], t.dtermLpf2Hz, t.dtermLpf2Type);
-      const D = -pid.d * sD * DTERM * this.dF[k] * tpa;
-      const dsp = (this.sp[k] - this.spPrev[k]) / dt; this.spPrev[k] = this.sp[k];
-      this.ffF[k] += (dsp - this.ffF[k]) * lpa(30);
-      const F = (pid.f * sF / 100) * FFS * this.ffF[k];
-      const lim = k === 2 ? 400 : 500;
-      this.pidSum[k] = clamp(P + this.i[k] + D + F, -lim, lim);
+  // ================================================================= FLIGHT CONTROLLER
+  const PTERM = 0.032029,
+    ITERM = 0.244381,
+    DTERM = 0.000529,
+    FFS = 0.013754;
+  class FlightController {
+    constructor(params, tune) {
+      this.setup(params, tune);
     }
-    let thr = throttleCurve(clamp(rc.thr, 0, 1), t.thrMid, t.thrExpo);
-    this.thrLp15 += (thr - this.thrLp15) * lpa(15);
-    if (t.throttleBoost > 0) thr = clamp(thr + (t.throttleBoost / 10) * (thr - this.thrLp15), 0, 1);   // throttle boost: a kick on quick throttle moves
-    const tl = (+t.thrustLinear || 0) / 100, tlB = tl > 0 ? (1 - tl) / (2 * tl) : 0;
-    if (tl > 0) thr = thr * (thr * tl + 1 - tl);   // thrust linear: Betaflight lowers the throttle to match, so hover stays where it was
-    if (!armed) { this.out = [0, 0, 0, 0]; this.dir3d = 1; this.wait3d = fm === '3d'; return this.out; }
-    let dir = 1;
-    if (fm === '3d') {
-      const x = clamp(rc.thr, 0, 1) * 2 - 1, db = t.deadband3d ?? 0.05;
-      // switched to 3D in the air with the stick low (or just armed): nothing reverses until the stick has been to the middle once
-      if (this.was3d === false) this.wait3d = true;
-      if (this.wait3d && Math.abs(x) <= db * 2) this.wait3d = false;
-      if (this.wait3d) { dir = 1; thr = 0; }
-      else { if (x > db) this.dir3d = 1; else if (x < -db) this.dir3d = -1; dir = this.dir3d || 1; thr = clamp((Math.abs(x) - db) / (1 - db), 0, 1); }
+    setup(params, tune) {
+      this.tune = tune;
+      this.p = params;
+      // mixer from geometry: roll right(+), pitch back/nose-up(+), yaw right(+)
+      this.mix = params.motors.map(m => ({ roll: m.pos.x < 0 ? 1 : -1, pitch: m.pos.z < 0 ? 1 : -1, yaw: m.spin }));
+      this.reset();
     }
-    this.was3d = fm === '3d';
-    const u = this.pidSum.map(s => s / 1000);
-    // with the props turning backward every motor's push (and its drag torque) is reversed, so the corrections swap sign too
-    const raw = this.mix.map(m => (m.roll * u[0] + m.pitch * u[1] - m.yaw * u[2] * -1) * dir);
-    let mn = Math.min(...raw), mx = Math.max(...raw), range = mx - mn;
-    let mixS = 1;
-    if (range > 1) mixS = 1 / range;
-    if (t.airmode) {
-      const mnS = mn * mixS, mxS = mx * mixS;
-      thr = clamp(thr, -mnS, 1 - mxS);
-    } else {
-      mixS *= Math.min(1, thr * 4 + 0.05);
+    reset() {
+      this.i = [0, 0, 0];
+      this.gf = [0, 0, 0];
+      this.dPrev = [0, 0, 0];
+      this.dF = [0, 0, 0];
+      this.gS = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ];
+      this.g2S = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ];
+      this.dS = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ];
+      this.d2S = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]; // Betaflight-style filter stages
+      this.thrLp5 = 0;
+      this.thrLp15 = 0; // anti-gravity and throttle boost watch the throttle's changes
+      this.spPrev = [0, 0, 0];
+      this.spF = [0, 0, 0];
+      this.spLp = [0, 0, 0];
+      this.ffF = [0, 0, 0];
+      this.out = [0, 0, 0, 0];
+      this.sp = [0, 0, 0];
+      this.pidSum = [0, 0, 0];
+      this.link = null;
+      this.sp3 = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]; // radio link model and Betaflight-style smoothing state
+      this.dir3d = 1;
+      this.wait3d = true; // 3D mode: no reverse until the throttle stick has been to the middle
     }
-    for (let i = 0; i < 4; i++) {
-      let m = clamp(thr + raw[i] * mixS, 0, 1);
-      if (tl > 0 && m > 0) m = Math.sqrt(m / tl + tlB * tlB) - tlB;   // thrust linear: more authority low in the throttle
-      if (t.motorOutputLimit > 0 && t.motorOutputLimit < 100) m *= t.motorOutputLimit / 100;
-      this.out[i] = (t.idle + (1 - t.idle) * m) * dir;
+    // rc: {thr 0..1, roll,pitch,yaw -1..1}; gyro: pilot-axis rates deg/s
+    // Flight modes (tune.flightMode): 'acro' (rate, the default), 'angle' (self-levelling: the sticks ask for a lean of up
+    // to angleLimit degrees and letting go levels the quad; yaw stays rate) and '3d' (rate, with reversible motors: the
+    // throttle stick's middle is zero thrust, above it pushes up through the props as normal and below it spins them
+    // backward to push the other way, so the quad can hover and fly upside-down. Betaflight's 3D feature: a small
+    // deadband round the middle keeps the motors idling in the direction last used).
+    update(rc, gyro, dt, armed, att) {
+      const t = this.tune,
+        axes = ['roll', 'pitch', 'yaw'],
+        fm = this.modeOverride || t.flightMode || 'acro'; // modeOverride: the game's keyboard assist flies in angle mode without changing the pilot's tune
+      this.reversible = fm === '3d';
+      // Advanced (off by default): the radio link. A real link sends the sticks in packets (rcLinkHz a second) and they
+      // arrive a little late (rcDelayMs: radio + receiver + the flight controller's own delay); between packets the
+      // flight controller only has the last one. With both at 0 the sticks reach the controller instantly, every step.
+      const LHz = +t.rcLinkHz || 0,
+        LD = (+t.rcDelayMs || 0) / 1000;
+      if (LHz > 0 || LD > 0) {
+        const L = this.link || (this.link = { t: 0, acc: 1e9, q: [], out: [rc.thr, rc.roll, rc.pitch, rc.yaw] });
+        L.t += dt;
+        L.acc += dt;
+        if (LHz <= 0 || L.acc >= 1 / LHz) {
+          L.acc = LHz > 0 ? (L.acc >= 2 / LHz ? 0 : L.acc - 1 / LHz) : 0;
+          L.q.push([L.t, rc.thr, rc.roll, rc.pitch, rc.yaw]);
+          if (L.q.length > 400) L.q.shift();
+        } // a packet leaves the radio
+        while (L.q.length && L.q[0][0] <= L.t - LD) {
+          const k = L.q.shift();
+          L.out = [k[1], k[2], k[3], k[4]];
+        } // …and arrives
+        rc = { thr: L.out[0], roll: L.out[1], pitch: L.out[2], yaw: L.out[3] };
+      } else if (this.link) this.link = null;
+      const stick = [rc.roll, rc.pitch, rc.yaw];
+      // Stick smoothing: 'sim' (the default: one gentle 40 Hz filter), 'off' (the packets' steps go straight in), or 'auto':
+      // Betaflight's own rule, a third-order filter whose cutoff follows the link rate (cutoff = rate x 1.5 / (1 + factor/10),
+      // factor 30 as stock: 56 Hz on a 150 Hz link, 19 Hz on a 50 Hz one), which is what makes a real quad feel rounder.
+      const smooth = t.rcSmooth || 'sim',
+        autoCut = smooth === 'auto' ? Math.max(5, ((LHz > 0 ? LHz : 150) * 1.5) / (1 + (t.rcSmoothFactor ?? 30) / 10)) : 0;
+      const lpa = fc => 1 - Math.exp(-2 * Math.PI * fc * dt);
+      // Betaflight-style filters and PID extras (Garage → Advanced physics → Betaflight; all absent = the sim as it always was:
+      // one 180 Hz PT1 on the gyro, one 90 Hz PT1 on the D-term, no TPA, anti-gravity, thrust linear, boost or output limit).
+      // Filter types as Betaflight's: PT1, PT2, PT3 (cutoffs corrected so the -3 dB point stays put), BIQUAD (drawn as a PT2).
+      // A cutoff of 0 is off. A dynamic lowpass (…MaxHz above …Hz) opens with the throttle like Betaflight's dyn_lpf curve.
+      const lpf = (S, x, hz, type) => {
+        if (!(hz > 0)) return x;
+        const n = type === 'PT3' ? 3 : type === 'PT2' || type === 'BIQUAD' ? 2 : 1,
+          a = lpa(hz * (n === 3 ? 1.961 : n === 2 ? 1.553 : 1));
+        S[0] += (x - S[0]) * a;
+        if (n > 1) S[1] += (S[0] - S[1]) * a;
+        if (n > 2) S[2] += (S[1] - S[2]) * a;
+        return S[n - 1];
+      };
+      const thrIn = clamp(rc.thr, 0, 1),
+        dyn = (lo, hi, ex) => {
+          if (!(hi > lo) || !(lo > 0)) return lo;
+          const e = (ex ?? 5) / 10,
+            c = thrIn * (1 - thrIn) * e + thrIn;
+          return lo + (hi - lo) * c;
+        };
+      const gHz = dyn(t.gyroLpfHz ?? 180, t.gyroLpfMaxHz, t.gyroLpfExpo),
+        dHz = dyn(t.dtermLpfHz ?? 90, t.dtermLpfMaxHz, t.dtermLpfExpo);
+      // TPA: above the breakpoint the D (or P and D) gains fade, reaching tpaRate % less at full throttle
+      const tpaR = (+t.tpaRate || 0) / 100,
+        tpaB = t.tpaBreakpoint ?? 0.35,
+        tpa = tpaR > 0 && thrIn > tpaB ? 1 - tpaR * Math.min(1, (thrIn - tpaB) / Math.max(0.01, 1 - tpaB)) : 1;
+      // anti-gravity: quick throttle changes speed up the I-term so the nose does not dip on a punch or a chop
+      this.thrLp5 += (thrIn - this.thrLp5) * lpa(5);
+      const agG = +t.antiGravity || 0,
+        iMul = agG > 0 ? 1 + (agG / 10) * Math.min(1, Math.abs(thrIn - this.thrLp5) * 10) : 1;
+      // Betaflight's simplified tuning sliders, here on top of the PIDs in the table (1 = as typed)
+      const sM = t.simMaster ?? 1,
+        sP = sM * (t.simPI ?? 1),
+        sD = sM * (t.simD ?? 1),
+        sF = sM * (t.simFF ?? 1);
+      for (let k = 0; k < 3; k++) {
+        const name = axes[k];
+        // pitch stick forward = nose down => setpoint pitch-back negative
+        let sp = applyRate(stick[k], t.rates[name], t.ratesType);
+        if (k === 1) sp = -sp;
+        if (fm === 'angle' && att && k < 2) {
+          const lim = t.angleLimit ?? 55,
+            want = (k === 1 ? -stick[k] : stick[k]) * lim;
+          sp = clamp((want - att[k]) * (t.angleStrength ?? 6), -600, 600);
+        }
+        if (smooth === 'auto') {
+          const a = lpa(autoCut * 1.961),
+            S3 = this.sp3[k];
+          S3[0] += (sp - S3[0]) * a;
+          S3[1] += (S3[0] - S3[1]) * a;
+          S3[2] += (S3[1] - S3[2]) * a;
+          this.spF[k] = S3[2];
+        } // PT3
+        else if (smooth === 'off') this.spF[k] = sp;
+        else this.spF[k] += (sp - this.spF[k]) * lpa(40); // RC smoothing
+        this.sp[k] = this.spF[k];
+        this.gf[k] = lpf(this.gS[k], gyro[k], gHz, t.gyroLpfType); // gyro LPF1 (180 Hz PT1 unless set)
+        if (t.gyroLpf2Hz > 0) this.gf[k] = lpf(this.g2S[k], this.gf[k], t.gyroLpf2Hz, t.gyroLpf2Type);
+        const pid = t.pid[name];
+        const err = this.sp[k] - this.gf[k];
+        const P = pid.p * sP * PTERM * err * (t.tpaMode === 'PD' ? tpa : 1);
+        // iterm relax (setpoint based)
+        this.spLp[k] += (this.sp[k] - this.spLp[k]) * lpa(15);
+        let iErr = err;
+        if (t.itermRelax && k < 2) {
+          const hp = Math.abs(this.sp[k] - this.spLp[k]);
+          iErr *= Math.max(0, 1 - hp / 40);
+        }
+        if (armed) this.i[k] = clamp(this.i[k] + pid.i * sP * ITERM * iErr * iMul * dt, -400, 400);
+        else this.i[k] = 0;
+        const dg = (this.gf[k] - this.dPrev[k]) / dt;
+        this.dPrev[k] = this.gf[k];
+        this.dF[k] = lpf(this.dS[k], dg, dHz, t.dtermLpfType); // D-term LPF1 (90 Hz PT1 unless set)
+        if (t.dtermLpf2Hz > 0) this.dF[k] = lpf(this.d2S[k], this.dF[k], t.dtermLpf2Hz, t.dtermLpf2Type);
+        const D = -pid.d * sD * DTERM * this.dF[k] * tpa;
+        const dsp = (this.sp[k] - this.spPrev[k]) / dt;
+        this.spPrev[k] = this.sp[k];
+        this.ffF[k] += (dsp - this.ffF[k]) * lpa(30);
+        const F = ((pid.f * sF) / 100) * FFS * this.ffF[k];
+        const lim = k === 2 ? 400 : 500;
+        this.pidSum[k] = clamp(P + this.i[k] + D + F, -lim, lim);
+      }
+      let thr = throttleCurve(clamp(rc.thr, 0, 1), t.thrMid, t.thrExpo);
+      this.thrLp15 += (thr - this.thrLp15) * lpa(15);
+      if (t.throttleBoost > 0) thr = clamp(thr + (t.throttleBoost / 10) * (thr - this.thrLp15), 0, 1); // throttle boost: a kick on quick throttle moves
+      const tl = (+t.thrustLinear || 0) / 100,
+        tlB = tl > 0 ? (1 - tl) / (2 * tl) : 0;
+      if (tl > 0) thr = thr * (thr * tl + 1 - tl); // thrust linear: Betaflight lowers the throttle to match, so hover stays where it was
+      if (!armed) {
+        this.out = [0, 0, 0, 0];
+        this.dir3d = 1;
+        this.wait3d = fm === '3d';
+        return this.out;
+      }
+      let dir = 1;
+      if (fm === '3d') {
+        const x = clamp(rc.thr, 0, 1) * 2 - 1,
+          db = t.deadband3d ?? 0.05;
+        // switched to 3D in the air with the stick low (or just armed): nothing reverses until the stick has been to the middle once
+        if (this.was3d === false) this.wait3d = true;
+        if (this.wait3d && Math.abs(x) <= db * 2) this.wait3d = false;
+        if (this.wait3d) {
+          dir = 1;
+          thr = 0;
+        } else {
+          if (x > db) this.dir3d = 1;
+          else if (x < -db) this.dir3d = -1;
+          dir = this.dir3d || 1;
+          thr = clamp((Math.abs(x) - db) / (1 - db), 0, 1);
+        }
+      }
+      this.was3d = fm === '3d';
+      const u = this.pidSum.map(s => s / 1000);
+      // with the props turning backward every motor's push (and its drag torque) is reversed, so the corrections swap sign too
+      const raw = this.mix.map(m => (m.roll * u[0] + m.pitch * u[1] - m.yaw * u[2] * -1) * dir);
+      let mn = Math.min(...raw),
+        mx = Math.max(...raw),
+        range = mx - mn;
+      let mixS = 1;
+      if (range > 1) mixS = 1 / range;
+      if (t.airmode) {
+        const mnS = mn * mixS,
+          mxS = mx * mixS;
+        thr = clamp(thr, -mnS, 1 - mxS);
+      } else {
+        mixS *= Math.min(1, thr * 4 + 0.05);
+      }
+      for (let i = 0; i < 4; i++) {
+        let m = clamp(thr + raw[i] * mixS, 0, 1);
+        if (tl > 0 && m > 0) m = Math.sqrt(m / tl + tlB * tlB) - tlB; // thrust linear: more authority low in the throttle
+        if (t.motorOutputLimit > 0 && t.motorOutputLimit < 100) m *= t.motorOutputLimit / 100;
+        this.out[i] = (t.idle + (1 - t.idle) * m) * dir;
+      }
+      return this.out;
     }
-    return this.out;
   }
-}
 
-// ================================================================= COLLISION WORLD
-// primitives: box {c, h(half), rot(yaw rad, optional tilt rx)}, capsule {a,b,r}, ground
-function makeBox(c, h, ry = 0, rx = 0, rz = 0) {
-  // rotation matrix from euler (Y * X * Z)
-  const cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx), cz = Math.cos(rz), sz = Math.sin(rz);
-  // R = Ry * Rx * Rz
-  const m = [
-    cy * cz + sy * sx * sz, -cy * sz + sy * sx * cz, sy * cx,
-    cx * sz, cx * cz, -sx,
-    -sy * cz + cy * sx * sz, sy * sz + cy * sx * cz, cy * cx];
-  const ext = Math.abs(m[0]) * h.x + Math.abs(m[1]) * h.y + Math.abs(m[2]) * h.z,
-        eyy = Math.abs(m[3]) * h.x + Math.abs(m[4]) * h.y + Math.abs(m[5]) * h.z,
-        ezz = Math.abs(m[6]) * h.x + Math.abs(m[7]) * h.y + Math.abs(m[8]) * h.z;
-  return { type: 'box', c, h, m, euler: [rx, ry, rz], aabb: { min: v3(c.x - ext, c.y - eyy, c.z - ezz), max: v3(c.x + ext, c.y + eyy, c.z + ezz) } };
-}
-function makeCapsule(a, b, r) {
-  return { type: 'capsule', a, b, r, aabb: { min: v3(Math.min(a.x, b.x) - r, Math.min(a.y, b.y) - r, Math.min(a.z, b.z) - r), max: v3(Math.max(a.x, b.x) + r, Math.max(a.y, b.y) + r, Math.max(a.z, b.z) + r) } };
-}
-function makeSphere(c, r) { return { type: 'sphere', c, r, aabb: { min: v3(c.x - r, c.y - r, c.z - r), max: v3(c.x + r, c.y + r, c.z + r) } }; }
+  // ================================================================= COLLISION WORLD
+  // primitives: box {c, h(half), rot(yaw rad, optional tilt rx)}, capsule {a,b,r}, ground
+  function makeBox(c, h, ry = 0, rx = 0, rz = 0) {
+    // rotation matrix from euler (Y * X * Z)
+    const cy = Math.cos(ry),
+      sy = Math.sin(ry),
+      cx = Math.cos(rx),
+      sx = Math.sin(rx),
+      cz = Math.cos(rz),
+      sz = Math.sin(rz);
+    // R = Ry * Rx * Rz
+    const m = [
+      cy * cz + sy * sx * sz,
+      -cy * sz + sy * sx * cz,
+      sy * cx,
+      cx * sz,
+      cx * cz,
+      -sx,
+      -sy * cz + cy * sx * sz,
+      sy * sz + cy * sx * cz,
+      cy * cx
+    ];
+    const ext = Math.abs(m[0]) * h.x + Math.abs(m[1]) * h.y + Math.abs(m[2]) * h.z,
+      eyy = Math.abs(m[3]) * h.x + Math.abs(m[4]) * h.y + Math.abs(m[5]) * h.z,
+      ezz = Math.abs(m[6]) * h.x + Math.abs(m[7]) * h.y + Math.abs(m[8]) * h.z;
+    return {
+      type: 'box',
+      c,
+      h,
+      m,
+      euler: [rx, ry, rz],
+      aabb: { min: v3(c.x - ext, c.y - eyy, c.z - ezz), max: v3(c.x + ext, c.y + eyy, c.z + ezz) }
+    };
+  }
+  function makeCapsule(a, b, r) {
+    return {
+      type: 'capsule',
+      a,
+      b,
+      r,
+      aabb: {
+        min: v3(Math.min(a.x, b.x) - r, Math.min(a.y, b.y) - r, Math.min(a.z, b.z) - r),
+        max: v3(Math.max(a.x, b.x) + r, Math.max(a.y, b.y) + r, Math.max(a.z, b.z) + r)
+      }
+    };
+  }
+  function makeSphere(c, r) {
+    return { type: 'sphere', c, r, aabb: { min: v3(c.x - r, c.y - r, c.z - r), max: v3(c.x + r, c.y + r, c.z + r) } };
+  }
 
-function sphereVs(prim, p, r) { // returns {n, d, pt} or null
-  if (prim.type === 'box') {
-    const m = prim.m, d = sub(p, prim.c);
-    // local = R^T d
-    const lx = m[0] * d.x + m[3] * d.y + m[6] * d.z, ly = m[1] * d.x + m[4] * d.y + m[7] * d.z, lz = m[2] * d.x + m[5] * d.y + m[8] * d.z;
-    const h = prim.h;
-    const cx = clamp(lx, -h.x, h.x), cy = clamp(ly, -h.y, h.y), cz = clamp(lz, -h.z, h.z);
-    let nx = lx - cx, ny = ly - cy, nz = lz - cz, dist = Math.hypot(nx, ny, nz), pen;
-    if (dist > 1e-9) { if (dist >= r) return null; nx /= dist; ny /= dist; nz /= dist; pen = r - dist; }
-    else { // center inside: push out along min axis
-      const dx = h.x - Math.abs(lx), dy = h.y - Math.abs(ly), dz = h.z - Math.abs(lz);
-      if (dx < dy && dx < dz) { nx = Math.sign(lx) || 1; ny = 0; nz = 0; pen = dx + r; }
-      else if (dy < dz) { nx = 0; ny = Math.sign(ly) || 1; nz = 0; pen = dy + r; }
-      else { nx = 0; ny = 0; nz = Math.sign(lz) || 1; pen = dz + r; }
+  function sphereVs(prim, p, r) {
+    // returns {n, d, pt} or null
+    if (prim.type === 'box') {
+      const m = prim.m,
+        d = sub(p, prim.c);
+      // local = R^T d
+      const lx = m[0] * d.x + m[3] * d.y + m[6] * d.z,
+        ly = m[1] * d.x + m[4] * d.y + m[7] * d.z,
+        lz = m[2] * d.x + m[5] * d.y + m[8] * d.z;
+      const h = prim.h;
+      const cx = clamp(lx, -h.x, h.x),
+        cy = clamp(ly, -h.y, h.y),
+        cz = clamp(lz, -h.z, h.z);
+      let nx = lx - cx,
+        ny = ly - cy,
+        nz = lz - cz,
+        dist = Math.hypot(nx, ny, nz),
+        pen;
+      if (dist > 1e-9) {
+        if (dist >= r) return null;
+        nx /= dist;
+        ny /= dist;
+        nz /= dist;
+        pen = r - dist;
+      } else {
+        // center inside: push out along min axis
+        const dx = h.x - Math.abs(lx),
+          dy = h.y - Math.abs(ly),
+          dz = h.z - Math.abs(lz);
+        if (dx < dy && dx < dz) {
+          nx = Math.sign(lx) || 1;
+          ny = 0;
+          nz = 0;
+          pen = dx + r;
+        } else if (dy < dz) {
+          nx = 0;
+          ny = Math.sign(ly) || 1;
+          nz = 0;
+          pen = dy + r;
+        } else {
+          nx = 0;
+          ny = 0;
+          nz = Math.sign(lz) || 1;
+          pen = dz + r;
+        }
+      }
+      const n = v3(m[0] * nx + m[1] * ny + m[2] * nz, m[3] * nx + m[4] * ny + m[5] * nz, m[6] * nx + m[7] * ny + m[8] * nz);
+      return { n, d: pen, pt: sub(p, mul(n, r)) };
     }
-    const n = v3(m[0] * nx + m[1] * ny + m[2] * nz, m[3] * nx + m[4] * ny + m[5] * nz, m[6] * nx + m[7] * ny + m[8] * nz);
-    return { n, d: pen, pt: sub(p, mul(n, r)) };
-  }
-  if (prim.type === 'capsule') {
-    const ab = sub(prim.b, prim.a), t = clamp(dot(sub(p, prim.a), ab) / (dot(ab, ab) || 1), 0, 1);
-    const q = add(prim.a, mul(ab, t)), dv = sub(p, q), dist = len(dv), rr = r + prim.r;
-    if (dist >= rr) return null;
-    const n = dist > 1e-9 ? mul(dv, 1 / dist) : v3(0, 1, 0);
-    return { n, d: rr - dist, pt: add(q, mul(n, prim.r)) };
-  }
-  if (prim.type === 'sphere') {
-    const dv = sub(p, prim.c), dist = len(dv), rr = r + prim.r;
-    if (dist >= rr) return null;
-    const n = dist > 1e-9 ? mul(dv, 1 / dist) : v3(0, 1, 0);
-    return { n, d: rr - dist, pt: add(prim.c, mul(n, prim.r)) };
-  }
-  return null;
-}
-
-// ================================================================= MAP: the playground
-// Each object: { id, name, kind, tags, prims:[...], visual:[...], obstacle?, gap?, wallNormal? }
-// visual entries are consumed by the renderer: {shape:'box'|'cyl'|'sphere'|..., mat, ...}
-function buildPlayground() {
-  const objs = []; let nid = 0;
-  const O = (name, kind, extra = {}) => { const o = { id: nid++, name, kind, prims: [], vis: [], ...extra }; objs.push(o); return o; };
-  const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => { const b = makeBox(c, h, ry, rx, rz); if (!opts.noCollide) o.prims.push(b); o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts }); return b; };
-  const pipe = (o, a, b, r, mat, opts = {}) => { o.prims.push(makeCapsule(a, b, r)); o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts }); };
-  const ball = (o, c, r, mat, opts = {}) => { if (!opts.noCollide) o.prims.push(makeSphere(c, r)); o.vis.push({ shape: 'sphere', c, r, mat, ...opts }); };
-
-  // ---- Building (north) — 14m tall brick, flat roof with parapet (perch spot)
-  const bld = O('Brick Building', 'building', { wallNormal: v3(0, 0, 1), tall: 14 });
-  box(bld, v3(0, 7, -27), v3(16, 7, 5), 'brick', 0, 0, 0, { graffiti: 'south' });
-  box(bld, v3(0, 14.4, -22.15), v3(16, 0.4, 0.15), 'concrete');
-  box(bld, v3(0, 14.4, -31.85), v3(16, 0.4, 0.15), 'concrete');
-  box(bld, v3(-15.85, 14.4, -27), v3(0.15, 0.4, 5), 'concrete');
-  box(bld, v3(15.85, 14.4, -27), v3(0.15, 0.4, 5), 'concrete');
-  box(bld, v3(-6, 15.2, -27), v3(1.2, 1.2, 1.2), 'metal', 0, 0, 0, { label: 'hvac' }); // rooftop unit
-  pipe(bld, v3(9, 0, -21.9), v3(9, 14.2, -21.9), 0.05, 'rust'); // drain pipe
-  bld.perchHeight = 14;
-
-  // ---- Concrete graffiti wall (west) with a slot gap
-  const wall = O('Graffiti Wall', 'wall', { wallNormal: v3(1, 0, 0) });
-  const wx = -19, gz = 4, gw = 0.11, gy0 = 0.85, gy1 = 1.35;
-  box(wall, v3(wx, 1.6, (-20 + (gz - gw)) / 2), v3(0.2, 1.6, ((gz - gw) + 20) / 2), 'concrete', 0, 0, 0, { graffiti: 'east' });
-  box(wall, v3(wx, 1.6, ((gz + gw) + 20) / 2), v3(0.2, 1.6, (20 - (gz + gw)) / 2), 'concrete', 0, 0, 0, { graffiti: 'east' });
-  box(wall, v3(wx, gy0 / 2, gz), v3(0.2, gy0 / 2, gw), 'concrete');
-  box(wall, v3(wx, (gy1 + 3.2) / 2, gz), v3(0.2, (3.2 - gy1) / 2, gw), 'concrete');
-  const slot = O('Wall Slot', 'gap', { gap: { c: v3(wx, (gy0 + gy1) / 2, gz), n: v3(1, 0, 0), hu: gw, hv: (gy1 - gy0) / 2, u: v3(0, 0, 1) } });
-
-  // ---- Chain-link fence (east & south) — thin colliders
-  const fence = O('Fence', 'fence');
-  for (const [a, b] of [[v3(18, 0, -20), v3(18, 0, 20)], [v3(-19, 0, 20), v3(18, 0, 20)]]) {
-    const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), ry = Math.atan2(dx, dz);
-    box(fence, v3((a.x + b.x) / 2, 1.25, (a.z + b.z) / 2), v3(0.02, 1.25, L / 2), 'chainlink', ry, 0, 0, { alpha: true });
-    const n = Math.round(L / 2.5);
-    for (let i = 0; i <= n; i++) { const t = i / n; pipe(fence, v3(a.x + dx * t, 0, a.z + dz * t), v3(a.x + dx * t, 2.55, a.z + dz * t), 0.03, 'galv'); }
-    pipe(fence, v3(a.x, 2.5, a.z), v3(b.x, 2.5, b.z), 0.02, 'galv');
-  }
-
-  // ---- Swing set (over/under obstacle)
-  const sw = O('Swing Set', 'overunder', { obstacle: { a: v3(-3, 0, -6), b: v3(3, 0, -6), under: 2.32, over: 2.46 } });
-  const topY = 2.4;
-  pipe(sw, v3(-3.1, topY, -6), v3(3.1, topY, -6), 0.035, 'paintRed');
-  for (const x of [-3, 3]) { pipe(sw, v3(x, 0, -7.1), v3(x, topY, -6), 0.035, 'paintRed'); pipe(sw, v3(x, 0, -4.9), v3(x, topY, -6), 0.035, 'paintRed'); }
-  for (const x of [-1.8, 0, 1.8]) {
-    for (const dx of [-0.22, 0.22]) pipe(sw, v3(x + dx, topY, -6), v3(x + dx, 0.5, -6), 0.006, 'chain');
-    box(sw, v3(x, 0.48, -6), v3(0.24, 0.02, 0.09), 'rubberBlack');
-  }
-
-  // ---- Slide tower (over/under: under deck, over roof)
-  const sl = O('Slide Tower', 'overunder', { obstacle: { a: v3(-8.7, 0, 2), b: v3(-7.3, 0, 2), under: 1.42, over: 2.95 } });
-  for (const [x, z] of [[-8.6, 1.4], [-7.4, 1.4], [-8.6, 2.6], [-7.4, 2.6]]) pipe(sl, v3(x, 0, z), v3(x, 2.6, z), 0.045, 'paintBlue');
-  box(sl, v3(-8, 1.5, 2), v3(0.6, 0.04, 0.6), 'metalPlate');
-  box(sl, v3(-8, 2.75, 2), v3(0.75, 0.15, 0.75), 'plasticYellow', 0, 0, 0, { roof: true });
-  const sLen = 3.3, sAng = Math.atan2(1.5, 2.9);
-  box(sl, v3(-7.4 + 1.45, 0.78, 2), v3(sLen / 2, 0.03, 0.27), 'metalSlide', Math.PI / 2, 0, 0, { tiltZ: -sAng });
-  // override with proper tilt: slide goes down toward +x
-  sl.prims.pop(); sl.vis.pop();
-  box(sl, v3(-7.4 + 1.45, 0.78, 2), v3(sLen / 2, 0.03, 0.27), 'metalSlide', 0, 0, -sAng, { graffiti: 'top' });
-  box(sl, v3(-7.4 + 1.45, 0.92, 1.73), v3(sLen / 2, 0.12, 0.02), 'metalSlide', 0, 0, -sAng);
-  box(sl, v3(-7.4 + 1.45, 0.92, 2.27), v3(sLen / 2, 0.12, 0.02), 'metalSlide', 0, 0, -sAng);
-  for (let i = 1; i <= 5; i++) pipe(sl, v3(-8.65, i * 0.27, 1.75), v3(-8.65, i * 0.27, 2.25), 0.02, 'galv');
-
-  // ---- Monkey bars (over/under along z)
-  const mb = O('Monkey Bars', 'overunder', { obstacle: { a: v3(8, 0, 0.2), b: v3(8, 0, 3.8), under: 2.02, over: 2.18 } });
-  for (const x of [7.6, 8.4]) {
-    pipe(mb, v3(x, 2.1, 0), v3(x, 2.1, 4), 0.03, 'paintGreen');
-    for (const z of [0, 4]) pipe(mb, v3(x, 0, z), v3(x, 2.1, z), 0.035, 'paintGreen');
-  }
-  for (let z = 0.35; z < 4; z += 0.38) pipe(mb, v3(7.6, 2.1, z), v3(8.4, 2.1, z), 0.016, 'galv');
-
-  // ---- Jungle gym cube (over/under through bottom bay)
-  const jg = O('Jungle Gym', 'overunder', { obstacle: { a: v3(7, 0, -8), b: v3(9.2, 0, -8), under: 1.02, over: 2.28 } });
-  const J0 = v3(7, 0, -9.1), S = 2.2;
-  const jp = (a, b) => pipe(jg, a, b, 0.025, 'paintOrange');
-  for (const dx of [0, S]) for (const dz of [0, S]) jp(v3(J0.x + dx, 0, J0.z + dz), v3(J0.x + dx, S, J0.z + dz));
-  for (const y of [1.1, S]) {
-    jp(v3(J0.x, y, J0.z), v3(J0.x + S, y, J0.z)); jp(v3(J0.x, y, J0.z + S), v3(J0.x + S, y, J0.z + S));
-    jp(v3(J0.x, y, J0.z), v3(J0.x, y, J0.z + S)); jp(v3(J0.x + S, y, J0.z), v3(J0.x + S, y, J0.z + S));
-  }
-  jp(v3(J0.x, S, J0.z + S / 2), v3(J0.x + S, S, J0.z + S / 2));
-
-  // ---- Basketball hoop (pole + backboard + ring gap)
-  // flagpole: tall, thin and in the open (7 m clear all round) for orbits, trippies and pole dancing
-  const fp = O('Flagpole', 'pole');
-  box(fp, v3(0, 0.12, -14.5), v3(0.35, 0.12, 0.35), 'concrete');
-  pipe(fp, v3(0, 0.24, -14.5), v3(0, 9.0, -14.5), 0.055, 'galv');
-  pipe(fp, v3(0, 9.0, -14.5), v3(0, 9.12, -14.5), 0.09, 'plasticYellow', { noCollide: true });
-  box(fp, v3(0.62, 8.3, -14.5), v3(0.55, 0.36, 0.008), 'paintRed', 0, 0, 0, { noCollide: true, flag: true });
-  const hp = O('Hoop Pole', 'pole');
-  pipe(hp, v3(-11, 0, -14.2), v3(-11, 3.4, -14.2), 0.06, 'paintBlue');
-  pipe(hp, v3(-11, 3.3, -14.2), v3(-11, 3.3, -13.4), 0.04, 'paintBlue');
-  box(hp, v3(-11, 3.35, -13.35), v3(0.9, 0.53, 0.02), 'backboard', 0, 0, 0, { graffiti: 'south', art: [{ name: 'rwdc', x: 0.15, y: 0.8, h: 0.36, rot: -0.08 }] });
-  const rim = O('Hoop', 'gap', { gap: { c: v3(-11, 3.05, -12.95), n: v3(0, 1, 0), hu: 0.21, hv: 0.21, u: v3(1, 0, 0), round: true } });
-  for (let i = 0; i < 14; i++) {
-    const a0 = i / 14 * Math.PI * 2, a1 = (i + 1) / 14 * Math.PI * 2;
-    pipe(rim, v3(-11 + Math.cos(a0) * 0.23, 3.05, -12.95 + Math.sin(a0) * 0.23), v3(-11 + Math.cos(a1) * 0.23, 3.05, -12.95 + Math.sin(a1) * 0.23), 0.009, 'rimOrange');
-  }
-
-  // ---- Lamp posts (poles)
-  for (const [x, z] of [[-14, -16], [14, -16], [14, 14], [-14, 14]]) {
-    const lp = O('Lamp Post', 'pole', { light: v3(x, 5.6, z) });
-    pipe(lp, v3(x, 0, z), v3(x, 5.6, z), 0.07, 'galv');
-    box(lp, v3(x, 5.7, z), v3(0.25, 0.08, 0.15), 'lampHead');
-  }
-
-  // ---- Benches, picnic table, bins, dumpster, tires, cones, trees
-  const bench = (x, z, ry) => {
-    const b = O('Bench', 'overunder', { obstacle: { a: v3(x - Math.cos(ry) * 0.9, 0, z + Math.sin(ry) * 0.9), b: v3(x + Math.cos(ry) * 0.9, 0, z - Math.sin(ry) * 0.9), under: 0.38, over: 0.52 } });
-    box(b, v3(x, 0.45, z), v3(0.95, 0.03, 0.22), 'wood', ry);
-    box(b, v3(x - Math.cos(ry) * 0.8, 0.22, z + Math.sin(ry) * 0.8), v3(0.04, 0.22, 0.2), 'concrete', ry);
-    box(b, v3(x + Math.cos(ry) * 0.8, 0.22, z - Math.sin(ry) * 0.8), v3(0.04, 0.22, 0.2), 'concrete', ry);
-  };
-  bench(-3, 9, 0); bench(4, 10, 0.3); bench(12, -2, Math.PI / 2);
-  const pt = O('Picnic Table', 'overunder', { obstacle: { a: v3(-3, 0, 14), b: v3(0, 0, 14), under: 0.66, over: 0.82 } });
-  box(pt, v3(-1.5, 0.74, 14), v3(1.5, 0.04, 0.4), 'wood', 0, 0, 0, { graffiti: 'top' });
-  for (const z of [13.35, 14.65]) box(pt, v3(-1.5, 0.44, z), v3(1.5, 0.03, 0.14), 'wood');
-  for (const x of [-2.8, -0.2]) for (const z of [13.6, 14.4]) box(pt, v3(x, 0.37, z), v3(0.04, 0.37, 0.04), 'wood');
-  for (const [x, z] of [[-5, -2], [5, 6], [-15, 10]]) { const t = O('Trash Can', 'deco'); pipe(t, v3(x, 0.3, z), v3(x, 0.62, z), 0.28, 'bin'); }
-  const dm = O('Dumpster', 'overunder', { wallNormal: v3(0, 0, 1) });
-  box(dm, v3(10, 0.65, -20.6), v3(1.6, 0.65, 0.85), 'dumpster', 0, 0, 0, { graffiti: 'south' });
-  for (const [x, z] of [[2.5, 3], [3.4, 3.2]]) { const t = O('Tire', 'deco'); pipe(t, v3(x - 0.25, 0.15, z), v3(x + 0.25, 0.15, z), 0.15, 'tire'); }
-  for (const [x, z] of [[-2, 0], [-1, 1.5], [0, 3], [1, 4.5]]) { const c = O('Cone', 'deco'); pipe(c, v3(x, 0.02, z), v3(x, 0.35, z), 0.08, 'cone', { cone: true }); }
-  for (const [x, z, s] of [[14, 8, 1], [-15, -6, 1.2], [13, -11, 0.9]]) {
-    const tr = O('Tree', 'pole');
-    // the Tricktionary's favourite obstacle: loops, Mattys, Split-S and mavericks go under the canopy and over the top.
-    // Round, so the over/under line is re-aimed across the approach direction (see trackCrossings).
-    tr.round = { c: v3(x, 0, z), r: 2.0 * s, under: 2.6 * s, over: 5.8 * s };
-    tr.obstacle = { a: v3(x - 2.0 * s, 0, z), b: v3(x + 2.0 * s, 0, z), under: 2.6 * s, over: 5.8 * s };
-    pipe(tr, v3(x, 0, z), v3(x, 3.2 * s, z), 0.16 * s, 'bark');
-    ball(tr, v3(x, 4.2 * s, z), 1.5 * s, 'leaves'); ball(tr, v3(x + 0.9 * s, 3.7 * s, z + 0.3), 1.0 * s, 'leaves'); ball(tr, v3(x - 0.7 * s, 3.8 * s, z - 0.6), 1.1 * s, 'leaves');
-  }
-  // ---- Covered walkway (pilot's photo): yellow posts on concrete footings, curved yellow beams, a corrugated roof that
-  // overhangs both sides, over a concrete path. Fly down the tunnel, slalom the posts, or loop the roof edge (over/under).
-  { const wk = O('Covered Walkway', 'overunder', { obstacle: { a: v3(-13, 0, 17.5), b: v3(-3, 0, 17.5), under: 2.45, over: 3.25 } });
-    const ZC = 17.5, HW = 1.2, EAVE = 2.6, RISE = 0.45, W2 = 1.65, R = (W2 * W2 + RISE * RISE) / (2 * RISE), Y0 = EAVE + RISE - R, F0 = Math.asin(W2 / R);
-    const arc = f => v3(0, Y0 + R * Math.cos(f), ZC + R * Math.sin(f));
-    for (let i = 0; i < 5; i++) { const x = -13 + i * 2.5;
-      for (const sg of [-1, 1]) { const z = ZC + sg * HW; box(wk, v3(x, 0.18, z), v3(0.17, 0.18, 0.17), 'concrete'); pipe(wk, v3(x, 0.36, z), v3(x, arc(sg * Math.asin(HW / R)).y, z), 0.045, 'plasticYellow'); }
-      for (let k = 0; k < 6; k++) { const a = arc(-F0 + 2 * F0 * k / 6), b = arc(-F0 + 2 * F0 * (k + 1) / 6); pipe(wk, v3(x, a.y - 0.05, a.z), v3(x, b.y - 0.05, b.z), 0.04, 'plasticYellow'); } }
-    for (const f of [-F0 * 0.6, 0, F0 * 0.6]) { const a = arc(f); pipe(wk, v3(-13.3, a.y - 0.02, a.z), v3(-2.7, a.y - 0.02, a.z), 0.02, 'galv'); }
-    for (let k = 0; k < 6; k++) { const f = -F0 + 2 * F0 * (k + 0.5) / 6, c = arc(f); box(wk, v3(-8, c.y + 0.02, c.z), v3(5.4, 0.012, R * Math.sin(F0 / 6) + 0.01), 'metalPlate', 0, f, 0, { roof: true }); }
-    const lf = O('Walkway Lamp', 'deco'); ball(lf, v3(-8, EAVE + RISE - 0.3, ZC), 0.07, 'lampHead', { noCollide: true }); }
-  // ---- the pilot (you), standing by the spawn with goggles on — fly into the face for a Facepunch
-  const pl = O('Pilot', 'pilot'); const PX = 2.6, PZ = 14.2;
-  // wide stance (as in the demos): fly between the legs (Immelmann, Power Swap demos) or over the head
-  pipe(pl, v3(PX - 0.36, 0, PZ), v3(PX - 0.1, 0.88, PZ), 0.07, 'jeans'); pipe(pl, v3(PX + 0.36, 0, PZ), v3(PX + 0.1, 0.88, PZ), 0.07, 'jeans');
-  pl.obstacle = { a: v3(PX - 0.26, 0, PZ), b: v3(PX + 0.26, 0, PZ), under: 0.55, over: 1.95 };
-  pipe(pl, v3(PX, 0.9, PZ), v3(PX, 1.42, PZ), 0.19, 'hoodie');
-  pipe(pl, v3(PX - 0.24, 1.38, PZ), v3(PX - 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie'); pipe(pl, v3(PX + 0.24, 1.38, PZ), v3(PX + 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie');
-  box(pl, v3(PX, 1.13, PZ - 0.33), v3(0.13, 0.08, 0.05), 'radio');
-  ball(pl, v3(PX, 1.66, PZ), 0.12, 'skin');
-  box(pl, v3(PX, 1.69, PZ - 0.1), v3(0.11, 0.045, 0.05), 'goggles', 0, 0, 0, { noCollide: true });
-  pipe(pl, v3(PX, 1.74, PZ + 0.02), v3(PX, 1.8, PZ + 0.02), 0.115, 'hoodie', { noCollide: true });
-  // ground zones (visual only)
-  const zones = [
-    { shape: 'zone', mat: 'rubberMat', c: v3(0, 0.006, -1), h: v3(11, 0, 9) },
-    { shape: 'zone', mat: 'sand', c: v3(8, 0.012, 2), h: v3(1.6, 0, 2.6) },
-    { shape: 'zone', mat: 'court', c: v3(-11, 0.009, -11), h: v3(6, 0, 5) },
-    { shape: 'zone', mat: 'concrete', c: v3(-8, 0.01, 17.5), h: v3(5.6, 0, 1.0) },
-  ];
-  const all = []; for (const o of objs) for (const p of o.prims) { p.owner = o.id; all.push(p); }
-  return { objs, prims: all, zones, spawn: { pos: v3(0, 0.03, 12), yaw: 0 }, bounds: { x: [-19, 18], z: [-22, 20] } };
-}
-
-// ================================================================= THE SURVEYOR
-// Reads a map's collision shapes and works out for itself what can be flown over and under, so over/under tricks do not
-// depend on somebody remembering to tag every object, or on which way the pilot happens to approach it. Run once on a
-// map after it is built (maps.js does). Two jobs:
-//   1. Tagged objects that are really slabs (a platform, a table, a deck) become direction-free: the over/under line is
-//      aimed across whatever approach the pilot takes, as wide as the slab is that way. Bars and rails keep their line.
-//   2. Untagged shapes with air beneath them (a lintel, a shelf, a bench top, a raised pipe) get an over/under of their own.
-//   3. Untagged slabs too wide to loop whole but with air beneath (a roof, a big deck) get an over/under along each edge:
-//      up over the eave and back under it is a loop round that edge.
-// Not surveyed: the ground, anything sitting on something, walls and roofs too big to loop, ramps, the pilot, poles.
-function surveyObstacles(world, opts = {}) {
-  if (world._surveyed) return world; world._surveyed = true;
-  const minGap = opts.minGap ?? 0.35, maxThick = opts.maxThick ?? 1.6, maxSpan = opts.maxSpan ?? 5;
-  const flatBox = p => p.type === 'box' && Math.abs(p.m[4]) > 0.94;
-  // the highest surface under a point, below height y (0 = the ground)
-  const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
-  let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0); const made = [], report = { slabs: 0, found: 0, edges: 0 };
-  for (const o of world.objs.slice()) {
-    if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.auto) continue;
-    if (o.obstacle && !o.round) {                                             // job 1
-      const { under, over } = o.obstacle; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
-      for (const p of o.prims) { if (p.leaf) continue; const a = p.aabb; if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue; if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue; x0 = Math.min(x0, a.min.x); x1 = Math.max(x1, a.max.x); z0 = Math.min(z0, a.min.z); z1 = Math.max(z1, a.max.z); n++; }
-      if (n && Math.min(x1 - x0, z1 - z0) >= 0.6 && Math.max(x1 - x0, z1 - z0) <= 12) { o.round = { c: v3((x0 + x1) / 2, 0, (z0 + z1) / 2), r: Math.max(x1 - x0, z1 - z0) / 2, box: { hx: (x1 - x0) / 2, hz: (z1 - z0) / 2 }, under, over }; report.slabs++; }
-      continue;
+    if (prim.type === 'capsule') {
+      const ab = sub(prim.b, prim.a),
+        t = clamp(dot(sub(p, prim.a), ab) / (dot(ab, ab) || 1), 0, 1);
+      const q = add(prim.a, mul(ab, t)),
+        dv = sub(p, q),
+        dist = len(dv),
+        rr = r + prim.r;
+      if (dist >= rr) return null;
+      const n = dist > 1e-9 ? mul(dv, 1 / dist) : v3(0, 1, 0);
+      return { n, d: rr - dist, pt: add(q, mul(n, prim.r)) };
     }
-    if (o.obstacle || o.round) continue;
-    const autos = [], edges = [];                                             // jobs 2 and 3
-    for (const p of o.prims) {
-      if (p.leaf) continue;   // foliage (maps.js coneSolid / leafSolid) is never an over/under bar of its own
-      const a = p.aabb, bot = a.min.y, top = a.max.y, cx = (a.min.x + a.max.x) / 2, cz = (a.min.z + a.max.z) / 2, sx = a.max.x - a.min.x, sz = a.max.z - a.min.z;
-      if (p.type === 'box' ? !flatBox(p) : p.type === 'capsule' ? Math.abs(p.b.y - p.a.y) > 0.3 * len(sub(p.b, p.a)) : true) continue;
-      if (top - bot > maxThick || Math.max(sx, sz) < 0.4) continue;
-      // air beneath: at the middle or at any of four points part-way out (a pillar under the middle doesn't make it solid)
-      let gap = 0; for (const [fx, fz] of [[0, 0], [0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) gap = Math.max(gap, bot - supportUnder(cx + fx * sx, cz + fz * sz, bot, p));
-      if (gap < minGap) continue;
-      if (Math.min(sx, sz) > maxSpan) {                                        // job 3: too wide to loop whole, so its edges
-        if (p.type !== 'box' || bot < 1.2) continue; const inx = Math.min(0.3, sx / 6), inz = Math.min(0.3, sz / 6);
-        for (const [ax, az, bx, bz] of [[a.min.x, a.min.z + inz, a.max.x, a.min.z + inz], [a.min.x, a.max.z - inz, a.max.x, a.max.z - inz], [a.min.x + inx, a.min.z, a.min.x + inx, a.max.z], [a.max.x - inx, a.min.z, a.max.x - inx, a.max.z]])
-          edges.push({ name: o.name + ' edge', ob: { a: v3(ax, 0, az), b: v3(bx, 0, bz), under: bot, over: top } });
+    if (prim.type === 'sphere') {
+      const dv = sub(p, prim.c),
+        dist = len(dv),
+        rr = r + prim.r;
+      if (dist >= rr) return null;
+      const n = dist > 1e-9 ? mul(dv, 1 / dist) : v3(0, 1, 0);
+      return { n, d: rr - dist, pt: add(prim.c, mul(n, prim.r)) };
+    }
+    return null;
+  }
+
+  // ================================================================= MAP: the playground
+  // Each object: { id, name, kind, tags, prims:[...], visual:[...], obstacle?, gap?, wallNormal? }
+  // visual entries are consumed by the renderer: {shape:'box'|'cyl'|'sphere'|..., mat, ...}
+  function buildPlayground() {
+    const objs = [];
+    let nid = 0;
+    const O = (name, kind, extra = {}) => {
+      const o = { id: nid++, name, kind, prims: [], vis: [], ...extra };
+      objs.push(o);
+      return o;
+    };
+    const box = (o, c, h, mat, ry = 0, rx = 0, rz = 0, opts = {}) => {
+      const b = makeBox(c, h, ry, rx, rz);
+      if (!opts.noCollide) o.prims.push(b);
+      o.vis.push({ shape: 'box', c, h, mat, euler: [rx, ry, rz], ...opts });
+      return b;
+    };
+    const pipe = (o, a, b, r, mat, opts = {}) => {
+      o.prims.push(makeCapsule(a, b, r));
+      o.vis.push({ shape: 'pipe', a, b, r, mat, ...opts });
+    };
+    const ball = (o, c, r, mat, opts = {}) => {
+      if (!opts.noCollide) o.prims.push(makeSphere(c, r));
+      o.vis.push({ shape: 'sphere', c, r, mat, ...opts });
+    };
+
+    // ---- Building (north) — 14m tall brick, flat roof with parapet (perch spot)
+    const bld = O('Brick Building', 'building', { wallNormal: v3(0, 0, 1), tall: 14 });
+    box(bld, v3(0, 7, -27), v3(16, 7, 5), 'brick', 0, 0, 0, { graffiti: 'south' });
+    box(bld, v3(0, 14.4, -22.15), v3(16, 0.4, 0.15), 'concrete');
+    box(bld, v3(0, 14.4, -31.85), v3(16, 0.4, 0.15), 'concrete');
+    box(bld, v3(-15.85, 14.4, -27), v3(0.15, 0.4, 5), 'concrete');
+    box(bld, v3(15.85, 14.4, -27), v3(0.15, 0.4, 5), 'concrete');
+    box(bld, v3(-6, 15.2, -27), v3(1.2, 1.2, 1.2), 'metal', 0, 0, 0, { label: 'hvac' }); // rooftop unit
+    pipe(bld, v3(9, 0, -21.9), v3(9, 14.2, -21.9), 0.05, 'rust'); // drain pipe
+    bld.perchHeight = 14;
+
+    // ---- Concrete graffiti wall (west) with a slot gap
+    const wall = O('Graffiti Wall', 'wall', { wallNormal: v3(1, 0, 0) });
+    const wx = -19,
+      gz = 4,
+      gw = 0.11,
+      gy0 = 0.85,
+      gy1 = 1.35;
+    box(wall, v3(wx, 1.6, (-20 + (gz - gw)) / 2), v3(0.2, 1.6, (gz - gw + 20) / 2), 'concrete', 0, 0, 0, { graffiti: 'east' });
+    box(wall, v3(wx, 1.6, (gz + gw + 20) / 2), v3(0.2, 1.6, (20 - (gz + gw)) / 2), 'concrete', 0, 0, 0, { graffiti: 'east' });
+    box(wall, v3(wx, gy0 / 2, gz), v3(0.2, gy0 / 2, gw), 'concrete');
+    box(wall, v3(wx, (gy1 + 3.2) / 2, gz), v3(0.2, (3.2 - gy1) / 2, gw), 'concrete');
+    const slot = O('Wall Slot', 'gap', {
+      gap: { c: v3(wx, (gy0 + gy1) / 2, gz), n: v3(1, 0, 0), hu: gw, hv: (gy1 - gy0) / 2, u: v3(0, 0, 1) }
+    });
+
+    // ---- Chain-link fence (east & south) — thin colliders
+    const fence = O('Fence', 'fence');
+    for (const [a, b] of [
+      [v3(18, 0, -20), v3(18, 0, 20)],
+      [v3(-19, 0, 20), v3(18, 0, 20)]
+    ]) {
+      const dx = b.x - a.x,
+        dz = b.z - a.z,
+        L = Math.hypot(dx, dz),
+        ry = Math.atan2(dx, dz);
+      box(fence, v3((a.x + b.x) / 2, 1.25, (a.z + b.z) / 2), v3(0.02, 1.25, L / 2), 'chainlink', ry, 0, 0, { alpha: true });
+      const n = Math.round(L / 2.5);
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        pipe(fence, v3(a.x + dx * t, 0, a.z + dz * t), v3(a.x + dx * t, 2.55, a.z + dz * t), 0.03, 'galv');
+      }
+      pipe(fence, v3(a.x, 2.5, a.z), v3(b.x, 2.5, b.z), 0.02, 'galv');
+    }
+
+    // ---- Swing set (over/under obstacle)
+    const sw = O('Swing Set', 'overunder', { obstacle: { a: v3(-3, 0, -6), b: v3(3, 0, -6), under: 2.32, over: 2.46 } });
+    const topY = 2.4;
+    pipe(sw, v3(-3.1, topY, -6), v3(3.1, topY, -6), 0.035, 'paintRed');
+    for (const x of [-3, 3]) {
+      pipe(sw, v3(x, 0, -7.1), v3(x, topY, -6), 0.035, 'paintRed');
+      pipe(sw, v3(x, 0, -4.9), v3(x, topY, -6), 0.035, 'paintRed');
+    }
+    for (const x of [-1.8, 0, 1.8]) {
+      for (const dx of [-0.22, 0.22]) pipe(sw, v3(x + dx, topY, -6), v3(x + dx, 0.5, -6), 0.006, 'chain');
+      box(sw, v3(x, 0.48, -6), v3(0.24, 0.02, 0.09), 'rubberBlack');
+    }
+
+    // ---- Slide tower (over/under: under deck, over roof)
+    const sl = O('Slide Tower', 'overunder', { obstacle: { a: v3(-8.7, 0, 2), b: v3(-7.3, 0, 2), under: 1.42, over: 2.95 } });
+    for (const [x, z] of [
+      [-8.6, 1.4],
+      [-7.4, 1.4],
+      [-8.6, 2.6],
+      [-7.4, 2.6]
+    ])
+      pipe(sl, v3(x, 0, z), v3(x, 2.6, z), 0.045, 'paintBlue');
+    box(sl, v3(-8, 1.5, 2), v3(0.6, 0.04, 0.6), 'metalPlate');
+    box(sl, v3(-8, 2.75, 2), v3(0.75, 0.15, 0.75), 'plasticYellow', 0, 0, 0, { roof: true });
+    const sLen = 3.3,
+      sAng = Math.atan2(1.5, 2.9);
+    box(sl, v3(-7.4 + 1.45, 0.78, 2), v3(sLen / 2, 0.03, 0.27), 'metalSlide', Math.PI / 2, 0, 0, { tiltZ: -sAng });
+    // override with proper tilt: slide goes down toward +x
+    sl.prims.pop();
+    sl.vis.pop();
+    box(sl, v3(-7.4 + 1.45, 0.78, 2), v3(sLen / 2, 0.03, 0.27), 'metalSlide', 0, 0, -sAng, { graffiti: 'top' });
+    box(sl, v3(-7.4 + 1.45, 0.92, 1.73), v3(sLen / 2, 0.12, 0.02), 'metalSlide', 0, 0, -sAng);
+    box(sl, v3(-7.4 + 1.45, 0.92, 2.27), v3(sLen / 2, 0.12, 0.02), 'metalSlide', 0, 0, -sAng);
+    for (let i = 1; i <= 5; i++) pipe(sl, v3(-8.65, i * 0.27, 1.75), v3(-8.65, i * 0.27, 2.25), 0.02, 'galv');
+
+    // ---- Monkey bars (over/under along z)
+    const mb = O('Monkey Bars', 'overunder', { obstacle: { a: v3(8, 0, 0.2), b: v3(8, 0, 3.8), under: 2.02, over: 2.18 } });
+    for (const x of [7.6, 8.4]) {
+      pipe(mb, v3(x, 2.1, 0), v3(x, 2.1, 4), 0.03, 'paintGreen');
+      for (const z of [0, 4]) pipe(mb, v3(x, 0, z), v3(x, 2.1, z), 0.035, 'paintGreen');
+    }
+    for (let z = 0.35; z < 4; z += 0.38) pipe(mb, v3(7.6, 2.1, z), v3(8.4, 2.1, z), 0.016, 'galv');
+
+    // ---- Jungle gym cube (over/under through bottom bay)
+    const jg = O('Jungle Gym', 'overunder', { obstacle: { a: v3(7, 0, -8), b: v3(9.2, 0, -8), under: 1.02, over: 2.28 } });
+    const J0 = v3(7, 0, -9.1),
+      S = 2.2;
+    const jp = (a, b) => pipe(jg, a, b, 0.025, 'paintOrange');
+    for (const dx of [0, S]) for (const dz of [0, S]) jp(v3(J0.x + dx, 0, J0.z + dz), v3(J0.x + dx, S, J0.z + dz));
+    for (const y of [1.1, S]) {
+      jp(v3(J0.x, y, J0.z), v3(J0.x + S, y, J0.z));
+      jp(v3(J0.x, y, J0.z + S), v3(J0.x + S, y, J0.z + S));
+      jp(v3(J0.x, y, J0.z), v3(J0.x, y, J0.z + S));
+      jp(v3(J0.x + S, y, J0.z), v3(J0.x + S, y, J0.z + S));
+    }
+    jp(v3(J0.x, S, J0.z + S / 2), v3(J0.x + S, S, J0.z + S / 2));
+
+    // ---- Basketball hoop (pole + backboard + ring gap)
+    // flagpole: tall, thin and in the open (7 m clear all round) for orbits, trippies and pole dancing
+    const fp = O('Flagpole', 'pole');
+    box(fp, v3(0, 0.12, -14.5), v3(0.35, 0.12, 0.35), 'concrete');
+    pipe(fp, v3(0, 0.24, -14.5), v3(0, 9.0, -14.5), 0.055, 'galv');
+    pipe(fp, v3(0, 9.0, -14.5), v3(0, 9.12, -14.5), 0.09, 'plasticYellow', { noCollide: true });
+    box(fp, v3(0.62, 8.3, -14.5), v3(0.55, 0.36, 0.008), 'paintRed', 0, 0, 0, { noCollide: true, flag: true });
+    const hp = O('Hoop Pole', 'pole');
+    pipe(hp, v3(-11, 0, -14.2), v3(-11, 3.4, -14.2), 0.06, 'paintBlue');
+    pipe(hp, v3(-11, 3.3, -14.2), v3(-11, 3.3, -13.4), 0.04, 'paintBlue');
+    box(hp, v3(-11, 3.35, -13.35), v3(0.9, 0.53, 0.02), 'backboard', 0, 0, 0, {
+      graffiti: 'south',
+      art: [{ name: 'rwdc', x: 0.15, y: 0.8, h: 0.36, rot: -0.08 }]
+    });
+    const rim = O('Hoop', 'gap', { gap: { c: v3(-11, 3.05, -12.95), n: v3(0, 1, 0), hu: 0.21, hv: 0.21, u: v3(1, 0, 0), round: true } });
+    for (let i = 0; i < 14; i++) {
+      const a0 = (i / 14) * Math.PI * 2,
+        a1 = ((i + 1) / 14) * Math.PI * 2;
+      pipe(
+        rim,
+        v3(-11 + Math.cos(a0) * 0.23, 3.05, -12.95 + Math.sin(a0) * 0.23),
+        v3(-11 + Math.cos(a1) * 0.23, 3.05, -12.95 + Math.sin(a1) * 0.23),
+        0.009,
+        'rimOrange'
+      );
+    }
+
+    // ---- Lamp posts (poles)
+    for (const [x, z] of [
+      [-14, -16],
+      [14, -16],
+      [14, 14],
+      [-14, 14]
+    ]) {
+      const lp = O('Lamp Post', 'pole', { light: v3(x, 5.6, z) });
+      pipe(lp, v3(x, 0, z), v3(x, 5.6, z), 0.07, 'galv');
+      box(lp, v3(x, 5.7, z), v3(0.25, 0.08, 0.15), 'lampHead');
+    }
+
+    // ---- Benches, picnic table, bins, dumpster, tires, cones, trees
+    const bench = (x, z, ry) => {
+      const b = O('Bench', 'overunder', {
+        obstacle: {
+          a: v3(x - Math.cos(ry) * 0.9, 0, z + Math.sin(ry) * 0.9),
+          b: v3(x + Math.cos(ry) * 0.9, 0, z - Math.sin(ry) * 0.9),
+          under: 0.38,
+          over: 0.52
+        }
+      });
+      box(b, v3(x, 0.45, z), v3(0.95, 0.03, 0.22), 'wood', ry);
+      box(b, v3(x - Math.cos(ry) * 0.8, 0.22, z + Math.sin(ry) * 0.8), v3(0.04, 0.22, 0.2), 'concrete', ry);
+      box(b, v3(x + Math.cos(ry) * 0.8, 0.22, z - Math.sin(ry) * 0.8), v3(0.04, 0.22, 0.2), 'concrete', ry);
+    };
+    bench(-3, 9, 0);
+    bench(4, 10, 0.3);
+    bench(12, -2, Math.PI / 2);
+    const pt = O('Picnic Table', 'overunder', { obstacle: { a: v3(-3, 0, 14), b: v3(0, 0, 14), under: 0.66, over: 0.82 } });
+    box(pt, v3(-1.5, 0.74, 14), v3(1.5, 0.04, 0.4), 'wood', 0, 0, 0, { graffiti: 'top' });
+    for (const z of [13.35, 14.65]) box(pt, v3(-1.5, 0.44, z), v3(1.5, 0.03, 0.14), 'wood');
+    for (const x of [-2.8, -0.2]) for (const z of [13.6, 14.4]) box(pt, v3(x, 0.37, z), v3(0.04, 0.37, 0.04), 'wood');
+    for (const [x, z] of [
+      [-5, -2],
+      [5, 6],
+      [-15, 10]
+    ]) {
+      const t = O('Trash Can', 'deco');
+      pipe(t, v3(x, 0.3, z), v3(x, 0.62, z), 0.28, 'bin');
+    }
+    const dm = O('Dumpster', 'overunder', { wallNormal: v3(0, 0, 1) });
+    box(dm, v3(10, 0.65, -20.6), v3(1.6, 0.65, 0.85), 'dumpster', 0, 0, 0, { graffiti: 'south' });
+    for (const [x, z] of [
+      [2.5, 3],
+      [3.4, 3.2]
+    ]) {
+      const t = O('Tire', 'deco');
+      pipe(t, v3(x - 0.25, 0.15, z), v3(x + 0.25, 0.15, z), 0.15, 'tire');
+    }
+    for (const [x, z] of [
+      [-2, 0],
+      [-1, 1.5],
+      [0, 3],
+      [1, 4.5]
+    ]) {
+      const c = O('Cone', 'deco');
+      pipe(c, v3(x, 0.02, z), v3(x, 0.35, z), 0.08, 'cone', { cone: true });
+    }
+    for (const [x, z, s] of [
+      [14, 8, 1],
+      [-15, -6, 1.2],
+      [13, -11, 0.9]
+    ]) {
+      const tr = O('Tree', 'pole');
+      // the Tricktionary's favourite obstacle: loops, Mattys, Split-S and mavericks go under the canopy and over the top.
+      // Round, so the over/under line is re-aimed across the approach direction (see trackCrossings).
+      tr.round = { c: v3(x, 0, z), r: 2.0 * s, under: 2.6 * s, over: 5.8 * s };
+      tr.obstacle = { a: v3(x - 2.0 * s, 0, z), b: v3(x + 2.0 * s, 0, z), under: 2.6 * s, over: 5.8 * s };
+      pipe(tr, v3(x, 0, z), v3(x, 3.2 * s, z), 0.16 * s, 'bark');
+      ball(tr, v3(x, 4.2 * s, z), 1.5 * s, 'leaves');
+      ball(tr, v3(x + 0.9 * s, 3.7 * s, z + 0.3), 1.0 * s, 'leaves');
+      ball(tr, v3(x - 0.7 * s, 3.8 * s, z - 0.6), 1.1 * s, 'leaves');
+    }
+    // ---- Covered walkway (pilot's photo): yellow posts on concrete footings, curved yellow beams, a corrugated roof that
+    // overhangs both sides, over a concrete path. Fly down the tunnel, slalom the posts, or loop the roof edge (over/under).
+    {
+      const wk = O('Covered Walkway', 'overunder', { obstacle: { a: v3(-13, 0, 17.5), b: v3(-3, 0, 17.5), under: 2.45, over: 3.25 } });
+      const ZC = 17.5,
+        HW = 1.2,
+        EAVE = 2.6,
+        RISE = 0.45,
+        W2 = 1.65,
+        R = (W2 * W2 + RISE * RISE) / (2 * RISE),
+        Y0 = EAVE + RISE - R,
+        F0 = Math.asin(W2 / R);
+      const arc = f => v3(0, Y0 + R * Math.cos(f), ZC + R * Math.sin(f));
+      for (let i = 0; i < 5; i++) {
+        const x = -13 + i * 2.5;
+        for (const sg of [-1, 1]) {
+          const z = ZC + sg * HW;
+          box(wk, v3(x, 0.18, z), v3(0.17, 0.18, 0.17), 'concrete');
+          pipe(wk, v3(x, 0.36, z), v3(x, arc(sg * Math.asin(HW / R)).y, z), 0.045, 'plasticYellow');
+        }
+        for (let k = 0; k < 6; k++) {
+          const a = arc(-F0 + (2 * F0 * k) / 6),
+            b = arc(-F0 + (2 * F0 * (k + 1)) / 6);
+          pipe(wk, v3(x, a.y - 0.05, a.z), v3(x, b.y - 0.05, b.z), 0.04, 'plasticYellow');
+        }
+      }
+      for (const f of [-F0 * 0.6, 0, F0 * 0.6]) {
+        const a = arc(f);
+        pipe(wk, v3(-13.3, a.y - 0.02, a.z), v3(-2.7, a.y - 0.02, a.z), 0.02, 'galv');
+      }
+      for (let k = 0; k < 6; k++) {
+        const f = -F0 + (2 * F0 * (k + 0.5)) / 6,
+          c = arc(f);
+        box(wk, v3(-8, c.y + 0.02, c.z), v3(5.4, 0.012, R * Math.sin(F0 / 6) + 0.01), 'metalPlate', 0, f, 0, { roof: true });
+      }
+      const lf = O('Walkway Lamp', 'deco');
+      ball(lf, v3(-8, EAVE + RISE - 0.3, ZC), 0.07, 'lampHead', { noCollide: true });
+    }
+    // ---- the pilot (you), standing by the spawn with goggles on — fly into the face for a Facepunch
+    const pl = O('Pilot', 'pilot');
+    const PX = 2.6,
+      PZ = 14.2;
+    // wide stance (as in the demos): fly between the legs (Immelmann, Power Swap demos) or over the head
+    pipe(pl, v3(PX - 0.36, 0, PZ), v3(PX - 0.1, 0.88, PZ), 0.07, 'jeans');
+    pipe(pl, v3(PX + 0.36, 0, PZ), v3(PX + 0.1, 0.88, PZ), 0.07, 'jeans');
+    pl.obstacle = { a: v3(PX - 0.26, 0, PZ), b: v3(PX + 0.26, 0, PZ), under: 0.55, over: 1.95 };
+    pipe(pl, v3(PX, 0.9, PZ), v3(PX, 1.42, PZ), 0.19, 'hoodie');
+    pipe(pl, v3(PX - 0.24, 1.38, PZ), v3(PX - 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie');
+    pipe(pl, v3(PX + 0.24, 1.38, PZ), v3(PX + 0.14, 1.12, PZ - 0.28), 0.05, 'hoodie');
+    box(pl, v3(PX, 1.13, PZ - 0.33), v3(0.13, 0.08, 0.05), 'radio');
+    ball(pl, v3(PX, 1.66, PZ), 0.12, 'skin');
+    box(pl, v3(PX, 1.69, PZ - 0.1), v3(0.11, 0.045, 0.05), 'goggles', 0, 0, 0, { noCollide: true });
+    pipe(pl, v3(PX, 1.74, PZ + 0.02), v3(PX, 1.8, PZ + 0.02), 0.115, 'hoodie', { noCollide: true });
+    // ground zones (visual only)
+    const zones = [
+      { shape: 'zone', mat: 'rubberMat', c: v3(0, 0.006, -1), h: v3(11, 0, 9) },
+      { shape: 'zone', mat: 'sand', c: v3(8, 0.012, 2), h: v3(1.6, 0, 2.6) },
+      { shape: 'zone', mat: 'court', c: v3(-11, 0.009, -11), h: v3(6, 0, 5) },
+      { shape: 'zone', mat: 'concrete', c: v3(-8, 0.01, 17.5), h: v3(5.6, 0, 1.0) }
+    ];
+    const all = [];
+    for (const o of objs)
+      for (const p of o.prims) {
+        p.owner = o.id;
+        all.push(p);
+      }
+    return { objs, prims: all, zones, spawn: { pos: v3(0, 0.03, 12), yaw: 0 }, bounds: { x: [-19, 18], z: [-22, 20] } };
+  }
+
+  // ================================================================= THE SURVEYOR
+  // Reads a map's collision shapes and works out for itself what can be flown over and under, so over/under tricks do not
+  // depend on somebody remembering to tag every object, or on which way the pilot happens to approach it. Run once on a
+  // map after it is built (maps.js does). Two jobs:
+  //   1. Tagged objects that are really slabs (a platform, a table, a deck) become direction-free: the over/under line is
+  //      aimed across whatever approach the pilot takes, as wide as the slab is that way. Bars and rails keep their line.
+  //   2. Untagged shapes with air beneath them (a lintel, a shelf, a bench top, a raised pipe) get an over/under of their own.
+  //   3. Untagged slabs too wide to loop whole but with air beneath (a roof, a big deck) get an over/under along each edge:
+  //      up over the eave and back under it is a loop round that edge.
+  // Not surveyed: the ground, anything sitting on something, walls and roofs too big to loop, ramps, the pilot, poles.
+  function surveyObstacles(world, opts = {}) {
+    if (world._surveyed) return world;
+    world._surveyed = true;
+    const minGap = opts.minGap ?? 0.35,
+      maxThick = opts.maxThick ?? 1.6,
+      maxSpan = opts.maxSpan ?? 5;
+    const flatBox = p => p.type === 'box' && Math.abs(p.m[4]) > 0.94;
+    // the highest surface under a point, below height y (0 = the ground)
+    const supportUnder = (x, z, y, self) => {
+      let top = 0;
+      for (const q of world.prims) {
+        if (q === self) continue;
+        const a = q.aabb;
+        if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y;
+      }
+      return top;
+    };
+    let nid = world.objs.reduce((m, o) => Math.max(m, o.id + 1), 0);
+    const made = [],
+      report = { slabs: 0, found: 0, edges: 0 };
+    for (const o of world.objs.slice()) {
+      if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.auto) continue;
+      if (o.obstacle && !o.round) {
+        // job 1
+        const { under, over } = o.obstacle;
+        let x0 = 1e9,
+          x1 = -1e9,
+          z0 = 1e9,
+          z1 = -1e9,
+          n = 0;
+        for (const p of o.prims) {
+          if (p.leaf) continue;
+          const a = p.aabb;
+          if (a.max.y < under - 0.3 || a.min.y > over + 0.3) continue;
+          if (p.type === 'capsule' && Math.abs(p.b.y - p.a.y) > 0.8 * len(sub(p.b, p.a))) continue;
+          x0 = Math.min(x0, a.min.x);
+          x1 = Math.max(x1, a.max.x);
+          z0 = Math.min(z0, a.min.z);
+          z1 = Math.max(z1, a.max.z);
+          n++;
+        }
+        if (n && Math.min(x1 - x0, z1 - z0) >= 0.6 && Math.max(x1 - x0, z1 - z0) <= 12) {
+          o.round = {
+            c: v3((x0 + x1) / 2, 0, (z0 + z1) / 2),
+            r: Math.max(x1 - x0, z1 - z0) / 2,
+            box: { hx: (x1 - x0) / 2, hz: (z1 - z0) / 2 },
+            under,
+            over
+          };
+          report.slabs++;
+        }
         continue;
       }
-      const long = Math.max(sx, sz), short = Math.min(sx, sz), alongX = sx >= sz;
-      const ob = { a: v3(alongX ? a.min.x : cx, 0, alongX ? cz : a.min.z), b: v3(alongX ? a.max.x : cx, 0, alongX ? cz : a.max.z), under: bot, over: top };
-      autos.push({ size: long * short, ob, round: short >= 0.6 && long <= 12 ? { c: v3(cx, 0, cz), r: long / 2, box: { hx: sx / 2, hz: sz / 2 }, under: bot, over: top } : null });
-    }
-    autos.sort((x, y) => y.size - x.size);
-    for (const E of edges.slice(0, 16)) { made.push({ id: nid++, name: E.name, kind: 'overunder', prims: [], vis: [], obstacle: E.ob, auto: true, edge: true, parent: o.id }); report.edges++; }
-    for (const A of autos.slice(0, 6)) { const v = { id: nid++, name: o.name, kind: 'overunder', prims: [], vis: [], obstacle: A.ob, auto: true, parent: o.id }; if (A.round) v.round = A.round; made.push(v); report.found++; }
-  }
-  world.objs.push(...made);
-  if (opts.lowGaps !== false) report.lowGaps = surveyLowGaps(world, nid + made.length);
-  report.overUnders = world.objs.filter(o => o.obstacle).length; report.gaps = world.objs.filter(o => o.gap).length;
-  report.poles = world.objs.reduce((n, o) => n + (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall' ? 0 : o.kind === 'pilot' ? 1 : o.prims.filter(q => q.type === 'capsule' && !q.leaf && q.r <= (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) && q.r >= 0.012 && len(sub(q.b, q.a)) >= 1.2 && Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8).length), 0);
-  report.walls = world.objs.filter(o => o.kind === 'wall' || o.kind === 'building').length;
-  world.survey = report; return world;
-}
-
-// Job 4 (owner, 2026-11-20: "under the bench / through the picnic table / under the moose don't count as gaps"): every low flat
-// slab (a box no higher than LOWGAP_MAX over what is under it) gets a gap of its own across each way it can be flown through:
-// the opening is the clear stretch under it that stays clear (5 cm, like tools/gapcheck.js) all the way through the slab's depth,
-// from the floor to its underside; at least LOWGAP_W wide and LOWGAP_H high. Not where a gap already is (same place, same way).
-const LOWGAP_MAX = 1.3, LOWGAP_W = 0.2, LOWGAP_H = 0.15, LOWGAP_CLEAR = 0.05;
-function primDist(P, p) {
-  if (P.type === 'sphere') return len(sub(p, P.c)) - P.r;
-  if (P.type === 'capsule') { const ab = sub(P.b, P.a), L = dot(ab, ab); let t = L ? dot(sub(p, P.a), ab) / L : 0; t = Math.max(0, Math.min(1, t)); return len(sub(p, add(P.a, mul(ab, t)))) - P.r; }
-  const m = P.m, d = sub(p, P.c), q = [Math.abs(m[0] * d.x + m[3] * d.y + m[6] * d.z) - P.h.x, Math.abs(m[1] * d.x + m[4] * d.y + m[7] * d.z) - P.h.y, Math.abs(m[2] * d.x + m[5] * d.y + m[8] * d.z) - P.h.z];
-  return Math.hypot(Math.max(q[0], 0), Math.max(q[1], 0), Math.max(q[2], 0)) + Math.min(Math.max(q[0], q[1], q[2]), 0);
-}
-function surveyLowGaps(world, nid) {
-  const have = world.objs.filter(o => o.gap), made = [];
-  const supportUnder = (x, z, y, self) => { let top = 0; for (const q of world.prims) { if (q === self) continue; const a = q.aabb; if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y; } return top; };
-  for (const o of world.objs.slice()) {
-    if (o.kind === 'pilot' || o.kind === 'gap' || o.kind === 'edge' || o.kind === 'wall' || o.kind === 'building' || o.auto || !o.prims || !o.prims.length) continue;
-    const mine = [];
-    for (const p of o.prims) {
-      if (p.leaf || p.type !== 'box' || Math.abs(p.m[4]) < 0.94) continue;
-      const a = p.aabb, bot = a.min.y; if (a.max.y - bot > 1.6) continue;
-      const ax = [v3(p.m[0], 0, p.m[6]), v3(p.m[2], 0, p.m[8])].map(norm), hh = [p.h.x, p.h.z]; if (Math.min(...hh) < 0.15 || Math.max(...hh) > 3) continue;
-      const floor = supportUnder(p.c.x, p.c.z, bot, p), H = bot - floor, fp = floor > 0 && world.prims.find(q => q !== p && Math.abs(q.aabb.max.y - floor) < 1e-6 && p.c.x > q.aabb.min.x && p.c.x < q.aabb.max.x && p.c.z > q.aabb.min.z && p.c.z < q.aabb.max.z);
-      if (fp && Math.min(fp.aabb.max.x - fp.aabb.min.x, fp.aabb.max.z - fp.aabb.min.z) < 0.4) continue;   /* over a beam or a lamp, not a floor */ if (H < LOWGAP_H + 2 * LOWGAP_CLEAR || H > LOWGAP_MAX) continue;
-      const R = Math.max(...hh) + 0.3, near = world.prims.filter(q => q.aabb.max.x > p.c.x - R && q.aabb.min.x < p.c.x + R && q.aabb.max.z > p.c.z - R && q.aabb.min.z < p.c.z + R && q.aabb.min.y < bot + 0.1 && q.aabb.max.y > floor - 0.1);
-      const free = pt => { for (const q of near) if (primDist(q, pt) < LOWGAP_CLEAR) return false; return true; };
-      for (const k of [0, 1]) {
-        const n = ax[k], u = ax[1 - k], hn = hh[k], hu = hh[1 - k], ys = [], ns = [];
-        for (let y = floor + LOWGAP_CLEAR + 0.01; y <= bot - LOWGAP_CLEAR - 0.01 + 1e-6; y += Math.max(0.04, (H - 0.12) / 6)) ys.push(y);
-        for (let t = -hn; t <= hn + 1e-6; t += 0.05) ns.push(t);   /* every 5 cm through its depth: a 6 cm leg is never stepped over */
-        const col = w => { for (const y of ys) for (const t of ns) if (!free(v3(p.c.x + u.x * w + n.x * t, y, p.c.z + u.z * w + n.z * t))) return false; return true; };
-        if (!col(0)) continue;
-        let w0 = 0, w1 = 0; const st = 0.04; while (w1 + st <= hu && col(w1 + st)) w1 += st; while (w0 - st >= -hu && col(w0 - st)) w0 -= st;
-        if (w1 - w0 < LOWGAP_W) continue;
-        const wc = (w0 + w1) / 2, c = v3(p.c.x + u.x * wc, (floor + bot) / 2, p.c.z + u.z * wc);
-        if (have.concat(made, mine.map(m => m.o)).some(g => { const r = sub(g.gap.c, c); return Math.abs(dot(norm(g.gap.n), n)) > 0.7 && Math.abs(r.y) < 0.6 + H / 2 && Math.abs(dot(r, n)) < hn + 0.6 && Math.abs(dot(r, u)) < hu + 0.3; })) continue;   // a gap already there: in or near this slab, the same way
-        mine.push({ size: (w1 - w0) * H, o: { id: 0, name: o.name, kind: 'gap', prims: [], vis: [], auto: true, low: true, parent: o.id, gap: { c, n, u, hu: (w1 - w0) / 2 - 0.02, hv: H / 2 - LOWGAP_CLEAR - 0.015 } } });   // a little inside the sampled clear air (tools/gapcheck.js tests the edges too)
+      if (o.obstacle || o.round) continue;
+      const autos = [],
+        edges = []; // jobs 2 and 3
+      for (const p of o.prims) {
+        if (p.leaf) continue; // foliage (maps.js coneSolid / leafSolid) is never an over/under bar of its own
+        const a = p.aabb,
+          bot = a.min.y,
+          top = a.max.y,
+          cx = (a.min.x + a.max.x) / 2,
+          cz = (a.min.z + a.max.z) / 2,
+          sx = a.max.x - a.min.x,
+          sz = a.max.z - a.min.z;
+        if (p.type === 'box' ? !flatBox(p) : p.type === 'capsule' ? Math.abs(p.b.y - p.a.y) > 0.3 * len(sub(p.b, p.a)) : true) continue;
+        if (top - bot > maxThick || Math.max(sx, sz) < 0.4) continue;
+        // air beneath: at the middle or at any of four points part-way out (a pillar under the middle doesn't make it solid)
+        let gap = 0;
+        for (const [fx, fz] of [
+          [0, 0],
+          [0.3, 0.3],
+          [-0.3, 0.3],
+          [0.3, -0.3],
+          [-0.3, -0.3]
+        ])
+          gap = Math.max(gap, bot - supportUnder(cx + fx * sx, cz + fz * sz, bot, p));
+        if (gap < minGap) continue;
+        if (Math.min(sx, sz) > maxSpan) {
+          // job 3: too wide to loop whole, so its edges
+          if (p.type !== 'box' || bot < 1.2) continue;
+          const inx = Math.min(0.3, sx / 6),
+            inz = Math.min(0.3, sz / 6);
+          for (const [ax, az, bx, bz] of [
+            [a.min.x, a.min.z + inz, a.max.x, a.min.z + inz],
+            [a.min.x, a.max.z - inz, a.max.x, a.max.z - inz],
+            [a.min.x + inx, a.min.z, a.min.x + inx, a.max.z],
+            [a.max.x - inx, a.min.z, a.max.x - inx, a.max.z]
+          ])
+            edges.push({ name: o.name + ' edge', ob: { a: v3(ax, 0, az), b: v3(bx, 0, bz), under: bot, over: top } });
+          continue;
+        }
+        const long = Math.max(sx, sz),
+          short = Math.min(sx, sz),
+          alongX = sx >= sz;
+        const ob = {
+          a: v3(alongX ? a.min.x : cx, 0, alongX ? cz : a.min.z),
+          b: v3(alongX ? a.max.x : cx, 0, alongX ? cz : a.max.z),
+          under: bot,
+          over: top
+        };
+        autos.push({
+          size: long * short,
+          ob,
+          round:
+            short >= 0.6 && long <= 12 ? { c: v3(cx, 0, cz), r: long / 2, box: { hx: sx / 2, hz: sz / 2 }, under: bot, over: top } : null
+        });
+      }
+      autos.sort((x, y) => y.size - x.size);
+      for (const E of edges.slice(0, 16)) {
+        made.push({ id: nid++, name: E.name, kind: 'overunder', prims: [], vis: [], obstacle: E.ob, auto: true, edge: true, parent: o.id });
+        report.edges++;
+      }
+      for (const A of autos.slice(0, 6)) {
+        const v = { id: nid++, name: o.name, kind: 'overunder', prims: [], vis: [], obstacle: A.ob, auto: true, parent: o.id };
+        if (A.round) v.round = A.round;
+        made.push(v);
+        report.found++;
       }
     }
-    mine.sort((x, y) => y.size - x.size); const kept = [];   // one gap per way through an object (a picnic table's top and its seats are one pass)
-    for (const m of mine) { if (kept.length >= 2 || kept.some(k => Math.abs(dot(k.gap.n, m.o.gap.n)) > 0.7)) continue; kept.push(m.o); m.o.id = nid++; made.push(m.o); }
+    world.objs.push(...made);
+    if (opts.lowGaps !== false) report.lowGaps = surveyLowGaps(world, nid + made.length);
+    report.overUnders = world.objs.filter(o => o.obstacle).length;
+    report.gaps = world.objs.filter(o => o.gap).length;
+    report.poles = world.objs.reduce(
+      (n, o) =>
+        n +
+        (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall'
+          ? 0
+          : o.kind === 'pilot'
+            ? 1
+            : o.prims.filter(
+                q =>
+                  q.type === 'capsule' &&
+                  !q.leaf &&
+                  q.r <= (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) &&
+                  q.r >= 0.012 &&
+                  len(sub(q.b, q.a)) >= 1.2 &&
+                  Math.abs(q.b.y - q.a.y) / len(sub(q.b, q.a)) >= 0.8
+              ).length),
+      0
+    );
+    report.walls = world.objs.filter(o => o.kind === 'wall' || o.kind === 'building').length;
+    world.survey = report;
+    return world;
   }
-  world.objs.push(...made); return made.length;
-}
 
-// ================================================================= DRONE PHYSICS
-const NEAR_M = 1.0, NEAR_M2 = 2 * NEAR_M;   // collision broad phase: list everything within 2 m, trust the list for 1 m of travel
-// Thrust with the rotor's own inflow (tune.inflow; owner, 2026-11-27, after reading WebFPV's plant: ideas only, written from the
-// textbook). Blade element says thrust falls as the air arriving at the blade speeds up: T/T0 = 1 - (x + y - 1) / k, where x is the
-// axial speed and y the induced velocity, both over vi0 (the induced velocity at rest), and k is fixed by the prop's pitch speed
-// (thrust reaches zero at x = 1 + k: the old line's jmax). Momentum theory says what induced velocity that thrust needs:
-// T/T0 = y sqrt(xp^2 + (x + y)^2), xp the edgewise speed over vi0. Both together: climbing costs less thrust than the straight line
-// (the rotor needs less induced velocity), and edgewise flow gives translational lift. Hover (x = xp = 0) is y = 1, T = T0 exactly.
-// Edgewise speed is taken at 0.8 (the induced velocity is not even over a real disc in forward flight: the induced power factor).
-// Descending (x < 0) keeps the old line's gain (the ring state is handled after) times the edgewise gain at x = 0.
-const INFLOW_EDGE = 0.8;
-function inflowRatio(vAx, vIn, vPitch, vi0, ctFold) {
-  if (!(vi0 > 0.05) || !(vPitch > 0)) return ctFold;
-  const k = Math.max(0.2, vPitch / vi0 - 1), xp = INFLOW_EDGE * vIn / vi0, x = Math.max(0, vAx / vi0);
-  // the axial root (xp = 0) in closed form, then three Newton steps down to the edgewise root (g rises and is convex in y)
-  const b = x + 1 / k, c = (x - 1) / k - 1; let y = Math.max(0, (-b + Math.sqrt(Math.max(0, b * b - 4 * c))) / 2);
-  if (xp > 1e-4) for (let it = 0; it < 3; it++) { const s = x + y, r = Math.sqrt(xp * xp + s * s), g = y * r - (1 - (s - 1) / k), dg = r + y * s / r + 1 / k; if (!(dg > 0)) break; y = Math.max(0, y - g / dg); }
-  const ratio = Math.max(0, 1 - (x + y - 1) / k);
-  return vAx >= 0 ? ratio : ctFold * ratio;
-}
-class Drone {
-  constructor(params, tune, world) {
-    this.world = world; this.rng = makeRng(1234);
-    this.setParams(params, tune);
-    this.reset(world.spawn);
-  }
-  setParams(params, tune) {
-    // Physics feel (Garage → Advanced, FEEL_KEYS; every one 1 by default, and at 1 the physics is exactly as it was). They
-    // scale what the physics sees, never the parts list or the Garage figures:
-    //   weightFeel  mass and rotational inertia (lighter: quicker, floatier; heavier: more momentum, drops harder)
-    //   dragFeel    air drag on the body and the props' sideways drag (more: slows down sooner, less coasting)
-    //   washFeel    prop wash: the shake and thrust loss when descending into your own air (0 = none)
-    //   motorFeel   how fast the motors spin up and down (more = quicker; less = laggier, like heavier props or a
-    //               softer ESC)
-    //   sagFeel     battery voltage sag under load (0 = a perfect battery)
-    //   groundFeel  ground effect: the cushion close above the floor (0 = none)
-    const f = k => Number.isFinite(+tune[k]) ? clamp(+tune[k], FEEL_KEYS[k][0], FEEL_KEYS[k][1]) : 1, F = {}; for (const k in FEEL_KEYS) F[k] = f(k);
-    // tune.propCt / tune.propCq (absent = 1, the physics as it was): the props' thrust and torque coefficients. The game sets
-    // them so a whoop hovers at the rpm a real one does (Blackbox, 2026-11-19: the sim's props were too efficient), keeping its
-    // top-end thrust (PROP_FIT in game.js)
-    const pct = Number.isFinite(+tune.propCt) ? clamp(+tune.propCt, 0.5, 3) : 1, pcq = Number.isFinite(+tune.propCq) ? clamp(+tune.propCq, 0.5, 4) : 1;
-    // tune.inertiaFeel (absent = 1, the physics as it was): roll and pitch inertia only (sim x = pitch, z = roll), fitted from real
-    // Blackbox logs (tools/inertiafit.js; owner, 2026-11-27)
-    const pin = Number.isFinite(+tune.inertiaFeel) ? clamp(+tune.inertiaFeel, 0.2, 3) : 1;
-    // tune.propFM (absent: cq as above): the props' torque from their thrust by a figure of merit (ideal power over shaft power at
-    // rest: FM = ct^1.5 / (2 pi sqrt(pi / 2) cq) for a disc of the prop's diameter). The game's fitted whoop props sit at 0.35
-    // (the 3D props 0.25-0.27); one number for every prop instead of a cq each, 3D props at 0.73 of it (owner, 2026-11-27, after reading WebFPV)
-    const pfm = Number.isFinite(+tune.propFM) ? clamp(+tune.propFM, 0.15, 0.8) * (params.revEff > 0.8 ? 0.73 : 1) : 0, cqFM = pfm ? Math.pow(params.ct * pct, 1.5) / (2 * Math.PI * Math.sqrt(Math.PI / 2) * pfm) : 0;   // 3D props lose about a quarter (symmetrical blades)
-    this.feel = F; const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1 && pin === 1 && !pfm;
-    this.p = all1 ? params : { ...params, ct: params.ct * pct, cq: pfm ? cqFM : params.cq * pcq, mass: params.mass * F.weightFeel, I: v3(params.I.x * F.weightFeel * pin, params.I.y * F.weightFeel, params.I.z * F.weightFeel * pin),
-      cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel), rotorDrag: params.rotorDrag * F.dragFeel,
-      rotorJ: params.rotorJ / F.motorFeel, bat: { ...params.bat, r: params.bat.r * F.sagFeel } };
-    this.tune = tune;
-    if (!this.fc) this.fc = new FlightController(params, tune); else this.fc.setup(params, tune);
-  }
-  reset(sp, keepBattery = false) {
-    this.pos = v3(sp.pos.x, sp.pos.y + 0.02, sp.pos.z); this.vel = v3();
-    this.q = qaxis(v3(0, 1, 0), sp.yaw || 0); this.w = v3(); // body rates rad/s
-    this.motorW = [0, 0, 0, 0]; this.motorI = [0, 0, 0, 0]; this.thrust = [0, 0, 0, 0];
-    if (!keepBattery) { this.soc = 1; this.mAh = 0; }
-    this.vbat = ocv(this.soc, this.p.bat.hv, this.p.bat.cells); this.ibat = 0;
-    this.armed = false; this.crashed = false; this.brownout = false; this.lowV = 0; this.contacts = []; this.contactThisStep = false;
-    this.noise = [0, 0, 0, 0]; this.washLevel = 0; this.wake = []; this.wakeTimer = 0; this.time = this.time || 0;
-    this.fc.reset(); this.restOnGround = 0; this.lastImpact = 0; this.lowSpeedContact = 0;
-  }
-  up() { return qrot(this.q, v3(0, 1, 0)); }
-  fwd() { return qrot(this.q, v3(0, 0, -1)); }
-  right() { return qrot(this.q, v3(1, 0, 0)); }
-  pilotRates() { return [-this.w.z * R2D, this.w.x * R2D, -this.w.y * R2D]; } // roll right, pitch back, yaw right
-
-  step(rc, dt) {
-    const p = this.p; this.time += dt;
-    this.contactThisStep = false;
-    // ---- flight controller
-    // attitude for Angle mode, in the pilot's axes: roll right +, pitch back (nose up) +
-    const att = (this.fc.modeOverride || this.fc.tune.flightMode) === 'angle' ? (() => { const r = this.right(), u = this.up(), f = this.fwd(); return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D]; })() : null;
-    const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
-    this.duty = out;   // the motor commands this step (Feel Lab compares them with the motor speed)
-    // Loop delay (tune.loopDelayMs: 0 = none, the physics default): a real quad answers a little late (gyro filtering, the
-    // DShot frame, the ESC), the sim's FC at once. The motors get the commands of that long ago (Feel Lab fits it).
-    const LD = +this.tune.loopDelayMs || 0; let outD = out;
-    if (LD > 0) { const n = Math.max(1, Math.round(LD / 1000 / dt)), Q = this.cmdQ || (this.cmdQ = []); Q.push(Array.from(out)); while (Q.length > n + 1) Q.shift(); outD = Q[0]; }
-    // ---- motors + battery
-    const up = this.up();
-    // Battery life off (the game's default; owner, 2026-11-26: "ensure battery sim is removed"): a full pack that never sags or browns
-    // out. On: the pack sags under the current, smoothed over ~5 ms (the board's caps): fed back raw every 1 ms step, the sag and the
-    // motors' current chased each other at full throttle and dragged the bus to its 2.5 V floor (pilots got brownouts on a full pack).
-    // The sag follows the motor model's own current: `tune.drain` (x2.4 in the game) is fitted to the mAh a real pack loses, and
-    // multiplying the sag by it too took 40 A off a full 1S pack at full throttle.
-    const batOn = this.tune.batteryLife !== false;
-    const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
-    const Vocv = ocv(batOn ? this.soc : 1, p.bat.hv, p.bat.cells);
-    const Vbus = batOn ? Math.max(2.5 * p.bat.cells, Vocv - (this.ibatS ?? this.ibat) * Rint) : Vocv;
-    let Itot = 0.35, Isag = 0.35; // electronics/VTX; Isag: the motor model's own current, what the pack sags under
-    const drain = +this.tune.drain || 1;
-    const Fb = v3(), Tb = v3();
-    let rotorAccelYaw = 0;
-    // air relative velocity incl. wake
-    const air = this.sampleWake();
-    this.washLevel += (air.turb - this.washLevel) * 0.05;
-    const vRelW = sub(this.vel, air.v);
-    const vRelB = qinv(this.q, vRelW);
-    let sumW = 0;
-    // ground effect: height under thrust axis (approx world-down to ground or top surfaces)
-    const hGround = this.heightAbove();
-    // Air near surfaces (owner, 2026-11-28; absent = none, the physics and its hash unchanged; the game fills both in):
-    //   tune.wallPull  a ducted rotor beside a wall is drawn toward it and lifts a little more: per rotor a force of
-    //                  0.21 x 0.34^(d/R) of its thrust toward the wall and thrust x (1 + 0.06 x 0.54^(d/R)), d from the rotor's centre
-    //                  (the fits of Ding, Bai, Dong and Chirarattananon, npj Robotics 2023, measured on a small ducted quadrotor)
-    //   tune.ceilPull  under a ceiling a rotor lifts more, thrust x (1/2 + 1/2 sqrt(1 + 1 / (8 z^2))), z = gap / R (Hsiao and
-    //                  Chirarattananon's model, which Carter et al. found to hold on a micro quadrotor down to z ~ 0.5)
-    // Flat faces of boxes only (walls, slabs, decks); poles and round things have none.
-    const WPl = +this.tune.wallPull || 0, CPl = +this.tune.ceilPull || 0; let nearW = null, nearC = null, offW = null;
-    if ((WPl || CPl) && this._hb && this._hb.list.length) {
-      const P = this.pos, RNG = p.arm + 2.5 * p.D; let dW = RNG, dC = RNG;
-      for (const pr of this._hb.list) { const a = pr.aabb; if (P.x + RNG < a.min.x || P.x - RNG > a.max.x || P.z + RNG < a.min.z || P.z - RNG > a.max.z || P.y + RNG < a.min.y || P.y - RNG > a.max.y) continue;
-        const M = pr.m, h = pr.h, dx = P.x - pr.c.x, dy = P.y - pr.c.y, dz = P.z - pr.c.z;
-        const lx = M[0] * dx + M[3] * dy + M[6] * dz, ly = M[1] * dx + M[4] * dy + M[7] * dz, lz = M[2] * dx + M[5] * dy + M[8] * dz;
-        const ex = lx - clamp(lx, -h.x, h.x), ey = ly - clamp(ly, -h.y, h.y), ez = lz - clamp(lz, -h.z, h.z), d = Math.hypot(ex, ey, ez); if (d < 1e-4 || d >= RNG) continue;
-        const n = v3(-(M[0] * ex + M[1] * ey + M[2] * ez) / d, -(M[3] * ex + M[4] * ey + M[5] * ez) / d, -(M[6] * ex + M[7] * ey + M[8] * ez) / d);   // from the quad to the surface
-        if (WPl && Math.abs(n.y) < 0.5 && d < dW) { dW = d; nearW = { n, d }; }
-        if (CPl && n.y > 0.7 && d < dC) { dC = d; nearC = { n, d }; } }
-      if (nearW || nearC) { offW = p.motors.map(m => qrot(this.q, m.pos)); if (nearW) { nearW.nB = qinv(this.q, nearW.n); nearW.k = WPl * (1 - Math.abs(dot(up, nearW.n))); } }
+  // Job 4 (owner, 2026-11-20: "under the bench / through the picnic table / under the moose don't count as gaps"): every low flat
+  // slab (a box no higher than LOWGAP_MAX over what is under it) gets a gap of its own across each way it can be flown through:
+  // the opening is the clear stretch under it that stays clear (5 cm, like tools/gapcheck.js) all the way through the slab's depth,
+  // from the floor to its underside; at least LOWGAP_W wide and LOWGAP_H high. Not where a gap already is (same place, same way).
+  const LOWGAP_MAX = 1.3,
+    LOWGAP_W = 0.2,
+    LOWGAP_H = 0.15,
+    LOWGAP_CLEAR = 0.05;
+  function primDist(P, p) {
+    if (P.type === 'sphere') return len(sub(p, P.c)) - P.r;
+    if (P.type === 'capsule') {
+      const ab = sub(P.b, P.a),
+        L = dot(ab, ab);
+      let t = L ? dot(sub(p, P.a), ab) / L : 0;
+      t = Math.max(0, Math.min(1, t));
+      return len(sub(p, add(P.a, mul(ab, t)))) - P.r;
     }
-    for (let i = 0; i < 4; i++) {
-      const m = p.motors[i];
-      const duty = outD[i] || 0;   // signed in 3D mode: a negative duty drives the motor backward
-      let w = this.motorW[i];
-      const Vm = duty * Vbus;
-      let I = (Vm - w / p.kvRad) / p.rm;
-      I = clamp(I, this.fc.reversible ? -12 : -4, 12);
-      const n = Math.abs(w) / (2 * Math.PI), sW = w < 0 ? -1 : 1;   // n is the speed; sW the way it turns (−1 only in 3D mode)
-      const Q = sW * p.cq * RHO * n * n * Math.pow(p.D, 5) + p.i0 * p.kt * Math.sign(w);
-      const tau = p.kt * I;
-      const dw = (tau - Q) / p.rotorJ;
-      w = this.fc.reversible ? w + dw * dt : Math.max(0, w + dw * dt);
-      this.motorW[i] = w; this.motorI[i] = I;
-      Itot += Math.max(0, I * duty) * drain; Isag += Math.max(0, I * duty);   // tune.drain: what the motor model leaves out (ESC, iron, the props' real torque); absent = 1
-      rotorAccelYaw += -m.spin * p.rotorJ * dw; // reaction of spinning-up rotor on frame (about body Y)
-      // prop velocity (body) at motor location
-      const vp = add(vRelB, cross(this.w, m.pos));
-      const vAx = vp.y * sW; // + means moving along thrust direction (climbing; reversed thrust points the other way)
-      const nn = Math.max(n, 1);
-      const J = vAx / (nn * p.D);
-      let ctF = J >= 0 ? clamp(1 - J / p.jmax, 0, 1) : clamp(1 - 0.35 * J, 1, 1.25);
-      // translational lift (edgewise flow) small gain
-      const vIn = Math.hypot(vp.x, vp.z);
-      let T;
-      if (this.tune.inflow) T = p.ct * RHO * n * n * Math.pow(p.D, 4) * inflowRatio(vAx, vIn, nn * p.D * p.jmax, Math.sqrt(p.ct * RHO * n * n * Math.pow(p.D, 4) / (2 * RHO * p.A)), ctF);   // tune.inflow: momentum theory, translational lift inside it
-      else { T = p.ct * RHO * n * n * Math.pow(p.D, 4) * ctF; const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A)); T *= 1 + 0.08 * Math.min(1, vIn / (vi + 0.5)); }
-      const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A));
-      // vortex ring state / propwash when descending into own wash
-      const desc = -vAx;
-      let vrs = 0;
-      if (desc > 0.15 * vi) {
-        const x = desc / (vi + 1e-3);
-        vrs = Math.exp(-Math.pow((x - 0.75) / 0.45, 2)) * clamp(1 - vIn / (1.6 * vi + 0.5), 0, 1);
+    const m = P.m,
+      d = sub(p, P.c),
+      q = [
+        Math.abs(m[0] * d.x + m[3] * d.y + m[6] * d.z) - P.h.x,
+        Math.abs(m[1] * d.x + m[4] * d.y + m[7] * d.z) - P.h.y,
+        Math.abs(m[2] * d.x + m[5] * d.y + m[8] * d.z) - P.h.z
+      ];
+    return Math.hypot(Math.max(q[0], 0), Math.max(q[1], 0), Math.max(q[2], 0)) + Math.min(Math.max(q[0], q[1], q[2]), 0);
+  }
+  function surveyLowGaps(world, nid) {
+    const have = world.objs.filter(o => o.gap),
+      made = [];
+    const supportUnder = (x, z, y, self) => {
+      let top = 0;
+      for (const q of world.prims) {
+        if (q === self) continue;
+        const a = q.aabb;
+        if (x > a.min.x && x < a.max.x && z > a.min.z && z < a.max.z && a.max.y <= y + 0.02 && a.max.y > top) top = a.max.y;
       }
-      const turb = clamp(vrs + air.turb, 0, 1.6);
-      // filtered noise per motor (~25Hz band)
-      this.noise[i] += (this.rng() * 1.7 - this.noise[i]) * (1 - Math.exp(-2 * Math.PI * 25 * dt));
-      { const wf = this.feel ? this.feel.washFeel : 1; T *= (1 - 0.22 * vrs * wf) * (1 + 0.38 * turb * wf * this.noise[i]); }
-      // ground effect (Cheeseman-Bennett), only when roughly upright over a surface
-      if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) { const r = p.D / 2, h = Math.max(hGround, r * 0.6), ge = clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25); T *= 1 + (ge - 1) * (this.feel ? this.feel.groundFeel : 1); }
-      let side = 0;
-      if (offW && sW > 0) { const R = p.D / 2;
-        if (nearC && up.y > 0.5) { const z = Math.max(0.3, (nearC.d - dot(offW[i], nearC.n)) / R); if (z < 3) T *= 1 + Math.min(0.5, 0.5 * Math.sqrt(1 + 1 / (8 * z * z)) - 0.5) * CPl; }
-        if (nearW && nearW.k > 0) { const db = Math.max(0, nearW.d - dot(offW[i], nearW.n)) / R; if (db < 5) { T *= 1 + 0.06 * Math.pow(0.54, db) * nearW.k; side = 0.21 * Math.pow(0.34, db) * nearW.k * Math.max(0, T); } } }
-      T = Math.max(0, T); if (sW < 0) T *= -p.revEff;   // spun backward the prop pushes the other way, and (unless it is a 3D prop) not as hard
-      this.thrust[i] = T;
-      sumW += Math.abs(w);
-      Fb.y += T;
-      const tq = cross(m.pos, v3(0, T, 0));
-      Tb.x += tq.x; Tb.y += tq.y; Tb.z += tq.z;
-      if (side) { const f = mul(nearW.nB, side), t2 = cross(m.pos, f); Fb.x += f.x; Fb.y += f.y; Fb.z += f.z; Tb.x += t2.x; Tb.y += t2.y; Tb.z += t2.z; }
-      Tb.y += -m.spin * sW * (p.cq * RHO * n * n * Math.pow(p.D, 5));
-    }
-    Tb.y += rotorAccelYaw;
-    this.ibat = Itot; this.vbat = Vbus; this.ibatS = (this.ibatS ?? Isag) + (Isag - (this.ibatS ?? Isag)) * (1 - Math.exp(-dt / 0.005));
-    if (batOn) this.soc = Math.max(0, this.soc - Itot * dt / (p.bat.cap * 3.6));   // Garage → Battery life off: the pack never runs down
-    // brownout: a whoop's AIO resets when the loaded voltage falls below ~2.9 V a cell for a moment; the quad drops
-    if (batOn && this.armed && Vbus < BROWNOUT * p.bat.cells) { this.lowV = (this.lowV || 0) + dt; if (this.lowV > 0.25) { this.armed = false; this.brownout = true; } } else this.lowV = 0;
-    this.mAh += Itot * dt / 3.6;
-    // ---- aerodynamic drag (body frame, quadratic) + rotor H-force (linear)
-    const vb = vRelB;
-    Fb.x += -0.5 * RHO * p.cdA.x * Math.abs(vb.x) * vb.x - p.rotorDrag * sumW * vb.x;
-    Fb.y += -0.5 * RHO * p.cdA.y * Math.abs(vb.y) * vb.y;
-    Fb.z += -0.5 * RHO * p.cdA.z * Math.abs(vb.z) * vb.z - p.rotorDrag * sumW * vb.z;
-    // tune.deadSpin (absent = 1: the physics as it was; the game fills in 0.1): how much of the rotational air drag a disarmed quad
-    // in the air still feels. The drag was set with the motors running (the PID flies through it); with them off it stopped a
-    // 680 deg/s flip in a quarter turn, where a real whoop tumbles on (owner, 2026-11-21: disarm tricks)
-    const aD = p.angDrag * (!this.armed && !this.crashed && this.tune.deadSpin != null ? +this.tune.deadSpin : 1);
-    Tb.x += -aD * this.w.x * Math.abs(this.w.x) * 1000; Tb.y += -aD * this.w.y * Math.abs(this.w.y) * 600; Tb.z += -aD * this.w.z * Math.abs(this.w.z) * 1000;
-    // ---- integrate
-    const Fw = qrot(this.q, Fb); Fw.y -= p.mass * G;
-    // race fields (RaceGOW: fan drafts push, battery-saver zones add thrust); maps without fields are untouched
-    const WF = this.world.fields; if (WF && WF.length) for (const f of WF) { const d = sub(this.pos, f.o), m = f.m;
-      const lx = d.x * m[0] + d.y * m[3] + d.z * m[6], ly = d.x * m[1] + d.y * m[4] + d.z * m[7], lz = d.x * m[2] + d.y * m[5] + d.z * m[8];
-      if (Math.abs(lx) > f.h.x || Math.abs(ly) > f.h.y || Math.abs(lz) > f.h.z) continue;
-      if (f.kind === 'push') { const k = f.accel * p.mass; Fw.x += f.dir.x * k; Fw.y += f.dir.y * k; Fw.z += f.dir.z * k; }
-      else if (f.kind === 'swirl') { const r = Math.hypot(d.x, d.z) || 1e-3, k = f.accel * p.mass * Math.max(0, 1 - r / f.h.x); Fw.x += -d.z / r * k; Fw.z += d.x / r * k; Fw.y += 0.3 * k; }   // a dust devil (the Murderdome): it shoves you round and up
-      else if (f.kind === 'boost') { const B = qrot(this.q, Fb), g = f.gain - 1; Fw.x += B.x * g; Fw.y += B.y * g; Fw.z += B.z * g; } }
-    this.vel = add(this.vel, mul(Fw, dt / p.mass));
-    const I = p.I, w = this.w;
-    // Shake (tune.shake: 0 = none, the physics default; the game gives players 1, fitted from the owner's Blackbox logs with
-    // tools/feelfit.js): air that is never still pushes a light quad about. A random angular kick per axis, smoothed over ~60
-    // ms (the 2-20 Hz wobble real hover logs show), growing with thrust, with prop wash and with speed; the FC fights it like
-    // a real one. Its own random stream (seeded), so turning it off leaves every other number exactly as it was.
-    const SH = +this.tune.shake || 0;
-    if (SH > 0 && this.armed && !this.crashed) { const T = this.turb || (this.turb = { a: [0, 0, 0], b: [0, 0, 0], rng: makeRng(4711) }), tau = Math.max(0.03, +this.tune.shakeTau || 0.06), k = Math.sqrt(2 * dt / tau);
-      // how much is going on: rotation and speed (owner: "a hint of wobble on movements"; a still hover stays nearly calm)
-      const Tt = this.thrust.reduce((a, b) => a + Math.abs(b), 0), load = Math.min(2.5, Tt / (p.mass * G)), sp = len(this.vel), rot = len(this.w) * R2D;
-      const busy = this.tune.shakeMove != null ? Math.min(1.5, rot / 500 + sp / 12) * this.tune.shakeMove + (1 - this.tune.shakeMove) : 1;
-      const amp = SH * SHAKE_A * (0.25 + load) * (1 + 1.5 * this.washLevel) * (1 + sp / 10) * busy;
-      for (let i = 0; i < 3; i++) { let n = 0; for (let j = 0; j < 3; j++) n += T.rng(); T.a[i] += (-T.a[i] * dt / tau) + k * n * 0.577; T.b[i] += (T.a[i] - T.b[i]) * Math.min(1, dt / (tau * 0.5)); }   // twice smoothed: no sharp edges
-      Tb.x += I.x * amp * T.b[0]; Tb.y += I.y * amp * T.b[1] * 0.15; Tb.z += I.z * amp * T.b[2]; }   // little on yaw: the sim's yaw authority is weak and real yaw tracks as well as the sim's (Feel Lab)
-    const Iw = v3(I.x * w.x, I.y * w.y, I.z * w.z), gyro = cross(w, Iw);
-    this.w = v3(w.x + (Tb.x - gyro.x) / I.x * dt, w.y + (Tb.y - gyro.y) / I.y * dt, w.z + (Tb.z - gyro.z) / I.z * dt);
-    this.pos = add(this.pos, mul(this.vel, dt));
-    const dq = qmul(this.q, { w: 0, x: this.w.x, y: this.w.y, z: this.w.z });
-    this.q = qnorm({ w: this.q.w + 0.5 * dq.w * dt, x: this.q.x + 0.5 * dq.x * dt, y: this.q.y + 0.5 * dq.y * dt, z: this.q.z + 0.5 * dq.z * dt });
-    // ---- wake shedding
-    this.wakeTimer += dt;
-    if (this.wakeTimer > 0.012 && this.armed) {
-      this.wakeTimer = 0;
-      const Tt = this.thrust.reduce((a, b) => a + b, 0);
-      const vi = Math.sqrt(Math.max(Tt, 1e-6) / (2 * RHO * p.A * 4));
-      const strength = clamp(Tt / (p.mass * G * 2.2), 0, 1.2);
-      if (strength > 0.05) this.wake.push({ p: v3(this.pos.x, this.pos.y, this.pos.z), v: mul(up, -vi * 0.9), s: strength, age: 0 });
-      if (this.wake.length > 160) this.wake.shift();
-    }
-    for (const k of this.wake) { k.age += dt; k.p = add(k.p, mul(k.v, dt)); k.v = mul(k.v, 1 - 1.2 * dt); }
-    while (this.wake.length && this.wake[0].age > 1.4) this.wake.shift();
-    // ---- collisions
-    this.collide(dt);
-  }
-
-  sampleWake() {
-    let turb = 0, vx = 0, vy = 0, vz = 0, wsum = 0;
-    const R = 0.16 + this.p.D * 2;
-    for (const k of this.wake) {
-      if (k.age < 0.12) continue;
-      const dx = k.p.x - this.pos.x, dy = k.p.y - this.pos.y, dz = k.p.z - this.pos.z;
-      const d2 = dx * dx + dy * dy + dz * dz; if (d2 > R * R) continue;
-      const f = (1 - Math.sqrt(d2) / R) * k.s * (1 - k.age / 1.4);
-      turb += f; vx += k.v.x * f; vy += k.v.y * f; vz += k.v.z * f; wsum += f;
-    }
-    const sc = wsum > 0 ? Math.min(1, wsum) / wsum : 0;
-    return { turb: clamp(turb * 0.6, 0, 1.2), v: v3(vx * sc * 0.6, vy * sc * 0.6, vz * sc * 0.6) };
-  }
-
-  heightAbove() {
-    // only boxes whose footprint is within NEAR_M2 of the quad (rebuilt after NEAR_M of travel): this runs every physics step,
-    // and a map with solid foliage has thousands of shapes (Moose: 4000; the full loop tripled its physics time)
-    let h = this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z) ? 60 : this.pos.y; const WP = this.world.prims, H = this._hb;
-    if (!H || H.w !== WP || H.n !== WP.length || Math.max(Math.abs(this.pos.x - H.x), Math.abs(this.pos.z - H.z)) > NEAR_M) {
-      const list = []; for (const pr of WP) { if (pr.type !== 'box') continue; const a = pr.aabb; if (this.pos.x + NEAR_M2 < a.min.x || this.pos.x - NEAR_M2 > a.max.x || this.pos.z + NEAR_M2 < a.min.z || this.pos.z - NEAR_M2 > a.max.z) continue; list.push(pr); }
-      this._hb = { w: WP, n: WP.length, x: this.pos.x, z: this.pos.z, list };
-    }
-    for (const pr of this._hb.list) {
-      const a = pr.aabb; if (this.pos.x < a.min.x || this.pos.x > a.max.x || this.pos.z < a.min.z || this.pos.z > a.max.z) continue;
-      if (a.max.y <= this.pos.y + 0.01) h = Math.min(h, this.pos.y - a.max.y);
-    }
-    return h;
-  }
-
-  collide(dt) {
-    const GH = this.world.groundHoles;   // Slackvegan's subway: no ground plane over these (the map has its own floors there); absent elsewhere
-    const p = this.p; let hit = false; let maxImpact = 0; let hitOwner = -1, hitNormal = null, hitSurf = null;
-    for (let iter = 0; iter < 2; iter++) {
-      for (const c of p.colliders) {
-        const cw = add(this.pos, qrot(this.q, c.c));
-        const contacts = [];
-        if (cw.y < c.r && !(GH && inGroundHole(GH, cw.x, cw.z))) contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true, surf: this.world.groundSurf });
-        // Broad phase: the world has a few hundred shapes and this runs 1000 times a second, but the quad is only ever
-        // near a handful. Keep the list of shapes within NEAR_M of where it was last built (same order as the world's
-        // list, so results are identical) and rebuild it once the quad has moved far enough that one could be missed.
-        const NC = this._nearC, WP = this.world.prims;
-        if (!NC || this._nearW !== WP || this._nearN !== WP.length || Math.max(Math.abs(cw.x - NC.x), Math.abs(cw.y - NC.y), Math.abs(cw.z - NC.z)) + c.r > NEAR_M) {
-          const near = []; for (const pr of WP) { const a = pr.aabb; if (!(cw.x + NEAR_M2 < a.min.x || cw.x - NEAR_M2 > a.max.x || cw.y + NEAR_M2 < a.min.y || cw.y - NEAR_M2 > a.max.y || cw.z + NEAR_M2 < a.min.z || cw.z - NEAR_M2 > a.max.z)) near.push(pr); }
-          this._near = near; this._nearC = { x: cw.x, y: cw.y, z: cw.z }; this._nearW = WP; this._nearN = WP.length;
-        }
-        for (const pr of this._near) {
-          const a = pr.aabb;
-          if (cw.x + c.r < a.min.x || cw.x - c.r > a.max.x || cw.y + c.r < a.min.y || cw.y - c.r > a.max.y || cw.z + c.r < a.min.z || cw.z - c.r > a.max.z) continue;
-          const r = sphereVs(pr, cw, c.r); if (r) { r.owner = pr.owner; r.surf = pr.surf; contacts.push(r); }
-        }
-        for (const ct of contacts) {
-          hit = true;
-          this.pos = add(this.pos, mul(ct.n, ct.d * 0.9));
-          const r = sub(ct.pt, this.pos);
-          const wW = qrot(this.q, this.w);
-          // surf.belt: the surface itself moves (More Warehouse's conveyor): contact and friction are worked out against the belt,
-          // so whatever rests on it is carried along. Absent everywhere else: the physics is unchanged
-          const bv = ct.surf && ct.surf.belt, vc = bv ? sub(add(this.vel, cross(wW, r)), bv) : add(this.vel, cross(wW, r));
-          const vn = dot(vc, ct.n);
-          if (vn < 0) {
-            if (-vn > maxImpact) { maxImpact = -vn; hitOwner = ct.owner; hitNormal = ct.n; hitSurf = ct.surf; }   // ct.surf: RaceGOW surfaces { e, f, crash }
-            // effective mass along normal
-            const rB = qinv(this.q, r), nB = qinv(this.q, ct.n);
-            const rxn = cross(rB, nB); const Iinv = v3(rxn.x / p.I.x, rxn.y / p.I.y, rxn.z / p.I.z);
-            const k = 1 / p.mass + dot(cross(Iinv, rB), nB);
-            const sf = ct.surf, e = -vn > 0.4 ? (sf ? sf.e : p.restitution) : 0;
-            const jn = -(1 + e) * vn / k;
-            // friction
-            const vt = sub(vc, mul(ct.n, vn)), vtl = len(vt);
-            let J = mul(ct.n, jn);
-            if (vtl > 1e-5) {
-              const tdir = mul(vt, 1 / vtl);
-              const rxt = cross(rB, qinv(this.q, tdir)); const It = v3(rxt.x / p.I.x, rxt.y / p.I.y, rxt.z / p.I.z);
-              const kt = 1 / p.mass + dot(cross(It, rB), qinv(this.q, tdir));
-              // tune.wallGrip: the friction of a duct pressed on a wall or the side of anything (a contact facing sideways, not the
-              // ground or a top); absent = p.friction, the physics as it was. The game sets 0.9 (TPU ducts grip: a whoop pushed
-              // into a wall sticks at moderate throttle; at 0.45 it slid down at anything under full throttle: Metal Craft Fpv)
-              const WG = this.tune.wallGrip, mu = sf ? sf.f : (WG == null || ct.ground || Math.abs(ct.n.y) > 0.7) ? p.friction : +WG;
-              const jt = Math.min(vtl / kt, mu * jn);
-              J = sub(J, mul(tdir, jt));
+      return top;
+    };
+    for (const o of world.objs.slice()) {
+      if (
+        o.kind === 'pilot' ||
+        o.kind === 'gap' ||
+        o.kind === 'edge' ||
+        o.kind === 'wall' ||
+        o.kind === 'building' ||
+        o.auto ||
+        !o.prims ||
+        !o.prims.length
+      )
+        continue;
+      const mine = [];
+      for (const p of o.prims) {
+        if (p.leaf || p.type !== 'box' || Math.abs(p.m[4]) < 0.94) continue;
+        const a = p.aabb,
+          bot = a.min.y;
+        if (a.max.y - bot > 1.6) continue;
+        const ax = [v3(p.m[0], 0, p.m[6]), v3(p.m[2], 0, p.m[8])].map(norm),
+          hh = [p.h.x, p.h.z];
+        if (Math.min(...hh) < 0.15 || Math.max(...hh) > 3) continue;
+        const floor = supportUnder(p.c.x, p.c.z, bot, p),
+          H = bot - floor,
+          fp =
+            floor > 0 &&
+            world.prims.find(
+              q =>
+                q !== p &&
+                Math.abs(q.aabb.max.y - floor) < 1e-6 &&
+                p.c.x > q.aabb.min.x &&
+                p.c.x < q.aabb.max.x &&
+                p.c.z > q.aabb.min.z &&
+                p.c.z < q.aabb.max.z
+            );
+        if (fp && Math.min(fp.aabb.max.x - fp.aabb.min.x, fp.aabb.max.z - fp.aabb.min.z) < 0.4) continue;
+        /* over a beam or a lamp, not a floor */ if (H < LOWGAP_H + 2 * LOWGAP_CLEAR || H > LOWGAP_MAX) continue;
+        const R = Math.max(...hh) + 0.3,
+          near = world.prims.filter(
+            q =>
+              q.aabb.max.x > p.c.x - R &&
+              q.aabb.min.x < p.c.x + R &&
+              q.aabb.max.z > p.c.z - R &&
+              q.aabb.min.z < p.c.z + R &&
+              q.aabb.min.y < bot + 0.1 &&
+              q.aabb.max.y > floor - 0.1
+          );
+        const free = pt => {
+          for (const q of near) if (primDist(q, pt) < LOWGAP_CLEAR) return false;
+          return true;
+        };
+        for (const k of [0, 1]) {
+          const n = ax[k],
+            u = ax[1 - k],
+            hn = hh[k],
+            hu = hh[1 - k],
+            ys = [],
+            ns = [];
+          for (let y = floor + LOWGAP_CLEAR + 0.01; y <= bot - LOWGAP_CLEAR - 0.01 + 1e-6; y += Math.max(0.04, (H - 0.12) / 6)) ys.push(y);
+          for (let t = -hn; t <= hn + 1e-6; t += 0.05) ns.push(t); /* every 5 cm through its depth: a 6 cm leg is never stepped over */
+          const col = w => {
+            for (const y of ys) for (const t of ns) if (!free(v3(p.c.x + u.x * w + n.x * t, y, p.c.z + u.z * w + n.z * t))) return false;
+            return true;
+          };
+          if (!col(0)) continue;
+          let w0 = 0,
+            w1 = 0;
+          const st = 0.04;
+          while (w1 + st <= hu && col(w1 + st)) w1 += st;
+          while (w0 - st >= -hu && col(w0 - st)) w0 -= st;
+          if (w1 - w0 < LOWGAP_W) continue;
+          const wc = (w0 + w1) / 2,
+            c = v3(p.c.x + u.x * wc, (floor + bot) / 2, p.c.z + u.z * wc);
+          if (
+            have
+              .concat(
+                made,
+                mine.map(m => m.o)
+              )
+              .some(g => {
+                const r = sub(g.gap.c, c);
+                return (
+                  Math.abs(dot(norm(g.gap.n), n)) > 0.7 &&
+                  Math.abs(r.y) < 0.6 + H / 2 &&
+                  Math.abs(dot(r, n)) < hn + 0.6 &&
+                  Math.abs(dot(r, u)) < hu + 0.3
+                );
+              })
+          )
+            continue; // a gap already there: in or near this slab, the same way
+          mine.push({
+            size: (w1 - w0) * H,
+            o: {
+              id: 0,
+              name: o.name,
+              kind: 'gap',
+              prims: [],
+              vis: [],
+              auto: true,
+              low: true,
+              parent: o.id,
+              gap: { c, n, u, hu: (w1 - w0) / 2 - 0.02, hv: H / 2 - LOWGAP_CLEAR - 0.015 }
             }
-            this.vel = add(this.vel, mul(J, 1 / p.mass));
-            const JB = qinv(this.q, J), tq = cross(rB, JB);
-            this.w = v3(this.w.x + tq.x / p.I.x, this.w.y + tq.y / p.I.y, this.w.z + tq.z / p.I.z);
-          }
-          this.contactNormal = ct.n; this.contactOwner = ct.owner; this.contactGround = !!ct.ground;
+          }); // a little inside the sampled clear air (tools/gapcheck.js tests the edges too)
         }
       }
+      mine.sort((x, y) => y.size - x.size);
+      const kept = []; // one gap per way through an object (a picnic table's top and its seats are one pass)
+      for (const m of mine) {
+        if (kept.length >= 2 || kept.some(k => Math.abs(dot(k.gap.n, m.o.gap.n)) > 0.7)) continue;
+        kept.push(m.o);
+        m.o.id = nid++;
+        made.push(m.o);
+      }
     }
-    this.contactThisStep = hit;
-    if (hit) {
-      this.lastImpact = maxImpact; this.impactOwner = hitOwner; this.impactNormal = hitNormal; this.impactSurf = hitSurf;
-      this.w = mul(this.w, 0.995);
+    world.objs.push(...made);
+    return made.length;
+  }
+
+  // ================================================================= DRONE PHYSICS
+  const NEAR_M = 1.0,
+    NEAR_M2 = 2 * NEAR_M; // collision broad phase: list everything within 2 m, trust the list for 1 m of travel
+  // Thrust with the rotor's own inflow (tune.inflow; owner, 2026-11-27, after reading WebFPV's plant: ideas only, written from the
+  // textbook). Blade element says thrust falls as the air arriving at the blade speeds up: T/T0 = 1 - (x + y - 1) / k, where x is the
+  // axial speed and y the induced velocity, both over vi0 (the induced velocity at rest), and k is fixed by the prop's pitch speed
+  // (thrust reaches zero at x = 1 + k: the old line's jmax). Momentum theory says what induced velocity that thrust needs:
+  // T/T0 = y sqrt(xp^2 + (x + y)^2), xp the edgewise speed over vi0. Both together: climbing costs less thrust than the straight line
+  // (the rotor needs less induced velocity), and edgewise flow gives translational lift. Hover (x = xp = 0) is y = 1, T = T0 exactly.
+  // Edgewise speed is taken at 0.8 (the induced velocity is not even over a real disc in forward flight: the induced power factor).
+  // Descending (x < 0) keeps the old line's gain (the ring state is handled after) times the edgewise gain at x = 0.
+  const INFLOW_EDGE = 0.8;
+  function inflowRatio(vAx, vIn, vPitch, vi0, ctFold) {
+    if (!(vi0 > 0.05) || !(vPitch > 0)) return ctFold;
+    const k = Math.max(0.2, vPitch / vi0 - 1),
+      xp = (INFLOW_EDGE * vIn) / vi0,
+      x = Math.max(0, vAx / vi0);
+    // the axial root (xp = 0) in closed form, then three Newton steps down to the edgewise root (g rises and is convex in y)
+    const b = x + 1 / k,
+      c = (x - 1) / k - 1;
+    let y = Math.max(0, (-b + Math.sqrt(Math.max(0, b * b - 4 * c))) / 2);
+    if (xp > 1e-4)
+      for (let it = 0; it < 3; it++) {
+        const s = x + y,
+          r = Math.sqrt(xp * xp + s * s),
+          g = y * r - (1 - (s - 1) / k),
+          dg = r + (y * s) / r + 1 / k;
+        if (!(dg > 0)) break;
+        y = Math.max(0, y - g / dg);
+      }
+    const ratio = Math.max(0, 1 - (x + y - 1) / k);
+    return vAx >= 0 ? ratio : ctFold * ratio;
+  }
+  class Drone {
+    constructor(params, tune, world) {
+      this.world = world;
+      this.rng = makeRng(1234);
+      this.setParams(params, tune);
+      this.reset(world.spawn);
     }
-    // crash rules (≈ "contact + disarm" in TPW terms)
-    if (this.armed && !this.crashed) {
-      if (maxImpact > (hitSurf && hitSurf.crash ? hitSurf.crash : (this.crashImpact || 7.5))) this.crash('impact');
+    setParams(params, tune) {
+      // Physics feel (Garage → Advanced, FEEL_KEYS; every one 1 by default, and at 1 the physics is exactly as it was). They
+      // scale what the physics sees, never the parts list or the Garage figures:
+      //   weightFeel  mass and rotational inertia (lighter: quicker, floatier; heavier: more momentum, drops harder)
+      //   dragFeel    air drag on the body and the props' sideways drag (more: slows down sooner, less coasting)
+      //   washFeel    prop wash: the shake and thrust loss when descending into your own air (0 = none)
+      //   motorFeel   how fast the motors spin up and down (more = quicker; less = laggier, like heavier props or a
+      //               softer ESC)
+      //   sagFeel     battery voltage sag under load (0 = a perfect battery)
+      //   groundFeel  ground effect: the cushion close above the floor (0 = none)
+      const f = k => (Number.isFinite(+tune[k]) ? clamp(+tune[k], FEEL_KEYS[k][0], FEEL_KEYS[k][1]) : 1),
+        F = {};
+      for (const k in FEEL_KEYS) F[k] = f(k);
+      // tune.propCt / tune.propCq (absent = 1, the physics as it was): the props' thrust and torque coefficients. The game sets
+      // them so a whoop hovers at the rpm a real one does (Blackbox, 2026-11-19: the sim's props were too efficient), keeping its
+      // top-end thrust (PROP_FIT in game.js)
+      const pct = Number.isFinite(+tune.propCt) ? clamp(+tune.propCt, 0.5, 3) : 1,
+        pcq = Number.isFinite(+tune.propCq) ? clamp(+tune.propCq, 0.5, 4) : 1;
+      // tune.inertiaFeel (absent = 1, the physics as it was): roll and pitch inertia only (sim x = pitch, z = roll), fitted from real
+      // Blackbox logs (tools/inertiafit.js; owner, 2026-11-27)
+      const pin = Number.isFinite(+tune.inertiaFeel) ? clamp(+tune.inertiaFeel, 0.2, 3) : 1;
+      // tune.propFM (absent: cq as above): the props' torque from their thrust by a figure of merit (ideal power over shaft power at
+      // rest: FM = ct^1.5 / (2 pi sqrt(pi / 2) cq) for a disc of the prop's diameter). The game's fitted whoop props sit at 0.35
+      // (the 3D props 0.25-0.27); one number for every prop instead of a cq each, 3D props at 0.73 of it (owner, 2026-11-27, after reading WebFPV)
+      const pfm = Number.isFinite(+tune.propFM) ? clamp(+tune.propFM, 0.15, 0.8) * (params.revEff > 0.8 ? 0.73 : 1) : 0,
+        cqFM = pfm ? Math.pow(params.ct * pct, 1.5) / (2 * Math.PI * Math.sqrt(Math.PI / 2) * pfm) : 0; // 3D props lose about a quarter (symmetrical blades)
+      this.feel = F;
+      const all1 = Object.values(F).every(v => v === 1) && pct === 1 && pcq === 1 && pin === 1 && !pfm;
+      this.p = all1
+        ? params
+        : {
+            ...params,
+            ct: params.ct * pct,
+            cq: pfm ? cqFM : params.cq * pcq,
+            mass: params.mass * F.weightFeel,
+            I: v3(params.I.x * F.weightFeel * pin, params.I.y * F.weightFeel, params.I.z * F.weightFeel * pin),
+            cdA: v3(params.cdA.x * F.dragFeel, params.cdA.y * F.dragFeel, params.cdA.z * F.dragFeel),
+            rotorDrag: params.rotorDrag * F.dragFeel,
+            rotorJ: params.rotorJ / F.motorFeel,
+            bat: { ...params.bat, r: params.bat.r * F.sagFeel }
+          };
+      this.tune = tune;
+      if (!this.fc) this.fc = new FlightController(params, tune);
+      else this.fc.setup(params, tune);
+    }
+    reset(sp, keepBattery = false) {
+      this.pos = v3(sp.pos.x, sp.pos.y + 0.02, sp.pos.z);
+      this.vel = v3();
+      this.q = qaxis(v3(0, 1, 0), sp.yaw || 0);
+      this.w = v3(); // body rates rad/s
+      this.motorW = [0, 0, 0, 0];
+      this.motorI = [0, 0, 0, 0];
+      this.thrust = [0, 0, 0, 0];
+      if (!keepBattery) {
+        this.soc = 1;
+        this.mAh = 0;
+      }
+      this.vbat = ocv(this.soc, this.p.bat.hv, this.p.bat.cells);
+      this.ibat = 0;
+      this.armed = false;
+      this.crashed = false;
+      this.brownout = false;
+      this.lowV = 0;
+      this.contacts = [];
+      this.contactThisStep = false;
+      this.noise = [0, 0, 0, 0];
+      this.washLevel = 0;
+      this.wake = [];
+      this.wakeTimer = 0;
+      this.time = this.time || 0;
+      this.fc.reset();
+      this.restOnGround = 0;
+      this.lastImpact = 0;
+      this.lowSpeedContact = 0;
+    }
+    up() {
+      return qrot(this.q, v3(0, 1, 0));
+    }
+    fwd() {
+      return qrot(this.q, v3(0, 0, -1));
+    }
+    right() {
+      return qrot(this.q, v3(1, 0, 0));
+    }
+    pilotRates() {
+      return [-this.w.z * R2D, this.w.x * R2D, -this.w.y * R2D];
+    } // roll right, pitch back, yaw right
+
+    step(rc, dt) {
+      const p = this.p;
+      this.time += dt;
+      this.contactThisStep = false;
+      // ---- flight controller
+      // attitude for Angle mode, in the pilot's axes: roll right +, pitch back (nose up) +
+      const att =
+        (this.fc.modeOverride || this.fc.tune.flightMode) === 'angle'
+          ? (() => {
+              const r = this.right(),
+                u = this.up(),
+                f = this.fwd();
+              return [Math.atan2(-r.y, u.y) * R2D, Math.asin(clamp(f.y, -1, 1)) * R2D];
+            })()
+          : null;
+      const out = this.fc.update(rc, this.pilotRates(), dt, this.armed && !this.crashed, att);
+      this.duty = out; // the motor commands this step (Feel Lab compares them with the motor speed)
+      // Loop delay (tune.loopDelayMs: 0 = none, the physics default): a real quad answers a little late (gyro filtering, the
+      // DShot frame, the ESC), the sim's FC at once. The motors get the commands of that long ago (Feel Lab fits it).
+      const LD = +this.tune.loopDelayMs || 0;
+      let outD = out;
+      if (LD > 0) {
+        const n = Math.max(1, Math.round(LD / 1000 / dt)),
+          Q = this.cmdQ || (this.cmdQ = []);
+        Q.push(Array.from(out));
+        while (Q.length > n + 1) Q.shift();
+        outD = Q[0];
+      }
+      // ---- motors + battery
       const up = this.up();
-      const speed = len(this.vel);
-      if (hit && up.y < -0.35 && speed < 0.6 && !this.fc.reversible) { this.restOnGround += dt; if (this.restOnGround > 0.45) this.crash('turtle'); }   // in 3D mode upside-down on the ground is just a place to take off from
-      // "stuck": wedged on its side with no way out. With tune.wallGrip (the game) a quad pushing into a wall at half its
-      // weight or more is not stuck but wall-sticking; absent, the rule is as it always was (physics hash unchanged)
-      else if (hit && speed < 0.25 && Math.abs(up.y) < 0.6 && !(this.tune.wallGrip != null && this.thrust.reduce((a, b) => a + Math.abs(b), 0) > 0.5 * p.mass * G)) { this.restOnGround += dt; if (this.restOnGround > 0.9) this.crash('stuck'); }
-      else this.restOnGround = Math.max(0, this.restOnGround - dt);
-    }
-    if (this.pos.y < -1 && !(this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z)) || this.pos.y < -40) { this.pos.y = 0.05; this.vel = v3(); }
-  }
-  crash(reason) { this.crashed = true; this.crashReason = reason; this.armed = false; }
-}
-
-// ================================================================= TRICK RECOGNITION
-// Approach: rotation tokenizer (quarter-turn primitives per body axis, like the
-// spreadsheet's "Custom Trick Building Blocks") + obstacle crossing events + rules.
-const TRICK_DATA = root.TPW_TRICKS || [];
-// Tricks the owner named that the TPW book does not have (scored like book tricks; pts are the owner's to set, draft until then)
-const ROLLBACK_ROLL = 100;   // deg of roll travel between the two passes
-const ROLLBACK_SEE = 0.3;   // s after the turn by which a rewind is travelling back toward the object
-const ROLLBACK_BACK = 3.2, ROLLBACK_HOLD = new Set(['Snapback', 'Juicy Flick', 'Roll', 'Yaw Spin']);   // s from the pass under to the pass back under; the calls that wait that long for it
-const CINNAMON_VIEW = 0.35, UHUH_SWING = 25;   /* the share of a Cinnamon Roll with its object within 40 deg of the camera line (a turn made looking anywhere reads about 0.2; a flown orbit of the object 0.4-0.6) */
-const MAV_OVER_UP = 0.5, MAV_OVER_BACK = 0.5, MAV_MIN_UP = -0.3;   // Maverick Loop: up.y and backward travel at the pass over the top; the lowest up.y on the way round
-const TWIST_BEFORE = 0.6, TWIST_AFTER = 1.0, TWIST_FLOW = 0.5, TWIST_UNDER = 2.5;   // Matty Twister: the roll starts this long before / after the over pass at most; the flip starts within this of the roll's end; the pass under within this
-const MAVVEL_BACK = 0.2, MAVVEL_EARLY = 0.5, MAVVEL_LATE = 1.5, MAVVEL_FLICK = 0.8, MAVVEL_PROMPT = 0.7;   // Mavvelmann: the over pass flown backward (fwdDot at most this); the flick from this long before the over pass to this long after it; the flick's longest (s); the longest wait before the roll (s)
-const CORNER_SWINGS = 3, CORNER_MIN = 45, CORNER_UP = 1.0, CORNER_SIDE = 0.4;   // Corner Climb: swings round the corner, each at least this many deg of it, climbing this far (m); how far each side of the corner's diagonal a swing must reach (m)
-const WALL_STICK_MIN = 1.0;   // s held on the wall (owner, 2026-11-19: "1 second")
-const EXTRA_TRICKS = [
-  { cat: 'Matty Flips', name: 'Half Matty Pendulum', diff: 'Advanced', pts: 1050, extra: true,
-    desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.' },
-  { cat: 'Open Air Tricks', name: 'Juicy Tornado', diff: 'Intermediate', pts: 350, extra: true,
-    desc: 'A Juicy Flick followed straight away by a forward double roll: flick forward to inverted with a punch of throttle, roll back upright, and keep rolling the same way for two more full rolls while flying forward (owner, 2026-11-20). Points: a Juicy Flick plus a Double Roll, until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Rollback', diff: 'Intermediate', pts: 300, extra: true,
-    desc: 'Fly under an object and, as you come out, pitch back until you are upside-down looking back at it (a Snapback\'s way in), roll back upright, and rewind: back under the same object, travelling backward. Named and first labelled by RodFPV. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Juicy Rollback', diff: 'Intermediate', pts: 350, extra: true,
-    desc: 'The Rollback with a Juicy Flick: pitch FORWARD to upside-down as you pass under the object, roll back upright, and rewind back under it, travelling backward. Named and first labelled by RodFPV. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Cube Eject', diff: 'Intermediate', pts: 575, extra: true,
-    desc: 'An Eject Roll out of a square gap: climb up through the open top of a cube (any square opening that lies flat), throttle blip at the peak, pitch down 180° and roll 360° as you dive back down (owner, 2026-11-23). Points: the site\'s Cube value for an Eject Roll.' },
-  { cat: 'Powerloops', name: 'Loop to Matty', diff: 'Advanced', pts: 550, extra: true,
-    desc: 'Fly through a cube and do half of a Powerloop, pitching back until you can see the back gate. Then pitch forward into a Matty flip motion, going backward down through the top of the cube and out the back (prowhooper.com; a cube trick).' },
-  { cat: 'Open Air Tricks', name: 'Inverted Uh-uh', diff: 'Intermediate', pts: 125, extra: true,
-    desc: 'A quick throttle blip and a half flip or half roll to inverted. Upside-down, yaw 45° left, 90° right, 90° left and 45° right, back to where you were facing, like the whoop shaking its head "uh-uh". Finish with a half flip or half roll back upright. Created by Heads from Infinity Loops (prowhooper.com).' },
-  { cat: 'Other Tricks', name: 'INVERTED', diff: 'Intermediate', pts: 200, extra: true,
-    desc: '3D mode only. Fly upside-down: every full second spent inverted in the air scores: 200 for the first, 50 more for each one after (250, 300, …, up to 1000 a second), with no repeat penalty. Touching anything, a bump or a crash ends the count (the seconds already scored stay); turn upside-down again to start a new one.' },
-  { cat: 'Gaps', name: 'Gaps', diff: 'Beginner', pts: 150, extra: true,
-    desc: 'Fly through a small, enclosed gap. Scored by how tight it is on its short side: 150 through 6 inches (15 cm) or less, 125 at 12 inches, 100 at 18 inches, and 25 less for every 6 inches more, down to 25 from 3 feet up. The same gap again in one combo is worth half each time.' },
-  { cat: 'Wall Tricks', name: 'Corner Climb', diff: 'Intermediate', pts: 300, extra: true,
-    desc: 'A trippy on the corner of a building: looking up at the corner, roll and yaw pushed opposite ways, swing a quarter turn round it one way, sling back the other way, and again, climbing the corner with a touch of pitch (owner, 2026-11-23, from the Infinity Loops trippy masterclass). Three swings and a metre of climb. Name and points are placeholders until the owner sets them.' },
-  { cat: 'Wall Tricks', name: 'Wall Stick', diff: 'Novice', pts: 200, extra: true,
-    desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.' },
-  // disarm tricks (owner, 2026-11-21): the rotation is carried by the quad's own momentum with the motors off. Points are placeholders
-  { cat: 'Other Tricks', name: 'Disarm Flip', diff: 'Novice', pts: 200, extra: true,
-    desc: 'Start a flip, disarm in the air and let the whoop carry a full flip round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Disarm Roll', diff: 'Novice', pts: 200, extra: true,
-    desc: 'Start a roll, disarm in the air and let the whoop carry a full roll round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Disarm Spin', diff: 'Novice', pts: 200, extra: true,
-    desc: 'Start a yaw spin, disarm in the air and let the whoop carry a full flat spin round, upright, with the motors off, then re-arm and fly away. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Dead Pirate Spin', diff: 'Intermediate', pts: 350, extra: true,
-    desc: 'The Disarm Spin upside-down: inverted, spinning flat, motors off for a full turn; then re-arm, come upright and fly away. Points are a placeholder until the owner sets them.' },
-  { cat: 'Other Tricks', name: 'Disarm Loop', diff: 'Intermediate', pts: 400, extra: true,
-    desc: 'A loop with a dead top: punch up and pull back, disarm as you go over, let the whoop fall round the top of the loop with the motors off, re-arm on the way down and pull out. Points are a placeholder until the owner sets them.' }];
-const DEAD_LOOP_UP = 1.0, DEAD_LOOP_V = 2.0;   // a loop climbs at least this (m) and is flown into at least this fast (m/s)
-const DEAD_TURN = 300, DEAD_LOOP_OFF = 120, DEAD_AWAY = 0.6;   // deg of one axis with the motors off for a flip / roll / spin; of pitch for a loop's dead top; s flown clear after the re-arm
-for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
-// The game's names follow prowhooper.com (owner, 2026-11-23). Everything stored or shared before then (labels, flights, the trick
-// library, calibration files, a pilot's browser) may carry the old names: `canonTrick` reads them as the new ones.
-const TRICK_ALIAS = { 'Immelmann Turn': 'Immelmann', 'Invert Rewind': 'Inverted Rewind', 'Split-S': 'Split S', 'Split-Back': 'Splitback', 'Orbit x2': 'Orbits', 'Trippy Spin x2': 'Trippy Spin',
-  'Flip Stall Rewind': 'Stall Flip Rewind', '360 Stall Rewind': 'Stall 360 Rewind', 'Matty Stall Rewind': 'Stall Matty Rewind', 'Half Matty Stall Rewind': 'Stall Half Matty Rewind',
-  '540 Half Matty Stall Rewind': 'Stall 540 Half Matty Rewind', 'Dive': 'Building Dive', 'Facepunch': 'Face Punch', 'Blindflip': 'Blind Loop' };
-const ALIAS_SKIP = new Set(['by', 'pilot', 'pilotName', 'map', 'obstacle', 'on', 'text', 'msg', 'note', 'notes', 'desc', 'title', 'object']);
-const canonReviver = (k, v) => typeof v === 'string' && !ALIAS_SKIP.has(k) ? canonTrick(v) : v;   // for JSON.parse on anything stored before the rename: a string that IS an old trick name, under any key or in any list
-function canonTrick(n) { if (typeof n !== 'string') return n; const t = n.trim(); return Object.prototype.hasOwnProperty.call(TRICK_ALIAS, t) ? TRICK_ALIAS[t] : n; }
-function trickPoints(name) { const t = TRICK_DATA.find(t => t.name.trim() === name); return t ? t.pts : 0; }
-
-// pattern tokens: Axis(R|P|Y) dir(+|-|a|b|-a|-b|*) deg  [i=inverted yaw] ; P+ = pitch back, R+ = roll right, Y+ = yaw right
-function parsePattern(s) {
-  return s.trim().split(/\s+/).map(tok => {
-    const m = tok.match(/^([RPY])(\+|-|-?[ab]|\*)(~?)(\d+)(i?)$/); if (!m) throw new Error('bad token ' + tok);
-    return { ax: m[1], dir: m[2], loose: !!m[3], deg: +m[4], inv: !!m[5] };
-  });
-}
-const LEARN_MAX = { tol: 30, rev: 30, crossBack: 1.2 }, LEARN_NONE = { tol: 0, rev: 0, crossBack: 0 };
-// ---- The community profile (pro-whooper-community/1, community/profile.json, made by tools/community.js from every
-// pilot's decided labels and approved by the owner): what all pilots' flying taught the detector. Every detector starts
-// from it and the pilot's own profile sits on top (mergeProfiles: the looser of the two for each knob). It can also
-// TIGHTEN, which a pilot's own profile never does: `floor[trick]` is the Watcher confidence a call of that trick needs,
-// set only where pilots rejected low-confidence calls of it. Null (the Node tests) = no community layer.
-let COMMUNITY = null;
-const FLOOR_MAX = 0.8;
-function cleanCommunity(c) {
-  if (!c || typeof c !== 'object' || c.format !== 'pro-whooper-community/1') return null;
-  const n = (v, max) => Number.isFinite(+v) ? clamp(+v, 0, max) : 0, L = c.learn || {}, out = { format: c.format, updated: String(c.updated || '').slice(0, 40), learn: { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) }, floor: {}, stats: c.stats && typeof c.stats === 'object' ? c.stats : {} };
-  if (c.rate && typeof c.rate === 'object') { out.rate = {}; for (const ax of 'RPY') if (Number.isFinite(+c.rate[ax])) out.rate[ax] = clamp(+c.rate[ax], 150, 900); }
-  if (Number.isFinite(+c.air) && +c.air > 0) out.air = clamp(+c.air, 0.2, 0.85);
-  if (c.floor && typeof c.floor === 'object') for (const [k, v] of Object.entries(c.floor)) if (typeof k === 'string' && k.length > 0 && k.length < 60 && Number.isFinite(+v) && +v > 0) out.floor[canonTrick(k)] = clamp(+v, 0, FLOOR_MAX);
-  return out;
-}
-function setCommunity(c) { COMMUNITY = cleanCommunity(c); return COMMUNITY; }
-// ---- The trick library (pro-whooper-library/1, library/library.json, built by tools/library.js): real examples of each
-// trick as it was flown. The Tricktionary demo GIFs are the reference (the definition of the trick, weight 3); pilots'
-// confirmed tricks add how real pilots fly them (sloppy, big, small, slow), and calls pilots rejected are counter-examples.
-// A move is a signature: the rotation per axis, summed along the move and resampled to LIB_N points (each 25 Hz sample
-// keeps only its strongest axis, so a tilted camera in a GIF and a gyro in the sim read alike; each axis is turned so its
-// first big movement is positive, so left and right, forward and back read alike), plus how long it took. Two signatures
-// are compared by dynamic time warping, so a slow floaty version lines up with a snappy one.
-// Live it does two things: votes in the Watcher on every rule call (weight 2), and when the rules call nothing for a move
-// that closely matches examples of a trick, says "maybe <trick>?" (never scored; the pilot confirms it in review).
-const FEEL_KEYS = { weightFeel: [0.5, 1.5], dragFeel: [0.5, 2], washFeel: [0, 2], motorFeel: [0.5, 2], sagFeel: [0, 2], groundFeel: [0, 2] };   // see Drone.setParams
-const BUMP_LATE = 0.6;    // s after a call in which a knock (BUMP_AFTER) still makes it a bump (the game applies it: ScoreKeeper.lateBump)
-const BUMP_AFTER = 1.5;   // m/s: a knock this hard after a move's end, before its call, makes the call a BUMP (soft touches and landings do not)
-let LIBRARY = null; const MAYBE_NAMES = new Set();   // filled from OPEN_TRICKS and OBSTACLE_TRICKS below
-const LIB_N = 24, LIB_HZ = 25, LIB_ON = 90, LIB_QUIET = 0.35, LIB_WAIT = 2.5, LIB_THR = 0.3, LIB_GAP = 0.06;
-// up: the up.y of the quad at each sample (from the attitude; when missing, as in a GIF, it is integrated from the rotation
-// starting level). The signature carries it as u: [N] in hundredths: upright 100, knife-edge 0, upside-down -100.
-function libUps(seq) { let q = { w: 1, x: 0, y: 0, z: 0 }; return seq.map(r => { const w = v3((r[1] || 0) * D2R, -(r[2] || 0) * D2R, -(r[0] || 0) * D2R), a = len(w); if (a > 1e-9) q = qnorm(qmul(q, qaxis(mul(w, 1 / a), a))); return qrot(q, v3(0, 1, 0)).y; }); }
-function libSig(seq, hz = LIB_HZ, ups = null) {   // seq: [[dR, dP, dY] degrees per sample] -> { d, c: [N*3], u: [N] } or null
-  if (!Array.isArray(seq)) return null; if (!ups || ups.length !== seq.length) ups = libUps(seq);
-  const dom = seq.map(r => { const a = r.map(v => Number.isFinite(v) ? v : 0), k = Math.abs(a[0]) >= Math.abs(a[1]) && Math.abs(a[0]) >= Math.abs(a[2]) ? 0 : Math.abs(a[1]) >= Math.abs(a[2]) ? 1 : 2, m = Math.hypot(a[0], a[1], a[2]), o = [0, 0, 0]; o[k] = Math.sign(a[k]) * m; return o; });
-  const act = dom.map(r => Math.abs(r[0] + r[1] + r[2]) * hz >= 60); let i0 = act.indexOf(true), i1 = act.lastIndexOf(true); if (i0 < 0) return null;
-  const S = dom.slice(i0, i1 + 1), tot = S.reduce((a, r) => a + Math.abs(r[0]) + Math.abs(r[1]) + Math.abs(r[2]), 0); if (tot < 120) return null;
-  const cum = [[0, 0, 0]]; for (const r of S) { const l = cum[cum.length - 1]; cum.push([l[0] + r[0], l[1] + r[1], l[2] + r[2]]); }
-  for (let ax = 0; ax < 3; ax++) { const f = cum.find(c => Math.abs(c[ax]) >= 45); if (f && f[ax] < 0) for (const c of cum) c[ax] = -c[ax]; }
-  // U[k] = up.y after k samples of the move
-  const U = [i0 > 0 ? ups[i0 - 1] : 1, ...ups.slice(i0, i1 + 1)], c = [], u = []; for (let i = 0; i < LIB_N; i++) { const x = i / (LIB_N - 1) * (cum.length - 1), j = Math.min(cum.length - 2, Math.floor(x)), f = x - j; for (let ax = 0; ax < 3; ax++) c.push(Math.round(cum[j][ax] + (cum[j + 1][ax] - cum[j][ax]) * f));
-    const k = Math.min(U.length - 1, Math.round(x)); u.push(Math.round(clamp(Number.isFinite(U[k]) ? U[k] : 1, -1, 1) * 100)); }
-  const o = { d: +(S.length / hz).toFixed(2), c, u }; Object.defineProperty(o, 'span', { value: [i0, i1] }); return o;   // span: which samples were the move (not stored)
-}
-// Where the move went and what the hands did (2026-11-18): ps = the over / under / gap passes during the move in order
-// ('OU' a Matty, 'UOU' a powerloop, '' open air; null = not known, as for a GIF), k = the sticks: th = throttle at 8
-// points through the move (0-100), cmd = how much of the rotation had the stick on that axis pushed (0-100: a bump or a
-// tumble has the sticks centred). Both only count when both signatures have them.
-function libLev(a, b) { const m = a.length, n = b.length; if (!m || !n) return Math.max(m, n); let p = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const q = [i]; for (let j = 1; j <= n; j++) q.push(Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))); p = q; } return p[n]; }
-const ENV = typeof process !== "undefined" && process.env ? process.env : {}, LIB_XW = +(ENV.LIB_XW ?? 0.12), LIB_KW = +(ENV.LIB_KW ?? 0);   // (Node tools may override; the browser has no process)   // sticks: recorded, but on the first 224 examples they told confirmed and rejected calls apart no better than chance (both ~99% commanded): weight 0 until they do
-function libExtra(a, b) { let e = 0;
-  if (typeof a.ps === 'string' && typeof b.ps === 'string') e += LIB_XW * Math.min(1, libLev(a.ps, b.ps) / Math.max(1, a.ps.length, b.ps.length));
-  if (a.k && b.k) { let th = 0; for (let i = 0; i < 8; i++) th += Math.abs(a.k.th[i] - b.k.th[i]); e += LIB_KW * (th / 800 + Math.abs(a.k.cmd - b.k.cmd) / 100) / 2; }
-  return e; }
-function libDist(a, b) {
-  const N = LIB_N, B = 5, D = []; for (let i = 0; i < N; i++) D.push(new Float64Array(N).fill(Infinity));
-  const cost = (i, j) => Math.hypot(a.c[i * 3] - b.c[j * 3], a.c[i * 3 + 1] - b.c[j * 3 + 1], a.c[i * 3 + 2] - b.c[j * 3 + 2]) / 360 + (a.u && b.u ? Math.abs(a.u[i] - b.u[j]) / 400 : 0);   // upside-down vs upright: up to 0.5
-  for (let i = 0; i < N; i++) for (let j = Math.max(0, i - B); j <= Math.min(N - 1, i + B); j++) { const k = cost(i, j); D[i][j] = k + (i || j ? Math.min(i ? D[i - 1][j] : Infinity, j ? D[i][j - 1] : Infinity, i && j ? D[i - 1][j - 1] : Infinity) : 0); }
-  return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d)))) + libExtra(a, b);
-}
-// ---- The learned witness (owner, 2026-11-21; tools/witness.py → community/witness.json): extra-trees trained on the library's
-// confirmed examples (with noisy copies of each), read here as plain arrays. For a move the rules called X it gives the share of
-// trees' votes for X: one more soft vote in the Watcher (`votes.learned`), only for the tricks it has shown it knows (`vote`)
-// and only when the model is marked `live` (not yet: see the Watcher), never a veto, never a namer. Absent (Node tests) = no vote. `witFeats` must match `feats` in tools/witness.py (test/witness.js).
-let WITNESS = null;
-function setWitness(M) {
-  WITNESS = null; if (!M || M.format !== 'pro-whooper-witness/1' || M.nf !== 116 || !Array.isArray(M.classes) || !Array.isArray(M.trees) || M.trees.length > 400) return null;
-  const K = M.classes.length, trees = [];
-  for (const t of M.trees) { const n = t && Array.isArray(t.f) ? t.f.length : 0; if (!n || n > 20000 || !Array.isArray(t.t) || !Array.isArray(t.r) || !Array.isArray(t.v) || t.t.length !== n || t.r.length !== n) return null;
-    for (let i = 0; i < n; i++) { const f = t.f[i], r = t.r[i]; if (!Number.isInteger(f) || !Number.isInteger(r) || f >= M.nf || (f >= 0 ? !(r > i && r < n && i + 1 < n && Number.isFinite(t.t[i])) : !(r >= 0 && r < t.v.length))) return null; }   // children only ever lie further on: no loops
-    if (!t.v.every(v => Array.isArray(v) && v.length % 2 === 0 && v.length <= 8 && v.every((x, j) => Number.isInteger(x) && x >= 0 && (j % 2 ? x <= 100 : x < K)))) return null;
-    trees.push({ f: Int16Array.from(t.f), t: Float64Array.from(t.t), r: Int32Array.from(t.r), v: t.v }); }
-  WITNESS = { classes: M.classes.map(c => String(c).slice(0, 60)), vote: new Set((Array.isArray(M.vote) ? M.vote : []).map(String)), live: M.live === true, trees, stats: M.stats && typeof M.stats === 'object' ? M.stats : {}, updated: String(M.updated || '').slice(0, 20) };
-  return WITNESS;
-}
-function witFeats(sig) {
-  const X = new Float64Array(116), c = sig.c, d = Math.max(+sig.d || 0.1, 0.1), u = sig.u && sig.u.length === LIB_N ? sig.u : null; let o = 0;
-  for (let i = 0; i < 72; i++) X[o++] = c[i] / 360;
-  let mn = 1, sum = 0, inv = 0; for (let i = 0; i < 24; i++) { const v = u ? u[i] / 100 : 1; X[o++] = v; mn = Math.min(mn, v); sum += v; if (v < -0.3) inv++; }
-  X[o++] = Math.log(d);
-  for (let a = 0; a < 3; a++) X[o++] = Math.abs(c[69 + a]) / 360;
-  for (let a = 0; a < 3; a++) { let s = 0; for (let i = 1; i < 24; i++) s += Math.abs(c[i * 3 + a] - c[(i - 1) * 3 + a]); X[o++] = s / 360 / d; }
-  X[o++] = mn; X[o++] = sum / 24; X[o++] = u ? u[23] / 100 : 1; X[o++] = inv / 24;
-  if (typeof sig.ps === 'string') { const ps = sig.ps, cnt = ch => Math.min(ps.split(ch).length - 1, 3) / 3; X[o] = Math.min(ps.length, 6) / 6; X[o + 1] = cnt('U'); X[o + 2] = cnt('O'); X[o + 3] = cnt('G');
-    const f = 'UOG'.indexOf(ps[0] || '?'); if (f >= 0) X[o + 4 + f] = 1; X[o + 7] = ps.includes('OU') ? 1 : 0; X[o + 8] = ps.includes('UO') ? 1 : 0; }
-  return X;
-}
-// the share of the trees' votes that go to `name` for this move (0-1), or null when the witness does not know that trick
-function witnessProb(sig, name) {
-  const Wt = WITNESS; if (!Wt || !sig || !Array.isArray(sig.c) || sig.c.length !== 72) return null; const k = Wt.classes.indexOf(name); if (k < 0) return null;
-  const X = witFeats(sig); let p = 0;
-  for (const t of Wt.trees) { let i = 0; while (t.f[i] >= 0) i = X[t.f[i]] <= t.t[i] ? i + 1 : t.r[i]; const v = t.v[t.r[i]]; let tot = 0, me = 0; for (let j = 0; j < v.length; j += 2) { tot += v[j + 1]; if (v[j] === k) me = v[j + 1]; } if (tot) p += me / tot; }
-  return p / Wt.trees.length;
-}
-function libK(k) { return k && typeof k === 'object' && Array.isArray(k.th) && k.th.length === 8 && k.th.every(Number.isFinite) && Number.isFinite(+k.cmd) ? { th: k.th.map(v => clamp(Math.round(v), 0, 100)), cmd: clamp(Math.round(+k.cmd), 0, 100) } : null; }
-// A library example's motion (tools/library.js; the knowledge bot in maneuvers.js flies it): 25 Hz from just before the move
-// to just after, in a frame turned to the flight's own heading (forward = -z, as the body), so no map position travels:
-// f 'open' (origin = where it started) or 'obj' (origin = where it first crossed the object's over/under line; y is height
-// above the ground, un / ov the object's under / over heights then); x y z in cm, q the attitude's x y z ×1e4 (w ≥ 0), th
-// throttle 0-100. Untrusted input: every number is checked and clamped.
-function libMo(m) {
-  if (!m || typeof m !== 'object' || (m.f !== 'open' && m.f !== 'obj')) return null;
-  const n = Array.isArray(m.x) ? m.x.length : 0; if (n < 8 || n > 400) return null;
-  const okA = (a, len, lim) => Array.isArray(a) && a.length === len && a.every(v => Number.isFinite(v) && Math.abs(v) <= lim);
-  if (!okA(m.x, n, 1e5) || !okA(m.y, n, 1e5) || !okA(m.z, n, 1e5) || !okA(m.q, n * 3, 10001)) return null;
-  const th = okA(m.th, n, 100) ? m.th.slice() : null, un = clamp(+m.un || 0, 0, 60), ov = clamp(+m.ov || 0, 0, 80);
-  if (m.f === 'obj' && !(ov > un)) return null;
-  const s = (v, n, re) => typeof v === 'string' && v.length <= n && (!re || re.test(v)) ? v : null;
-  const o = Array.isArray(m.o) && m.o.length === 3 && m.o.every(v => Number.isFinite(v) && Math.abs(v) <= 2000) ? m.o.slice() : null;
-  return { f: m.f, n, x: m.x.slice(), y: m.y.slice(), z: m.z.slice(), q: m.q.slice(), th, un, ov, hz: 25, ct: clamp(+m.ct || 20, -10, 60), hit: m.hit === 1,
-    map: s(m.map, 24, /^[a-z0-9_-]+$/), o, yaw: o && Number.isFinite(m.yaw) ? clamp(+m.yaw, -7, 7) : null, on: s(m.on, 60), by: s(m.by, 30), at: s(m.at, 30, /^[0-9T:.\-Z+]+$/), t: Number.isFinite(m.t) ? clamp(+m.t, 0, 3600) : null };   // where / when / who: shown to the judge (always escaped)
-}
-function setLibrary(L) {
-  if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) { LIBRARY = null; return null; }
-  const ex = [], by = {};
-  for (const e of L.examples.slice(0, 5000)) { if (!e || typeof e.t !== 'string' || e.t.length > 60 || !Array.isArray(e.c) || e.c.length !== LIB_N * 3 || !e.c.every(Number.isFinite) || !(+e.d > 0)) continue;
-    const x = { t: canonTrick(e.t), d: clamp(+e.d, 0.05, 12), c: e.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null, custom: !!e.x, w: clamp(+e.w || 1, 0.1, 5), s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot', neg: !!e.neg, p: String(e.p ?? '').slice(0, 12), obs: !!e.obs, ps: typeof e.ps === 'string' && /^[OUG]{0,8}$/.test(e.ps) ? e.ps : null, k: libK(e.k), mo: libMo(e.mo) };
-    ex.push(x); const b = by[x.t] || (by[x.t] = { pos: 0, neg: 0, demo: false, pilots: new Set(), dur: [] }); if (x.neg) b.neg++; else { b.pos++; if (x.s === 'demo') b.demo = true; else b.pilots.add(x.p); b.dur.push(x.d); } }
-  for (const [k, b] of Object.entries(by)) { b.dur.sort((p, q) => p - q); b.trusted = b.demo || b.pilots.size >= 2;
-    // only tricks the rotation itself defines are said as maybes (tap, stall, wall, pole and dive tricks need what the rules see)
-    b.sayable = MAYBE_NAMES.has(k) || ex.some(x => x.t === k && x.custom); }
-  LIBRARY = { ex, by, stats: L.stats && typeof L.stats === 'object' ? L.stats : {}, updated: String(L.updated || '').slice(0, 20) }; return LIBRARY;
-}
-// distances from a signature to each trick: the nearest example of it (a demo counts a little closer: it is the definition)
-// and the nearest counter-example. Sorted, best first.
-function libMatch(sig, only) {
-  if (!LIBRARY || !sig) return []; const best = {};
-  for (const e of LIBRARY.ex) { if (only && e.t !== only) continue; const dd = libDist(sig, e) * (e.s === 'demo' ? 0.85 : 1), b = best[e.t] || (best[e.t] = { name: e.t, pos: Infinity, neg: Infinity, demo: false });
-    if (e.neg) b.neg = Math.min(b.neg, dd); else if (dd < b.pos) { b.pos = dd; b.demo = e.s === 'demo'; } }
-  return Object.values(best).filter(b => b.pos < Infinity).sort((a, b) => a.pos - b.pos);
-}
-// ---- Names other pilots will see (owner, 2026-11-23: "we need to have a way to censor bad names"): trick challenge names and the
-// names of the pilots who post them. A word list, caught through l33t-speak (0 1 3 4 5 7 @ $ …), accents, spacing and dots between
-// letters, and stretched letters. BAD_SUB is matched anywhere in the name with every letter run squashed to one ("fuuuck"); BAD_WORD
-// only as a whole word (with runs of three or more cut to two, a plural s dropped, and spaced-out single letters joined), because
-// those letters turn up inside ordinary words (cocoon, grape, torpedo). tools/dropoff-worker.mjs keeps an identical copy (the relay
-// checks again): test/challenges.js holds the two to the same answers.
-const BAD_SUB = ['fuck', 'fuk', 'fvck', 'pusy', 'shit', 'cunt', 'niger', 'niga', 'fagot', 'bitch', 'whore', 'slut', 'penis', 'vagina', 'dick', 'puss', 'retard', 'nazi', 'hitler', 'jiz', 'boob', 'wank', 'twat', 'bastard', 'molest', 'incest', 'milf', 'dildo', 'hentai', 'porn', 'cumshot', 'blowjob', 'handjob', 'motherf', 'asshol', 'arsehol', 'killyourself', 'pedophil', 'paedophil', 'tranie', 'beaner', 'wetback', 'raghead', 'towelhead', 'chingchong', 'golliwog', 'jigaboo', 'kike', 'shemale', 'skank', 'clit', 'scrotum', 'testicl', 'orgasm', 'ejacul', 'horny', 'sperm', 'faggot', 'dyke', 'spunk', 'bollock', 'tosser', 'bellend'];
-const BAD_WORD = ['ass', 'arse', 'cum', 'cock', 'cocks', 'tit', 'tits', 'titty', 'anal', 'anus', 'rape', 'raped', 'raping', 'rapist', 'sex', 'sexy', 'fap', 'fag', 'fags', 'fck', 'kys', 'coon', 'spic', 'chink', 'gook', 'negro', 'heil', 'kkk', 'pedo', 'paedo', 'prick', 'tranny', 'homo', 'lesbo', 'hoe', 'hoes', 'piss', 'jerkoff', 'wtf', 'stfu', 'gfy', 'nig', 'jap', 'dago', 'wop', 'gyp', 'isis', 'sieg', 'zieg', 'lynch', 'boner', 'bj', 'hj', 'xxx', 'tard', 'thot', 'incel', 'poon', 'muff', 'nonce', 'nude', 'naked', 'semen', 'pubic', 'erection'];
-const L33T = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b', '9': 'g', '6': 'g', '2': 'z', '(': 'c', '¢': 'c', '€': 'e', '£': 'l' };
-const BAD_SUB_SQ = BAD_SUB.filter(w => !/(.)\1/.test(w)), BAD_WORD_SET = new Set(BAD_WORD);   // a pattern with a double letter is only matched unsquashed (puss / push, boob / bob)
-function badName(v) {
-  const low = String(v == null ? '' : v).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[0-9!|@$+(¢€£]/g, c => L33T[c] || c);
-  const raw = low.split(/[^a-z]+/).filter(Boolean), words = [];   // spaced-out letters (f u c k, s.e.x) are joined into one word
-  for (let i = 0; i < raw.length; i++) { if (raw[i].length === 1) { let j = i, w = ''; while (j < raw.length && raw[j].length === 1) w += raw[j++]; if (w.length > 1) { words.push(w); i = j - 1; continue; } } words.push(raw[i]); }
-  for (const w0 of words) { const sq = w0.replace(/(.)\1+/g, '$1'), w = w0.replace(/(.)\1{2,}/g, '$1$1');   // inside one word only: "Push It" is not a swear
-    if (BAD_SUB_SQ.some(b => sq.includes(b)) || BAD_SUB.some(b => w.includes(b))) return true;
-    for (const x of [w0, w, sq, w.replace(/e?s$/, ''), w.replace(/s$/, '')]) if (x && BAD_WORD_SET.has(x)) return true; }
-  return false;
-}
-// ---- Trick challenges (owner, 2026-11-23; src/challenge.js, the relay's /challenges): a pilot posts a new trick they named, other
-// pilots try it; a try passes when the game's own signature match puts the move within CH_PASS of the original (libDist, the
-// trick library's distance). CH_CONFIRM pilots other than the creator passing makes it a community trick, live at once at
-// CH_PTS points (the owner can change them): called in any flight where no book trick was called, nearer than CH_LIVE and nearer
-// to it than to any trick in the library, scored on its own line (ScoreKeeper.community), never in the TPW trick score.
-// setChallenges([{ id, name, sig, live, try, pts }]): `try` = the one the pilot is attempting now, `live` = confirmed. Untrusted
-// input (the relay's list): every field is checked; absent (Node tests, tools) = nothing happens.
-const CH_PASS = 0.3, CH_LIVE = 0.25, CH_PTS = 200, CH_CONFIRM = 2;
-let CHALLENGES = null;
-function chSig(g) {
-  if (!g || typeof g !== 'object' || !Array.isArray(g.c) || g.c.length !== LIB_N * 3 || !g.c.every(Number.isFinite) || !(+g.d > 0)) return null;
-  const o = { d: clamp(+g.d, 0.05, 12), c: g.c.map(v => clamp(Math.round(v), -5000, 5000)), u: Array.isArray(g.u) && g.u.length === LIB_N && g.u.every(Number.isFinite) ? g.u.map(v => clamp(Math.round(v), -100, 100)) : null };
-  if (typeof g.ps === 'string' && /^[OUG]{0,8}$/.test(g.ps)) o.ps = g.ps; return o;
-}
-function setChallenges(L) {
-  CHALLENGES = null; if (!Array.isArray(L)) return null; const out = [];
-  for (const c of L.slice(0, 60)) { if (!c || typeof c.id !== 'string' || !/^[A-Za-z0-9_.~-]{1,160}$/.test(c.id) || typeof c.name !== 'string' || c.name.length < 2 || c.name.length > 40 || badName(c.name)) continue;
-    const sig = chSig(c.sig); if (!sig || !(c.live || c.try)) continue;
-    out.push({ id: c.id, name: c.name, sig, live: !!c.live, try: !!c.try, pts: Number.isFinite(+c.pts) ? clamp(Math.round(+c.pts), 0, 5000) : CH_PTS }); }
-  CHALLENGES = out.length ? out : null; return CHALLENGES;
-}
-// the pilot's own profile over the community's: each loosening knob takes the looser value; the rest is the pilot's
-function mergeProfiles(c, p) {
-  if (!c) return p || null; const o = p ? JSON.parse(JSON.stringify(p)) : {}, L = o.learn || {};
-  o.learn = { ...L, tol: Math.max(+L.tol || 0, c.learn.tol), rev: Math.max(+L.rev || 0, c.learn.rev), crossBack: Math.max(+L.crossBack || 0, c.learn.crossBack) };
-  if (c.rate) { o.rate = { ...(o.rate || {}) }; for (const ax of 'RPY') if (c.rate[ax]) o.rate[ax] = o.rate[ax] ? Math.min(o.rate[ax], c.rate[ax]) : c.rate[ax]; }
-  if (c.air) o.air = Math.max(o.air || 0, c.air);
-  return o;
-}
-const DRT_SPLIT_T = 1.0, DRT_SPLIT_R = 300, DRT_SPLIT_MIN = 540;   // a trippy turning into a DRT: this much roll within this long
-const DRT_ROLL = 1.8, DRT_SPAN = 120, DRT_RATE = 150, DRT_HOLD = 1.5, DRT_STILL = 2.5, DRT_BACK = 150;   // Double Rolling Trippy: roll per degree round the pole; how much of the trippy; rolling fast (deg/s) in the look (s) keeps the lap alive this long still / this far back
-const STICK_ON = 0.08, TRIPPY_FLAT = 0.8, LOCK_ANG = 50;   // a stick counts as pushed; how upright a sticks-opposed trippy may be flown; 'locked in' = the pole within this of the camera's line, in the top half
-const SPLIT_DROP = 1.0;   // m an open-air Split-S comes out below where its half roll began
-const POWER_ROLL_SPAN = 4.5, POWER_ROLL_OVER = new Set(['Immelmann', 'Split S', "Rubik's Cube", 'Roll']);   // s from the first pass under to the last; what a Power Roll replaces
-const SPLIT_LOOK = 4;   // s from the half roll's start to the pass under (the attitude Split-S)
-let TOL_X = 0;   // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
-function matchTokens(pat, toks) {
-  if (pat.length !== toks.length) return null;
-  const vars = {};
-  let err = 0;
-  for (let i = 0; i < pat.length; i++) {
-    const p = pat[i], t = toks[i];
-    if (p.ax !== t.ax) return null;
-    if (p.inv && !t.inv) return null;
-    const tol = (p.loose ? 95 : 50) + TOL_X;
-    if (Math.abs(t.raw - p.deg) > tol) return null;
-    err += Math.max(0, Math.abs(t.raw - p.deg) - (p.loose ? 55 : 0)) / p.deg;
-    if (p.dir === '+' && t.dir !== 1) return null;
-    if (p.dir === '-' && t.dir !== -1) return null;
-    if (p.dir !== '*' && p.dir !== '+' && p.dir !== '-') {
-      const neg = p.dir[0] === '-', v = neg ? p.dir[1] : p.dir;
-      const want = neg ? -1 : 1;
-      if (vars[v] === undefined) vars[v] = t.dir * want; else if (vars[v] * want !== t.dir) return null;
-    }
-  }
-  if (vars.a !== undefined && vars.b !== undefined && vars.a === vars.b && pat.some(p => p.dir.includes('b'))) {
-    // a and b must differ only when both used as separate vars
-  }
-  return { err: err / pat.length };
-}
-
-// crossing requirement strings: 'UOU' 'OU' 'UO' 'U' 'O' with alternating direction rules
-const OBSTACLE_NAMES = new Set();   // filled below from OBSTACLE_TRICKS (the library's obstacle check)
-const OBSTACLE_TRICKS = [
-  { name: 'Powerloop', pats: ['P+~360'], cross: 'UOU', end: 'fwd' },
-  { name: 'Power Flip', pats: ['P+~720'], cross: 'UOU', end: 'fwd' },
-  { name: 'Reversed Power Flip', pats: ['P+180 P-360 P+180'], cross: 'UOU', end: 'fwd' },
-  { name: 'Power Roll', pats: ['P+180 Ra360 P+180'], cross: 'UOU', end: 'fwd' },
-  { name: 'Inverted 360 Powerloop', pats: ['P+180 Ya360i P+180'], cross: 'UOU', end: 'fwd' },
-  { name: 'Barani', pats: ['P+180 Ya180i P+~180', 'P+180 Ya180i P-~180'], cross: 'UOU', end: 'back' },
-  // as pilots really fly it (shared flight, 2026-11-17): half loop up IN FRONT of the object (no pass under first), half
-  // yaw upside-down over it (~140°), then a sloppy Matty (~265°, often read as two pieces) out under it flying backward
-  { name: 'Barani', pats: ['P+180 Ya180i P-~180', 'P+180 Ya180i P+~180'], cross: 'OU', end: 'back' },
-  { name: 'Rollani', pats: ['P+180 Ya180i Rb360 P*180'], cross: 'UOU', end: 'back' },
-  { name: 'Flipani', pats: ['P+180 Ya180i P-540', 'P+180 Ya180i P-360 P+180'], cross: 'UOU', end: 'back' },
-  { name: 'Immelmann', pats: ['P+180 Ra180'], cross: 'UO' },
-  { name: 'Matty Flip', pats: ['P-~360'], end: 'back', cross: 'OU' },
-  { name: 'Anti Matty', pats: ['P+~360'], cross: 'OU', end: 'back' },
-  { name: 'Power Matty', pats: ['P-~720'], cross: 'OU', end: 'back' },
-  // demo GIF pitches down ~45–90° before the roll, leaving ~270–315° for the Matty after it
-  { name: 'Matty Twister', pats: ['Ra360 P-~360', 'P-~90 Ra360 P-~270'], cross: 'OU', end: 'back' },
-  { name: 'Matty Roll', pats: ['P-270 Ra360 P-90', 'P-270 Ra360'], cross: 'OU', end: 'back' },
-  { name: 'Matty 360', pats: ['P-~180 Ya360 P-~180', 'P-~270 Ya360'], cross: 'OU', end: 'back' },
-  { name: 'Split S', pats: ['Ra180 P+~180', 'Ra~180 P+~180'], cross: 'OU', end: 'fwd' },
-  { name: '540 Split S', pats: ['Ra540 P+180'], cross: 'OU', end: 'fwd' },
-  { name: 'Splitback', pats: ['Ra180 P+~540'], cross: 'OU', end: 'fwd' },
-  { name: 'Split Yaw', pats: ['Ra180 P+~90 Yb180', 'Ra180 Yb180 P+~90'], cross: 'OU', end: 'back' },
-  // pilot feedback: needs to be detected better. The second half of a Matty is anything from ~100 to ~250 of pitch, the end often floaty
-  { name: 'Half Matty', pats: ['Ra180 P*~180'], cross: 'U', end: 'back' },
-  { name: '540 Half Matty', pats: ['Ra540 P*~180'], cross: 'U', end: 'back' },
-  { name: 'Forani', pats: ['P-180 Ya180i P*180'], cross: 'U', end: 'back' },
-  // pilot feedback: far too many false Snapbacks. TPW: pass UNDER first, then pitch back to inverted and roll 180, tracking the object
-  { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U', passFirst: true },   // the Watcher checks the rest (under first, tracking, no loop)
-  { name: 'Blind Loop', pats: ['Ya180 P+360'], cross: 'OU' },
-  // ---- phase 2 (rules from the TPW descriptions; marked draft until confirmed with pilot examples)
-  // demo GIF: the loop comes all the way round to level on the start side, hovers ~1.3 s, then Split-S back over and under
-  { name: 'Power Split', pats: ['P+~180 Ra180 P+~180', 'P+~270 Ra180 P+~180', 'P+~360 Ra180 P+~180'], cross: 'UOOU', pauseOK: 2.0, draft: true },
-  { name: 'Power Swap', pats: ['P+~180 Ra180 P-180'], cross: 'UOU', end: 'back', draft: true },
-  // demo GIF: loop round to level on the start side (no pass back under), hover ~0.7 s, Matty back over and under
-  { name: 'Power Switch', pats: ['P+~180 P-~360', 'P+~270 P-~270', 'P+~180 P-~270', 'P+~360 P-~360', 'P+~360 P-~270'], cross: 'UOOU', end: 'back', pauseOK: 1.6, draft: true },
-  { name: 'Immelloop', pats: ['P+~180 Ra180', 'P+~180 Ra180 P+~90'], cross: 'UOU', end: 'back', draft: true },
-  { name: 'Immelmatt', pats: ['P+~180 Ra180 P-~270'], cross: 'UOU', end: 'back', draft: true },
-  { name: 'Half Mavvy', pats: ['Ra180 P*~180'], cross: 'UOU', end: 'back', draft: true },
-  { name: "Mavik's Loop", pats: ['P-~180 R*360 P-~180', 'P-~180 R*360 P+~180'], cross: 'UOU', draft: true },
-  { name: 'Mavani', pats: ['P-~180 Ya180i P*~180'], cross: 'UOU', end: 'back', draft: true },
-  { name: 'Donkey Loop', pats: ['P-~180 Ya360i P*~180'], cross: 'UOU', draft: true },
-  { name: 'Mavvelmann', pats: ['P-~180 Ra180'], cross: 'UO', draft: true },
-  { name: 'Split Stall Matty Rewind', pats: ['Ra180 P-~270', 'Ra180 P+~90 P-~270', 'Ra180 P-~360'], cross: 'OU', end: 'back', draft: true },
-  { name: 'Maverick Tap Rewind', pats: ['P-~360', 'P-~90 P-~270'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
-  { name: 'Power Switch Tap', pats: ['P+~180 P-~270', 'P+~270 P-~180', 'P+~180 P-~360'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
-  { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' },   // demo GIF unclear (see tricktionary-reference.md)
-];
-for (const T of OBSTACLE_TRICKS) { OBSTACLE_NAMES.add(T.name); MAYBE_NAMES.add(T.name); }
-const OPEN_TRICKS = [
-  // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
-  // pilots' corrections (2026-11-22, 3 pilots): the roll runs long (~420-440°) and the flip out comes up short (~105-140°)
-  { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180', 'Pa180 R*~360 Pa~180'] },
-  { name: "Cubik's Rube", pats: ['Ra180 P*360 Ra180'] },
-  // pilot feedback: sloppy reps (~300-330 of spin) are normal and should count; the grade reflects the error
-  // (the half flip in/out is loose: with the camera tilted the nose ends up short of, or past, a clean 180)
-  { name: 'Inverted Yaw Spin', pats: ['Pa~180 Y*~360i Pa~180', 'Ra180 Y*~360i Ra180', 'Pa~180 Y*~360i R*180', 'Ra180 Y*~360i P*~180'] },
-  { name: 'Vanny Roll', pats: ['Ya180 R*360 Ya180'] },
-  { name: 'Double Flip', pats: ['P*720'] },
-  { name: 'Double Roll', pats: ['R*720'] },
-  // pilot: needs better detection. The roll often blends into the end of the flick (the roll splits the pitch token)
-  // owner, 2026-11-20: a Juicy Flick followed by a forward double roll: the flick's 180 roll runs on two more turns (2½ rolls in
-  // all, one way), or the double roll comes after a breath; the flick may still blend into the roll
-  { name: 'Juicy Tornado', pats: ['P-180 R*~900', 'P-180 Ra~180 Ra~720', 'P-~135 R*~900 P-~45'] },
-  { name: 'Juicy Flick', pats: ['P-180 R*180', 'P-~135 R*180 P-~45'] },
-  { name: 'Inverted Rewind', pats: ['Ra180 R-a180', 'Pa180 P-a180'] },
-  { name: 'Flip', pats: ['P*360'] },
-  { name: 'Roll', pats: ['R*360'] },
-  { name: 'Yaw Spin', pats: ['Y*360'] },
-];
-// rotation patterns that also need a situation: a tap, a stall, a rewind, a climb, tracking an object…
-for (const T of OPEN_TRICKS) MAYBE_NAMES.add(T.name);
-const CONTEXT_TRICKS = [
-  { name: 'Roll Tap', pats: ['R*~360', 'R*~270'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
-  { name: 'Loop Tap', pats: ['R*~90 P+~180', 'R*~90 P+~270', 'P+~90 R*~90 P+~180'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
-  { name: 'Ceiling Tap', pats: ['P+~180', 'P+~270'], req: { tap: { face: 'bottom', surface: 'ceiling' } }, draft: true },
-  { name: 'Downtown Tap', pats: ['R*~180 P-~360', 'R*~180 P+~90 P-~360', 'R*~180 P-~270'], req: { tap: { face: 'any', surface: 'any' } }, draft: true },
-  // demo GIF: ascends in front of an indoor cube (~1 m), not a tall object
-  // owner, 2026-11-23 (after the audit of prowhooper.com): an Eject Roll needs no gap (a climb in front of an object, as the site says);
-  // flown up and out of a square opening that lies flat (the top of a cube) it is a Cube Eject. `flatGap`: true = any flat gap,
-  // 'square' = its sides within 30 % of each other, 'down' = crossed going down
-  { name: 'Cube Eject', pats: ['P-~180 R*~360'], req: { climbBefore: true, flatGap: 'square' }, draft: true },
-  { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: 0.8, notFlatGap: 'square' }, draft: true },
-  { name: 'Loop to Matty', pats: ['P+~180 P-~180', 'P+~180 P-~270', 'P+~180 P-~360'], req: { flatGap: 'down', endBack: true }, draft: true },
-  { name: 'Stellar Eject Roll', pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'], req: { climbBefore: true, endBack: true }, draft: true },
-  // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
-  { name: 'Stall Flip Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
-  { name: 'Stall 360 Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
-  // TPW: a SEGMENTED front flip at the stall beside an object. A continuous Matty (pilot: Mattys were read as this) is a Matty.
-  { name: 'Stall Matty Rewind', pats: ['P-~360'], req: { stallIn: true, endBack: true, segmented: true, nearTall: true }, draft: true },
-  { name: 'Stall Half Matty Rewind', pats: ['Y*~180 Ra180 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
-  { name: 'Stall 540 Half Matty Rewind', pats: ['Y*~180 Ra540 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
-  { name: 'Inverted Yaw Tracking', pats: ['Ra180 Y-a~180i P-~180', 'Ra180 Y-a~360i P-~180', 'Ra180 Y-a~270i P-~180', 'Ra180 Y-a~180i Ra180', 'Ra180 Y-a~360i Ra180', 'Ra180 Y-a~270i Ra180'], req: { track: 0.7 }, draft: true },
-];
-for (const t of [...OBSTACLE_TRICKS, ...OPEN_TRICKS, ...CONTEXT_TRICKS]) t.parsed = t.pats.map(parsePattern);
-const TAP_TRICKS = new Set([...OBSTACLE_TRICKS, ...CONTEXT_TRICKS].filter(t => t.tap || (t.req && t.req.tap)).map(t => t.name).concat(['Wall Tap', 'Face Punch']));
-
-class TrickDetector {
-  constructor(world) { this.world = world; this.reset(); if (COMMUNITY && this.setPilot) this.setPilot(null); }
-  reset() {
-    this.pending = null; this.debug = [];
-    this.active = false; this.samples = []; this.restT = 0; this.events = []; this.crossLog = [];
-    this.prevSide = {}; this.contacts = []; this.out = []; this.wallRide = null; this.diveMaxY = 0; this.dive = null;
-    this.climb = null; this.slide = null; this.perch = null; this.stick = null; this.dead = null; this.deadPend = null; this.deadMute = null; this.yHist = []; this.lastTap = -10; this.time = 0;
-  }
-  // call every physics step (or every few)
-  update(d, dt, rc) {
-    this.time += dt;
-    const t = this.time, up = d.up(), rates = d.pilotRates();
-    const rmag = Math.hypot(rates[0], rates[1], rates[2]);
-    this.trackCrossings(d, t);
-    this.continuousDetectors(d, dt, t, rc);
-    if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
-    const resting = rmag < 75 && up.y > 0.05;
-    if (this.pending) { const lc = this.crossLog[this.crossLog.length - 1]; if (lc && lc.t > this.pending.endT && !lc.used) { lc.used = true; this.pending.evalT = Math.min(this.pending.evalT, t + 0.25); } }
-    if (this.pending && (t >= this.pending.evalT || (rmag > 150 && !this.active))) { const pnd = this.pending; this.pending = null; this.evaluate(pnd, t); }
-    if (!this.active) {
-      if (rmag > 150 && d.armed) { this.active = true; this.samples = []; this.winStart = t; this.restT = 0; }
-      else { if (!this.pending) this.contacts = this.contacts.filter(c => t - c.t < 0.3); return; }
-    }
-    this.samples.push({ t, r: rates, up, pos: v3(d.pos.x, d.pos.y, d.pos.z), vel: v3(d.vel.x, d.vel.y, d.vel.z), q: { w: d.q.w, x: d.q.x, y: d.q.y, z: d.q.z } });
-    if (d.crashed) { this.close(d, t, true); return; }
-    if (resting) { this.restT += dt; if (this.restT > 0.55) this.close(d, t, false); } else this.restT = 0;
-    if (t - this.winStart > 12) this.close(d, t, false);
-  }
-  // Only objects near the quad can be crossed. The list of them is rebuilt every 0.1 s with a 30 m margin (a whoop covers
-  // at most ~3 m in that time), so the result is the same as checking every object every step, for a fraction of the CPU
-  // (performance, 2026-11-17). An object leaving the list forgets which side the quad was on, as if seen for the first time.
-  nearObjs(d, t) {
-    if (this.nearT != null && t >= this.nearT && t - this.nearT < 0.1 && this.nearW === this.world) return this.near;
-    this.nearT = t; this.nearW = this.world; const out = [], keep = new Set();
-    for (const o of this.world.objs) { if (!o.round && !o.obstacle && !o.gap) continue;
-      let r = o._nearR; if (r == null) { const pts = []; if (o.round) pts.push([o.round.c, (o.round.box ? Math.max(o.round.box.hx, o.round.box.hz) : o.round.r) + 3]); if (o.obstacle) { pts.push([o.obstacle.a, 0], [o.obstacle.b, 0]); } if (o.gap) pts.push([o.gap.c, Math.max(o.gap.hu, o.gap.hv)]);
-        let cx = 0, cz = 0; for (const [p] of pts) { cx += p.x; cz += p.z; } cx /= pts.length; cz /= pts.length; r = 0; for (const [p, e] of pts) r = Math.max(r, Math.hypot(p.x - cx, p.z - cz) + e); o._nearC = [cx, cz]; o._nearR = r; }
-      if (o.round) { if (Math.hypot(d.pos.x - o.round.c.x, d.pos.z - o.round.c.z) > o._nearR + 30) continue; }   // a tree's line is re-aimed round its centre
-      else if (Math.hypot(d.pos.x - o._nearC[0], d.pos.z - o._nearC[1]) > o._nearR + 30) continue;
-      out.push(o); keep.add(o.id); }
-    if (this.near) for (const o of this.near) if (!keep.has(o.id)) { delete this.prevSide[o.id]; delete this.prevSide['g' + o.id]; }
-    this.near = out; return out;
-  }
-  trackCrossings(d, t) {
-    for (const o of this.nearObjs(d, t)) {
-      if (o.round) {   // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
-        const R = o.round, st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
-        const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z), vh = Math.hypot(d.vel.x, d.vel.z);
-        const closing = vh > 1.0 && dh > 0.8 && ((R.c.x - d.pos.x) * d.vel.x + (R.c.z - d.pos.z) * d.vel.z) / (dh * vh) > 0.6;
-        if (dh < (R.box ? Math.max(R.box.hx, R.box.hz) : R.r) + 3) st.tNear = t;
-        // never re-aim mid-trick (big Split-Back: ~3 s over→under); the log is only scanned when a re-aim is otherwise due
-        if (vh > 0.5 && (t - (st.tNear ?? -9) > 2.5 || closing) && !this.crossLog.some(c => c.obj === o.id && t - c.t < 5)) {   // far away, or heading in at it: aim across the approach
-          const ax = d.vel.x / vh, az = d.vel.z / vh;
-          if (!st.ax || ax * st.ax + az * st.az < 0.97) {
-            st.ax = ax; st.az = az; delete this.prevSide[o.id];
-            const rr = R.box ? Math.min(R.box.hx / Math.max(0.05, Math.abs(az)), R.box.hz / Math.max(0.05, Math.abs(ax))) : R.r;   // a rectangle is as wide as it is across this approach
-            o.obstacle = { a: v3(R.c.x + az * rr, 0, R.c.z - ax * rr), b: v3(R.c.x - az * rr, 0, R.c.z + ax * rr), under: R.under, over: R.over };
+      // Battery life off (the game's default; owner, 2026-11-26: "ensure battery sim is removed"): a full pack that never sags or browns
+      // out. On: the pack sags under the current, smoothed over ~5 ms (the board's caps): fed back raw every 1 ms step, the sag and the
+      // motors' current chased each other at full throttle and dragged the bus to its 2.5 V floor (pilots got brownouts on a full pack).
+      // The sag follows the motor model's own current: `tune.drain` (x2.4 in the game) is fitted to the mAh a real pack loses, and
+      // multiplying the sag by it too took 40 A off a full 1S pack at full throttle.
+      const batOn = this.tune.batteryLife !== false;
+      const Rint = p.bat.r * (1 + 0.9 * Math.pow(1 - this.soc, 3));
+      const Vocv = ocv(batOn ? this.soc : 1, p.bat.hv, p.bat.cells);
+      const Vbus = batOn ? Math.max(2.5 * p.bat.cells, Vocv - (this.ibatS ?? this.ibat) * Rint) : Vocv;
+      let Itot = 0.35,
+        Isag = 0.35; // electronics/VTX; Isag: the motor model's own current, what the pack sags under
+      const drain = +this.tune.drain || 1;
+      const Fb = v3(),
+        Tb = v3();
+      let rotorAccelYaw = 0;
+      // air relative velocity incl. wake
+      const air = this.sampleWake();
+      this.washLevel += (air.turb - this.washLevel) * 0.05;
+      const vRelW = sub(this.vel, air.v);
+      const vRelB = qinv(this.q, vRelW);
+      let sumW = 0;
+      // ground effect: height under thrust axis (approx world-down to ground or top surfaces)
+      const hGround = this.heightAbove();
+      // Air near surfaces (owner, 2026-11-28; absent = none, the physics and its hash unchanged; the game fills both in):
+      //   tune.wallPull  a ducted rotor beside a wall is drawn toward it and lifts a little more: per rotor a force of
+      //                  0.21 x 0.34^(d/R) of its thrust toward the wall and thrust x (1 + 0.06 x 0.54^(d/R)), d from the rotor's centre
+      //                  (the fits of Ding, Bai, Dong and Chirarattananon, npj Robotics 2023, measured on a small ducted quadrotor)
+      //   tune.ceilPull  under a ceiling a rotor lifts more, thrust x (1/2 + 1/2 sqrt(1 + 1 / (8 z^2))), z = gap / R (Hsiao and
+      //                  Chirarattananon's model, which Carter et al. found to hold on a micro quadrotor down to z ~ 0.5)
+      // Flat faces of boxes only (walls, slabs, decks); poles and round things have none.
+      const WPl = +this.tune.wallPull || 0,
+        CPl = +this.tune.ceilPull || 0;
+      let nearW = null,
+        nearC = null,
+        offW = null;
+      if ((WPl || CPl) && this._hb && this._hb.list.length) {
+        const P = this.pos,
+          RNG = p.arm + 2.5 * p.D;
+        let dW = RNG,
+          dC = RNG;
+        for (const pr of this._hb.list) {
+          const a = pr.aabb;
+          if (
+            P.x + RNG < a.min.x ||
+            P.x - RNG > a.max.x ||
+            P.z + RNG < a.min.z ||
+            P.z - RNG > a.max.z ||
+            P.y + RNG < a.min.y ||
+            P.y - RNG > a.max.y
+          )
+            continue;
+          const M = pr.m,
+            h = pr.h,
+            dx = P.x - pr.c.x,
+            dy = P.y - pr.c.y,
+            dz = P.z - pr.c.z;
+          const lx = M[0] * dx + M[3] * dy + M[6] * dz,
+            ly = M[1] * dx + M[4] * dy + M[7] * dz,
+            lz = M[2] * dx + M[5] * dy + M[8] * dz;
+          const ex = lx - clamp(lx, -h.x, h.x),
+            ey = ly - clamp(ly, -h.y, h.y),
+            ez = lz - clamp(lz, -h.z, h.z),
+            d = Math.hypot(ex, ey, ez);
+          if (d < 1e-4 || d >= RNG) continue;
+          const n = v3(
+            -(M[0] * ex + M[1] * ey + M[2] * ez) / d,
+            -(M[3] * ex + M[4] * ey + M[5] * ez) / d,
+            -(M[6] * ex + M[7] * ey + M[8] * ez) / d
+          ); // from the quad to the surface
+          if (WPl && Math.abs(n.y) < 0.5 && d < dW) {
+            dW = d;
+            nearW = { n, d };
+          }
+          if (CPl && n.y > 0.7 && d < dC) {
+            dC = d;
+            nearC = { n, d };
+          }
+        }
+        if (nearW || nearC) {
+          offW = p.motors.map(m => qrot(this.q, m.pos));
+          if (nearW) {
+            nearW.nB = qinv(this.q, nearW.n);
+            nearW.k = WPl * (1 - Math.abs(dot(up, nearW.n)));
           }
         }
       }
-      if (o.obstacle) {
-        const { a, b, under, over } = o.obstacle;
-        const ab = sub(b, a); ab.y = 0; const L = len(ab); const u = mul(ab, 1 / L);
-        const n = v3(-u.z, 0, u.x);
-        const rel = sub(d.pos, a); const side = dot(rel, n) > 0 ? 1 : -1; const along = dot(rel, u);
-        const key = o.id, prev = this.prevSide[key];
-        this.prevSide[key] = side;
-        if (prev !== undefined && prev !== side && along > -0.35 && along < L + 0.35) {
-          let kind = null;
-          if (d.pos.y < under && d.pos.y > (o.obstacle.floor || 0)) kind = 'U'; else if (d.pos.y > over && d.pos.y < over + 7) kind = 'O';   // floor: a high bar's unders only count close below it (the Murderdome's ring truss over its chain gates)
-          if (kind) {
-            const f = d.fwd(), fh = Math.hypot(f.x, f.z), vh = Math.hypot(d.vel.x, d.vel.z);
-            const fwdDot = (fh > 0.2 && vh > 0.8) ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;
-            const rr = d.right(), rh = Math.hypot(rr.x, rr.z);
-            const latDot = (rh > 0.2 && vh > 0.8) ? Math.abs(rr.x * d.vel.x + rr.z * d.vel.z) / (rh * vh) : 0; // 1 = flying sideways
-            const latS = Math.sign(rr.x * d.vel.x + rr.z * d.vel.z) || 0;   // which way sideways: +1 = toward the quad's right
-            // dithering back and forth across the line (floaty loop tops, a wobbly hover over a bar) isn't a pass: the
-            // same kind of crossing straight back within 0.25 s cancels the one before
-            let li = -1; for (let i = this.crossLog.length - 1; i >= 0; i--) if (this.crossLog[i].obj === o.id) { li = i; break; }
-            const L = li >= 0 ? this.crossLog[li] : null;
-            if (L && L.kind === kind && t - L.t < 0.25 && !L.used) { this.crossLog.splice(li, 1); this.nCross = Math.min(this.nCross ?? 0, this.crossLog.length); }
-            else this.crossLog.push({ t, obj: o.id, name: o.name, kind, dir: side, fwdDot, latDot, latS, upY: d.up().y, spd: vh, hOver: d.pos.y - over, p: v3(d.pos.x, (under + over) / 2, d.pos.z) });
+      for (let i = 0; i < 4; i++) {
+        const m = p.motors[i];
+        const duty = outD[i] || 0; // signed in 3D mode: a negative duty drives the motor backward
+        let w = this.motorW[i];
+        const Vm = duty * Vbus;
+        let I = (Vm - w / p.kvRad) / p.rm;
+        I = clamp(I, this.fc.reversible ? -12 : -4, 12);
+        const n = Math.abs(w) / (2 * Math.PI),
+          sW = w < 0 ? -1 : 1; // n is the speed; sW the way it turns (−1 only in 3D mode)
+        const Q = sW * p.cq * RHO * n * n * Math.pow(p.D, 5) + p.i0 * p.kt * Math.sign(w);
+        const tau = p.kt * I;
+        const dw = (tau - Q) / p.rotorJ;
+        w = this.fc.reversible ? w + dw * dt : Math.max(0, w + dw * dt);
+        this.motorW[i] = w;
+        this.motorI[i] = I;
+        Itot += Math.max(0, I * duty) * drain;
+        Isag += Math.max(0, I * duty); // tune.drain: what the motor model leaves out (ESC, iron, the props' real torque); absent = 1
+        rotorAccelYaw += -m.spin * p.rotorJ * dw; // reaction of spinning-up rotor on frame (about body Y)
+        // prop velocity (body) at motor location
+        const vp = add(vRelB, cross(this.w, m.pos));
+        const vAx = vp.y * sW; // + means moving along thrust direction (climbing; reversed thrust points the other way)
+        const nn = Math.max(n, 1);
+        const J = vAx / (nn * p.D);
+        let ctF = J >= 0 ? clamp(1 - J / p.jmax, 0, 1) : clamp(1 - 0.35 * J, 1, 1.25);
+        // translational lift (edgewise flow) small gain
+        const vIn = Math.hypot(vp.x, vp.z);
+        let T;
+        if (this.tune.inflow)
+          T =
+            p.ct *
+            RHO *
+            n *
+            n *
+            Math.pow(p.D, 4) *
+            inflowRatio(vAx, vIn, nn * p.D * p.jmax, Math.sqrt((p.ct * RHO * n * n * Math.pow(p.D, 4)) / (2 * RHO * p.A)), ctF);
+        // tune.inflow: momentum theory, translational lift inside it
+        else {
+          T = p.ct * RHO * n * n * Math.pow(p.D, 4) * ctF;
+          const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A));
+          T *= 1 + 0.08 * Math.min(1, vIn / (vi + 0.5));
+        }
+        const vi = Math.sqrt(Math.max(T, 1e-6) / (2 * RHO * p.A));
+        // vortex ring state / propwash when descending into own wash
+        const desc = -vAx;
+        let vrs = 0;
+        if (desc > 0.15 * vi) {
+          const x = desc / (vi + 1e-3);
+          vrs = Math.exp(-Math.pow((x - 0.75) / 0.45, 2)) * clamp(1 - vIn / (1.6 * vi + 0.5), 0, 1);
+        }
+        const turb = clamp(vrs + air.turb, 0, 1.6);
+        // filtered noise per motor (~25Hz band)
+        this.noise[i] += (this.rng() * 1.7 - this.noise[i]) * (1 - Math.exp(-2 * Math.PI * 25 * dt));
+        {
+          const wf = this.feel ? this.feel.washFeel : 1;
+          T *= (1 - 0.22 * vrs * wf) * (1 + 0.38 * turb * wf * this.noise[i]);
+        }
+        // ground effect (Cheeseman-Bennett), only when roughly upright over a surface
+        if (sW > 0 && hGround < 3 * p.D && up.y > 0.5) {
+          const r = p.D / 2,
+            h = Math.max(hGround, r * 0.6),
+            ge = clamp(1 / (1 - Math.pow(r / (4 * h), 2)), 1, 1.25);
+          T *= 1 + (ge - 1) * (this.feel ? this.feel.groundFeel : 1);
+        }
+        let side = 0;
+        if (offW && sW > 0) {
+          const R = p.D / 2;
+          if (nearC && up.y > 0.5) {
+            const z = Math.max(0.3, (nearC.d - dot(offW[i], nearC.n)) / R);
+            if (z < 3) T *= 1 + Math.min(0.5, 0.5 * Math.sqrt(1 + 1 / (8 * z * z)) - 0.5) * CPl;
+          }
+          if (nearW && nearW.k > 0) {
+            const db = Math.max(0, nearW.d - dot(offW[i], nearW.n)) / R;
+            if (db < 5) {
+              T *= 1 + 0.06 * Math.pow(0.54, db) * nearW.k;
+              side = 0.21 * Math.pow(0.34, db) * nearW.k * Math.max(0, T);
+            }
+          }
+        }
+        T = Math.max(0, T);
+        if (sW < 0) T *= -p.revEff; // spun backward the prop pushes the other way, and (unless it is a 3D prop) not as hard
+        this.thrust[i] = T;
+        sumW += Math.abs(w);
+        Fb.y += T;
+        const tq = cross(m.pos, v3(0, T, 0));
+        Tb.x += tq.x;
+        Tb.y += tq.y;
+        Tb.z += tq.z;
+        if (side) {
+          const f = mul(nearW.nB, side),
+            t2 = cross(m.pos, f);
+          Fb.x += f.x;
+          Fb.y += f.y;
+          Fb.z += f.z;
+          Tb.x += t2.x;
+          Tb.y += t2.y;
+          Tb.z += t2.z;
+        }
+        Tb.y += -m.spin * sW * (p.cq * RHO * n * n * Math.pow(p.D, 5));
+      }
+      Tb.y += rotorAccelYaw;
+      this.ibat = Itot;
+      this.vbat = Vbus;
+      this.ibatS = (this.ibatS ?? Isag) + (Isag - (this.ibatS ?? Isag)) * (1 - Math.exp(-dt / 0.005));
+      if (batOn) this.soc = Math.max(0, this.soc - (Itot * dt) / (p.bat.cap * 3.6)); // Garage → Battery life off: the pack never runs down
+      // brownout: a whoop's AIO resets when the loaded voltage falls below ~2.9 V a cell for a moment; the quad drops
+      if (batOn && this.armed && Vbus < BROWNOUT * p.bat.cells) {
+        this.lowV = (this.lowV || 0) + dt;
+        if (this.lowV > 0.25) {
+          this.armed = false;
+          this.brownout = true;
+        }
+      } else this.lowV = 0;
+      this.mAh += (Itot * dt) / 3.6;
+      // ---- aerodynamic drag (body frame, quadratic) + rotor H-force (linear)
+      const vb = vRelB;
+      Fb.x += -0.5 * RHO * p.cdA.x * Math.abs(vb.x) * vb.x - p.rotorDrag * sumW * vb.x;
+      Fb.y += -0.5 * RHO * p.cdA.y * Math.abs(vb.y) * vb.y;
+      Fb.z += -0.5 * RHO * p.cdA.z * Math.abs(vb.z) * vb.z - p.rotorDrag * sumW * vb.z;
+      // tune.deadSpin (absent = 1: the physics as it was; the game fills in 0.1): how much of the rotational air drag a disarmed quad
+      // in the air still feels. The drag was set with the motors running (the PID flies through it); with them off it stopped a
+      // 680 deg/s flip in a quarter turn, where a real whoop tumbles on (owner, 2026-11-21: disarm tricks)
+      const aD = p.angDrag * (!this.armed && !this.crashed && this.tune.deadSpin != null ? +this.tune.deadSpin : 1);
+      Tb.x += -aD * this.w.x * Math.abs(this.w.x) * 1000;
+      Tb.y += -aD * this.w.y * Math.abs(this.w.y) * 600;
+      Tb.z += -aD * this.w.z * Math.abs(this.w.z) * 1000;
+      // ---- integrate
+      const Fw = qrot(this.q, Fb);
+      Fw.y -= p.mass * G;
+      // race fields (RaceGOW: fan drafts push, battery-saver zones add thrust); maps without fields are untouched
+      const WF = this.world.fields;
+      if (WF && WF.length)
+        for (const f of WF) {
+          const d = sub(this.pos, f.o),
+            m = f.m;
+          const lx = d.x * m[0] + d.y * m[3] + d.z * m[6],
+            ly = d.x * m[1] + d.y * m[4] + d.z * m[7],
+            lz = d.x * m[2] + d.y * m[5] + d.z * m[8];
+          if (Math.abs(lx) > f.h.x || Math.abs(ly) > f.h.y || Math.abs(lz) > f.h.z) continue;
+          if (f.kind === 'push') {
+            const k = f.accel * p.mass;
+            Fw.x += f.dir.x * k;
+            Fw.y += f.dir.y * k;
+            Fw.z += f.dir.z * k;
+          } else if (f.kind === 'swirl') {
+            const r = Math.hypot(d.x, d.z) || 1e-3,
+              k = f.accel * p.mass * Math.max(0, 1 - r / f.h.x);
+            Fw.x += (-d.z / r) * k;
+            Fw.z += (d.x / r) * k;
+            Fw.y += 0.3 * k;
+          } // a dust devil (the Murderdome): it shoves you round and up
+          else if (f.kind === 'boost') {
+            const B = qrot(this.q, Fb),
+              g = f.gain - 1;
+            Fw.x += B.x * g;
+            Fw.y += B.y * g;
+            Fw.z += B.z * g;
+          }
+        }
+      this.vel = add(this.vel, mul(Fw, dt / p.mass));
+      const I = p.I,
+        w = this.w;
+      // Shake (tune.shake: 0 = none, the physics default; the game gives players 1, fitted from the owner's Blackbox logs with
+      // tools/feelfit.js): air that is never still pushes a light quad about. A random angular kick per axis, smoothed over ~60
+      // ms (the 2-20 Hz wobble real hover logs show), growing with thrust, with prop wash and with speed; the FC fights it like
+      // a real one. Its own random stream (seeded), so turning it off leaves every other number exactly as it was.
+      const SH = +this.tune.shake || 0;
+      if (SH > 0 && this.armed && !this.crashed) {
+        const T = this.turb || (this.turb = { a: [0, 0, 0], b: [0, 0, 0], rng: makeRng(4711) }),
+          tau = Math.max(0.03, +this.tune.shakeTau || 0.06),
+          k = Math.sqrt((2 * dt) / tau);
+        // how much is going on: rotation and speed (owner: "a hint of wobble on movements"; a still hover stays nearly calm)
+        const Tt = this.thrust.reduce((a, b) => a + Math.abs(b), 0),
+          load = Math.min(2.5, Tt / (p.mass * G)),
+          sp = len(this.vel),
+          rot = len(this.w) * R2D;
+        const busy = this.tune.shakeMove != null ? Math.min(1.5, rot / 500 + sp / 12) * this.tune.shakeMove + (1 - this.tune.shakeMove) : 1;
+        const amp = SH * SHAKE_A * (0.25 + load) * (1 + 1.5 * this.washLevel) * (1 + sp / 10) * busy;
+        for (let i = 0; i < 3; i++) {
+          let n = 0;
+          for (let j = 0; j < 3; j++) n += T.rng();
+          T.a[i] += (-T.a[i] * dt) / tau + k * n * 0.577;
+          T.b[i] += (T.a[i] - T.b[i]) * Math.min(1, dt / (tau * 0.5));
+        } // twice smoothed: no sharp edges
+        Tb.x += I.x * amp * T.b[0];
+        Tb.y += I.y * amp * T.b[1] * 0.15;
+        Tb.z += I.z * amp * T.b[2];
+      } // little on yaw: the sim's yaw authority is weak and real yaw tracks as well as the sim's (Feel Lab)
+      const Iw = v3(I.x * w.x, I.y * w.y, I.z * w.z),
+        gyro = cross(w, Iw);
+      this.w = v3(w.x + ((Tb.x - gyro.x) / I.x) * dt, w.y + ((Tb.y - gyro.y) / I.y) * dt, w.z + ((Tb.z - gyro.z) / I.z) * dt);
+      this.pos = add(this.pos, mul(this.vel, dt));
+      const dq = qmul(this.q, { w: 0, x: this.w.x, y: this.w.y, z: this.w.z });
+      this.q = qnorm({
+        w: this.q.w + 0.5 * dq.w * dt,
+        x: this.q.x + 0.5 * dq.x * dt,
+        y: this.q.y + 0.5 * dq.y * dt,
+        z: this.q.z + 0.5 * dq.z * dt
+      });
+      // ---- wake shedding
+      this.wakeTimer += dt;
+      if (this.wakeTimer > 0.012 && this.armed) {
+        this.wakeTimer = 0;
+        const Tt = this.thrust.reduce((a, b) => a + b, 0);
+        const vi = Math.sqrt(Math.max(Tt, 1e-6) / (2 * RHO * p.A * 4));
+        const strength = clamp(Tt / (p.mass * G * 2.2), 0, 1.2);
+        if (strength > 0.05) this.wake.push({ p: v3(this.pos.x, this.pos.y, this.pos.z), v: mul(up, -vi * 0.9), s: strength, age: 0 });
+        if (this.wake.length > 160) this.wake.shift();
+      }
+      for (const k of this.wake) {
+        k.age += dt;
+        k.p = add(k.p, mul(k.v, dt));
+        k.v = mul(k.v, 1 - 1.2 * dt);
+      }
+      while (this.wake.length && this.wake[0].age > 1.4) this.wake.shift();
+      // ---- collisions
+      this.collide(dt);
+    }
+
+    sampleWake() {
+      let turb = 0,
+        vx = 0,
+        vy = 0,
+        vz = 0,
+        wsum = 0;
+      const R = 0.16 + this.p.D * 2;
+      for (const k of this.wake) {
+        if (k.age < 0.12) continue;
+        const dx = k.p.x - this.pos.x,
+          dy = k.p.y - this.pos.y,
+          dz = k.p.z - this.pos.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > R * R) continue;
+        const f = (1 - Math.sqrt(d2) / R) * k.s * (1 - k.age / 1.4);
+        turb += f;
+        vx += k.v.x * f;
+        vy += k.v.y * f;
+        vz += k.v.z * f;
+        wsum += f;
+      }
+      const sc = wsum > 0 ? Math.min(1, wsum) / wsum : 0;
+      return { turb: clamp(turb * 0.6, 0, 1.2), v: v3(vx * sc * 0.6, vy * sc * 0.6, vz * sc * 0.6) };
+    }
+
+    heightAbove() {
+      // only boxes whose footprint is within NEAR_M2 of the quad (rebuilt after NEAR_M of travel): this runs every physics step,
+      // and a map with solid foliage has thousands of shapes (Moose: 4000; the full loop tripled its physics time)
+      let h = this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z) ? 60 : this.pos.y;
+      const WP = this.world.prims,
+        H = this._hb;
+      if (!H || H.w !== WP || H.n !== WP.length || Math.max(Math.abs(this.pos.x - H.x), Math.abs(this.pos.z - H.z)) > NEAR_M) {
+        const list = [];
+        for (const pr of WP) {
+          if (pr.type !== 'box') continue;
+          const a = pr.aabb;
+          if (
+            this.pos.x + NEAR_M2 < a.min.x ||
+            this.pos.x - NEAR_M2 > a.max.x ||
+            this.pos.z + NEAR_M2 < a.min.z ||
+            this.pos.z - NEAR_M2 > a.max.z
+          )
+            continue;
+          list.push(pr);
+        }
+        this._hb = { w: WP, n: WP.length, x: this.pos.x, z: this.pos.z, list };
+      }
+      for (const pr of this._hb.list) {
+        const a = pr.aabb;
+        if (this.pos.x < a.min.x || this.pos.x > a.max.x || this.pos.z < a.min.z || this.pos.z > a.max.z) continue;
+        if (a.max.y <= this.pos.y + 0.01) h = Math.min(h, this.pos.y - a.max.y);
+      }
+      return h;
+    }
+
+    collide(dt) {
+      const GH = this.world.groundHoles; // Slackvegan's subway: no ground plane over these (the map has its own floors there); absent elsewhere
+      const p = this.p;
+      let hit = false;
+      let maxImpact = 0;
+      let hitOwner = -1,
+        hitNormal = null,
+        hitSurf = null;
+      for (let iter = 0; iter < 2; iter++) {
+        for (const c of p.colliders) {
+          const cw = add(this.pos, qrot(this.q, c.c));
+          const contacts = [];
+          if (cw.y < c.r && !(GH && inGroundHole(GH, cw.x, cw.z)))
+            contacts.push({ n: v3(0, 1, 0), d: c.r - cw.y, pt: v3(cw.x, 0, cw.z), owner: -1, ground: true, surf: this.world.groundSurf });
+          // Broad phase: the world has a few hundred shapes and this runs 1000 times a second, but the quad is only ever
+          // near a handful. Keep the list of shapes within NEAR_M of where it was last built (same order as the world's
+          // list, so results are identical) and rebuild it once the quad has moved far enough that one could be missed.
+          const NC = this._nearC,
+            WP = this.world.prims;
+          if (
+            !NC ||
+            this._nearW !== WP ||
+            this._nearN !== WP.length ||
+            Math.max(Math.abs(cw.x - NC.x), Math.abs(cw.y - NC.y), Math.abs(cw.z - NC.z)) + c.r > NEAR_M
+          ) {
+            const near = [];
+            for (const pr of WP) {
+              const a = pr.aabb;
+              if (
+                !(
+                  cw.x + NEAR_M2 < a.min.x ||
+                  cw.x - NEAR_M2 > a.max.x ||
+                  cw.y + NEAR_M2 < a.min.y ||
+                  cw.y - NEAR_M2 > a.max.y ||
+                  cw.z + NEAR_M2 < a.min.z ||
+                  cw.z - NEAR_M2 > a.max.z
+                )
+              )
+                near.push(pr);
+            }
+            this._near = near;
+            this._nearC = { x: cw.x, y: cw.y, z: cw.z };
+            this._nearW = WP;
+            this._nearN = WP.length;
+          }
+          for (const pr of this._near) {
+            const a = pr.aabb;
+            if (
+              cw.x + c.r < a.min.x ||
+              cw.x - c.r > a.max.x ||
+              cw.y + c.r < a.min.y ||
+              cw.y - c.r > a.max.y ||
+              cw.z + c.r < a.min.z ||
+              cw.z - c.r > a.max.z
+            )
+              continue;
+            const r = sphereVs(pr, cw, c.r);
+            if (r) {
+              r.owner = pr.owner;
+              r.surf = pr.surf;
+              contacts.push(r);
+            }
+          }
+          for (const ct of contacts) {
+            hit = true;
+            this.pos = add(this.pos, mul(ct.n, ct.d * 0.9));
+            const r = sub(ct.pt, this.pos);
+            const wW = qrot(this.q, this.w);
+            // surf.belt: the surface itself moves (More Warehouse's conveyor): contact and friction are worked out against the belt,
+            // so whatever rests on it is carried along. Absent everywhere else: the physics is unchanged
+            const bv = ct.surf && ct.surf.belt,
+              vc = bv ? sub(add(this.vel, cross(wW, r)), bv) : add(this.vel, cross(wW, r));
+            const vn = dot(vc, ct.n);
+            if (vn < 0) {
+              if (-vn > maxImpact) {
+                maxImpact = -vn;
+                hitOwner = ct.owner;
+                hitNormal = ct.n;
+                hitSurf = ct.surf;
+              } // ct.surf: RaceGOW surfaces { e, f, crash }
+              // effective mass along normal
+              const rB = qinv(this.q, r),
+                nB = qinv(this.q, ct.n);
+              const rxn = cross(rB, nB);
+              const Iinv = v3(rxn.x / p.I.x, rxn.y / p.I.y, rxn.z / p.I.z);
+              const k = 1 / p.mass + dot(cross(Iinv, rB), nB);
+              const sf = ct.surf,
+                e = -vn > 0.4 ? (sf ? sf.e : p.restitution) : 0;
+              const jn = (-(1 + e) * vn) / k;
+              // friction
+              const vt = sub(vc, mul(ct.n, vn)),
+                vtl = len(vt);
+              let J = mul(ct.n, jn);
+              if (vtl > 1e-5) {
+                const tdir = mul(vt, 1 / vtl);
+                const rxt = cross(rB, qinv(this.q, tdir));
+                const It = v3(rxt.x / p.I.x, rxt.y / p.I.y, rxt.z / p.I.z);
+                const kt = 1 / p.mass + dot(cross(It, rB), qinv(this.q, tdir));
+                // tune.wallGrip: the friction of a duct pressed on a wall or the side of anything (a contact facing sideways, not the
+                // ground or a top); absent = p.friction, the physics as it was. The game sets 0.9 (TPU ducts grip: a whoop pushed
+                // into a wall sticks at moderate throttle; at 0.45 it slid down at anything under full throttle: Metal Craft Fpv)
+                const WG = this.tune.wallGrip,
+                  mu = sf ? sf.f : WG == null || ct.ground || Math.abs(ct.n.y) > 0.7 ? p.friction : +WG;
+                const jt = Math.min(vtl / kt, mu * jn);
+                J = sub(J, mul(tdir, jt));
+              }
+              this.vel = add(this.vel, mul(J, 1 / p.mass));
+              const JB = qinv(this.q, J),
+                tq = cross(rB, JB);
+              this.w = v3(this.w.x + tq.x / p.I.x, this.w.y + tq.y / p.I.y, this.w.z + tq.z / p.I.z);
+            }
+            this.contactNormal = ct.n;
+            this.contactOwner = ct.owner;
+            this.contactGround = !!ct.ground;
           }
         }
       }
-      if (o.gap) {
-        const g = o.gap, rel = sub(d.pos, g.c), s = dot(rel, g.n) > 0 ? 1 : -1, key = 'g' + o.id, prev = this.prevSide[key];
-        this.prevSide[key] = s;
-        if (prev !== undefined && prev !== s) {
-          const vAx = g.round ? null : cross(g.n, g.u);
-          const du = dot(rel, g.u), dv = g.round ? dot(rel, cross(g.n, g.u)) : dot(rel, vAx);
-          const inside = g.round ? Math.hypot(du, dv) < g.hu : (Math.abs(du) < g.hu + 0.02 && Math.abs(dv) < g.hv + 0.02);
-          const f = d.fwd(), vl = len(d.vel), fwdDot = vl > 0.8 ? dot(f, d.vel) / vl : 0;
-          // how narrow the gap is (its short side) and how well the quad's up axis lines up with that side (knife-edged through it)
-          const narrow = g.round ? 2 * g.hu : 2 * Math.min(g.hu, g.hv), nAx = g.round ? null : (g.hu <= g.hv ? g.u : vAx), up = d.up(), nAlign = nAx ? Math.abs(dot(up, nAx)) : 1;
-          if (inside) this.crossLog.push({ t, obj: o.id, name: o.name, kind: 'G', dir: s, rollAbs: Math.abs(d.right().y), up, fwdDot, narrow: +narrow.toFixed(3), nAlign: +nAlign.toFixed(2), spd: vl, flat: Math.abs(g.n.y) > 0.7 || undefined, sq: (g.round || Math.min(g.hu, g.hv) / Math.max(g.hu, g.hv) >= 0.7) || undefined, low: o.low || undefined });
-        }
+      this.contactThisStep = hit;
+      if (hit) {
+        this.lastImpact = maxImpact;
+        this.impactOwner = hitOwner;
+        this.impactNormal = hitNormal;
+        this.impactSurf = hitSurf;
+        this.w = mul(this.w, 0.995);
+      }
+      // crash rules (≈ "contact + disarm" in TPW terms)
+      if (this.armed && !this.crashed) {
+        if (maxImpact > (hitSurf && hitSurf.crash ? hitSurf.crash : this.crashImpact || 7.5)) this.crash('impact');
+        const up = this.up();
+        const speed = len(this.vel);
+        if (hit && up.y < -0.35 && speed < 0.6 && !this.fc.reversible) {
+          this.restOnGround += dt;
+          if (this.restOnGround > 0.45) this.crash('turtle');
+        } // in 3D mode upside-down on the ground is just a place to take off from
+        // "stuck": wedged on its side with no way out. With tune.wallGrip (the game) a quad pushing into a wall at half its
+        // weight or more is not stuck but wall-sticking; absent, the rule is as it always was (physics hash unchanged)
+        else if (
+          hit &&
+          speed < 0.25 &&
+          Math.abs(up.y) < 0.6 &&
+          !(this.tune.wallGrip != null && this.thrust.reduce((a, b) => a + Math.abs(b), 0) > 0.5 * p.mass * G)
+        ) {
+          this.restOnGround += dt;
+          if (this.restOnGround > 0.9) this.crash('stuck');
+        } else this.restOnGround = Math.max(0, this.restOnGround - dt);
+      }
+      if (
+        (this.pos.y < -1 && !(this.world.groundHoles && inGroundHole(this.world.groundHoles, this.pos.x, this.pos.z))) ||
+        this.pos.y < -40
+      ) {
+        this.pos.y = 0.05;
+        this.vel = v3();
       }
     }
-    if (this.crossLog.length && t - this.crossLog[0].t >= 20) this.crossLog = this.crossLog.filter(c => t - c.t < 20);   // only when something has expired (it ran every step)
+    crash(reason) {
+      this.crashed = true;
+      this.crashReason = reason;
+      this.armed = false;
+    }
   }
-  tokenize(samples) {
-    const toks = []; let cur = null; let idle = 0;
-    const AX = ['R', 'P', 'Y'];
-    for (let i = 1; i < samples.length; i++) {
-      const s = samples[i], dt = s.t - samples[i - 1].t;
-      const ar = s.r.map(Math.abs); let k = 0; if (ar[1] > ar[k]) k = 1; if (ar[2] > ar[k]) k = 2;
-      if (ar[k] < 95) { idle += dt; if (cur) cur.idleAfter += dt; continue; }
-      const dir = Math.sign(s.r[k]);
-      if (cur && cur.k === k && cur.dir === dir && cur.idleAfter < 0.28) {
-        cur.maxGap = Math.max(cur.maxGap || 0, cur.idleAfter); cur.raw += ar[k] * dt; cur.t1 = s.t; cur.idleAfter = 0; cur.n++; cur.inv += s.up.y < -0.2 ? 1 : 0;
-        cur.off += (ar[(k + 1) % 3] + ar[(k + 2) % 3]) * dt;
-      } else {
-        if (cur && cur.k === k && cur.dir === dir) { // same axis after a pause: segmented
-          cur.segments = (cur.segments || 1) + 1; cur.maxGap = Math.max(cur.maxGap || 0, cur.idleAfter);
-          cur.raw += ar[k] * dt; cur.t1 = s.t; cur.idleAfter = 0; cur.n++; continue;
-        }
-        cur = { k, ax: AX[k], dir, raw: ar[k] * dt, t0: s.t, t1: s.t, idleAfter: 0, n: 1, inv: s.up.y < -0.2 ? 1 : 0, off: 0 };
-        toks.push(cur);
+
+  // ================================================================= TRICK RECOGNITION
+  // Approach: rotation tokenizer (quarter-turn primitives per body axis, like the
+  // spreadsheet's "Custom Trick Building Blocks") + obstacle crossing events + rules.
+  const TRICK_DATA = root.TPW_TRICKS || [];
+  // Tricks the owner named that the TPW book does not have (scored like book tricks; pts are the owner's to set, draft until then)
+  const ROLLBACK_ROLL = 100; // deg of roll travel between the two passes
+  const ROLLBACK_SEE = 0.3; // s after the turn by which a rewind is travelling back toward the object
+  const ROLLBACK_BACK = 3.2,
+    ROLLBACK_HOLD = new Set(['Snapback', 'Juicy Flick', 'Roll', 'Yaw Spin']); // s from the pass under to the pass back under; the calls that wait that long for it
+  const CINNAMON_VIEW = 0.35,
+    UHUH_SWING = 25; /* the share of a Cinnamon Roll with its object within 40 deg of the camera line (a turn made looking anywhere reads about 0.2; a flown orbit of the object 0.4-0.6) */
+  const MAV_OVER_UP = 0.5,
+    MAV_OVER_BACK = 0.5,
+    MAV_MIN_UP = -0.3; // Maverick Loop: up.y and backward travel at the pass over the top; the lowest up.y on the way round
+  const TWIST_BEFORE = 0.6,
+    TWIST_AFTER = 1.0,
+    TWIST_FLOW = 0.5,
+    TWIST_UNDER = 2.5; // Matty Twister: the roll starts this long before / after the over pass at most; the flip starts within this of the roll's end; the pass under within this
+  const MAVVEL_BACK = 0.2,
+    MAVVEL_EARLY = 0.5,
+    MAVVEL_LATE = 1.5,
+    MAVVEL_FLICK = 0.8,
+    MAVVEL_PROMPT = 0.7; // Mavvelmann: the over pass flown backward (fwdDot at most this); the flick from this long before the over pass to this long after it; the flick's longest (s); the longest wait before the roll (s)
+  const CORNER_SWINGS = 3,
+    CORNER_MIN = 45,
+    CORNER_UP = 1.0,
+    CORNER_SIDE = 0.4; // Corner Climb: swings round the corner, each at least this many deg of it, climbing this far (m); how far each side of the corner's diagonal a swing must reach (m)
+  const WALL_STICK_MIN = 1.0; // s held on the wall (owner, 2026-11-19: "1 second")
+  const EXTRA_TRICKS = [
+    {
+      cat: 'Matty Flips',
+      name: 'Half Matty Pendulum',
+      diff: 'Advanced',
+      pts: 1050,
+      extra: true,
+      desc: 'Three Half Mattys chained on the same object, swinging back and forth under it like a pendulum (owner, 2026-11-18). Points: three Half Mattys at full value, until the owner sets them.'
+    },
+    {
+      cat: 'Open Air Tricks',
+      name: 'Juicy Tornado',
+      diff: 'Intermediate',
+      pts: 350,
+      extra: true,
+      desc: 'A Juicy Flick followed straight away by a forward double roll: flick forward to inverted with a punch of throttle, roll back upright, and keep rolling the same way for two more full rolls while flying forward (owner, 2026-11-20). Points: a Juicy Flick plus a Double Roll, until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Rollback',
+      diff: 'Intermediate',
+      pts: 300,
+      extra: true,
+      desc: "Fly under an object and, as you come out, pitch back until you are upside-down looking back at it (a Snapback's way in), roll back upright, and rewind: back under the same object, travelling backward. Named and first labelled by RodFPV. Points are a placeholder until the owner sets them."
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Juicy Rollback',
+      diff: 'Intermediate',
+      pts: 350,
+      extra: true,
+      desc: 'The Rollback with a Juicy Flick: pitch FORWARD to upside-down as you pass under the object, roll back upright, and rewind back under it, travelling backward. Named and first labelled by RodFPV. Points are a placeholder until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Cube Eject',
+      diff: 'Intermediate',
+      pts: 575,
+      extra: true,
+      desc: "An Eject Roll out of a square gap: climb up through the open top of a cube (any square opening that lies flat), throttle blip at the peak, pitch down 180° and roll 360° as you dive back down (owner, 2026-11-23). Points: the site's Cube value for an Eject Roll."
+    },
+    {
+      cat: 'Powerloops',
+      name: 'Loop to Matty',
+      diff: 'Advanced',
+      pts: 550,
+      extra: true,
+      desc: 'Fly through a cube and do half of a Powerloop, pitching back until you can see the back gate. Then pitch forward into a Matty flip motion, going backward down through the top of the cube and out the back (prowhooper.com; a cube trick).'
+    },
+    {
+      cat: 'Open Air Tricks',
+      name: 'Inverted Uh-uh',
+      diff: 'Intermediate',
+      pts: 125,
+      extra: true,
+      desc: 'A quick throttle blip and a half flip or half roll to inverted. Upside-down, yaw 45° left, 90° right, 90° left and 45° right, back to where you were facing, like the whoop shaking its head "uh-uh". Finish with a half flip or half roll back upright. Created by Heads from Infinity Loops (prowhooper.com).'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'INVERTED',
+      diff: 'Intermediate',
+      pts: 200,
+      extra: true,
+      desc: '3D mode only. Fly upside-down: every full second spent inverted in the air scores: 200 for the first, 50 more for each one after (250, 300, …, up to 1000 a second), with no repeat penalty. Touching anything, a bump or a crash ends the count (the seconds already scored stay); turn upside-down again to start a new one.'
+    },
+    {
+      cat: 'Gaps',
+      name: 'Gaps',
+      diff: 'Beginner',
+      pts: 150,
+      extra: true,
+      desc: 'Fly through a small, enclosed gap. Scored by how tight it is on its short side: 150 through 6 inches (15 cm) or less, 125 at 12 inches, 100 at 18 inches, and 25 less for every 6 inches more, down to 25 from 3 feet up. The same gap again in one combo is worth half each time.'
+    },
+    {
+      cat: 'Wall Tricks',
+      name: 'Corner Climb',
+      diff: 'Intermediate',
+      pts: 300,
+      extra: true,
+      desc: 'A trippy on the corner of a building: looking up at the corner, roll and yaw pushed opposite ways, swing a quarter turn round it one way, sling back the other way, and again, climbing the corner with a touch of pitch (owner, 2026-11-23, from the Infinity Loops trippy masterclass). Three swings and a metre of climb. Name and points are placeholders until the owner sets them.'
+    },
+    {
+      cat: 'Wall Tricks',
+      name: 'Wall Stick',
+      diff: 'Novice',
+      pts: 200,
+      extra: true,
+      desc: 'Push the whoop into a wall (or the side of anything) and hold it there, stuck to the surface, for at least a second, then fly away cleanly (owner, 2026-11-19). Points set by the owner.'
+    },
+    // disarm tricks (owner, 2026-11-21): the rotation is carried by the quad's own momentum with the motors off. Points are placeholders
+    {
+      cat: 'Other Tricks',
+      name: 'Disarm Flip',
+      diff: 'Novice',
+      pts: 200,
+      extra: true,
+      desc: 'Start a flip, disarm in the air and let the whoop carry a full flip round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Disarm Roll',
+      diff: 'Novice',
+      pts: 200,
+      extra: true,
+      desc: 'Start a roll, disarm in the air and let the whoop carry a full roll round with the motors off, then re-arm before it touches anything and fly away. Points are a placeholder until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Disarm Spin',
+      diff: 'Novice',
+      pts: 200,
+      extra: true,
+      desc: 'Start a yaw spin, disarm in the air and let the whoop carry a full flat spin round, upright, with the motors off, then re-arm and fly away. Points are a placeholder until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Dead Pirate Spin',
+      diff: 'Intermediate',
+      pts: 350,
+      extra: true,
+      desc: 'The Disarm Spin upside-down: inverted, spinning flat, motors off for a full turn; then re-arm, come upright and fly away. Points are a placeholder until the owner sets them.'
+    },
+    {
+      cat: 'Other Tricks',
+      name: 'Disarm Loop',
+      diff: 'Intermediate',
+      pts: 400,
+      extra: true,
+      desc: 'A loop with a dead top: punch up and pull back, disarm as you go over, let the whoop fall round the top of the loop with the motors off, re-arm on the way down and pull out. Points are a placeholder until the owner sets them.'
+    }
+  ];
+  const DEAD_LOOP_UP = 1.0,
+    DEAD_LOOP_V = 2.0; // a loop climbs at least this (m) and is flown into at least this fast (m/s)
+  const DEAD_TURN = 300,
+    DEAD_LOOP_OFF = 120,
+    DEAD_AWAY = 0.6; // deg of one axis with the motors off for a flip / roll / spin; of pitch for a loop's dead top; s flown clear after the re-arm
+  for (const x of EXTRA_TRICKS) if (!TRICK_DATA.some(t => t.name === x.name)) TRICK_DATA.push(x);
+  // The game's names follow prowhooper.com (owner, 2026-11-23). Everything stored or shared before then (labels, flights, the trick
+  // library, calibration files, a pilot's browser) may carry the old names: `canonTrick` reads them as the new ones.
+  const TRICK_ALIAS = {
+    'Immelmann Turn': 'Immelmann',
+    'Invert Rewind': 'Inverted Rewind',
+    'Split-S': 'Split S',
+    'Split-Back': 'Splitback',
+    'Orbit x2': 'Orbits',
+    'Trippy Spin x2': 'Trippy Spin',
+    'Flip Stall Rewind': 'Stall Flip Rewind',
+    '360 Stall Rewind': 'Stall 360 Rewind',
+    'Matty Stall Rewind': 'Stall Matty Rewind',
+    'Half Matty Stall Rewind': 'Stall Half Matty Rewind',
+    '540 Half Matty Stall Rewind': 'Stall 540 Half Matty Rewind',
+    'Dive': 'Building Dive',
+    'Facepunch': 'Face Punch',
+    'Blindflip': 'Blind Loop'
+  };
+  const ALIAS_SKIP = new Set([
+    'by',
+    'pilot',
+    'pilotName',
+    'map',
+    'obstacle',
+    'on',
+    'text',
+    'msg',
+    'note',
+    'notes',
+    'desc',
+    'title',
+    'object'
+  ]);
+  const canonReviver = (k, v) => (typeof v === 'string' && !ALIAS_SKIP.has(k) ? canonTrick(v) : v); // for JSON.parse on anything stored before the rename: a string that IS an old trick name, under any key or in any list
+  function canonTrick(n) {
+    if (typeof n !== 'string') return n;
+    const t = n.trim();
+    return Object.prototype.hasOwnProperty.call(TRICK_ALIAS, t) ? TRICK_ALIAS[t] : n;
+  }
+  function trickPoints(name) {
+    const t = TRICK_DATA.find(t => t.name.trim() === name);
+    return t ? t.pts : 0;
+  }
+
+  // pattern tokens: Axis(R|P|Y) dir(+|-|a|b|-a|-b|*) deg  [i=inverted yaw] ; P+ = pitch back, R+ = roll right, Y+ = yaw right
+  function parsePattern(s) {
+    return s
+      .trim()
+      .split(/\s+/)
+      .map(tok => {
+        const m = tok.match(/^([RPY])(\+|-|-?[ab]|\*)(~?)(\d+)(i?)$/);
+        if (!m) throw new Error('bad token ' + tok);
+        return { ax: m[1], dir: m[2], loose: !!m[3], deg: +m[4], inv: !!m[5] };
+      });
+  }
+  const LEARN_MAX = { tol: 30, rev: 30, crossBack: 1.2 },
+    LEARN_NONE = { tol: 0, rev: 0, crossBack: 0 };
+  // ---- The community profile (pro-whooper-community/1, community/profile.json, made by tools/community.js from every
+  // pilot's decided labels and approved by the owner): what all pilots' flying taught the detector. Every detector starts
+  // from it and the pilot's own profile sits on top (mergeProfiles: the looser of the two for each knob). It can also
+  // TIGHTEN, which a pilot's own profile never does: `floor[trick]` is the Watcher confidence a call of that trick needs,
+  // set only where pilots rejected low-confidence calls of it. Null (the Node tests) = no community layer.
+  let COMMUNITY = null;
+  const FLOOR_MAX = 0.8;
+  function cleanCommunity(c) {
+    if (!c || typeof c !== 'object' || c.format !== 'pro-whooper-community/1') return null;
+    const n = (v, max) => (Number.isFinite(+v) ? clamp(+v, 0, max) : 0),
+      L = c.learn || {},
+      out = {
+        format: c.format,
+        updated: String(c.updated || '').slice(0, 40),
+        learn: { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) },
+        floor: {},
+        stats: c.stats && typeof c.stats === 'object' ? c.stats : {}
+      };
+    if (c.rate && typeof c.rate === 'object') {
+      out.rate = {};
+      for (const ax of 'RPY') if (Number.isFinite(+c.rate[ax])) out.rate[ax] = clamp(+c.rate[ax], 150, 900);
+    }
+    if (Number.isFinite(+c.air) && +c.air > 0) out.air = clamp(+c.air, 0.2, 0.85);
+    if (c.floor && typeof c.floor === 'object')
+      for (const [k, v] of Object.entries(c.floor))
+        if (typeof k === 'string' && k.length > 0 && k.length < 60 && Number.isFinite(+v) && +v > 0)
+          out.floor[canonTrick(k)] = clamp(+v, 0, FLOOR_MAX);
+    return out;
+  }
+  function setCommunity(c) {
+    COMMUNITY = cleanCommunity(c);
+    return COMMUNITY;
+  }
+  // ---- The trick library (pro-whooper-library/1, library/library.json, built by tools/library.js): real examples of each
+  // trick as it was flown. The Tricktionary demo GIFs are the reference (the definition of the trick, weight 3); pilots'
+  // confirmed tricks add how real pilots fly them (sloppy, big, small, slow), and calls pilots rejected are counter-examples.
+  // A move is a signature: the rotation per axis, summed along the move and resampled to LIB_N points (each 25 Hz sample
+  // keeps only its strongest axis, so a tilted camera in a GIF and a gyro in the sim read alike; each axis is turned so its
+  // first big movement is positive, so left and right, forward and back read alike), plus how long it took. Two signatures
+  // are compared by dynamic time warping, so a slow floaty version lines up with a snappy one.
+  // Live it does two things: votes in the Watcher on every rule call (weight 2), and when the rules call nothing for a move
+  // that closely matches examples of a trick, says "maybe <trick>?" (never scored; the pilot confirms it in review).
+  const FEEL_KEYS = {
+    weightFeel: [0.5, 1.5],
+    dragFeel: [0.5, 2],
+    washFeel: [0, 2],
+    motorFeel: [0.5, 2],
+    sagFeel: [0, 2],
+    groundFeel: [0, 2]
+  }; // see Drone.setParams
+  const BUMP_LATE = 0.6; // s after a call in which a knock (BUMP_AFTER) still makes it a bump (the game applies it: ScoreKeeper.lateBump)
+  const BUMP_AFTER = 1.5; // m/s: a knock this hard after a move's end, before its call, makes the call a BUMP (soft touches and landings do not)
+  let LIBRARY = null;
+  const MAYBE_NAMES = new Set(); // filled from OPEN_TRICKS and OBSTACLE_TRICKS below
+  const LIB_N = 24,
+    LIB_HZ = 25,
+    LIB_ON = 90,
+    LIB_QUIET = 0.35,
+    LIB_WAIT = 2.5,
+    LIB_THR = 0.3,
+    LIB_GAP = 0.06;
+  // up: the up.y of the quad at each sample (from the attitude; when missing, as in a GIF, it is integrated from the rotation
+  // starting level). The signature carries it as u: [N] in hundredths: upright 100, knife-edge 0, upside-down -100.
+  function libUps(seq) {
+    let q = { w: 1, x: 0, y: 0, z: 0 };
+    return seq.map(r => {
+      const w = v3((r[1] || 0) * D2R, -(r[2] || 0) * D2R, -(r[0] || 0) * D2R),
+        a = len(w);
+      if (a > 1e-9) q = qnorm(qmul(q, qaxis(mul(w, 1 / a), a)));
+      return qrot(q, v3(0, 1, 0)).y;
+    });
+  }
+  function libSig(seq, hz = LIB_HZ, ups = null) {
+    // seq: [[dR, dP, dY] degrees per sample] -> { d, c: [N*3], u: [N] } or null
+    if (!Array.isArray(seq)) return null;
+    if (!ups || ups.length !== seq.length) ups = libUps(seq);
+    const dom = seq.map(r => {
+      const a = r.map(v => (Number.isFinite(v) ? v : 0)),
+        k = Math.abs(a[0]) >= Math.abs(a[1]) && Math.abs(a[0]) >= Math.abs(a[2]) ? 0 : Math.abs(a[1]) >= Math.abs(a[2]) ? 1 : 2,
+        m = Math.hypot(a[0], a[1], a[2]),
+        o = [0, 0, 0];
+      o[k] = Math.sign(a[k]) * m;
+      return o;
+    });
+    const act = dom.map(r => Math.abs(r[0] + r[1] + r[2]) * hz >= 60);
+    let i0 = act.indexOf(true),
+      i1 = act.lastIndexOf(true);
+    if (i0 < 0) return null;
+    const S = dom.slice(i0, i1 + 1),
+      tot = S.reduce((a, r) => a + Math.abs(r[0]) + Math.abs(r[1]) + Math.abs(r[2]), 0);
+    if (tot < 120) return null;
+    const cum = [[0, 0, 0]];
+    for (const r of S) {
+      const l = cum[cum.length - 1];
+      cum.push([l[0] + r[0], l[1] + r[1], l[2] + r[2]]);
+    }
+    for (let ax = 0; ax < 3; ax++) {
+      const f = cum.find(c => Math.abs(c[ax]) >= 45);
+      if (f && f[ax] < 0) for (const c of cum) c[ax] = -c[ax];
+    }
+    // U[k] = up.y after k samples of the move
+    const U = [i0 > 0 ? ups[i0 - 1] : 1, ...ups.slice(i0, i1 + 1)],
+      c = [],
+      u = [];
+    for (let i = 0; i < LIB_N; i++) {
+      const x = (i / (LIB_N - 1)) * (cum.length - 1),
+        j = Math.min(cum.length - 2, Math.floor(x)),
+        f = x - j;
+      for (let ax = 0; ax < 3; ax++) c.push(Math.round(cum[j][ax] + (cum[j + 1][ax] - cum[j][ax]) * f));
+      const k = Math.min(U.length - 1, Math.round(x));
+      u.push(Math.round(clamp(Number.isFinite(U[k]) ? U[k] : 1, -1, 1) * 100));
+    }
+    const o = { d: +(S.length / hz).toFixed(2), c, u };
+    Object.defineProperty(o, 'span', { value: [i0, i1] });
+    return o; // span: which samples were the move (not stored)
+  }
+  // Where the move went and what the hands did (2026-11-18): ps = the over / under / gap passes during the move in order
+  // ('OU' a Matty, 'UOU' a powerloop, '' open air; null = not known, as for a GIF), k = the sticks: th = throttle at 8
+  // points through the move (0-100), cmd = how much of the rotation had the stick on that axis pushed (0-100: a bump or a
+  // tumble has the sticks centred). Both only count when both signatures have them.
+  function libLev(a, b) {
+    const m = a.length,
+      n = b.length;
+    if (!m || !n) return Math.max(m, n);
+    let p = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      const q = [i];
+      for (let j = 1; j <= n; j++) q.push(Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+      p = q;
+    }
+    return p[n];
+  }
+  const ENV = typeof process !== 'undefined' && process.env ? process.env : {},
+    LIB_XW = +(ENV.LIB_XW ?? 0.12),
+    LIB_KW = +(ENV.LIB_KW ?? 0); // (Node tools may override; the browser has no process)   // sticks: recorded, but on the first 224 examples they told confirmed and rejected calls apart no better than chance (both ~99% commanded): weight 0 until they do
+  function libExtra(a, b) {
+    let e = 0;
+    if (typeof a.ps === 'string' && typeof b.ps === 'string')
+      e += LIB_XW * Math.min(1, libLev(a.ps, b.ps) / Math.max(1, a.ps.length, b.ps.length));
+    if (a.k && b.k) {
+      let th = 0;
+      for (let i = 0; i < 8; i++) th += Math.abs(a.k.th[i] - b.k.th[i]);
+      e += (LIB_KW * (th / 800 + Math.abs(a.k.cmd - b.k.cmd) / 100)) / 2;
+    }
+    return e;
+  }
+  function libDist(a, b) {
+    const N = LIB_N,
+      B = 5,
+      D = [];
+    for (let i = 0; i < N; i++) D.push(new Float64Array(N).fill(Infinity));
+    const cost = (i, j) =>
+      Math.hypot(a.c[i * 3] - b.c[j * 3], a.c[i * 3 + 1] - b.c[j * 3 + 1], a.c[i * 3 + 2] - b.c[j * 3 + 2]) / 360 +
+      (a.u && b.u ? Math.abs(a.u[i] - b.u[j]) / 400 : 0); // upside-down vs upright: up to 0.5
+    for (let i = 0; i < N; i++)
+      for (let j = Math.max(0, i - B); j <= Math.min(N - 1, i + B); j++) {
+        const k = cost(i, j);
+        D[i][j] = k + (i || j ? Math.min(i ? D[i - 1][j] : Infinity, j ? D[i][j - 1] : Infinity, i && j ? D[i - 1][j - 1] : Infinity) : 0);
       }
-    }
-    // drop tiny tokens, merge neighbours that become adjacent
-    let f = toks.filter(t => t.raw > 60);
-    const merged = [];
-    for (const t of f) {
-      const l = merged[merged.length - 1];
-      if (l && l.ax === t.ax && l.dir === t.dir) { l.raw += t.raw; l.t1 = t.t1; l.n += t.n; l.inv += t.inv; l.off += t.off; l.idleAfter = t.idleAfter; l.maxGap = Math.max(l.maxGap || 0, l.idleAfter); }
-      else merged.push({ ...t });
-    }
-    for (const t of merged) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / t.raw; }
-    return merged;
+    return D[N - 1][N - 1] / N + 0.15 * Math.min(1, Math.abs(Math.log(Math.max(0.05, a.d) / Math.max(0.05, b.d)))) + libExtra(a, b);
   }
-  close(d, t, crashed) {
-    this.active = false;
-    const S = this.samples; if (S.length < 5) return;
-    const w = { S, endT: t, crashed };
-    // Obstacle tricks often finish *after* the rotation stops (e.g. the pass back under the
-    // object at the end of a Matty / Powerloop), so wait a moment for trailing crossings.
-    const t0 = S[0].t - 2.2;
-    const nearObs = this.crossLog.some(c => c.t >= t0) || this.nearObstacle(d, 3.5);
-    if (crashed || !nearObs) this.evaluate(w, t); else { w.evalT = t + 1.4; this.pending = w; }
+  // ---- The learned witness (owner, 2026-11-21; tools/witness.py → community/witness.json): extra-trees trained on the library's
+  // confirmed examples (with noisy copies of each), read here as plain arrays. For a move the rules called X it gives the share of
+  // trees' votes for X: one more soft vote in the Watcher (`votes.learned`), only for the tricks it has shown it knows (`vote`)
+  // and only when the model is marked `live` (not yet: see the Watcher), never a veto, never a namer. Absent (Node tests) = no vote. `witFeats` must match `feats` in tools/witness.py (test/witness.js).
+  let WITNESS = null;
+  function setWitness(M) {
+    WITNESS = null;
+    if (
+      !M ||
+      M.format !== 'pro-whooper-witness/1' ||
+      M.nf !== 116 ||
+      !Array.isArray(M.classes) ||
+      !Array.isArray(M.trees) ||
+      M.trees.length > 400
+    )
+      return null;
+    const K = M.classes.length,
+      trees = [];
+    for (const t of M.trees) {
+      const n = t && Array.isArray(t.f) ? t.f.length : 0;
+      if (!n || n > 20000 || !Array.isArray(t.t) || !Array.isArray(t.r) || !Array.isArray(t.v) || t.t.length !== n || t.r.length !== n)
+        return null;
+      for (let i = 0; i < n; i++) {
+        const f = t.f[i],
+          r = t.r[i];
+        if (
+          !Number.isInteger(f) ||
+          !Number.isInteger(r) ||
+          f >= M.nf ||
+          (f >= 0 ? !(r > i && r < n && i + 1 < n && Number.isFinite(t.t[i])) : !(r >= 0 && r < t.v.length))
+        )
+          return null;
+      } // children only ever lie further on: no loops
+      if (
+        !t.v.every(
+          v =>
+            Array.isArray(v) &&
+            v.length % 2 === 0 &&
+            v.length <= 8 &&
+            v.every((x, j) => Number.isInteger(x) && x >= 0 && (j % 2 ? x <= 100 : x < K))
+        )
+      )
+        return null;
+      trees.push({ f: Int16Array.from(t.f), t: Float64Array.from(t.t), r: Int32Array.from(t.r), v: t.v });
+    }
+    WITNESS = {
+      classes: M.classes.map(c => String(c).slice(0, 60)),
+      vote: new Set((Array.isArray(M.vote) ? M.vote : []).map(String)),
+      live: M.live === true,
+      trees,
+      stats: M.stats && typeof M.stats === 'object' ? M.stats : {},
+      updated: String(M.updated || '').slice(0, 20)
+    };
+    return WITNESS;
   }
-  evaluate(w, now) {
-    const S = w.S, crashed = w.crashed, t = now;
-    const toks = this.tokenize(S);
-    const t0 = S[0].t - 2.2, t1 = now;
-    const crosses = this.crossLog.filter(c => c.t >= t0 && c.t <= t1);
-    const contacts = this.contacts.filter(c => c.t >= S[0].t - 0.1 && c.t <= Math.min(t1, w.endT + 0.6));
-    this.contacts = this.contacts.filter(c => c.t > t1);
-    const res = [];
-    const dbg = { t: +now.toFixed(2), toks: toks.map(tk => tk.ax + (tk.dir > 0 ? '+' : '-') + Math.round(tk.raw) + (tk.inv ? 'i' : '') + (tk.maxGap > 0.15 ? `(stall ${tk.maxGap.toFixed(2)}s)` : '')).join(' '),
-      cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - S[0].t).toFixed(1)}s`).join(' '), result: [], near: null,
-      samples: S.filter((_, i) => i % 20 === 0).map(x => [+(x.t - S[0].t).toFixed(3), +x.pos.x.toFixed(3), +x.pos.y.toFixed(3), +x.pos.z.toFixed(3), +x.q.w.toFixed(4), +x.q.x.toFixed(4), +x.q.y.toFixed(4), +x.q.z.toFixed(4), ...x.r.map(v => Math.round(v))]) };
-    (this.debug = this.debug || []).push(dbg); if (this.debug.length > 12) this.debug.shift();
-    if (crashed) { dbg.result.push('Crash'); this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks }); return; }
-    if (!toks.length) return;
-    // obstacle-based first (needs crossings), else open air greedy
-    const ob = this.matchObstacle(toks, crosses);
-    const sg = toks.length === 1 && (toks[0].ax === 'P' || toks[0].ax === 'R') && toks[0].segments >= 2 && toks[0].maxGap >= 0.42 && Math.abs(toks[0].raw - 360) < 60 ? toks[0] : null;
-    if (ob) res.push(ob);
-    else if (sg) res.push({ name: 'Segmented Flips/Rolls', toks: [sg], err: 0.05, segmentedOK: true });
-    else {
+  function witFeats(sig) {
+    const X = new Float64Array(116),
+      c = sig.c,
+      d = Math.max(+sig.d || 0.1, 0.1),
+      u = sig.u && sig.u.length === LIB_N ? sig.u : null;
+    let o = 0;
+    for (let i = 0; i < 72; i++) X[o++] = c[i] / 360;
+    let mn = 1,
+      sum = 0,
+      inv = 0;
+    for (let i = 0; i < 24; i++) {
+      const v = u ? u[i] / 100 : 1;
+      X[o++] = v;
+      mn = Math.min(mn, v);
+      sum += v;
+      if (v < -0.3) inv++;
+    }
+    X[o++] = Math.log(d);
+    for (let a = 0; a < 3; a++) X[o++] = Math.abs(c[69 + a]) / 360;
+    for (let a = 0; a < 3; a++) {
+      let s = 0;
+      for (let i = 1; i < 24; i++) s += Math.abs(c[i * 3 + a] - c[(i - 1) * 3 + a]);
+      X[o++] = s / 360 / d;
+    }
+    X[o++] = mn;
+    X[o++] = sum / 24;
+    X[o++] = u ? u[23] / 100 : 1;
+    X[o++] = inv / 24;
+    if (typeof sig.ps === 'string') {
+      const ps = sig.ps,
+        cnt = ch => Math.min(ps.split(ch).length - 1, 3) / 3;
+      X[o] = Math.min(ps.length, 6) / 6;
+      X[o + 1] = cnt('U');
+      X[o + 2] = cnt('O');
+      X[o + 3] = cnt('G');
+      const f = 'UOG'.indexOf(ps[0] || '?');
+      if (f >= 0) X[o + 4 + f] = 1;
+      X[o + 7] = ps.includes('OU') ? 1 : 0;
+      X[o + 8] = ps.includes('UO') ? 1 : 0;
+    }
+    return X;
+  }
+  // the share of the trees' votes that go to `name` for this move (0-1), or null when the witness does not know that trick
+  function witnessProb(sig, name) {
+    const Wt = WITNESS;
+    if (!Wt || !sig || !Array.isArray(sig.c) || sig.c.length !== 72) return null;
+    const k = Wt.classes.indexOf(name);
+    if (k < 0) return null;
+    const X = witFeats(sig);
+    let p = 0;
+    for (const t of Wt.trees) {
       let i = 0;
-      while (i < toks.length) {
-        let best = null;
-        for (let k = Math.min(4, toks.length - i); k >= 1 && !best; k--) {
-          const slice = toks.slice(i, i + k);
-          for (const tr of OPEN_TRICKS) {
-            for (const pp of tr.parsed) { const m = matchTokens(pp, slice); if (m) { best = { name: tr.name, toks: slice, err: m.err, k }; break; } }
-            if (best) break;
-          }
-        }
-        if (best) { res.push(best); i += best.k; } else i++;
+      while (t.f[i] >= 0) i = X[t.f[i]] <= t.t[i] ? i + 1 : t.r[i];
+      const v = t.v[t.r[i]];
+      let tot = 0,
+        me = 0;
+      for (let j = 0; j < v.length; j += 2) {
+        tot += v[j + 1];
+        if (v[j] === k) me = v[j + 1];
       }
+      if (tot) p += me / tot;
     }
-    if (!ob) { const nm = this.nearMiss(toks, crosses); if (nm) { dbg.near = nm; this.emit({ name: 'near', near: nm }); } }
-    for (const r of res) {
-      dbg.result.push(r.name);
-      const grade = this.grade(r, contacts, toks);
-      this.emit({ name: r.name, exec: grade.exec, clean: grade.clean, obstacle: r.obstacle || null, toks: r.toks, notes: grade.notes });
-    }
+    return p / Wt.trees.length;
   }
-  matchObstacle(toks, crosses) {
-    // group crossings per obstacle
-    const byObj = {};
-    for (const c of crosses) if (c.kind !== 'G') (byObj[c.obj] = byObj[c.obj] || []).push(c);
-    let best = null;
-    for (const id in byObj) {
-      const seq = byObj[id];
-      const kinds = seq.map(c => c.kind).join('');
-      for (const tr of OBSTACLE_TRICKS) {
-        const need = tr.cross;
-        const pos = kinds.lastIndexOf(need); if (pos < 0) continue;
-        // direction alternation check
-        const part = seq.slice(pos, pos + need.length);
-        let ok = true;
-        if (need === 'UOU' && !(part[0].dir !== part[1].dir && part[1].dir !== part[2].dir)) ok = false;
-        if ((need === 'OU' || need === 'UO') && part[0].dir === part[1].dir) ok = false;
-        if (!ok) continue;
-        if (!endOK(tr, part[part.length - 1])) continue;
-        if (!tr.lateral && part.every(c => c.latDot > 0.7)) continue;            // sideways passes = jump-rope family
-        if (need === 'UOU' && this.stayedUpright && this.stayedUpright(part[0].t, part[2].t) && toks.some(x => x.ax === 'P' && x.dir > 0)) continue; // a loop that stayed upright (body or view) is a maverick, not a powerloop
-        if (tr.tap && !(this.tapIn && this.tapIn(tr.tap, +id, toks.length ? toks[0].t0 - 0.4 : part[0].t, part[part.length - 1].t + 0.15))) continue;
-        if (this.watcher && (this.vetoedFor(tr.name, toks.length ? toks[0].t0 : part[0].t) || !this.watcher.pre(tr.name, { toks, part, obj: +id, t0: toks.length ? toks[0].t0 : part[0].t }))) continue;   // the Watcher's hard checks
-        // match against big tokens (ignore trailing/leading 90s if needed)
-        const variants = [toks, trimNinety(toks), dropSmall(toks)];
-        for (const tv of variants) for (const pp of tr.parsed) {
-          const m = matchTokens(pp, tv);
-          if (!m) continue;
-          if (tr.name === 'Mavvelmann' && this.mavvelOK && !this.mavvelOK(tv, part)) continue;
-          if (tr.name === 'Matty Twister' && this.twisterOK && !this.twisterOK(tv, part, +id)) continue;
-          const early = tr.name === 'Barani' && this.horizonAt && (() => { const y = tv.find(k => k.ax === 'Y'); return y && !this.horizonAt(y.t0); })();
-          const cand = { name: early ? 'Power Swap' : tr.name, toks: tv, err: m.err + (tv !== toks ? 0.15 : 0), obstacle: seq[0].name, obj: +id, clen: need.length, part, ct1: part[part.length - 1].t, ...(early ? { earlyYaw: true } : {}) };
-          if (m && better(cand, best)) best = cand;
-        }
-      }
-      // maverick family: UOU, no big pitch, never inverted (except mavvy roll's roll)
-      if (/UOU/.test(kinds)) {
-        const bigP = toks.filter(x => x.ax === 'P' && x.raw > 200);
-        const rolls = toks.filter(x => x.ax === 'R');
-        const part = seq.slice(kinds.lastIndexOf('UOU'), kinds.lastIndexOf('UOU') + 3);
-        const r1 = rolls.length === 1 ? rolls[0] : null;   // a Mavvy Roll's roll is the one time it may go inverted
-        const upright = !this.stayedUpright ? true : r1 ? this.stayedUpright(part[0].t, r1.t0 - 0.03) && this.stayedUpright(r1.t1 + 0.03, part[2].t)
-          : this.stayedUpright(part[0].t, part[2].t);   // maverick: forward-looking the whole way (body or camera view)
-        const sideOver = part[1].kind === 'O' && part[1].latDot > 0.85 && Math.abs(part[1].fwdDot) < 0.3 && part[1].upY < -0.3;   // over the top sideways and upside-down: a Side Loop, never a maverick (owner's review of RodFPV)
-        // a Maverick Loop (no roll) is judged by its top (owner, 2026-11-27: his Mavericks round Clappy's wires were missed, and every Maverick
-        // call pilots rejected went over forward, sideways or nearly upside-down): over the object upright and travelling backward
-        // (MAV_OVER_UP, MAV_OVER_BACK), and never on its back on the way round (MAV_MIN_UP), so a steep dive down the far side (nose straight
-        // down, up.y ~0) still counts; a Mavvy Roll keeps the old "upright apart from its roll"
-        const mavTop = !rolls.length && part[1].kind === 'O' && (part[1].upY ?? 1) > MAV_OVER_UP && (part[1].fwdDot ?? -1) < -MAV_OVER_BACK;
-        const mavOK = rolls.length ? upright : mavTop && (!this.minUpBetween || Math.max(this.minUpBetween(part[0].t, part[2].t), this.minCamUpBetween(part[0].t, part[2].t)) > MAV_MIN_UP);
-        if (!bigP.length && mavOK && !sideOver && part[0].dir !== part[1].dir && !part.every(c => c.latDot > 0.7) && (part[0].spd ?? 9) >= 1.5 && (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) && (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)) {   // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
-          const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : (rolls.length === 0 ? 'Maverick Loop' : null);
-          const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
-          if (nm && better(cand, best)) best = cand;
-        }
-      }
-      // jump-rope family: passes made flying sideways
-      // Only on things you really jump-rope: a bar with room to fly under it (pilot: they triggered on benches, the picnic
-      // table and other objects that aren't over/under bars). Not trees, not the pilot, nothing lower than 0.9 m.
-      const jo = this.world.objs.find(o => o.id === +id), jumpable = !jo || (jo.obstacle && !jo.round && jo.kind !== 'pilot' && jo.obstacle.under >= 0.9);
-      if (jumpable) { const lat = seq.filter(c => c.latDot > 0.6); const lk = lat.map(c => c.kind).join('');
-        const R = toks.filter(x => x.ax === 'R'), P = toks.filter(x => x.ax === 'P'), Y = toks.filter(x => x.ax === 'Y');
-        const pick = (nm, cl, pp) => { const cand = { name: nm, toks, err: 0.12, obstacle: seq[0].name, obj: +id, clen: cl, part: pp, ct1: pp[pp.length - 1].t, draft: true }; if (better(cand, best)) best = cand; };
-        if (lat.length >= 2 && !P.some(x => x.raw > 200) && lat.slice(-2).every(c => (c.spd ?? 9) >= 1.5)) {
-          const pp = lat.slice(-3);
-          // (owner's review, 2026-11-18: side loops and jump ropes were called as each other) the book tells them apart by
-          // how the quad goes over the top: a Side Loop is UPSIDE-DOWN over it, rolling toward it all the way round (a slow,
-          // steady roll; back-to-back side loops roll on from one loop into the next, so there is no clean 360 token per
-          // loop); a Jump Rope stays upright; a Double Dutch flicks a fast 360 the other way at the peak.
-          const rate = x => x.raw / Math.max(0.05, x.t1 - x.t0), ov = lat.filter(c => c.kind === 'O').pop();
-          const uA = ov && seq.filter(c => c.kind === 'U' && c.t < ov.t).pop(), uB = ov && seq.find(c => c.kind === 'U' && c.t > ov.t), loopT = uA && uB ? uB.t - uA.t : 0;   // a Double Dutch's flick is quick, or at least short against the loop; a side loop rolls most of the way round
-          const fast = ov && R.find(x => x.t1 >= ov.t - 0.8 && x.t0 <= ov.t + 1.2 && x.raw <= 520 && ((x.raw >= 270 && rate(x) >= 330) || (x.raw >= 220 && loopT > 0 && x.t1 - x.t0 <= 0.45 * loopT)));
-          const sideLoop = /UOU$/.test(lk) && (() => { const o = pp[1]; return o.kind === 'O' && o.upY < -0.3 && !fast && (!this.sweptBetween || this.sweptBetween(pp[0].t, pp[2].t) >= 240); })();
-          if (sideLoop || (/UOU$/.test(lk) && !fast && pp[1].upY < 0 && R.some(x => Math.abs(x.raw - 360) < 80))) pick('Side Loop', 3, pp);
-          else if (/U$/.test(lk) && (() => {   // Burrito: big roll before crossing over, rewind down the same side, finish under
-            const rb = R.filter(x => x.raw >= 150).pop(); if (!rb) return false;
-            const noOver = !lat.some(c => c.kind === 'O' && c.t > rb.t0 - 0.6);       // a Double Dutch rolls at the peak, over the object
-            // (owner, 2026-11-18: trippy spins were called Burrito Rolls) a Burrito is a sideways move on an over/under, not
-            // done while circling a pole and looking up it: a roll made while the quad was going round a pole is the trippy's
-            { const inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, rb.t1) - Math.max(w.t0, rb.t0)), 0); if (inPose >= 0.4 * Math.max(0.1, rb.t1 - rb.t0)) return false; }   // the roll was mostly flown in a trippy's pose round a pole
-            // (owner, 2026-11-23, the site's words: "begin with one Jump Rope, then, as you initiate … another … before you cross over
-            // the object, do a roll in the opposite direction and rewind back down the same side") the Jump Rope comes first: over
-            // this object sideways and upright, back under it, within BURRITO_JR s before the roll; and the roll goes AGAINST the way
-            // the jump rope went round the object (a roll with it is a Side Loop's: there dir = -latS of the over pass)
-            const jO = lat.filter(c => c.kind === 'O' && c.t < rb.t0 && c.t > rb.t0 - BURRITO_JR).pop(), jU = jO && lat.find(c => c.kind === 'U' && c.t > jO.t && c.t < rb.t0 + 0.3);
-            if (!jO || !jU || !(jO.upY > 0.2)) return false;
-            if (jO.latS && Math.sign(rb.dir) !== jO.latS) return false;
-            return noOver;
-          })()) pick('Burrito Roll', 2, lat.slice(-2));
-          else if (fast || (ov && R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230))) pick('Double Dutch', 2, lat.slice(-2));   /* (a Double Dutch jumps over: without a pass over the object a quick roll under it is no Double Dutch) */   // the flick at the peak is fast; a slow roll all the way round is a side loop
-          else if (Y.some(x => Math.abs(x.raw - 360) < 80) && (() => {   // (owner, 2026-11-20: "a cinnamon roll is not an inverted trick") a jump rope with a slow yaw: upright over the top and all the way through, like a Cradle
-            const p2 = lat.slice(-2), ov = p2.find(c => c.kind === 'O');
-            if (ov && ov.upY != null && ov.upY < -0.15) return false;
-            if (this.trackFrac && this.trackFrac(p2[0].t - 0.3, p2[1].t) < CINNAMON_VIEW) return false;   /* the site: the object stays in view all the way round */
-            { const yb = Y.find(x => Math.abs(x.raw - 360) < 80), inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, yb.t1) - Math.max(w.t0, yb.t0)), 0); if (inPose >= 0.4 * Math.max(0.1, yb.t1 - yb.t0)) return false; }   // the yaw of a trippy going round its pole (HemmingsonFPV's warehouse trippy was called Cinnamon Roll twice), as for the Burrito
-            return !this.minUpBetween || this.minUpBetween(p2[0].t - 0.5, p2[1].t) > -0.15;
-          })()) pick('Cinnamon Roll', 2, lat.slice(-2));
-          // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
-          // roll or pitch (a Split-S has a 180 roll and a half loop) and both passes really are sideways
-          else if (/^(OU|UO)$/.test(lk.slice(-2)) && lat[lat.length - 1].t - lat[lat.length - 2].t < 3 && lat[lat.length - 1].dir !== lat[lat.length - 2].dir && !R.some(x => x.raw > 120) && !P.some(x => x.raw > 110) && lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6) && lat.slice(-2).every(c => c.kind !== 'O' || c.upY > 0.2)) pick('Jump Rope', 2, lat.slice(-2));   // upright over the top   // one over + one under, there and back
-        }
-      }
-      // beginner switch: maverick over, stall, rewind back over, back under flying backward — no big rotation
-      if (/UOOU$/.test(kinds) && !toks.some(x => x.raw > 160) && seq.slice(-4).filter(c => (c.spd ?? 9) >= 1.2).length >= 3) {
-        const pp = seq.slice(-4); if (endOK({ end: 'back' }, pp[3])) { const cand = { name: 'Beginner Switch', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 4, part: pp, ct1: pp[3].t, draft: true }; if (better(cand, best)) best = cand; }
-      }
-      if (/OU/.test(kinds) && !best) {
-        const p2 = seq.slice(kinds.lastIndexOf('OU'), kinds.lastIndexOf('OU') + 2);
-        const big = toks.filter(x => x.raw > 200);
-        // over flying forward, under flying backward, both at speed, no flip (the braking nod is too small to be a token)
-        const brisk = p2.every(c => (c.spd ?? 9) >= 1.5) && (p2[0].fwdDot > 0.3 || toks.some(x => x.ax === 'P' && x.raw >= 60));
-        // pilot: Matty flips inside combos were still called Beginner Matty. Mid-combo the flip is often slow, broken up or
-        // partly claimed by the trick before, so no single big pitch token is left. Go by how far the quad actually tumbled
-        // between going over and coming back under: a beginner matty only nods (well under a half turn), a Matty goes round.
-        const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0;   // and it must be FORWARD: the tail of a powerloop between the two passes (pilot review of RodFPV: Power Flip read as Matty + Power Flip) is the other way round
-        const flipped = tumble >= 230 && (!this.fwdSweptBetween || this.fwdSweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) >= 0.6 * tumble) && !(this.cur && this.cur[1] && this.cur[1].raw > 45) && !toks.some(x => x.ax === 'R' && x.raw > 120) && !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) && !toks.some(x => x.ax === 'Y' && x.raw > 120);
-        // a Beginner Matty never goes inverted and never tumbles (pilot: a powerloop round the covered walkway was called one):
-        // if it tumbled but the flip can't be read yet (rotation still going), say nothing and wait
-        const gentle = tumble < 200 && (!this.stayedUpright || this.stayedUpright(p2[0].t - 0.3, p2[1].t));
-        if (!big.length && brisk && (flipped || gentle) && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1])) best = { name: flipped ? 'Matty Flip' : 'Beginner Matty',   /* owner, 2026-11-23: the climb back over is not required */ toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 2, part: p2, ct1: p2[1].t };
-      }
-      if (/OUO/.test(kinds) && !best) {
-        const big = toks.filter(x => x.raw > 200);
-        const p3 = seq.slice(kinds.lastIndexOf('OUO'), kinds.lastIndexOf('OUO') + 3);
-        // over, back under flying BACKWARD and upright, up and over again — upright the whole way round
-        const bm = p3[1].fwdDot < -0.2 && p3[1].upY > 0.45 && p3[0].dir !== p3[1].dir && p3[1].dir !== p3[2].dir && p3[2].t - p3[0].t < 6 && (!this.stayedUpright || this.stayedUpright(p3[0].t, p3[2].t)) && (!this.sweptBetween || this.sweptBetween(p3[0].t, p3[2].t) < 260);
-        if (bm && !big.length && p3.every(c => (c.spd ?? 9) >= 1.5) && toks.some(x => x.ax === 'P' && x.raw >= 60)) best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part: p3, ct1: p3[2].t };
-      }
-    }
-    // knife edge through a gap. Owner, 2026-11-20: a Knife Edge (and the Reverse one) only counts through a NARROW gap: its
-    // short side at most KNIFE_X quad widths (the pilot's own whoop: ducts and all), with the quad rolled so its up axis lies
-    // along that short side. A rolled pass through a wide gate is just a banked pass. Ninja Star keeps any gap.
-    const qW = this.quadWidth(), knifeOK = c => c.narrow == null || (c.narrow <= KNIFE_X * qW + 0.005 && (c.nAlign ?? 1) > 0.5);
-    const g = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8), gk = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8 && knifeOK(c));
-    if (!best && g) {
-      const rl = toks.filter(x => x.ax === 'R');
-      if (gk && rl.length >= 1 && rl.every(x => x.raw < 160)) best = { name: 'Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
-      const yw = toks.find(x => x.ax === 'Y' && Math.abs(x.raw - 360) < 70);
-      if (yw && (g.narrow == null || g.narrow <= NINJA_X * qW + 0.005)) best = { name: 'Ninja Star', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
-      if (gk && gk.fwdDot < -0.4 && toks.some(x => x.ax === 'P' && x.raw > 120)) best = { name: 'Reverse Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
-    }
-    // Split-S by attitude (2026-11-21: 16 of 34 confirmed Split-S labels were missed). The half roll is measured well, the pull-through
-    // is not (55-140 deg read for a real half loop: slow ends under the token threshold, part of it on yaw with camera tilt). When
-    // nothing in the table fits: one half roll, at most a nose-up pull, over then under ONE object, upside-down on the way and upright
-    // under it, flying forward the other way from where the roll began = a Split-S.
-    if (!best && this.fbIn) for (const id in byObj) { const seq = byObj[id], kinds = seq.map(c => c.kind).join(''), pos = kinds.lastIndexOf('OU'); if (pos < 0) continue;
-      const part = seq.slice(pos, pos + 2), big = toks.filter(x => x.raw >= 90), R = big.filter(x => x.ax === 'R');
-      if (part[0].dir === part[1].dir || R.length !== 1 || R[0].raw < 100 || R[0].raw > 250 || big.some(x => x !== R[0] && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < R[0].t0 - 0.1))) continue;
-      const r = R[0], u = part[1]; if (!(u.upY > 0.5) || !(u.fwdDot > 0.2) || part.every(c => c.latDot > 0.7) || r.t0 > u.t || u.t - r.t0 > SPLIT_LOOK || part[0].t < r.t0 - 1.5) continue;
-      const W = this.fbIn(r.t0 - 0.1, u.t); if (W.length < 4 || Math.min(...W.map(x => x.up.y)) > -0.3) continue;
-      const f0 = W[0].f, f1 = W[W.length - 1].f, h0 = Math.hypot(f0.x, f0.z), h1 = Math.hypot(f1.x, f1.z); if (h0 < 0.3 || h1 < 0.3 || (f0.x * f1.x + f0.z * f1.z) / (h0 * h1) > -0.4) continue;
-      if (this.watcher && (this.vetoedFor('Split S', r.t0) || !this.watcher.pre('Split S', { toks, part, obj: +id, t0: r.t0 }))) continue;
-      const tv = big.filter(x => x === r || x.ax === 'P'); best = { name: 'Split S', toks: tv, err: 0.4, obstacle: seq[0].name, obj: +id, clen: 2, part, ct1: u.t, splitWitness: true }; break; }
-    const pr = this.powerRollWitness && this.powerRollWitness(byObj, toks);
-    if (pr && (!best || (best.clen || 0) < 3 || POWER_ROLL_OVER.has(best.name))) best = pr;
-    return best;
+  function libK(k) {
+    return k && typeof k === 'object' && Array.isArray(k.th) && k.th.length === 8 && k.th.every(Number.isFinite) && Number.isFinite(+k.cmd)
+      ? { th: k.th.map(v => clamp(Math.round(v), 0, 100)), cmd: clamp(Math.round(+k.cmd), 0, 100) }
+      : null;
   }
-  // Power Roll as pilots fly it (owner's labels, 2026-11-27: "a power roll is more of a loop motion, with a roll at the top"; the
-  // difference from a Rubik's Cube is the over/under object). Read from the raw rotations: ONE continuous loop on pitch (P+ 300-460
-  // deg; the table's P+180 / P+180 halves are rarely cut apart) with a 250-460 deg roll inside it, over the top, while going under,
-  // over and back under one object, out upright and flying forward. The game cut these into Immelmann + Split S or a Rubik's Cube.
-  powerRollWitness(byObj, given = []) {
-    const T = this.toks; if (!Array.isArray(T) || !this.fbIn) return null;
-    for (const id in byObj) { const seq = byObj[id], kinds = seq.map(c => c.kind).join(''), pos = kinds.lastIndexOf('UOU'); if (pos < 0) continue;
-      const [u0, o, u1] = seq.slice(pos, pos + 3); if (u0.dir === o.dir || o.dir === u1.dir || u1.t - u0.t > POWER_ROLL_SPAN) continue;
-      if (!(u1.upY > 0.5) || !(u1.fwdDot > 0.2)) continue;
-      const P = T.filter(k => k.ax === 'P' && k.dir > 0 && k.t1 > u0.t - 0.8 && k.t0 < u1.t + 0.3), pSum = P.reduce((s, k) => s + k.raw, 0); if (pSum < 300 || pSum > 460) continue;
-      const p0 = Math.min(...P.map(k => k.t0)), p1 = Math.max(...P.map(k => k.t1));
-      const R = T.find(k => k.ax === 'R' && k.raw >= 250 && k.raw <= 460 && (k.t0 + k.t1) / 2 > p0 && (k.t0 + k.t1) / 2 < p1 && o.t > k.t0 - 0.7 && o.t < k.t1 + 0.7); if (!R) continue;
-      if (T.some(k => k.ax === 'P' && k.dir < 0 && k.raw > 120 && k.t1 > p0 && k.t0 < p1)) continue;   // a flip the other way inside it: not a loop with a roll
-      if (this.watcher && (this.vetoedFor('Power Roll', p0) || !this.watcher.pre('Power Roll', { toks: [...P, R], part: [u0, o, u1], obj: +id, t0: p0 }))) continue;
-      // the call takes the detector's own pieces of these rotations (so they are used up and no Rubik's Cube / Roll is read from them too)
-      const own = given.filter(x => x.ax !== 'Y' && x.t1 > p0 - 0.15 && x.t0 < p1 + 0.15);
-      if (!own.some(x => x.ax === 'R' && x.raw >= 200) || own.filter(x => x.ax === 'P').reduce((s, x) => s + x.raw, 0) < 250) continue;
-      return { name: 'Power Roll', toks: own, err: 0.3, obstacle: seq[0].name, obj: +id, clen: 3, part: [u0, o, u1], ct1: u1.t, powerRollWitness: true };
-    }
-    return null;
+  // A library example's motion (tools/library.js; the knowledge bot in maneuvers.js flies it): 25 Hz from just before the move
+  // to just after, in a frame turned to the flight's own heading (forward = -z, as the body), so no map position travels:
+  // f 'open' (origin = where it started) or 'obj' (origin = where it first crossed the object's over/under line; y is height
+  // above the ground, un / ov the object's under / over heights then); x y z in cm, q the attitude's x y z ×1e4 (w ≥ 0), th
+  // throttle 0-100. Untrusted input: every number is checked and clamped.
+  function libMo(m) {
+    if (!m || typeof m !== 'object' || (m.f !== 'open' && m.f !== 'obj')) return null;
+    const n = Array.isArray(m.x) ? m.x.length : 0;
+    if (n < 8 || n > 400) return null;
+    const okA = (a, len, lim) => Array.isArray(a) && a.length === len && a.every(v => Number.isFinite(v) && Math.abs(v) <= lim);
+    if (!okA(m.x, n, 1e5) || !okA(m.y, n, 1e5) || !okA(m.z, n, 1e5) || !okA(m.q, n * 3, 10001)) return null;
+    const th = okA(m.th, n, 100) ? m.th.slice() : null,
+      un = clamp(+m.un || 0, 0, 60),
+      ov = clamp(+m.ov || 0, 0, 80);
+    if (m.f === 'obj' && !(ov > un)) return null;
+    const s = (v, n, re) => (typeof v === 'string' && v.length <= n && (!re || re.test(v)) ? v : null);
+    const o = Array.isArray(m.o) && m.o.length === 3 && m.o.every(v => Number.isFinite(v) && Math.abs(v) <= 2000) ? m.o.slice() : null;
+    return {
+      f: m.f,
+      n,
+      x: m.x.slice(),
+      y: m.y.slice(),
+      z: m.z.slice(),
+      q: m.q.slice(),
+      th,
+      un,
+      ov,
+      hz: 25,
+      ct: clamp(+m.ct || 20, -10, 60),
+      hit: m.hit === 1,
+      map: s(m.map, 24, /^[a-z0-9_-]+$/),
+      o,
+      yaw: o && Number.isFinite(m.yaw) ? clamp(+m.yaw, -7, 7) : null,
+      on: s(m.on, 60),
+      by: s(m.by, 30),
+      at: s(m.at, 30, /^[0-9T:.\-Z+]+$/),
+      t: Number.isFinite(m.t) ? clamp(+m.t, 0, 3600) : null
+    }; // where / when / who: shown to the judge (always escaped)
   }
-  nearMiss(toks, crosses) {
-    const objs = [...new Set(crosses.filter(c => c.kind !== 'G').map(c => c.obj))];
-    let best = null;
-    for (const tr of OBSTACLE_TRICKS) for (const tv of [toks, trimNinety(toks), dropSmall(toks)]) for (const pp of tr.parsed) {
-      if (tr.tap || tr.draft) continue;
-      if (!matchTokens(pp, tv)) continue;
-      const cand = { name: tr.name, need: tr.cross, end: tr.end };
-      if (!best || cand.need.length > best.need.length || (cand.need.length === best.need.length && trickPoints(cand.name) > trickPoints(best.name))) best = cand;
+  function setLibrary(L) {
+    if (!L || L.format !== 'pro-whooper-library/1' || !Array.isArray(L.examples)) {
+      LIBRARY = null;
+      return null;
     }
-    if (!best) return null;
-    const words = { U: 'under', O: 'over' };
-    if (!objs.length) return null;
-    const id = objs[0], cs = crosses.filter(c => c.obj === id), seq = cs.map(c => c.kind).join('');
-    if (seq.endsWith(best.need) || (best.need.length > 1 && seq.includes(best.need))) {
-      const last = cs[cs.length - 1];
-      if (last && last.upY < 0.45) return `Almost ${best.name} on ${last.name}: you weren't upright on the last pass ${words[last.kind]}`;
-      if (best.end === 'back') return `Almost ${best.name} on ${last.name}: finish upright, facing the object, flying backward under it`;
-      if (best.end === 'fwd') return `Almost ${best.name} on ${last.name}: finish flying forward under it`;
-    }
-    return `Almost ${best.name} on ${crosses.find(c => c.obj === id).name}: needs ${best.need.split('').map(k => words[k]).join(' → ')}, saw ${seq ? seq.split('').map(k => words[k]).join(' → ') : 'nothing'}`;
-  }
-  grade(r, contacts, allToks) {
-    let clean = 100; const notes = [];
-    const used = r.toks;
-    // rotation accuracy
-    clean -= Math.min(30, (r.err || 0) * 120);
-    // pauses / segmentation inside the trick
-    const pauseOK = (OBSTACLE_TRICKS.find(x => x.name === r.name) || {}).pauseOK || 0;   // a level-out hover that is part of the trick
-    for (let i = 0; i < used.length - 1 && !r.segmentedOK; i++) { const gap = used[i + 1].t0 - used[i].t1; if (gap > 0.22 && gap > pauseOK) { clean -= Math.min(30, (gap - 0.22) * 90); notes.push('segmented'); } }
-    if (!r.segmentedOK) for (const t of used) if (t.maxGap > 0.1) { clean -= Math.min(50, (t.maxGap - 0.06) * 180); notes.push('stalled mid-rotation'); }
-    // off-axis wobble
-    for (const t of used) if (t.offRatio > 0.35) { clean -= Math.min(20, (t.offRatio - 0.35) * 60); notes.push('off-axis'); }
-    // leftover rotation tokens not part of the trick
-    const extra = allToks.length - used.length; if (extra > 0 && r.obstacle) { clean -= 8 * extra; notes.push('extra rotation'); }
-    clean = Math.round(clamp(clean, 0, 100));
-    let exec = clean >= 70 ? 'CLEAN' : 'SLOPPY';
-    const bumps = contacts.filter(c => !(c.tap));
-    if (bumps.length) { exec = 'BUMP'; notes.push('contact'); }
-    return { exec, clean, notes };
-  }
-  continuousDetectors(d, dt, t, rc) {
-    const up = d.up(), speed = len(d.vel);
-    // Wall tap: gentle contact with a wall surface, bottom of the whoop toward the wall
-    if (!this.liveTaps && d.contactThisStep && d.armed && !d.contactGround && d.contactNormal && Math.abs(d.contactNormal.y) < 0.5) {
-      const o = this.world.objs[d.contactOwner];
-      if (o && (o.kind === 'wall' || o.kind === 'building' || o.wallNormal) && dot(up, d.contactNormal) > 0.55 && d.lastImpact < 3 && t - this.lastTap > 1.2) {
-        this.lastTap = t; this.contacts.forEach(c => { if (t - c.t < 0.05) c.tap = true; });
-        this.emit({ name: 'Wall Tap', exec: 'CLEAN', clean: Math.round(100 - d.lastImpact * 10), obstacle: o.name, continuous: true });
-      }
-    }
-    // Wall ride: travel along a wall, close, rolled so that thrust axis points away from wall
-    // pilot feedback (x2): with a steep camera you can't get flat against the wall, so the frame doesn't need to be close:
-    // start within ~0.9 m with the belly turned toward the wall (roll ≥ ~35° even when pitched forward), then hold the ride
-    // out to 1.3 m and through short wobbles (0.25 s). Must be travelling along the wall, not turning away from it.
-    const w = this.nearWall(d), WR0 = this.wallRide;
-    const along = w && speed > 0.5 && Math.abs(dot(d.vel, w.n)) / speed < 0.6, tiltW = w ? dot(up, w.n) : 0;
-    const riding = w && along && speed > 1.0 && d.armed && !d.crashed && (WR0 ? (w.dist < 1.3 && tiltW > 0.25) : (w.dist < 0.9 && tiltW > 0.4));
-    if (riding) {
-      if (!this.wallRide) { const f0 = d.fwd(); this.wallRide = { t0: t, p0: v3(d.pos.x, d.pos.y, d.pos.z), n0: w.n, h0: Math.atan2(f0.x, f0.z), name: w.name, contact: false, fd: 0, n: 0 }; }
-      const WR = this.wallRide; WR.lastIn = t;
-      // a banked turn away from the wall isn't a ride: the heading swings round and the quad drifts off the wall
-      { const fh = d.fwd(); let dh = Math.atan2(fh.x, fh.z) - WR.h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-        WR.ok = Math.abs(dh) * R2D < 20 && dot(sub(d.pos, WR.p0), WR.n0) < 0.35; }
-      if (d.contactThisStep) WR.contact = true;
-      const f = d.fwd(); WR.fd += speed > 0.5 ? dot(f, d.vel) / speed : 0; WR.n++;
-      if (!WR.emitted && WR.ok && t - WR.t0 > 0.35 && len(sub(d.pos, WR.p0)) > 1.2) {   // live: scores the moment it qualifies
-        WR.emitted = true; WR.name2 = WR.fd / Math.max(1, WR.n) < -0.4 ? 'Reverse Wall Ride' : 'Wall Ride';
-        this.emit({ name: WR.name2, exec: WR.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: WR.name, continuous: true, live: true });
-      }
-    } else if (this.wallRide && !d.crashed && t - this.wallRide.lastIn < 0.25) {
-      // brief wobble off the wall: still the same ride
-    } else if (this.wallRide) {
-      const L = len(sub(d.pos, this.wallRide.p0));
-      const backward = this.wallRide.fd / Math.max(1, this.wallRide.n) < -0.4;
-      if (!this.wallRide.emitted && this.wallRide.ok && this.wallRide.lastIn - this.wallRide.t0 > 0.35 && L > 1.2 && !d.crashed) this.emit({ name: backward ? 'Reverse Wall Ride' : 'Wall Ride', exec: this.wallRide.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: this.wallRide.name, continuous: true });
-      this.wallRide = null;
-    }
-    // Dive (TPW, and the pilot's definition after it was called far too often: 24 calls in 35 minutes, 3 of 4 judged
-    // wrong). A dive is ONE committed descent: nose down, falling fast, pulled out level near the ground. It counts
-    //   - in the open only from really high up (12 m or more, dropping at least 9 m), or
-    //   - beside a tall structure (a wall or building within 3 m for most of the way down), from 6 m, dropping 4.5 m:
-    //     "almost a wall ride, but not quite, just a diving motion".
-    // Coming down from height in a glide, a spiral or a tumble is just coming down.
-    { const D = this.dive, vy = d.vel.y, f = d.fwd();
-      if (!D) { if (d.armed && !d.crashed && vy < -3 && d.pos.y >= 6) this.dive = { t0: t, y0: d.pos.y, T: 0, nose: 0, near: 0, minVy: vy, hit: false, lvl: 0, name: null, rot: this.totRot || 0 }; }
-      else if (d.crashed || !d.armed) this.dive = null;
+    const ex = [],
+      by = {};
+    for (const e of L.examples.slice(0, 5000)) {
+      if (
+        !e ||
+        typeof e.t !== 'string' ||
+        e.t.length > 60 ||
+        !Array.isArray(e.c) ||
+        e.c.length !== LIB_N * 3 ||
+        !e.c.every(Number.isFinite) ||
+        !(+e.d > 0)
+      )
+        continue;
+      const x = {
+        t: canonTrick(e.t),
+        d: clamp(+e.d, 0.05, 12),
+        c: e.c.map(v => clamp(Math.round(v), -5000, 5000)),
+        u: Array.isArray(e.u) && e.u.length === LIB_N && e.u.every(Number.isFinite) ? e.u.map(v => clamp(Math.round(v), -100, 100)) : null,
+        custom: !!e.x,
+        w: clamp(+e.w || 1, 0.1, 5),
+        s: e.s === 'demo' ? 'demo' : e.s === 'reviewer' ? 'reviewer' : 'pilot',
+        neg: !!e.neg,
+        p: String(e.p ?? '').slice(0, 12),
+        obs: !!e.obs,
+        ps: typeof e.ps === 'string' && /^[OUG]{0,8}$/.test(e.ps) ? e.ps : null,
+        k: libK(e.k),
+        mo: libMo(e.mo)
+      };
+      ex.push(x);
+      const b = by[x.t] || (by[x.t] = { pos: 0, neg: 0, demo: false, pilots: new Set(), dur: [] });
+      if (x.neg) b.neg++;
       else {
-        if (vy < -1.5) { D.T += dt; D.lvl = 0; D.minVy = Math.min(D.minVy, vy); if (f.y < -0.42) D.nose += dt;   // nose at least 25 degrees below level
-          if ((Math.round(t * 1000) % 20) === 0) { let best = null; for (const o of this.world.objs) { if (!(o.kind === 'wall' || o.kind === 'building')) continue; for (const pr of o.prims) { if (pr.type !== 'box' || pr.aabb.max.y < d.pos.y - 0.5) continue; const r = sphereVs(pr, d.pos, 3.0); if (r && Math.abs(r.n.y) <= 0.3 && (!best || r.d > best.d)) best = { d: r.d, name: o.name }; } } if (best) { D.near += 0.02; D.name = best.name; } }
-          if (d.contactThisStep && d.lastImpact > 0.6) D.hit = true; }
-        else { D.lvl += dt;   // levelling out: judge it once the descent has clearly ended
-          if (D.lvl > 0.12) { const drop = D.y0 - d.pos.y, beside = D.T > 0 && D.near / D.T >= 0.5, tumble = ((this.totRot || 0) - D.rot) > 420;
-            const committed = D.T >= 0.5 && D.nose / D.T >= 0.4 && D.minVy <= -7 && !D.hit && !tumble && up.y > 0.4 && d.pos.y < 3.5;
-            if (committed && ((beside && D.y0 >= 6 && drop >= 4.5) || (D.y0 >= 12 && drop >= 9))) this.emit({ name: 'Building Dive', exec: 'CLEAN', clean: beside ? 95 : 90, obstacle: beside ? D.name : 'open air', continuous: true });   /* owner, 2026-11-23: an open-air dive counts too */
-            this.dive = null; } }
-        if (this.dive && t - D.t0 > 8) this.dive = null;
-      } }
-    // Stall rewind: climb (>2.5 m/s up) beside something tall, stall, come back down without rotating
-    if (d.vel.y > 2.5 && d.armed && !this.climb) this.climb = { t0: t, y0: d.pos.y, p0: v3(d.pos.x, 0, d.pos.z), rot: 0, peak: d.pos.y };
-    if (this.climb) {
-      const rr = d.pilotRates(); this.climb.rot += (Math.abs(rr[0]) + Math.abs(rr[1])) * dt;
-      this.climb.peak = Math.max(this.climb.peak, d.pos.y);
-      if (d.vel.y < -2.5 && this.climb.peak - this.climb.y0 > 2.5 && this.climb.rot < 120 && this.nearTall(d, 3)) {
-        const back = Math.hypot(d.pos.x - this.climb.p0.x, d.pos.z - this.climb.p0.z);
-        if (back < 2.5) this.emit({ name: 'Stall Rewind', exec: 'CLEAN', clean: 88, obstacle: this.nearTall(d, 3), continuous: true });
-        this.climb = null;
-      } else if (t - this.climb.t0 > 4 || this.climb.rot > 200) this.climb = null;
-    }
-    // Slide Disarm (TPW: disarm on the move, slide across the ground or an object's surface, re-arm before stopping, fly
-    // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
-    // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
-    if (d.contactThisStep) this.lastTouch = t;
-    this.stickTick(d, t); this.deadTick(d, t); this.cornerTick(d, dt, t); this.uhTick(d, t); this.rollbackTick(d, t);
-    const sl = this.slide;
-    if (sl) { const hs = Math.hypot(d.vel.x, d.vel.z);
-      if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) { sl.lastC = t; const o = this.world.objs[d.contactOwner]; sl.surface = d.contactGround || !o ? 'the ground' : o.name; }
-      const on = t - sl.lastC < 0.15; if (on) sl.dist += hs * dt;
-      if (on && hs < 0.15) { if (sl.stopT == null) sl.stopT = t; } else sl.stopT = null;
-      if (d.crashed || t - sl.t > 10 || (sl.stopT != null && t - sl.stopT > 1.0)) this.slide = null;   // came to rest: the moment has passed
-    }
-  }
-  // Rollback and Juicy Rollback (owner, 2026-11-23: "make sure our understanding of rollback is based on these attempts": RodFPV's 9
-  // labels on Clappy's footbridge, re-flown). Under an object flying on; straight after (or as) it passes, over onto its back by PITCH
-  // (back, a Snapback's way = Rollback: 136-189 deg measured; forward, a Juicy Flick's = Juicy Rollback: 173-200), a roll back upright
-  // (114-417 deg as the gyro split it with yaw), and back UNDER the same object the other way, upright and travelling backward,
-  // 1.6-2.4 s after the first pass. Judged when the pass back under comes: nothing else is read from that stretch
-  rollbackTick(d, t) { const L = this.crossLog, n0 = this.rbN ?? 0; this.rbN = L.length; if (L.length <= n0) { if (L.length < n0) this.rbN = L.length; return; }
-    for (let i = Math.min(n0, L.length); i < L.length; i++) { const u2 = L[i]; if (u2.kind !== 'U' || !(u2.upY > 0.45) || !(u2.fwdDot < -0.4) || t - (this.rbT ?? -9) < 1.0) continue;
-      let u1 = null; for (let j = i - 1; j >= 0 && u2.t - L[j].t <= ROLLBACK_BACK; j--) { const c = L[j]; if (c.obj !== u2.obj) continue; if (c.kind === 'O') break; if (c.kind === 'U' && c.dir !== u2.dir && u2.t - c.t >= 0.6) { u1 = c; break; } }
-      if (!u1) continue;
-      const H = (this.attLog || []).filter(r => r[0] >= u1.t - 1.3 && r[0] <= u2.t), k = H.findIndex(r => r[1] < 0); if (k < 0 || Math.min(...H.map(r => r[1])) > -0.3) continue;
-      const tI = H[k][0], a = H.find(r => r[0] >= tI - 0.7) || H[0], b = H.find(r => r[0] >= tI + 0.15) || H[H.length - 1], dP = b[4] - a[4], dR = b[3] - a[3];
-      if (tI > u1.t + 1.0 || Math.abs(dP) < 90 || Math.abs(dR) > Math.abs(dP)) continue;   // onto its back by roll is a Half Matty's way in, not this
-      { let roll = 0; for (let q = 1; q < H.length; q++) roll += Math.abs(H[q][3] - H[q - 1][3]); if (roll < ROLLBACK_ROLL) continue; }   // it comes upright again by ROLL (Rod's: 114-417 deg); a Matty that happens to pass under twice flips all the way round on pitch
-      const t0 = u1.t - 1.3; this.rbT = t;
-      for (const q of this.toks) if (q.t1 > t0 && q.t0 <= t) q.usedUntil = Math.max(q.usedUntil, q.t1); for (const c of this.cur) if (c) c.usedUntil = t;
-      this.pend = (this.pend || []).filter(q => !(q.tDone > t0));
-      this.emit({ name: dP > 0 ? 'Rollback' : 'Juicy Rollback', exec: 'CLEAN', clean: 88, obstacle: u2.name, toks: [], dur: +(u2.t - u1.t).toFixed(2), draft: true }); } }
-  // a call made from the way in (Snapback, Juicy Flick, a Roll or Yaw Spin read from the same turn) waits for the pass back under
-  rollbackWait(p, t) { if (!ROLLBACK_HOLD.has(p.name)) return false; const L = this.crossLog, d = this.lastD; if (!d) return false;
-    for (let j = L.length - 1; j >= 0 && t - L[j].t < ROLLBACK_BACK; j--) { const c = L[j];
-      if (c.kind !== 'U' || c.t < p.t0 - 1.3 || c.t > p.tDone + 0.3 || this.minUpBetween(c.t - 1.3, t) >= -0.3) continue;
-      // only while it is coming back: Rod's rewinds are already travelling back toward the object when the turn ends (the pass back
-      // under came 0.4 s or less after it); a Snapback that flies on or stops is called without more delay
-      const at = this.fbIn(c.t - 0.03, c.t + 0.03)[0]; if (at && t - p.tDone >= ROLLBACK_SEE) { const rx = d.pos.x - at.p.x, rz = d.pos.z - at.p.z, r = Math.hypot(rx, rz) || 1, away = (d.vel.x * rx + d.vel.z * rz) / r; if (away > -0.5) return false; }
-      return true; } return false; }
-  // Inverted Uh-uh as it happens: from going upside-down to coming upright again within 4 s, the head shake in between (`uhuh`).
-  // The half flip / roll in and out and the little yaws are its own: nothing else is read from them
-  uhTick(d, t) { const uy = d.up().y, U = this.uh || (this.uh = { inv: false, t0: 0 });
-    if (!d.armed || d.crashed) { U.inv = false; return; }
-    if (!U.inv) { if (uy < -0.6) { U.inv = true; U.t0 = t; } return; }
-    if (uy > 0.6) { U.inv = false; const T = t - U.t0, own = () => { for (const k of this.toks) if (k.t1 > U.t0 - 0.7 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c) c.usedUntil = t;
-        this.pend = (this.pend || []).filter(p => !(p.tDone > U.t0 - 0.7)); };
-      if (T >= 0.5 && T <= 4 && !this.live && this.uhuh(U.t0, t)) { own(); this.emit({ name: 'Inverted Uh-uh', exec: 'CLEAN', clean: 88, toks: [], dur: +(T).toFixed(2), draft: true }); }
-      else if (T >= IYT_MIN && T <= IYT_MAX && !Object.values(this.orb).some(o => o && this.orbSpan(o) > 250)) {   /* a pass looks like the start of an orbit to the orbit tracker: only a real lap rules it out */ const tk = this.iyTrack(U.t0, t);   // Inverted Yaw Tracking: the pass, judged as it comes upright
-        if (tk) { own(); const cl = Math.round(clamp(100 - tk.off * 1.6 - (1 - tk.frac) * 40, 40, 98));
-          this.emit({ name: 'Inverted Yaw Tracking', exec: cl >= 72 ? 'CLEAN' : 'SLOPPY', clean: cl, toks: [], dur: +(T).toFixed(2), obstacle: tk.name, draft: true,
-            notes: [`tracked ${tk.name} through ${Math.round(Math.abs(tk.sweep))}°`, tk.off < 15 ? 'locked on' : 'the object drifted off centre'] }); } } }
-    else if (t - U.t0 > IYT_MAX) U.inv = false; }
-  // Inverted Yaw Tracking's witness (owner, 2026-11-27, after headmazta's tutorial: "it's focused on tracking an object as you pass by
-  // it while inverted"): upside-down from a to b, the quad travels past ONE solid thing, the thing's bearing sweeps by, and the yaw
-  // follows it so it stays in the middle of the picture left to right. Any amount of yaw that matches the pass (a slow track makes no
-  // rotation token at all, so this reads the attitude, not tokens); the right yaw direction for the side it is on is implied (yawing
-  // the other way loses it). A spin on the spot beside a pole has no sweep; an orbit is not a pass (the path must be fairly straight).
-  trackTargets(pos, R) { if (!this.trkObjs) { const poleObj = new Set(this.poles.map(P => P.objId)); this.trkObjs = [];
-      for (const o of this.world.objs) { if (o.kind === 'edge' || o.removed || poleObj.has(o.id) || !o.prims || !o.prims.length) continue; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
-        for (const q of o.prims) { if (!q.aabb) continue; x0 = Math.min(x0, q.aabb.min.x); x1 = Math.max(x1, q.aabb.max.x); y0 = Math.min(y0, q.aabb.min.y); y1 = Math.max(y1, q.aabb.max.y); z0 = Math.min(z0, q.aabb.min.z); z1 = Math.max(z1, q.aabb.max.z); }
-        if (x1 < x0 || y1 < 0.4 || Math.max(x1 - x0, z1 - z0) > IYT_BIG) continue; const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; this.trkObjs.push({ name: o.name, x: cx, z: cz, point: y => v3(cx, clamp(y, y0, y1), cz) }); } }
-    return [...this.poles, ...this.trkObjs].filter(P => Math.hypot(P.x - pos.x, P.z - pos.z) < R); }
-  iyTrack(a, b) { const A = this.fbIn(a, b), W = A.filter(x => x.up.y < -0.3); if (W.length < 20) return null;
-    if (A.filter(x => x.up.y < -0.8).length < A.length * IYT_FLAT) return null;   // held on its back, not rolling through it (a barrel roll round a pole)
-    if (this.crossLog.some(c => (c.kind === 'O' || c.kind === 'U') && c.t >= a - 0.3 && c.t <= b + 0.1)) return null;   // over or under something on its back is a loop's top (a Barani yaws there too), not a pass beside a thing
-    const c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R), wrap = v => Math.atan2(Math.sin(v), Math.cos(v)), mid = W[W.length >> 1];
-    let path = 0; for (let i = 1; i < W.length; i++) path += Math.hypot(W[i].p.x - W[i - 1].p.x, W[i].p.z - W[i - 1].p.z);
-    const chord = Math.hypot(W[W.length - 1].p.x - W[0].p.x, W[W.length - 1].p.z - W[0].p.z); if (path < IYT_TRAVEL || chord < path * 0.7) return null;
-    const cam = W.map(x => { const vx = x.f.x * c + x.up.x * s, vz = x.f.z * c + x.up.z * s; return Math.hypot(vx, vz) > 0.3 ? Math.atan2(vx, vz) : null; });
-    let yaw = 0, prev = null; for (const h of cam) { if (h == null) continue; if (prev != null) yaw += wrap(h - prev); prev = h; }
-    let best = null;
-    for (const P of this.trackTargets(mid.p, IYT_NEAR + 4)) { let sweep = 0, pb = null, k = 0, n = 0, off = 0, dmin = 1e9;
-      for (let i = 0; i < W.length; i++) { const x = W[i], dx = P.x - x.p.x, dz = P.z - x.p.z, dd = Math.hypot(dx, dz); dmin = Math.min(dmin, dd); const be = Math.atan2(dx, dz); if (pb != null) sweep += wrap(be - pb); pb = be;
-        n++; if (cam[i] != null) { const e = Math.abs(wrap(cam[i] - be)) * R2D; if (e < IYT_VIEW) { k++; off += e; } } }
-      if (dmin > IYT_NEAR || dmin < 0.25 || Math.abs(sweep) * R2D < IYT_SWEEP || Math.abs(sweep) * R2D > 220) continue;
-      if (yaw * sweep <= 0 || Math.abs(yaw) < Math.abs(sweep) * 0.5) continue; const frac = k / n; if (frac < IYT_FRAC) continue;
-      if (!best || frac > best.frac) best = { name: P.name, frac, off: off / Math.max(1, k), sweep: sweep * R2D, yaw: yaw * R2D }; }
-    return best; }
-  // Corner Climb (owner, 2026-11-23: the masterclass's building-corner trippy "is its own trick"): in the trippy's look (the corner held
-  // up in the picture; rolled over, or flown flatter with roll and yaw opposed), swinging round an upright corner of a wall or
-  // building one way and back the other, never a full lap, and climbing. Each swing must reach both faces of the corner (a pass
-  // back and forth in front of one face is not round the corner). Called once, at the third swing with a metre climbed.
-  cornerTick(d, dt, t) {
-    if (!this.corners || !this.corners.length) return;
-    if (!d.armed || d.crashed) { this.cc = null; return; }
-    if (t - this.cnT > 0.3) { this.cnT = t; this.cnNear = this.corners.filter(c => Math.hypot(c.x - d.pos.x, c.z - d.pos.z) < 8 && d.pos.y > c.y0 - 0.5 && d.pos.y < c.y1 + 1.5); }
-    let cc = this.cc; if (!cc && !this.cnNear.length) return;
-    let c = cc ? cc.c : null; if (!c) { let bd = 1e9; for (const k of this.cnNear) { const dd = Math.hypot(k.x - d.pos.x, k.z - d.pos.z); if (dd < bd) { bd = dd; c = k; } } }
-    const rx = d.pos.x - c.x, rz = d.pos.z - c.z, dist = Math.hypot(rx, rz); if (dist > 7 || d.pos.y > c.y1 + 1.5) { this.cc = null; return; }
-    const up = d.up(), f = d.fwd(), rc = this.lastRc, o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0; this.cnSo += (o - this.cnSo) * Math.min(1, dt / 0.35);
-    const ys = [1, 2, 3, 4.5].map(dy => Math.min(c.y1, d.pos.y + dy)); ys.push(c.y1);
-    const topVis = dist > 0.3 && ys.some(y => { const v = this.viewOf(d.pos, up, f, v3(c.x, y, c.z)); return v.top && v.ang < 75; });
-    const pose = topVis && (up.y < 0.35 || this.cnSo > 0.5 && up.y < TRIPPY_FLAT), ang = Math.atan2(rz, rx), side = rx * c.n1.x + rz * c.n1.z - (rx * c.n2.x + rz * c.n2.z);
-    if (!cc) { if (pose) this.cc = { c, ang, acc: 0, dir: 0, rev: 0, n: 0, y0: d.pos.y, t0: t, lastPose: t, lo: side, hi: side, done: false }; return; }
-    let da = ang - cc.ang; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; cc.ang = ang;
-    if (pose) cc.lastPose = t; else { if (t - cc.lastPose > 0.9) this.cc = null; return; }
-    const sg = Math.sign(da), deg = Math.abs(da) * R2D; if (!sg) return; if (!cc.dir) cc.dir = sg;
-    const good = () => cc.acc >= CORNER_MIN && cc.acc < 300 && cc.lo < -CORNER_SIDE && cc.hi > CORNER_SIDE;
-    if (sg === cc.dir) { cc.acc += deg; cc.rev = 0; cc.lo = Math.min(cc.lo, side); cc.hi = Math.max(cc.hi, side); if (cc.acc >= 300) { cc.n = 0; cc.y0 = d.pos.y; cc.t0 = t; } }   // a whole lap is a Trippy Spin's business
-    else { cc.rev += deg; if (cc.rev > 20) { if (good()) cc.n++; else { cc.n = 0; cc.y0 = d.pos.y; cc.t0 = t; cc.done = false; } cc.dir = sg; cc.acc = cc.rev; cc.rev = 0; cc.lo = cc.hi = side; } }
-    if (!cc.done && !this.live && cc.n + (good() ? 1 : 0) >= CORNER_SWINGS && d.pos.y - cc.y0 >= CORNER_UP) { cc.done = true;
-      for (const k of this.toks) if (k.t1 > cc.t0 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1);
-      this.emit({ name: 'Corner Climb', exec: 'CLEAN', clean: 90, continuous: true, obstacle: c.name, meters: +(d.pos.y - cc.y0).toFixed(1), dur: +(t - cc.t0).toFixed(2), toks: [], draft: true }); }
-  }
-  // Wall Stick (owner, 2026-11-19): held against a wall or the side of anything (a sideways contact, not the ground or a top),
-  // nearly still, for WALL_STICK_MIN or more, then a clean fly-away (postStep: a second off every surface, armed, moving).
-  // Needs the game's wall grip (tune.wallGrip) to be possible at ordinary throttle.
-  stickTick(d, t) {
-    const n = d.contactNormal, side = d.contactThisStep && n && Math.abs(n.y) < 0.7 && !d.contactGround, slow = len(d.vel) < 0.35;
-    let st = this.stick;
-    if (side && slow && d.armed && !d.crashed) {
-      if (!st) st = this.stick = { t0: t, lastC: t, obstacle: null };
-      st.lastC = t; const o = this.world.objs[d.contactOwner]; if (o && o.name) st.obstacle = o.name;
-    } else if (st && (t - st.lastC > 0.15 || d.crashed || !d.armed)) {
-      const held = st.lastC - st.t0; this.stick = null;
-      if (held >= WALL_STICK_MIN && !d.crashed && d.armed && !this.pendingFly) this.pendingFly = { name: 'Wall Stick', t, y0: d.pos.y, obstacle: st.obstacle, seconds: held };
-    }
-  }
-  // ---- disarm tricks (owner, 2026-11-21; not in the TPW book): disarm in the air, let the quad's own momentum carry the rotation,
-  // re-arm before it touches anything, fly on. Disarm Flip / Disarm Roll: DEAD_TURN of pitch / roll with the motors off. Disarm
-  // Spin: the same on yaw, a flat spin, upright; Dead Pirate Spin: upside-down. Disarm Loop: a loop whose top is flown dead
-  // (DEAD_LOOP_OFF of pitch with the motors off inside one continuous turn of DEAD_TURN, upside-down over the top of a climb).
-  // The ordinary reading of the same rotation (Flip, Roll, Yaw Spin, Powerloop…) is not called beside it (deadMute, in commit).
-  deadTick(d, t) {
-    const Y = this.yHist || (this.yHist = []); if (!Y.length || t - Y[Y.length - 1][0] >= 0.05 || t < Y[Y.length - 1][0]) { if (Y.length && t < Y[Y.length - 1][0]) Y.length = 0; Y.push([t, d.pos.y, Math.hypot(d.vel.x, d.vel.z)]); if (Y.length > 120) Y.shift(); }
-    const D = this.dead; if (D) { if (d.crashed || d.contactThisStep) { this.dead = null; this.deadMute = { a: D.t - 0.05, b: t + 2.5 }; }   /* it landed or hit something with the motors off: nothing from that rotation */
-      else { const u = d.up().y; D.up += u; D.n++; } }
-    const M = this.deadMute; if (M && t > M.b) this.deadMute = null;
-    const P = this.deadPend; if (!P) return;
-    if (d.crashed || !d.armed || d.contactThisStep) { this.deadPend = null; return; }   // it has to be caught and flown away
-    if (t - P.t < DEAD_AWAY) return;
-    this.deadPend = null; let name = P.name, deg = P.deg;
-    if (!name) {   // the loop: one continuous pitch turn from before the disarm to now, upside-down on the way, after a climb, upright again
-      const H = this.attLog || [], from = P.t0 - 2.5; let best = 0, minUp = 1, a0 = null;
-      for (let i = H.length - 1; i >= 0 && H[i][0] >= from; i--) { const v = P.sgn * (this.axRot[1] - H[i][4]); if (v > best) { best = v; a0 = H[i][0]; } }
-      if (a0 != null) for (let i = H.length - 1; i >= 0 && H[i][0] >= a0; i--) minUp = Math.min(minUp, H[i][1]);
-      const ys = Y.filter(y => a0 != null && y[0] >= a0 - 0.3), climb = ys.length ? Math.max(...ys.map(y => y[1])) - ys[0][1] : 0, vIn = ys.length ? Math.max(...ys.slice(0, 8).map(y => y[2])) : 0;
-      if (best >= DEAD_TURN && minUp < -0.5 && climb >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V && d.up().y > 0.4) { name = 'Disarm Loop'; deg = best; }   // flown into, up and over: a flip on the spot is not a loop
-    }
-    if (!name) return;
-    this.emit({ name, exec: Math.abs(deg - 360) <= 40 || deg > 400 ? 'CLEAN' : 'SLOPPY', clean: Math.max(50, Math.round(100 - Math.abs(Math.min(deg, 360) - 360) / 2)), continuous: true, obstacle: 'open air', seconds: +P.secs.toFixed(2), deg: Math.round(deg), deadDeg: Math.round(P.deg), draft: true });
-  }
-  onArmChange(d, armed) {
-    const t = this.time, speed = len(d.vel);
-    if (!armed && !d.crashed && !d.contactThisStep && t - (this.lastTouch ?? -9) > 0.2) this.dead = { t, A0: (this.axRot || [0, 0, 0]).slice(), up: 0, n: 0 };   // disarmed in the air
-    if (armed) { const D = this.dead; this.dead = null;
-      if (D && !d.crashed && !d.contactThisStep && t - D.t >= 0.12) { const A = this.axRot || [0, 0, 0], r = [0, 1, 2].map(i => Math.abs(A[i] - D.A0[i])), sum = r[0] + r[1] + r[2] || 1, k = r.indexOf(Math.max(...r)), upM = D.n ? D.up / D.n : 1;
-        let name = null; if (r[k] >= DEAD_TURN && r[k] >= 0.6 * sum) name = k === 1 ? 'Disarm Flip' : k === 0 ? 'Disarm Roll' : upM > 0.5 ? 'Disarm Spin' : upM < -0.5 ? 'Dead Pirate Spin' : null;
-        // a loop's dead top: enough pitch with the motors off, after a climb (a flip carried only part of the way round, dead, stays a Flip)
-        const Y = (this.yHist || []).filter(y => y[0] >= D.t - 2.5), climbed = Y.length ? Math.max(...Y.map(y => y[1])) - Math.min(...Y.map(y => y[1])) : 0, vIn = Y.length ? Math.max(...Y.map(y => y[2])) : 0;
-        const loop = !name && k === 1 && r[1] >= DEAD_LOOP_OFF && r[1] >= 0.6 * sum && climbed >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V;
-        if (name || loop) { this.deadPend = { name, t, t0: D.t, deg: r[k], sgn: Math.sign(A[1] - D.A0[1]) || 1, secs: t - D.t }; this.deadMute = { a: D.t - (name ? 0.7 : 2.5), b: t + DEAD_AWAY + 1.8 }; } } }
-    if (!armed && !d.crashed) {
-      if (speed > 1.2) this.slide = { t, dist: 0, lastC: -9, stopT: null, surface: null };   // disarmed on the move: a slide may follow
-      else if (d.pos.y > 4.5 && speed < 1 && d.up().y > 0.8 && (d.contactThisStep || t - (this.lastTouch ?? -9) < 0.3)) this.perch = { t, y: d.pos.y };   // resting on something (a hover with the motors cut for a moment was called a Perch)
-    } else if (armed) {
-      // re-armed while still sliding (a moment's grace after it stops), having really slid (whoops stop quickly: 0.75 m)
-      const sl = this.slide; if (sl && sl.dist >= 0.75 && (sl.stopT == null || t - sl.stopT < 0.6)) this.pendingFly = { name: 'Slide Disarm', t, y0: d.pos.y, obstacle: sl.surface, meters: sl.dist };
-      if (this.perch && d.pos.y > 4.4) this.pendingFly = { name: 'Perch', t, y0: -9 };
-      this.slide = null; this.perch = null;
-    }
-  }
-  postStep(d) {
-    const pf = this.pendingFly; if (!pf) return;
-    const away = pf.name === 'Perch' ? d.pos.y > 0.6 : pf.name === 'Wall Stick' ? this.time - (this.lastTouch ?? -9) > 1.0 && d.armed : (d.pos.y > pf.y0 + 0.35 || this.time - (this.lastTouch ?? -9) > 0.35);   // off the surface and flying (a wall stick: a whole second clear of everything)
-    if (d.crashed || this.time - pf.t > (pf.name === 'Wall Stick' ? 5 : 4)) this.pendingFly = null;
-    else if (away && len(d.vel) > 1) { this.emit({ name: pf.name, exec: 'CLEAN', clean: 90, continuous: true, obstacle: pf.obstacle || undefined, meters: pf.meters, seconds: pf.seconds, draft: pf.name === 'Wall Stick' || undefined }); this.pendingFly = null; }
-  }
-  nearWall(d) {
-    let best = null;
-    for (const o of this.world.objs) {
-      if (!(o.kind === 'wall' || o.kind === 'building' || o.kind === 'fence')) continue;
-      for (const pr of o.prims) {
-        if (pr.type !== 'box') continue;
-        const r = sphereVs(pr, d.pos, 1.4); if (!r) continue;
-        const dist = 1.4 - r.d; if (Math.abs(r.n.y) > 0.3) continue;
-        if (!best || dist < best.dist) best = { dist, n: r.n, name: o.name };
+        b.pos++;
+        if (x.s === 'demo') b.demo = true;
+        else b.pilots.add(x.p);
+        b.dur.push(x.d);
       }
     }
-    return best;
+    for (const [k, b] of Object.entries(by)) {
+      b.dur.sort((p, q) => p - q);
+      b.trusted = b.demo || b.pilots.size >= 2;
+      // only tricks the rotation itself defines are said as maybes (tap, stall, wall, pole and dive tricks need what the rules see)
+      b.sayable = MAYBE_NAMES.has(k) || ex.some(x => x.t === k && x.custom);
+    }
+    LIBRARY = { ex, by, stats: L.stats && typeof L.stats === 'object' ? L.stats : {}, updated: String(L.updated || '').slice(0, 20) };
+    return LIBRARY;
   }
-  nearObstacle(d, r) {
-    for (const o of this.world.objs) { if (!o.obstacle) continue; const { a, b } = o.obstacle;
-      const ab = sub(b, a), t = clamp(dot(sub(d.pos, a), ab) / dot(ab, ab), 0, 1), q = add(a, mul(ab, t));
-      if (Math.hypot(d.pos.x - q.x, d.pos.z - q.z) < r) return true; }
+  // distances from a signature to each trick: the nearest example of it (a demo counts a little closer: it is the definition)
+  // and the nearest counter-example. Sorted, best first.
+  function libMatch(sig, only) {
+    if (!LIBRARY || !sig) return [];
+    const best = {};
+    for (const e of LIBRARY.ex) {
+      if (only && e.t !== only) continue;
+      const dd = libDist(sig, e) * (e.s === 'demo' ? 0.85 : 1),
+        b = best[e.t] || (best[e.t] = { name: e.t, pos: Infinity, neg: Infinity, demo: false });
+      if (e.neg) b.neg = Math.min(b.neg, dd);
+      else if (dd < b.pos) {
+        b.pos = dd;
+        b.demo = e.s === 'demo';
+      }
+    }
+    return Object.values(best)
+      .filter(b => b.pos < Infinity)
+      .sort((a, b) => a.pos - b.pos);
+  }
+  // ---- Names other pilots will see (owner, 2026-11-23: "we need to have a way to censor bad names"): trick challenge names and the
+  // names of the pilots who post them. A word list, caught through l33t-speak (0 1 3 4 5 7 @ $ …), accents, spacing and dots between
+  // letters, and stretched letters. BAD_SUB is matched anywhere in the name with every letter run squashed to one ("fuuuck"); BAD_WORD
+  // only as a whole word (with runs of three or more cut to two, a plural s dropped, and spaced-out single letters joined), because
+  // those letters turn up inside ordinary words (cocoon, grape, torpedo). tools/dropoff-worker.mjs keeps an identical copy (the relay
+  // checks again): test/challenges.js holds the two to the same answers.
+  const BAD_SUB = [
+    'fuck',
+    'fuk',
+    'fvck',
+    'pusy',
+    'shit',
+    'cunt',
+    'niger',
+    'niga',
+    'fagot',
+    'bitch',
+    'whore',
+    'slut',
+    'penis',
+    'vagina',
+    'dick',
+    'puss',
+    'retard',
+    'nazi',
+    'hitler',
+    'jiz',
+    'boob',
+    'wank',
+    'twat',
+    'bastard',
+    'molest',
+    'incest',
+    'milf',
+    'dildo',
+    'hentai',
+    'porn',
+    'cumshot',
+    'blowjob',
+    'handjob',
+    'motherf',
+    'asshol',
+    'arsehol',
+    'killyourself',
+    'pedophil',
+    'paedophil',
+    'tranie',
+    'beaner',
+    'wetback',
+    'raghead',
+    'towelhead',
+    'chingchong',
+    'golliwog',
+    'jigaboo',
+    'kike',
+    'shemale',
+    'skank',
+    'clit',
+    'scrotum',
+    'testicl',
+    'orgasm',
+    'ejacul',
+    'horny',
+    'sperm',
+    'faggot',
+    'dyke',
+    'spunk',
+    'bollock',
+    'tosser',
+    'bellend'
+  ];
+  const BAD_WORD = [
+    'ass',
+    'arse',
+    'cum',
+    'cock',
+    'cocks',
+    'tit',
+    'tits',
+    'titty',
+    'anal',
+    'anus',
+    'rape',
+    'raped',
+    'raping',
+    'rapist',
+    'sex',
+    'sexy',
+    'fap',
+    'fag',
+    'fags',
+    'fck',
+    'kys',
+    'coon',
+    'spic',
+    'chink',
+    'gook',
+    'negro',
+    'heil',
+    'kkk',
+    'pedo',
+    'paedo',
+    'prick',
+    'tranny',
+    'homo',
+    'lesbo',
+    'hoe',
+    'hoes',
+    'piss',
+    'jerkoff',
+    'wtf',
+    'stfu',
+    'gfy',
+    'nig',
+    'jap',
+    'dago',
+    'wop',
+    'gyp',
+    'isis',
+    'sieg',
+    'zieg',
+    'lynch',
+    'boner',
+    'bj',
+    'hj',
+    'xxx',
+    'tard',
+    'thot',
+    'incel',
+    'poon',
+    'muff',
+    'nonce',
+    'nude',
+    'naked',
+    'semen',
+    'pubic',
+    'erection'
+  ];
+  const L33T = {
+    '0': 'o',
+    '1': 'i',
+    '!': 'i',
+    '|': 'i',
+    '3': 'e',
+    '4': 'a',
+    '@': 'a',
+    '5': 's',
+    '$': 's',
+    '7': 't',
+    '+': 't',
+    '8': 'b',
+    '9': 'g',
+    '6': 'g',
+    '2': 'z',
+    '(': 'c',
+    '¢': 'c',
+    '€': 'e',
+    '£': 'l'
+  };
+  const BAD_SUB_SQ = BAD_SUB.filter(w => !/(.)\1/.test(w)),
+    BAD_WORD_SET = new Set(BAD_WORD); // a pattern with a double letter is only matched unsquashed (puss / push, boob / bob)
+  function badName(v) {
+    const low = String(v == null ? '' : v)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[0-9!|@$+(¢€£]/g, c => L33T[c] || c);
+    const raw = low.split(/[^a-z]+/).filter(Boolean),
+      words = []; // spaced-out letters (f u c k, s.e.x) are joined into one word
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i].length === 1) {
+        let j = i,
+          w = '';
+        while (j < raw.length && raw[j].length === 1) w += raw[j++];
+        if (w.length > 1) {
+          words.push(w);
+          i = j - 1;
+          continue;
+        }
+      }
+      words.push(raw[i]);
+    }
+    for (const w0 of words) {
+      const sq = w0.replace(/(.)\1+/g, '$1'),
+        w = w0.replace(/(.)\1{2,}/g, '$1$1'); // inside one word only: "Push It" is not a swear
+      if (BAD_SUB_SQ.some(b => sq.includes(b)) || BAD_SUB.some(b => w.includes(b))) return true;
+      for (const x of [w0, w, sq, w.replace(/e?s$/, ''), w.replace(/s$/, '')]) if (x && BAD_WORD_SET.has(x)) return true;
+    }
     return false;
   }
-  nearTall(d, h) {
-    for (const o of this.world.objs) { if (o.kind === 'edge') continue;   // the map's invisible edge is no structure (a Stall Rewind / Eject Roll "on the Map Edge")
-      for (const pr of o.prims) {
-      if (pr.aabb.max.y < h) continue;
-      const dx = Math.max(pr.aabb.min.x - d.pos.x, 0, d.pos.x - pr.aabb.max.x), dz = Math.max(pr.aabb.min.z - d.pos.z, 0, d.pos.z - pr.aabb.max.z);
-      if (Math.hypot(dx, dz) < 2.5) return o.name;
-    } }
-    return null;
+  // ---- Trick challenges (owner, 2026-11-23; src/challenge.js, the relay's /challenges): a pilot posts a new trick they named, other
+  // pilots try it; a try passes when the game's own signature match puts the move within CH_PASS of the original (libDist, the
+  // trick library's distance). CH_CONFIRM pilots other than the creator passing makes it a community trick, live at once at
+  // CH_PTS points (the owner can change them): called in any flight where no book trick was called, nearer than CH_LIVE and nearer
+  // to it than to any trick in the library, scored on its own line (ScoreKeeper.community), never in the TPW trick score.
+  // setChallenges([{ id, name, sig, live, try, pts }]): `try` = the one the pilot is attempting now, `live` = confirmed. Untrusted
+  // input (the relay's list): every field is checked; absent (Node tests, tools) = nothing happens.
+  const CH_PASS = 0.3,
+    CH_LIVE = 0.25,
+    CH_PTS = 200,
+    CH_CONFIRM = 2;
+  let CHALLENGES = null;
+  function chSig(g) {
+    if (!g || typeof g !== 'object' || !Array.isArray(g.c) || g.c.length !== LIB_N * 3 || !g.c.every(Number.isFinite) || !(+g.d > 0))
+      return null;
+    const o = {
+      d: clamp(+g.d, 0.05, 12),
+      c: g.c.map(v => clamp(Math.round(v), -5000, 5000)),
+      u: Array.isArray(g.u) && g.u.length === LIB_N && g.u.every(Number.isFinite) ? g.u.map(v => clamp(Math.round(v), -100, 100)) : null
+    };
+    if (typeof g.ps === 'string' && /^[OUG]{0,8}$/.test(g.ps)) o.ps = g.ps;
+    return o;
   }
-  emit(ev) { ev.t = this.time; this.out.push(ev);
-    if (ev.name !== 'near') { const tk = ev.toks && ev.toks.length ? Math.min(...ev.toks.map(k => k.t0)) : this.time - 2; (this.callLog || (this.callLog = [])).push({ t0: Math.min(tk, this.time - 0.3), t1: this.time }); if (this.callLog.length > 40) this.callLog.shift(); } }
-  drainMaybes() { const o = this.maybes || []; this.maybes = []; return o; }
-  // the library's ear (see LIBRARY): 25 Hz rotation samples, moves split by quiet, and "maybe" calls where the rules said nothing
-  libTick(d, t, rates, dt) {
-    const L = this.lib || (this.lib = { acc: [0, 0, 0], n: 0, buf: [], burst: null, bursts: [], quiet: 0, queue: [] });
-    for (let k = 0; k < 3; k++) L.acc[k] += rates[k] * dt; L.n += dt;
-    if (L.n >= 1 / LIB_HZ - 1e-9) { { const r = this.lastRc; L.buf.push([t, L.acc[0], L.acc[1], L.acc[2], d.up().y, r ? r.thr : null, r ? r.roll : 0, r ? r.pitch : 0, r ? r.yaw : 0]); } L.acc = [0, 0, 0]; L.n = 0; if (L.buf.length > LIB_HZ * 14) L.buf.splice(0, L.buf.length - LIB_HZ * 12); }
-    const on = Math.hypot(rates[0], rates[1], rates[2]) >= LIB_ON && !d.crashed;
-    if (on) { L.quiet = 0; if (!L.burst) L.burst = { a: t, b: t, rot: 0 }; L.burst.b = t; L.burst.rot += Math.hypot(rates[0], rates[1], rates[2]) * dt; }
-    else if (L.burst) { L.quiet += dt; if (L.quiet >= LIB_QUIET) { const B = L.burst; L.burst = null; L.bursts.push(B); if (L.bursts.length > 4) L.bursts.shift();
-      // the move just ended: the last 1-3 bursts (joined while the air between them is under a second) are candidates
-      const cands = []; let a = B.a, rot = 0; for (let i = L.bursts.length - 1; i >= 0; i--) { const x = L.bursts[i]; if (i < L.bursts.length - 1 && L.bursts[i + 1].a - x.b > 1.0) break; a = x.a; rot += x.rot; if (rot >= 150 && B.b - a <= 7) cands.push({ a, b: B.b, rot }); }
-      if (cands.length) L.queue.push({ due: t + LIB_WAIT, cands }); } }
-    if (L.queue.length && t >= L.queue[0].due) this.libJudge(L.queue.shift(), t);
-  }
-  libSeq(a, b) { return (this.lib ? this.lib.buf : []).filter(r => r[0] >= a - 0.02 && r[0] <= b + 0.06); }
-  libSigOf(a, b) { const R = this.libSeq(a, b), sig = libSig(R.map(r => [r[1], r[2], r[3]]), LIB_HZ, R.map(r => r[4])); if (!sig) return null;
-    const [i0, i1] = sig.span, A = R[i0][0] - 1 / LIB_HZ, B = R[i1][0]; Object.defineProperty(sig, 'at', { value: [A, B] });   // when the move was (the detector's clock), for tools/library.js's motion
-    // the passes during the move (an over/under can come just before the rotation starts: a Matty goes over, then flips)
-    sig.ps = this.crossLog.filter(c => c.t >= A - 0.6 && c.t <= B + 0.3 && (c.kind === 'O' || c.kind === 'U' || c.kind === 'G')).map(c => c.kind).join('').slice(0, 8);
-    // the sticks over the move, when they were recorded (not for a GIF or an old trace)
-    const M = R.slice(i0, i1 + 1); if (M.length >= 3 && M.every(r => r[5] != null) && M.some(r => Math.abs(r[6]) > 0.05 || Math.abs(r[7]) > 0.05 || Math.abs(r[8]) > 0.05)) {
-      const th = []; for (let i = 0; i < 8; i++) th.push(Math.round(clamp(M[Math.round(i / 7 * (M.length - 1))][5], 0, 1) * 100));
-      let on = 0, all = 0; for (const r of M) { const a3 = [Math.abs(r[1]), Math.abs(r[2]), Math.abs(r[3])], k = a3[0] >= a3[1] && a3[0] >= a3[2] ? 0 : a3[1] >= a3[2] ? 1 : 2; all += a3[k]; if (Math.abs(r[6 + k]) > 0.15) on += a3[k]; }
-      sig.k = { th, cmd: all > 0 ? Math.round(on / all * 100) : 0 }; }
-    return sig; }
-  drainChallenges() { const o = this.chals || []; this.chals = []; return o; }
-  // trick challenges (see CHALLENGES): the move just judged by the library's ear, against the one being tried (any flight, even
-  // where the rules called something: the pilot's own move is what is compared) and the confirmed ones (only where nothing was called)
-  chalJudge(q, t) {
-    if (!CHALLENGES) return; const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3), seen = this.chalLog || (this.chalLog = []), sigs = q.cands.map(c => this.libSigOf(c.a, c.b));
-    for (const ch of CHALLENGES) { let best = null;
-      q.cands.forEach((c, i) => { const g = sigs[i]; if (!g) return; const dd = libDist(g, ch.sig); if (!best || dd < best.d) best = { c, d: dd, g }; });
-      if (!best || seen.some(x => x.id === ch.id && x.t1 >= best.c.a - 0.2)) continue;
-      const hit = { chal: ch.id, name: ch.name, t0: +best.c.a.toFixed(3), t1: +best.c.b.toFixed(3), at: +t.toFixed(3), dist: +best.d.toFixed(3), sig: { d: best.g.d, c: best.g.c, u: best.g.u, ps: best.g.ps } };
-      if (ch.try && best.d <= CH_PASS) { (this.chals || (this.chals = [])).push({ ...hit, try: true }); seen.push({ id: ch.id, t1: best.c.b }); continue; }
-      if (ch.live && best.d <= CH_LIVE && !covered(best.c.a, best.c.b)) {
-        const lib = LIBRARY ? libMatch(best.g).find(x => x.name !== ch.name) : null; if (lib && lib.pos <= best.d) continue;   // it is nearer to a trick the game already knows (its own examples in the library do not count against it)
-        (this.chals || (this.chals = [])).push({ ...hit, live: true, pts: ch.pts }); seen.push({ id: ch.id, t1: best.c.b }); }
-    }
-    if (seen.length > 30) seen.splice(0, seen.length - 30);
-  }
-  libJudge(q, t) {
-    this.chalJudge(q, t); if (!LIBRARY) return;
-    const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) || (this.chalLog || []).some(c => c.t1 >= a - 0.3 && c.t1 <= b + 0.3);   // a live community trick already called it
-    let pick = null;
-    for (const c of q.cands) { if (covered(c.a, c.b)) return;   // the rules called something here (or a maybe already went out): nothing to add
-      const m = libMatch(this.libSigOf(c.a, c.b)), top = m[0]; if (!top) continue; const B = LIBRARY.by[top.name];
-      if (!B || !B.trusted || !B.sayable || top.pos > LIB_THR || top.neg <= top.pos + 0.04) continue;
-      if (m[1] && m[1].pos < top.pos + LIB_GAP) continue;   // another trick fits nearly as well: too close to call
-      if (OBSTACLE_NAMES.has(top.name) && !this.crossLog.some(x => x.t > c.a - 2.3 && x.t < c.b + 0.4)) continue;   // an obstacle trick needs its object
-      if (!pick || top.pos < pick.top.pos) pick = { c, top }; }
-    if (!pick) return;
-    const sim = +clamp(1 - pick.top.pos / (LIB_THR * 1.6), 0, 1).toFixed(2);
-    (this.maybeLog || (this.maybeLog = [])).push({ t0: pick.c.a, t1: pick.c.b }); if (this.maybeLog.length > 20) this.maybeLog.shift();
-    (this.maybes || (this.maybes = [])).push({ name: pick.top.name, maybe: true, t0: +pick.c.a.toFixed(3), t1: +pick.c.b.toFixed(3), at: +t.toFixed(3), sim, byDemo: pick.top.demo });
-  }
-  drain() { const o = this.out; this.out = []; return o; }
-}
-
-// ================================================================= LIVE (STREAMING) TRICK RECOGNITION
-// Rotation is tokenised live per body axis; every completed token or obstacle pass triggers a match
-// against all trick patterns on the *tail* of recent events. A match becomes a "pending" trick shown
-// immediately; it locks in after a short hold unless a longer/better trick extends it (Flip → Rubik's,
-// Flip → Powerloop), or the closing obstacle pass is still on its way. Tricks claim *time slices* of
-// rotations, so one continuous rotation can feed several tricks (chained powerloops).
-// Tricktionary demo (Segmented Flips/Rolls GIF, real-time via OSD timer): pauses of ~0.23 s (flip) and ~0.27 s (roll)
-// between the two 180s. The written rule says 0.5 s; the demo is how it's actually flown.
-const SEG_GAP = 0.18;
-const SLOW_TH = 30, SLOW_MAX = 2.5;   // slow-pitch continuation inside loops near an obstacle
-const KNIFE_X = 4, NINJA_X = 3, SWITCH_LAPS = 1, HORIZON_VIEW = 55, QUAD_W = 0.09;   /* the site's sizes (owner, 2026-11-23): Knife Edge through a gap up to 4 whoops wide, Ninja Star up to 3; a Trippy Switch needs a whole lap the other way; a Barani's yaw starts once the horizon is in view (camera at most this far above it), else it is a Power Swap */   // Knife Edge: gaps no wider than ~2.75 quad widths (owner: "about two" — an Air65 is 0.082 m across, so the playground's 0.22 m Wall Slot is one; a 0.7 m gate is not)
-// Inverted Yaw Tracking: 0.6-6 s upside-down, 1.2 m or more travelled past a thing no further than 8 m (no wider than 12 m), its bearing
-// sweeping 45 deg or more, held within 35 deg of the picture's centre line for 60 % of it
-const IYT_MIN = 0.6, IYT_MAX = 6, IYT_TRAVEL = 1.2, IYT_NEAR = 8, IYT_BIG = 12, IYT_SWEEP = 45, IYT_VIEW = 35, IYT_FRAC = 0.6, IYT_FLAT = 0.55;
-const TOK_TH = 95, TOK_END = 0.06, HOLD = 0.08, HOLD_OBST = 1.3, HOLD_MAX = 1.6;
-// "air" between the segments of a trick (pilot feedback): whoop tricks are built from basic segments, and real pilots
-// leave some space between them (to set up for an object, or just float). Up to AIR_OPEN s between two rotations still
-// makes one trick; a pending smaller trick waits that long (while the quad holds steady) for the next segment.
-const AIR_OPEN = 1.0;
-function rawAt(tok, tt) { const tl = tok.tl; if (!tl || !tl.length) return tt <= tok.t0 ? 0 : tok.raw; if (tt <= tl[0][0]) return 0; if (tt >= tok.t1) return tok.raw;
-  let i = 0; while (i < tl.length - 1 && tl[i + 1][0] < tt) i++; const p = tl[i], q = tl[i + 1] || [tok.t1, tok.raw]; return q[0] > p[0] ? p[1] + (q[1] - p[1]) * (tt - p[0]) / (q[0] - p[0]) : p[1]; }
-function clipSpans(spans, a, b) { return spans.map(s => ({ tok: s.tok, a: Math.max(s.a, a), b: Math.min(s.b, b) })).filter(s => s.b - s.a > 0.005); }
-function sliceTok(T, a, b) { // part of a normalized token between times a..b
-  const ra = T.raw0 + (rawAt(T.base, a) - rawAt(T.base, T.t0)), rb = T.raw0 + (rawAt(T.base, b) - rawAt(T.base, T.t0));
-  const raw = Math.max(0, (T.base ? rb - ra : T.raw * (b - a) / Math.max(1e-3, T.t1 - T.t0)));
-  const f = raw / Math.max(1, T.raw);
-  return { ...T, t0: a, t1: b, raw, raw0: T.raw0 + (ra - T.raw0), n: Math.max(1, Math.round(T.n * f)), inv: Math.round(T.inv * f), off: T.off * f, rateSum: T.rateSum * f, rateSq: T.rateSq * f, spans: clipSpans(T.spans, a, b) };
-}
-function spansOverlap(A, B) { for (const x of A) for (const y of B) if (x.tok === y.tok && Math.min(x.b, y.b) - Math.max(x.a, y.a) > 0.03) return true; return false; }
-class StreamDetector extends TrickDetector {
-  reset() {
-    super.reset();
-    this.cur = [null, null, null]; this.toks = []; this.pend = []; this.crashSeen = false; this.nCross = 0; this.lastD = null; this.hmChain = [];
-    this.liveTaps = true; this.camTilt = this.camTilt ?? 20; this.live = null; this.lastTrippy = null;
-    { const st = this.watcher && this.watcher.style; this.watcher = new Watcher(this); if (st) this.watcher.style = st; } this.vetoes = []; this.reviews = [];   // second judge; reviews go to the game's replay card
-    this.fb = []; this.taps = []; this.stalls = []; this.rewinds = []; this.passes = []; this.orbSegs = []; this.faces = [];
-    this.near = null; this.nearT = null; this.nearPT = null; this.nearP = null;   // near-object caches (a map edited in place is a new layout)
-    this.orb = {}; this.circled = []; this.passTr = {}; this.vst = {}; this.hst = {}; this.airPole = null; this.lastTapT = -9; this.lastFaceT = -9; this.newEv = []; this.claimUsed = new Set(); this.lastRetrig = 0;
-    // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
-    // swing-set legs, slide-tower posts, monkey-bar & jungle-gym uprights, the pilot). Fence posts and wall pipes are excluded.
-    // the upright corners of walls and buildings 3 m or taller (Corner Climb): where, how high, and the two faces that meet there
-    this.corners = []; this.cc = null; this.cnNear = []; this.cnT = -9; this.cnSo = 0;
-    for (const o of this.world.objs) { if (o.kind !== 'building' && o.kind !== 'wall') continue;
-      for (const p of o.prims || []) { if (p.type !== 'box' || p.leaf || Math.abs(p.m[4]) < 0.99 || p.h.y < 1.5 || Math.max(p.h.x, p.h.z) < 0.5) continue;
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) this.corners.push({ name: o.name, objId: o.id, x: p.c.x + p.m[0] * p.h.x * sx + p.m[2] * p.h.z * sz, z: p.c.z + p.m[6] * p.h.x * sx + p.m[8] * p.h.z * sz, y0: p.c.y - p.h.y, y1: p.c.y + p.h.y, n1: { x: p.m[0] * sx, z: p.m[6] * sx }, n2: { x: p.m[2] * sz, z: p.m[8] * sz } }); } }
-    this.poles = []; this.trkObjs = null;
-    for (const o of this.world.objs) {
-      if (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall') continue;
-      if (o.kind === 'pilot') { const c = o.prims.find(p => p.type === 'sphere').c; this.poles.push({ id: o.id * 100, objId: o.id, name: 'the pilot', x: c.x, z: c.z, y0: 0, y1: 1.8, point: y => v3(c.x, clamp(y, 0, 1.8), c.z) }); continue; }
-      o.prims.forEach((p, i) => {
-        if (p.type !== 'capsule' || p.leaf || p.r > (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) || p.r < 0.012) return;   // not chains; a tree's trunk may be thick (pilot: no trippy round Moose's lone trees)
-        const ab = sub(p.b, p.a), L = len(ab); if (L < 1.2 || Math.abs(ab.y) / L < 0.8) return;
-        const lo = p.a.y < p.b.y ? p.a : p.b, hi = p.a.y < p.b.y ? p.b : p.a, y0 = lo.y, y1 = hi.y;
-        const pt = y => { const f = clamp((y - y0) / (y1 - y0), 0, 1); return v3(lo.x + (hi.x - lo.x) * f, y0 + (y1 - y0) * f, lo.z + (hi.z - lo.z) * f); };
-        const mid = pt((y0 + y1) / 2);
-        this.poles.push({ id: o.id * 100 + i, objId: o.id, name: o.name, x: mid.x, z: mid.z, y0, y1, point: pt });
+  function setChallenges(L) {
+    CHALLENGES = null;
+    if (!Array.isArray(L)) return null;
+    const out = [];
+    for (const c of L.slice(0, 60)) {
+      if (
+        !c ||
+        typeof c.id !== 'string' ||
+        !/^[A-Za-z0-9_.~-]{1,160}$/.test(c.id) ||
+        typeof c.name !== 'string' ||
+        c.name.length < 2 ||
+        c.name.length > 40 ||
+        badName(c.name)
+      )
+        continue;
+      const sig = chSig(c.sig);
+      if (!sig || !(c.live || c.try)) continue;
+      out.push({
+        id: c.id,
+        name: c.name,
+        sig,
+        live: !!c.live,
+        try: !!c.try,
+        pts: Number.isFinite(+c.pts) ? clamp(Math.round(+c.pts), 0, 5000) : CH_PTS
       });
     }
+    CHALLENGES = out.length ? out : null;
+    return CHALLENGES;
   }
-  // ---------------------------------------------------------------- building blocks
-  viewOf(p, up, f, pt) {
-    const c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R);
-    const cam = norm(add(mul(f, c), mul(up, s))), camUp = norm(sub(mul(up, c), mul(f, s)));
-    const dir = norm(sub(pt, p)); return { ang: Math.acos(clamp(dot(cam, dir), -1, 1)) * R2D, top: dot(dir, camUp) > 0.05 };
-  }
-  sense(d, dt, t, rates, up) {
-    let ev = false; const f = d.fwd(), vh = Math.hypot(d.vel.x, d.vel.z);
-    if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) { this.fb.push({ t, p: v3(d.pos.x, d.pos.y, d.pos.z), v: v3(d.vel.x, d.vel.y, d.vel.z), up, f, rc: this.lastRc ? { thr: this.lastRc.thr, roll: this.lastRc.roll, pitch: this.lastRc.pitch, yaw: this.lastRc.yaw } : null }); if (this.fb.length > 900) this.fb.shift(); }
-    // deliberate taps: soft contact with anything but the ground, remembering which side of the quad touched
-    if (d.contactThisStep && d.armed && !d.crashed && !d.contactGround && d.contactNormal) {
-      const o = this.world.objs[d.contactOwner];
-      if (o && o.kind === 'edge') { /* the map's invisible edge: not a trick */ }
-      else if (o && o.kind === 'pilot' && t - this.lastFaceT > 1 && d.pos.y > 1.35) { this.lastFaceT = t; this.faces.push({ t, id: 'face' + t.toFixed(3), obj: o.id }); this.newEv.push('face'); ev = true; }
-      else if (d.lastImpact < 3.2 && t - this.lastTapT > 0.25) {
-        const n = d.contactNormal, nB = qinv(d.q, n);
-        const face = nB.y > 0.55 ? 'bottom' : nB.y < -0.55 ? 'top' : 'side';
-        const surface = n.y < -0.6 ? 'ceiling' : Math.abs(n.y) < 0.5 ? 'wall' : 'top';
-        this.lastTapT = t; this.taps.push({ t, obj: d.contactOwner, kind: o && o.kind, wallish: !!(o && (o.kind === 'wall' || o.kind === 'building' || o.wallNormal)), name: o && o.name, face, surface, impact: d.lastImpact, id: 'tap' + t.toFixed(3) });
-        this.newEv.push('tap'); ev = true;
-      }
-    }
-    // vertical stall: climbing → apex → falling
-    const vs = this.vst;
-    if (d.vel.y > 1.5) { if (!vs.climb) { vs.climb = true; vs.t0 = t; vs.y0 = d.pos.y; } vs.apexT = null; }
-    else if (vs.climb && d.vel.y < 0.3 && vs.apexT == null) { vs.apexT = t; vs.apexY = d.pos.y; }
-    if (vs.climb && vs.apexT != null && d.vel.y < -1.0) { this.stalls.push({ t0: vs.t0, tApex: vs.apexT, yApex: vs.apexY, climb: vs.apexY - vs.y0, t }); vs.climb = false; vs.apexT = null; this.newEv.push('stall'); ev = true; }
-    if (vs.climb && t - vs.t0 > 4) vs.climb = false;
-    // horizontal rewind: moving one way → stop → moving back the way you came
-    const hs = this.hst;
-    if (vh > 1.5) {
-      const u = v3(d.vel.x / vh, 0, d.vel.z / vh);
-      if (hs.slowT != null && hs.uBefore) {
-        if (dot(u, hs.uBefore) < -0.5 && t - hs.slowT < 2.5) { this.rewinds.push({ t0: hs.slowT, t1: t, p: v3(d.pos.x, d.pos.y, d.pos.z), id: 'rw' + t.toFixed(3) }); this.newEv.push('rewind'); ev = true; }
-        hs.slowT = null;
-      }
-      hs.u = u; hs.uBefore = u;
-    } else if (vh < 0.7 && hs.u && hs.slowT == null) hs.slowT = t;
-    if (hs.slowT != null && t - hs.slowT > 2.5) hs.slowT = null;
-    // Open-air trippies (pilot: "open air trippies aren't being counted"): the same coordinated, rolled-over orbit with
-    // nothing in the middle. The game knows where every pole is, so when the quad is rolled past knife-edge and
-    // circling a point that is NOT a pole, that point becomes a pole of its own for as long as the circling lasts: the
-    // centre of the turn, measured from the path. Everything after that (laps, the "held at the top of the picture"
-    // check, how round it is) is the ordinary orbit code. Only trippies count this way; an upright circle is just a turn.
-    { const A = this.airPole, hd = Math.atan2(d.vel.z, d.vel.x); let dh = hs.hd == null ? 0 : hd - hs.hd; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; hs.hd = hd;
-      const om = vh > 0.8 ? dh / dt : 0; hs.om = (hs.om || 0) + (om - (hs.om || 0)) * Math.min(1, dt / 0.12);
-      const R = Math.abs(hs.om) > 0.35 ? vh / Math.abs(hs.om) : 99, turning = d.armed && up.y < 0.35 && vh > 0.8 && R >= 0.3 && R <= 4.5;
-      const cx = turning ? d.pos.x - d.vel.z / hs.om : 0, cz = turning ? d.pos.z + d.vel.x / hs.om : 0;
-      const nearReal = turning && this.poles.some(P => { const o = this.orb[P.id]; return (o && o.acc > 90) || (Math.hypot(P.x - cx, P.z - cz) < Math.max(1.5, R * 0.8) && d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5); });
-      if (!A) {
-        const c = hs.airC;
-        if (!turning || nearReal) hs.airC = null;
-        else if (!c) hs.airC = { t0: t, x: cx, z: cz, n: 1, sx: cx, sz: cz, dir: Math.sign(hs.om) };
-        else if (Math.sign(hs.om) !== c.dir || Math.hypot(cx - c.sx / c.n, cz - c.sz / c.n) > Math.max(1.2, R)) hs.airC = null;
-        else { c.sx += cx; c.sz += cz; c.n++; if (t - c.t0 > 0.45) { const P = { id: 'air', air: true, objId: 'air', name: 'open air', x: c.sx / c.n, z: c.sz / c.n, y0: d.pos.y - 5, y1: d.pos.y + 5, tTurn: t, t0: t }; P.point = y => v3(P.x, y, P.z); this.airPole = P; hs.airC = null; } }
-      } else {
-        if (turning) { A.tTurn = t; const k = Math.min(1, dt / 1.2); A.x += (cx - A.x) * k; A.z += (cz - A.z) * k; A.y0 = Math.min(A.y0, d.pos.y - 3); A.y1 = Math.max(A.y1, d.pos.y + 3); }   // an open-air orbit drifts: follow it slowly
-        const liveHere = this.live && this.live.key === 'air';
-        if (!d.armed || nearReal && !liveHere || t - A.tTurn > (liveHere ? 1.0 : 0.6)) { const ob = this.orb.air; if (ob && ob.acc > 0) { this.endOrbit(A, ob, 'exit'); ev = true; } delete this.orb.air; delete this.passTr.air; this.airPole = null; }
-      } }
-    // poles: passes (closest approach then clear) and orbits (angle swept around the pole)
-    // only poles within 40 m can be passed or orbited (both need the quad within 9 m); the list is rebuilt every 0.1 s, so
-    // a pole drops off it long after it has been reset as "far" (performance, 2026-11-17)
-    if (this.nearPT == null || t < this.nearPT || t - this.nearPT >= 0.1 || this.nearPA !== this.poles) { this.nearPT = t; this.nearPA = this.poles;
-      this.nearP = this.poles.filter(P => { const a = P.point(P.y0), b = P.point(P.y1); return Math.min(Math.hypot(d.pos.x - a.x, d.pos.z - a.z), Math.hypot(d.pos.x - b.x, d.pos.z - b.z)) < 40; }); }
-    for (const P of (this.airPole ? [...this.nearP, this.airPole] : this.nearP)) {
-      // fast path (input lag on low-end machines, 2026-11-19): a pole well out of reach of a pass (6 m) and of an orbit (9 m)
-      // with nothing tracked on it does exactly nothing below, so skip the work (the same calls, checked on every flight)
-      if (!P.air) { if (P.sp == null) { const a = P.point(P.y0), b = P.point(P.y1); P.sp = Math.hypot(a.x - b.x, a.z - b.z) / 2 + 0.01; }
-        if (Math.hypot(d.pos.x - P.x, d.pos.z - P.z) - P.sp > 9.5 && !this.orb[P.id]) { const q = this.passTr[P.id]; if (!q || (q.dmin === 99 && !q.lock && !q.far)) continue; } }
-      const at = P.point(d.pos.y), dx = d.pos.x - at.x, dz = d.pos.z - at.z, dist = Math.hypot(dx, dz);
-      const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
-      const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
-      if (P.air) { /* nothing is there to pass */ }
-      else if (dist > 6 || !inY) { pt.dmin = 99; pt.lock = false; pt.far = 0; }
-      else if (pt.lock) { pt.far = Math.max(pt.far || 0, dist); if (dist < pt.far - 0.3) { pt.lock = false; pt.far = 0; pt.dmin = dist; pt.tc = t; } }   // one pass per approach: wait until it heads back in
-      else { if (dist < pt.dmin) { pt.dmin = dist; pt.tc = t; }
-        if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) { this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) }); pt.dmin = 99; pt.lock = true; pt.far = dist; this.newEv.push('pass'); ev = true; } }
-      let ob = this.orb[P.id]; const ang = Math.atan2(dz, dx);
-      const rMax = Math.max(5.5, Math.min(9, 2 + (P.y1 - P.y0) * 0.75));   // big spins: tall poles (flagpole, trees) get wider trippies
-      if (dist < 0.25 || dist > rMax || !inY || !d.armed) { if (ob && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; } this.orb[P.id] = null; continue; }
-      if (!ob) { this.orb[P.id] = { acc: 0, dir: 0, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; continue; }
-      let da = ang - ob.lastAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; ob.lastAng = ang;
-      // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
-      // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
-      // a Double Rolling Trippy rolls round the line to the pole and can all but stop going round for a moment, or swing back a
-      // little (the owner's labelled run, 2026-11-25: the lap restarted every 2-3 s): while it is rolling fast in the trippy look,
-      // give it longer before it counts as stopped or reversed, and keep counting its roll
-      const rollingIn = ob.poseT0 != null && t - (ob.lastPose ?? -9) < DRT_HOLD && Math.abs(rates[0]) > DRT_RATE;
-      if (ob.poseT0 != null) ob.pRoll = (ob.pRoll || 0) + rates[0] * dt;
-      if (Math.abs(da) / dt < Math.min(25 * D2R, 0.8 / Math.max(dist, 0.5))) { ob.still += dt; if (ob.still > (rollingIn ? DRT_STILL : 1.0) && ob.acc > 0) { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; } continue; }
-      ob.still = 0; const sg = Math.sign(da);
-      if (!ob.dir) { ob.dir = sg; ob.t0 = t; }
-      if (sg === ob.dir) {
-        // how round the path is: distance from the pole, weighted by the angle swept at that distance. A circle keeps its
-        // distance; flying straight past (a Cradle, a Whiplash, any fly-by) sweeps nearly 180° while the distance goes
-        // from far to close to far (pilot: cradles were being called orbits)
-        { const w = Math.abs(da) * R2D; ob.as += w * dist; ob.as2 += w * dist * dist; ob.aw += w; }
-        { const vr = (d.vel.x * dx + d.vel.z * dz) / Math.max(dist, 1e-3), vh2 = d.vel.x * d.vel.x + d.vel.z * d.vel.z; ob.pl += Math.sqrt(vh2) * dt; ob.pt += Math.sqrt(Math.max(0, vh2 - vr * vr)) * dt; }   // how much of the way was ROUND the pole rather than toward/away from it
-        // which way the quad leans: a trippy is ROLLED (its top toward the pole); a fast orbit leans just as far by pitching
-        // its nose down at the pole (pilots: RodFPV's orbits round Clappy's sakura trees at 10-16 m/s ran pitch -65..-75°,
-        // roll 10-40°, and were called Trippy Spin)
-        const rolled = !(f.y < -0.6 && up.y > -0.15);   // not 'nose well below the horizon while still right-way-up' (inverted trippies and nose-up-the-pole ones are fine)
-        const back = Math.min(ob.rev || 0, Math.abs(da) * R2D); ob.acc += Math.abs(da) * R2D - back; ob.rev = Math.max(0, (ob.rev || 0) - Math.abs(da) * R2D); ob.n++;   // ground given back while rolling is flown again before it counts ob.t1 = t; if (up.y < 0.15 && rolled) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
-        // in view: level with the quad, or lower down the trunk (a fast orbit looks down at the pole: pilot RodFPV)
-        const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)), inView = vi.ang < 55 || [-1, -2].some(dy => d.pos.y + dy >= P.y0 - 0.2 && this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)).ang < 55);
-        if (inView) ob.view++;
-        { const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy); for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y); ys.push(P.y1);   // any part of it, up to the top of a tall pole
-          let lockNow = false; const topVis = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); if (vt.top && vt.ang < LOCK_ANG) lockNow = true; return vt.top && vt.ang < 75; }); if (topVis) ob.top++;
-          if (!lockNow) lockNow = ys.some(y => { const vt = this.viewOf(d.pos, up, f, P.point(y)); return vt.top && vt.ang < LOCK_ANG; });   // pole held in the top half of the screen
-          // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
-          // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
-          // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
-          // the sticks (the Infinity Loops masterclass, 2026-11-23; all 25 confirmed trippies in the shared flights against the orbits):
-          // in a trippy roll and yaw are pushed OPPOSITE ways ("wonky nips"), in an ordinary orbit the same way. `so` is that,
-          // smoothed over ~0.35 s (-1 together .. +1 opposed; 0 with no sticks recorded, as in the Node tests' fake flights)
-          { const rc = this.lastRc, o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0;
-            ob.so = (ob.so || 0) + (o - (ob.so || 0)) * Math.min(1, dt / 0.35); if (o > 0) ob.sOpp = (ob.sOpp || 0) + dt; else if (o < 0) ob.sSame = (ob.sSame || 0) + dt; }
-          // …or held flatter than knife-edge with the sticks opposed: a high camera tilt flies the same trippy much flatter (the
-          // masterclass; HemmingsonFPV's and the owner's missed trippies never went under up.y 0.35)
-          const wonky = ob.so > 0.5 && up.y < TRIPPY_FLAT;
-          const dA = Math.abs(da) * R2D - back, pose = topVis && (up.y < 0.35 || f.y > 0.7 && Math.abs(rates[0]) > 120 || wonky) && rolled;   // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
-          // the trippy pose while circling a pole (the pole held up in the picture, rolled over or nose up the pole): no Burrito
-          // Roll then (owner: a burrito is never flown looking up at a pole); once 90° of the circle has been flown in the pose
-          if (pose && ob.tAcc > 90) { const W = this.circled || (this.circled = []), last = W[W.length - 1]; if (last && last.ob === ob && t - last.t1 < 0.25) last.t1 = t; else { W.push({ ob, t0: t, t1: t }); if (W.length > 12) W.shift(); } }
-          if (pose) { ob.tAcc += dA; ob.lastPose = t; if (ob.poseT0 == null) { ob.run += dA; if (ob.run > 20) { ob.poseT0 = t; ob.accStart = ob.acc - ob.run; } }
-            ob.rs += dist; ob.rs2 += dist * dist; ob.rn++; const wr = dA / dt; ob.ws += wr; ob.ws2 += wr * wr; if (lockNow) ob.lock = (ob.lock || 0) + 1; }
-          else if (ob.poseT0 == null) ob.run = 0;
-          if (up.y > 0.35 && inView) ob.oAcc += dA; }
-        ob.roll += rates[0] * dt;
-        const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0; if (st && ob.st && st !== ob.st) ob.flips++; if (st) ob.st = st;   // upright <-> inverted changes
-        if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin') { this.endOrbit(P, ob, 'exit'); ev = true; this.orb[P.id] = null; continue; }
-        // a plain trippy that turns into a Double Rolling one (the owner's run: one lap of trippy, then rolling): bank the trippy's
-        // laps and judge the rolling on its own (the last DRT_SPLIT_T s rolled DRT_SPLIT_R deg or more, 2.5x the orbit's sweep)
-        { const H = ob.hist || (ob.hist = []); if (!H.length || t - H[H.length - 1][0] >= 0.1) { H.push([t, ob.acc, ob.pRoll || 0]); while (H.length && t - H[0][0] > 2.5) H.shift(); }
-          const h = H.find(x => t - x[0] <= DRT_SPLIT_T), dR = h ? Math.abs((ob.pRoll || 0) - h[2]) : 0, dAc = h ? ob.acc - h[1] : 0;
-          if (h && t - h[0] > DRT_SPLIT_T - 0.15 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin' && this.orbSpan(ob) >= 330 && dR >= DRT_SPLIT_R && dR >= 2.5 * Math.max(dAc, 30)) {
-            this.endOrbit(P, ob, 'split'); ev = true;
-            this.orb[P.id] = { acc: 0, dir: ob.dir, t0: h[0], t1: t, lastAng: ang, n: 1, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0,
-              poseT0: h[0], accStart: 0, lastPose: t, pRoll: Math.sign(ob.pRoll || 1) * dR, split: true };
-            continue; } }
-      } else { ob.rev += Math.abs(da) * R2D; if (ob.rev > (rollingIn ? DRT_BACK : 30)) { if (ob.acc > 0) { this.endOrbit(P, ob, 'reverse'); ev = true; } this.orb[P.id] = { acc: 0, dir: sg, t0: t, t1: t, lastAng: ang, n: 0, inv: 0, view: 0, top: 0, roll: 0, rev: 0, still: 0, flips: 0, st: 0, tAcc: 0, oAcc: 0, run: 0, rs: 0, rs2: 0, rn: 0, ws: 0, ws2: 0, as: 0, as2: 0, aw: 0, pl: 0, pt: 0 }; } }
-    }
-    this.updateLive(t);
-    if (t - (this.prunedAt || 0) >= 0.05 || t < (this.prunedAt || 0)) { this.prunedAt = t;   // forgetting old sightings does not need doing every millisecond
-      this.taps = this.taps.filter(x => t - x.t < 8); this.stalls = this.stalls.filter(x => t - x.t < 8); this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
-      this.passes = this.passes.filter(x => t - x.t < 8); this.orbSegs = this.orbSegs.filter(x => t - x.t1 < 10); this.faces = this.faces.filter(x => t - x.t < 4); }
-    return ev;
-  }
-  // ---- live orbit tricks (Trippy Spin, Orbit, Double Rolling Trippy): count every half lap, bank on exit, lose on crash
-  orbSpan(ob) { return ob.poseT0 != null ? ob.acc - ob.accStart : 0; }   // degrees swept since the trippy view was first held
-  orbitKind(ob) {
-    if (!ob || !ob.n) return null;
-    const span = this.orbSpan(ob), laps = Math.max(0.25, ob.acc / 360), inv = ob.inv / ob.n, view = ob.view / ob.n;
-    // a Double Rolling Trippy (the owner's video and labelled run, 2026-11-25): a trippy that keeps rolling round the line to the
-    // pole, the pole still up in the picture, so the body rolls far more than the orbit alone turns it: his labelled ones 2.6-3.4 deg
-    // of roll per degree round the pole, plain trippies 0.6-0.9. It never needs to come upright (his never went past knife-edge; the
-    // old "through upright every lap" test called Split S, Flips and Mattys near poles instead)
-    if (span >= DRT_SPAN && ob.tAcc / span >= 0.45 && Math.abs(ob.pRoll || 0) / span >= DRT_ROLL) return 'Double Rolling Trippy Spin';
-    if (ob.split && Math.abs(ob.pRoll || 0) >= DRT_SPLIT_MIN && Math.abs(ob.pRoll || 0) / Math.max(span, 1) >= DRT_ROLL) return 'Double Rolling Trippy Spin';   // the rolling after a trippy: in the owner's run it hardly went round at all
-    if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin';
-    const mr = ob.aw ? ob.as / ob.aw : 0, round = mr > 0 ? Math.sqrt(Math.max(0, ob.as2 / ob.aw - mr * mr)) / mr : 1;   // 0 = a circle; a straight fly-by is 0.5+
-    const around = ob.pl > 0 ? ob.pt / ob.pl : 0;
-    if (!ob.air && ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8) return 'Orbits';
-    return null;
-  }
-  // laps are laps round the pole; a Double Rolling Trippy split off a trippy can barely go round (the owner's run), so its rolling
-  // counts as well, at two rolls a lap ("double"), whichever is more
-  orbLapDeg(ob, kind) { return kind === 'Double Rolling Trippy Spin' && ob.split ? Math.max(this.orbSpan(ob), Math.abs(ob.pRoll || 0) / 2) : kind === 'Trippy Spin' || kind === 'Double Rolling Trippy Spin' ? this.orbSpan(ob) : ob.acc; }
-  updateLive(t) {
-    // the post with the most sweep owns the live trick (circling the slide tower sweeps all 4 posts at once)
-    let best = null, bestP = null;
-    for (const P of (this.airPole ? [...this.poles, this.airPole] : this.poles)) { const ob = this.orb[P.id]; if (ob && P.air) ob.air = true; if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) { best = ob; bestP = P; } }
-    const L = this.live;
-    if (L && this.orb[L.key] && this.orb[L.key] === L.ob) { const k = this.orbitKind(L.ob); if (k) L.name = k; L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2; L.t1 = t; if (L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') L.t0 = L.ob.poseT0; }
-    else if (!L && best) this.live = { key: bestP.id, objId: bestP.objId, pole: bestP.name, ob: best, name: this.orbitKind(best), dir: best.dir, t0: ['Trippy Spin', 'Double Rolling Trippy Spin'].includes(this.orbitKind(best)) ? best.poseT0 : best.t0, t1: t, laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2 };
-    const N = this.live;
-    if (N && this.lastTrippy && !N.switched && N.name !== 'Orbits' && N.objId === this.lastTrippy.objId && N.dir !== this.lastTrippy.dir && N.t0 - this.lastTrippy.t < 1.6 && N.laps >= SWITCH_LAPS) {
-      N.switched = true; this.emit({ name: 'Trippy Switch', exec: 'CLEAN', clean: 95, obstacle: N.pole, toks: [], live: true }); this.lastTrippy = null;
-    }
-  }
-  finishLive(reason) {
-    const L = this.live; this.live = null; if (!L) return;
-    // Pilot: completed laps were flown clean, so they score even if the run ends in a crash; only the lap in progress
-    // is lost (the same as finished loops and tricks before a crash, which always counted).
-    const d = this.lastD; if (!d) return; const bailed = d.crashed || !d.armed;
-    if (bailed) L.laps = Math.floor(L.laps);
-    if (L.laps < 1) return;                                                  // under one lap doesn't count
-    const base = trickPoints(L.name) * L.laps / 2;                           // TPW values are for two laps
-    for (const k of this.toks) if (k.t1 > L.t0 && k.t0 < L.t1) k.usedUntil = Math.max(k.usedUntil, k.t1);
-    for (const sg of this.orbSegs) if (sg.t1 > L.t0 - 0.3 && sg.t0 < L.t1 + 0.3) this.claimUsed.add(sg.id);
-    // how tidy: an even circle at an even pace, holding the view, is clean; egg shapes, surging and losing the view are sloppy
-    let clean = 92, notes = []; const ob = L.ob;
-    if ((L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') && ob && ob.rn > 20) { const mr = ob.rs / ob.rn, cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr, mw = ob.ws / ob.rn, cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1), hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
-      const lock = (ob.lock || 0) / ob.rn;   // 'locked in' (the masterclass): the object never leaves the top of the screen
-      clean = Math.round(Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60 - Math.max(0, 0.85 - lock) * 15));
-      if (cvR > 0.15) notes.push('uneven circle'); if (cvW > 0.4) notes.push('uneven pace'); if (hold < 0.8) notes.push('lost the view at times'); else if (lock >= 0.9) notes.push('locked in'); else if (lock < 0.6) notes.push('the object wandered off the top of the screen'); }
-    // the stick witness: a trippy's roll and yaw are opposed, an orbit's together. A soft vote (the call's confidence), never a veto
-    let watch; if (ob && (ob.sOpp || 0) + (ob.sSame || 0) > 0.4) { const share = (ob.sOpp || 0) / ((ob.sOpp || 0) + (ob.sSame || 0)), ok = L.name === 'Orbits' ? 1 - share : share;
-      watch = { conf: +clamp(0.35 + 0.65 * ok, 0, 1).toFixed(2), fails: ok < 0.5 ? ['sticks'] : [], votes: { sticks: { n: 1, ok: +ok.toFixed(2) } } }; if (ok < 0.5) notes.push(L.name === 'Orbits' ? 'roll and yaw were opposed, as in a trippy' : 'roll and yaw went the same way, as in an orbit'); }
-    if (bailed) notes.push('completed laps kept');
-    this.emit({ name: L.name, exec: clean < 70 ? 'SLOPPY' : 'CLEAN', clean, notes, obstacle: L.pole, basePts: Math.round(base), laps: L.laps, dur: +Math.max(0, L.t1 - L.t0).toFixed(2), toks: [], live: true, draft: true, ...(watch ? { watch } : {}) });
-    if (reason === 'reverse' && L.name !== 'Orbits') this.lastTrippy = { objId: L.objId, dir: L.dir, t: this.time };
-  }
-  liveState() {
-    const out = [];
-    if (this.live && this.live.laps >= 0.5) out.push({ name: this.live.name, laps: this.live.laps, pts: Math.round(trickPoints(this.live.name) * this.live.laps / 2), counts: this.live.laps >= 1 });
-    if (this.wallRide && this.wallRide.emitted) out.push({ name: this.wallRide.name2 || 'Wall Ride', meters: len(sub(this.lastD.pos, this.wallRide.p0)) });
-    if (this.slide && this.slide.dist > 0.3) out.push({ name: this.slide.dist >= 0.75 ? 'Slide Disarm · re-arm!' : 'Sliding', meters: this.slide.dist });
-    if (this.dead && this.lastD && !this.lastD.armed) out.push({ name: 'Motors off · re-arm!' });
-    return out;
-  }
-  endOrbit(P, ob, reason) {
-    const c0 = ob && ob.poseT0 != null ? ob.poseT0 - 0.1 : ob ? ob.t0 - 0.3 : 0;
-    if (ob && ob.acc > 270) { for (const k of this.toks) if (k.t0 >= c0 && k.t0 <= ob.t1) k.usedUntil = Math.max(k.usedUntil, k.t1); for (const c of this.cur) if (c && c.t0 >= c0 + 0.3 - 0.3) c.usedUntil = this.time; }   // rotation during an orbit is the orbit's, not a separate roll
-    if (this.live && this.live.ob === ob) this.finishLive(reason);
-    if (ob.acc < 250 || !ob.n || P.air) return;
-    this.orbSegs.push({ obj: P.id, name: P.name, dir: ob.dir, acc: ob.acc, t0: ob.t0, t1: ob.t1, inv: ob.inv / ob.n, view: ob.view / ob.n, top: ob.top / ob.n, roll: ob.roll, id: 'orb' + P.id + '@' + ob.t0.toFixed(2) });
-    this.newEv.push('orbit');
-  }
-  // Rates for rotation tokens. A spin around the WORLD vertical with the body held tilted (an inverted yaw spin with a
-  // 30° camera: the pilot keeps the horizon in view) shows up in body rates as yaw·cos(tilt) plus a steady pitch/roll
-  // component. When rotation about the vertical clearly dominates body yaw, count it as yaw (heading change) and keep
-  // only the rest as pitch/roll. Plain body-yaw spins and flips are unchanged.
-  tokRates(d, rates) {
-    const g = qinv(d.q, v3(0, 1, 0));                                  // world up, in body axes (x right, y up, z back)
-    if (Math.abs(g.y) < 0.5) return rates;
-    const w = d.w, h = w.x * g.x + w.y * g.y + w.z * g.z;
-    const wm = Math.hypot(w.x, w.y, w.z);
-    if (!(Math.abs(h) > 0.85 * wm && Math.abs(h) > Math.abs(w.y) * 1.03 && Math.abs(h) * R2D > 60)) return rates;   // only a spin about the vertical
-    const px = w.x - h * g.x, pz = w.z - h * g.z;
-    return [-pz * R2D, px * R2D, -h * Math.sign(g.y) * R2D];
-  }
-  // Angle swept by the direction of travel in the vertical plane of the move (degrees, + = up/over the top the way a
-  // powerloop goes). A real loop's path turns ~360 with the pitch; a flip in place barely moves; a Matty's path turns
-  // ~180 the other way (forward, down, then backward).
-  pathSweep(a, b) {
-    const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.y, x.v.z) > 0.6); if (W.length < 6) return { sweep: 0, speed: 0, rise: 0 };
-    const v0 = W[0].v, hl = Math.hypot(v0.x, v0.z) || 1, hx = v0.x / hl, hz = v0.z / hl;
-    let prev = null, acc = 0, sp = 0;
-    for (const x of W) { const g = Math.atan2(x.v.y, x.v.x * hx + x.v.z * hz); if (prev != null) { let d = g - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; acc += d; } prev = g; sp += Math.hypot(x.v.x, x.v.y, x.v.z); }
-    const ys = W.map(x => x.p.y); return { sweep: acc * R2D, speed: sp / W.length, rise: Math.max(...ys) - Math.min(...ys) };
-  }
-  // Was the loop one smooth motion? No hit, no hard change of speed or direction (more than about 12 g for a moment),
-  // and the turning stayed on the pitch axis rather than wandering onto roll and yaw.
-  loopSmooth(t0, t1, tok) {
-    if (this.contacts.some(c => c.t > t0 - 0.05 && c.t < t1 + 0.05 && c.impact > 0.6)) return false;
-    const W = this.fbIn(t0, t1); for (let i = 5; i < W.length; i++) { const a = W[i - 5].v, b = W[i].v; if (Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) > 6) return false; }
-    if (tok && tok.raw > 0 && tok.off / tok.raw > 0.6) return false;
-    return true;
-  }
-  // Loops and Mattys flown in open air (pilot request): the powerloop family when the path loops round with the pitch,
-  // the Matty family when the path goes forward -> down -> backward and the quad ends flying backward.
-  matchOpenLoop(toks) {
-    if (!toks.length || !toks.some(k => k.ax === 'P' && k.raw >= 250)) return null;
-    const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1;
-    // An obstacle only takes the loop away from the open-air reading when the loop really went ROUND it: under and over
-    // the same thing. Passing over a roof edge or under some far-off bar while looping in clear air is still an open
-    // loop (pilot, on the school map where the Surveyor finds an over/under everywhere: open powerloops weren't counted).
-    { const near = this.crossLog.filter(c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3);
-      // a Matty only waits for an object's own reading when it really went over and then under one object (owner, Clappy Park:
-      // sweeping open-air Mattys beside the shops brushed an awning, a window and the façade trim and were never called)
-      var objMatty = near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
-      var overOpen = near.some(o => o.kind === 'O' && !near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
-      if (near.some(c => c.kind === 'U' && near.some(o => o.kind === 'O' && o.obj === c.obj))) return null;
-      if (near.some(c => c.kind === 'U' && c.t > t0 - 0.25 && c.t < t0 + 0.6) && this.time - t1 < 0.45) return null; }   // went in under something: give the way back under a moment to show up
-    const ps = this.pathSweep(t0 - 0.25, t1 + 0.25);
-    if (ps.speed < 1.6 || ps.rise < 0.8) return null;
-    let best = null;
-    for (const tr of OBSTACLE_TRICKS) {
-      const loopFam = tr.cross === 'UOU' && !tr.tap && !/Mav|Donkey|Half Mavvy|Power Swap|Power Switch|Barani|Rollani|Flipani/.test(tr.name);
-      const mattyFam = tr.cross === 'OU' && tr.end === 'back';
-      if (!loopFam && !mattyFam) continue;
-      // The path must loop with the pitch. Shared flights (2026-11-17, pilot-labelled open powerloops read as Flip / Wall
-      // Ride): the sweep's sign depends on which way the quad happened to be travelling when the window opened, and a
-      // tall, slow loop turns the path less than a full 270 because it stalls over the top. So: either way round, and a
-      // loop that climbs 1.5 m and takes over a second counts from half a turn of path.
-      if (loopFam && !(Math.abs(ps.sweep) >= 270 || (Math.abs(ps.sweep) >= 180 && ps.rise >= 1.5 && t1 - t0 >= 1.0))) continue;
-      if (mattyFam && objMatty) continue;   // over then under one object: that object's own Matty reading takes it
-      if (mattyFam && overOpen && this.time - t1 < 0.6) continue;   // went over something: give the way back under it a moment to show up
-      // a Matty's path goes forward -> down -> backward; a big sweeping one (owner, 2026-11-18: punch up ~12 m, flip forward over
-      // the top, fall back flying backward, 3-4 s) turns the path the other way round, up over the top, while the nose flips
-      // forward: allowed when it climbs 3 m and takes 1.5 s (a powerloop ends flying forward, so it never reads as one)
-      const fwdFlip = tr.pats.every(q => /P-/.test(q));   // the nose flips forward, against the path (not an Anti Matty: a backflip turns with the path, like a loop)
-      if (mattyFam && !((ps.sweep <= -120 || (fwdFlip && ps.sweep >= 180 && ps.rise >= 3 && t1 - t0 >= 1.5)) && this.backFrac(this.time - 0.3, this.time) >= 0.6)) continue;
-      for (const pp of tr.parsed) { const m = matchTokens(pp, toks); if (!m) continue;
-        if (loopFam && !this.loopSmooth(t0, t1, toks.length === 1 ? toks[0] : null)) continue;   // the loop monitor: a broken loop is not a loop
-        const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
-        if (!best || better(cand, best)) best = cand; }
-    }
-    return best;
-  }
-  // Open-air Split-S (owner, 2026-11-21: "yup", it counts; 5 confirmed labels had no object under them): one half roll to upside-down,
-  // a nose-up pull through, out upright and flying forward the other way, at least SPLIT_DROP lower than where the roll began. No
-  // other big rotation in it. An over-then-under of one object is that object's own Split-S (matchObstacle), and a pass over
-  // something gets a moment for the way back under it to show up.
-  matchOpenSplit(toks) {
-    const big = toks.filter(x => x.raw >= 90), R = big.filter(x => x.ax === 'R'); if (R.length !== 1) return null;
-    const r = R[0], P = toks.filter(x => x.ax === 'P' && x.dir > 0 && x.raw >= 45 && x.t0 >= r.t0 - 0.1);
-    if (r.raw < 120 || r.raw > 250 || !P.length || big.some(x => x !== r && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < r.t0 - 0.1))) return null;
-    const t1 = Math.max(r.t1, ...P.map(x => x.t1)); if (t1 - r.t0 > SPLIT_LOOK || this.time - t1 > 1.2) return null;
-    const near = this.crossLog.filter(c => (c.kind === 'U' || c.kind === 'O') && c.t > r.t0 - 0.6 && c.t < this.time + 0.1);
-    if (near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t))) return null;
-    if (near.some(o => o.kind === 'O' && !(o.hOver > 2.5)) && this.time - t1 < 0.6) return null;
-    const W = this.fbIn(r.t0 - 0.1, this.time); if (W.length < 6) return null;
-    const a = W[0], b = W[W.length - 1]; if (Math.min(...W.map(x => x.up.y)) > -0.5 || b.up.y < 0.6 || a.up.y < 0.5 || a.p.y - b.p.y < SPLIT_DROP) return null;
-    const h0 = Math.hypot(a.f.x, a.f.z), h1 = Math.hypot(b.f.x, b.f.z), sp = Math.hypot(b.v.x, b.v.z); if (h0 < 0.3 || h1 < 0.3 || sp < 1.2) return null;
-    if ((a.f.x * b.f.x + a.f.z * b.f.z) / (h0 * h1) > -0.5 || (b.v.x * b.f.x + b.v.z * b.f.z) / (sp * h1) < 0.3) return null;
-    if (this.contacts.some(c => c.t >= r.t0 && c.t <= this.time && (c.impact || 0) > 0.8)) return null;
-    return { name: 'Split S', toks: toks.filter(x => x === r || P.includes(x)), err: 0.3, clen: 0.5, obstacle: 'open air', openAir: true };
-  }
-  keptInView(pt, a, b, frac) { if (!pt) return true; const W = this.fbIn(a, b); if (!W.length) return false;
-    return W.filter(x => this.viewOf(x.p, x.up, x.f, pt).ang < 75).length / W.length >= frac; }
-  // fraction of frames with some part of the pole (from 1.5 m below you to 3 m above, within its length) near the middle of the picture
-  poleView(P, a, b, ang) { const W = this.fbIn(a, b); if (!W.length || !P) return 0;
-    return W.filter(x => [-1.5, -0.75, 0, 0.75, 1.5, 3].some(dy => { const y = x.p.y + dy; if (y < P.y0 - 0.2 || y > P.y1 + 0.2) return false; return this.viewOf(x.p, x.up, x.f, P.point(y)).ang < ang; })).length / W.length; }
-  headingTurn(a, b) { const W = this.fbIn(a, b); if (W.length < 2) return 0; const hd = x => { const v = Math.abs(x.up.y) > 0.3 ? x.f : x.up; return Math.atan2(v.x * Math.sign(x.up.y || 1), v.z * Math.sign(x.up.y || 1)); };
-    const h0 = hd(W[0]), h1 = hd(W[W.length - 1]); let d = Math.abs(h1 - h0) * R2D; if (d > 180) d = 360 - d; return d; }
-  maxTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => Math.acos(clamp(x.up.y, -1, 1)) * R2D)) : 0; }
-  maxSideTilt(a, b) { const W = this.fbIn(a, b); return W.length ? Math.max(...W.map(x => { const r = cross(x.f, x.up); return Math.asin(clamp(Math.abs(r.y), 0, 1)) * R2D; })) : 0; }
-  orbiting() { return Object.values(this.orb).some(o => o && o.acc > 150 && (this.orbSpan(o) > 60 || o.oAcc > 150 || (o.flips || 0) >= 2)); }
-  tapIn(spec, obj, a, b) {
-    return this.taps.find(x => !this.claimUsed.has(x.id) && x.t >= a && x.t <= b && (obj == null || x.obj === obj) &&
-      (!spec.face || spec.face === 'any' || x.face === spec.face) && (!spec.surface || spec.surface === 'any' || x.surface === spec.surface)) || null;
-  }
-  fbIn(a, b) { return this.fb.filter(x => x.t >= a && x.t <= b); }
-  sweptBetween(a, b) { const W = this.fbIn(a, b); let s = 0; for (let i = 1; i < W.length; i++) s += Math.acos(Math.max(-1, Math.min(1, dot(W[i - 1].up, W[i].up)))); return s * R2D; }
-  // the same, only the part that turned the nose DOWN (top toward the nose: a forward flip, a Matty) minus the part that
-  // turned it up (a powerloop's way round): a Matty's tumble is forward
-  fwdSweptBetween(a, b) { const W = this.fbIn(a, b); let s = 0; for (let i = 1; i < W.length; i++) { const u0 = W[i - 1].up, u1 = W[i].up, g = Math.acos(Math.max(-1, Math.min(1, dot(u0, u1)))); const dd = (u1.x - u0.x) * W[i - 1].f.x + (u1.y - u0.y) * W[i - 1].f.y + (u1.z - u0.z) * W[i - 1].f.z; s += dd >= 0 ? g : -g; } return s * R2D; }
-  minUpBetween(a, b) { const W = this.fbIn(a, b); return W.length ? Math.min(...W.map(x => x.up.y)) : 1; }
-  // the same, judged by the camera (what the pilot sees): with a 30° camera, a maverick's nose-down descent has the body
-  // ~110° nose down while the view is still forward-looking
-  minCamUpBetween(a, b) { const W = this.fbIn(a, b); if (!W.length) return 1; const c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R);
-    return Math.min(...W.map(x => x.up.y * c - x.f.y * s)); }
-  // stayed upright by the body OR by the camera view: pilots hold the quad differently for different camera angles
-  // the site's Barani (owner, 2026-11-23): the half loop goes on until the horizon is in the top half of the picture before the yaw
-  // starts; a yaw begun while still looking at the sky makes it a Power Swap. True once the camera's line is within HORIZON_VIEW of level
-  horizonAt(t) { const W = this.fbIn(t - 0.03, t + 0.03); if (!W.length) return true; const x = W[0], c = Math.cos(this.camTilt * D2R), s = Math.sin(this.camTilt * D2R), cam = norm(add(mul(x.f, c), mul(x.up, s)));
-    return Math.asin(clamp(cam.y, -1, 1)) * R2D <= HORIZON_VIEW; }
-  // Inverted Uh-uh (the site; credited there to Heads of Infinity Loops): upside-down between the half flip / roll in and the one out,
-  // the nose shakes left, right, left(, right) and ends about where it began: three swings of UHUH_SWING deg or more, no spin
-  uhuh(a, b) { const H = (this.attLog || []).filter(r => r[0] >= a && r[0] <= b && r[1] < -0.4); if (H.length < 15) return false;
-    let ext = H[0][5], dir = 0, n = 0, big = 0; for (const r of H) { const y = r[5]; if (!dir) { if (Math.abs(y - ext) >= UHUH_SWING) { dir = Math.sign(y - ext); n = 1; big = Math.abs(y - ext); ext = y; } }
-      else if ((y - ext) * dir > 0) { big = Math.max(big, 0); ext = y; } else if (Math.abs(y - ext) >= UHUH_SWING) { dir = -dir; n++; ext = y; } }
-    const net = Math.abs(H[H.length - 1][5] - H[0][5]), span = Math.max(...H.map(r => r[5])) - Math.min(...H.map(r => r[5]));
-    return n >= 3 && net <= 70 && span <= 200; }
-  // Matty Twister by the book (owner, 2026-11-24: one was called "despite not trying and not being over an object"): fly over the
-  // object; the 360 roll is made WHILE OVER it (it starts from just before the over pass to a second after, above the object's top);
-  // the Matty flip follows at once, in one motion; the pass under comes out of the flip
-  twisterOK(tv, part, id) {
-    const R = tv.filter(k => k.ax === 'R'), P = tv.filter(k => k.ax === 'P'), ro = R.sort((a, b) => b.raw - a.raw)[0], fl = P[P.length - 1], O = part[0], U = part[1]; if (!ro || !fl || !O || !U) return false;
-    if (ro.t0 < O.t - TWIST_BEFORE || ro.t0 > O.t + TWIST_AFTER) return false;          // rolled while over the object
-    const o = this.world.objs.find(x => x.id === id), top = o && o.obstacle ? o.obstacle.over : null, at = this.fbIn(ro.t0 - 0.03, ro.t0 + 0.03)[0];
-    if (top != null && at && at.p.y < top - 0.15) return false;                          // and above it, not beside or below
-    if (fl.t1 < ro.t1 - 0.05 || fl.t0 - ro.t1 > TWIST_FLOW) return false;                // the flip follows the roll at once
-    if (U.t < ro.t0 || U.t - ro.t1 > TWIST_UNDER) return false;                          // and comes out under the object
-    return true;
-  }
-  // Mavvelmann by the book (owner, 2026-11-23): an Immelmann with a maverick's way up. Under the object, round and above it looking
-  // forward the whole way (upright from the under pass to the flick; over the top travelling backward), THEN, above it, a quick 180
-  // pitch down to upside-down, and promptly a 180 roll to level out
-  mavvelOK(tv, part) {
-    const fl = tv.find(k => k.ax === 'P'), ro = tv.find(k => k.ax === 'R'), U = part[0], O = part[1]; if (!fl || !ro || !U || !O) return false;
-    if (!this.stayedUpright(U.t, Math.max(U.t, fl.t0 - 0.03))) return false;                       // the maverick motion: never inverted on the way up and over
-    if (O.t <= fl.t0 && O.fwdDot && O.fwdDot > MAVVEL_BACK) return false;                          // over the top with backward motion
-    if (fl.t0 < O.t - MAVVEL_EARLY || fl.t0 > O.t + MAVVEL_LATE) return false;                     // the flick comes when you are above the object
-    if (fl.t1 - fl.t0 > MAVVEL_FLICK) return false;                                                // a quick flick
-    if (ro.t0 - fl.t1 > MAVVEL_PROMPT) return false;                                               // the roll follows promptly
-    if (this.minUpBetween(fl.t0 + (fl.t1 - fl.t0) * 0.6, ro.t0 + 0.05) > -0.3) return false;       // upside-down after the flick
-    const end = this.fbIn(ro.t1, ro.t1 + 0.25); if (end.length && Math.max(...end.map(x => x.up.y)) < 0.4) return false;   // levelled out
-    return true;
-  }
-  stayedUpright(a, b) { return Math.max(this.minUpBetween(a, b), this.minCamUpBetween(a, b)) > 0.1; }
-  backFrac(a, b) { const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.z) > 0.8); if (!W.length) return 0;
-    return W.filter(x => { const fh = Math.hypot(x.f.x, x.f.z) || 1, vh = Math.hypot(x.v.x, x.v.z); return (x.f.x * x.v.x + x.f.z * x.v.z) / (fh * vh) < -0.35; }).length / W.length; }
-  trackFrac(a, b) { // best fraction of time any pole or obstacle stayed in the camera view
-    const W = this.fbIn(a, b); if (!W.length) return 0; let best = 0;
-    const pts = [...this.poles.map(P => y => P.point(y)), ...this.world.objs.filter(o => o.obstacle).map(o => { const m = mul(add(o.obstacle.a, o.obstacle.b), 0.5); return () => v3(m.x, o.obstacle.under, m.z); })];
-    for (const pt of pts) { let k = 0; for (const x of W) if (len(sub(pt(x.p.y), x.p)) < 8 && this.viewOf(x.p, x.up, x.f, pt(x.p.y)).ang < 40) k++; best = Math.max(best, k / W.length); }
-    return best;
-  }
-  // a context trick's situation: null if not met, else what it claims
-  reqOK(req, toks) {
-    const t0 = toks[0].t0, t1 = toks[toks.length - 1].t1, now = this.time, out = { claims: [] };
-    if (req.tap) { const tp = this.tapIn(req.tap, null, t0 - 0.2, t1 + 0.25); if (!tp) return null; out.claims.push(tp.id); out.tapRef = tp; out.obstacle = tp.name; }
-    if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return null;
-    if (req.flatGap || req.notFlatGap) { const want = req.flatGap || req.notFlatGap, g = this.crossLog.find(c => c.kind === 'G' && c.flat && c.t >= t0 - 2.5 && c.t <= t1 + 0.6 && (want !== 'square' || c.sq) && (want !== 'down' || c.dir < 0 && c.t >= t0));
-      if (req.flatGap ? !g : g) return null; if (g && req.flatGap) out.obstacle = g.name; }
-    if (req.nearTall) { const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0]; const nm = s0 && this.nearTall({ pos: s0.p }, req.nearTall === true ? 3 : req.nearTall); if (!nm) return null; out.obstacle = out.obstacle || nm;
-      // a stall rewind rises beside the object and comes back down: it never passes over/under one (loops, jump ropes do)
-      if (req.nearTall !== true && this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)) return null;
-      if (req.stallIn && req.nearTall !== true) {   // flip/roll at the stall: nearly in place, unlike a loop beside the object
-        const W = this.fbIn(t0, t1); if (W.length > 2) { const ext = k => Math.max(...W.map(x => x.p[k])) - Math.min(...W.map(x => x.p[k]));
-          if (Math.hypot(ext('x'), ext('z')) > 1.6 || ext('y') > 1.6) return null; } } }
-    if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
-    if (req.rewindIn) { const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id)); if (!rw) return null; out.claims.push(rw.id); }
-    if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
-    if (req.track) { const yk = toks.find(k => k.ax === 'Y'), tk = this.iyTrack((yk ? yk.t0 : t0) - 0.1, (yk ? yk.t1 : t1) + 0.1); if (!tk) return null; out.obstacle = out.obstacle || tk.name; }   // the yaw segment itself keeps it centred (not the air around it)
-    if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2) && !(toks.length >= 2 && toks[1].t0 - toks[0].t1 >= 0.2)) return null;
-    return out;
-  }
-  reqPre(req, toks) {  // could this situation still complete? (used to hold a simpler trick a little longer)
-    const t0 = toks[0].t0, d = this.lastD; if (!d) return false;
-    if (req.tap) { const w = this.nearWall(d); const ceil = this.world.prims.some(p => p.aabb.min.y > d.pos.y && p.aabb.min.y - d.pos.y < 0.7 && d.pos.x > p.aabb.min.x && d.pos.x < p.aabb.max.x && d.pos.z > p.aabb.min.z && d.pos.z < p.aabb.max.z);
-      if (!((w && w.dist < 0.7) || ceil)) return false; }
-    if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return false;
-    if (req.flatGap && req.flatGap !== 'down' && !this.crossLog.some(c => c.kind === 'G' && c.flat && c.t >= t0 - 2.5)) return false;
-    if (req.stallIn && !(this.vst.climb || this.stalls.some(x => x.tApex >= t0 - 0.45))) return false;
-    if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2)) return false;   // a continuous flip can't become a segmented one
-    if (req.rewindIn && !(this.hst.slowT != null || this.rewinds.some(x => x.t1 >= t0 - 0.3))) return false;
-    if (req.endBack && Math.hypot(d.vel.x, d.vel.z) > 2.5 && this.backFrac(this.time - 0.2, this.time) < 0.2) return false;
-    if (req.track && !this.trackTargets(d.pos, IYT_NEAR + 2).length) return false;
-    return true;
-  }
-  toksIn(a, b) { return this.normalized().filter(x => x.t1 > a && x.t0 < b); }
-  eventCands(t) {
-    const out = [], fresh = this.newEv; this.newEv = [];
-    const mk = (o) => { const c = { err: 0.1, clen: 2, draft: true, toks: [], ...o }; c.t0 = c.t0 ?? (c.toks[0] ? c.toks[0].t0 : t); c.tDone = c.tDone ?? t; out.push(c); };
-    // Inverted Yaw Spin as pilots really finish it (first labelled flight, 2026-11-17: called a Yaw Spin): half flip or roll
-    // in, the spin upside-down, then back upright any way that works — often a quick tug and a slow pull-out that never
-    // makes a clean 180 token. Entry + inverted spin + "is upright again within 2 s" is the trick; the textbook pattern
-    // (with a crisp exit) still matches first when it is there.
-    { const N = this.normalized(), ri = [...N].reverse().findIndex(k => k.ax === 'Y' && k.inv && k.raw >= 270 && k.raw <= 830), yi = ri < 0 ? -1 : N.length - 1 - ri, y = yi >= 0 ? N[yi] : null, e = y && yi > 0 ? N[yi - 1] : null;
-      if (y && e && t - y.t1 < 2.0 && t - y.t1 > 0.15 && e.ax !== 'Y' && e.raw >= 120 && e.raw <= 260 && y.t0 - e.t1 <= this.airAllowed(e.t1, y.t0) && this.lastD && this.lastD.up().y > 0.55
-        && !N.slice(yi + 1).some(k => k.raw >= 130) && !this.claimUsed.has('iys' + y.t0.toFixed(2)) && !this.orbiting())
-        mk({ name: 'Inverted Yaw Spin', toks: N.slice(yi - 1), err: 0.3, clen: 0, draft: false, claims: ['iys' + y.t0.toFixed(2)], t0: e.t0, notes: ['loose exit'] }); }
-    for (const tp of this.taps) if (!this.claimUsed.has(tp.id) && t - tp.t < 1.5 && tp.face === 'bottom' && tp.surface === 'wall' && tp.wallish)
-      mk({ name: 'Wall Tap', clen: 0.5, draft: false, t0: tp.t, tDone: tp.t, claims: [tp.id], tapRef: tp, obstacle: tp.name, holdIfSpin: true });
-    for (const fc of this.faces) if (!this.claimUsed.has(fc.id)) mk({ name: 'Face Punch', clen: 0.5, t0: fc.t, tDone: fc.t, claims: [fc.id], tapRef: fc, obstacle: 'the pilot', draft: false });
-    if (fresh.includes('pass')) for (const ps of this.passes.filter(x => x.t === t && !this.claimUsed.has(x.id))) {
-      const P = this.poles.find(p => p.id === ps.obj);
-      // pilot feedback: pole tricks were hard to get. Passing close beside a pole puts the bit at your own height out at the
-      // side of the picture, but you're still looking at the pole (above/below you): any part of it in view counts. And a
-      // whip round the pole often reads as a heading swing (yaw) rather than roll, with a 30° camera.
-      const vf = this.poleView(P, ps.tc - 0.3, t, 60);
-      // heading from before the move began to now (this whip's own rotations; a slow cradle's can start up to 3 s back)
-      const toks = this.toksIn(ps.tc - 1.5, t), turn = this.headingTurn(Math.min(ps.tc - 0.8, ...toks.map(k => k.t0 - 0.2)), t), tilt = this.maxTilt(ps.tc - 0.8, t);
-      const turnC = this.headingTurn(Math.min(ps.tc - 0.8, ...this.toksIn(ps.tc - 3.0, t).map(k => k.t0 - 0.2)), t);
-      const fbC = this.fbIn(ps.tc - 3.0, t), bankMax = fbC.length ? Math.max(...fbC.map(x => Math.abs(x.f.z * x.up.x - x.f.x * x.up.z))) : 0, nose0 = fbC.length ? fbC[0].f.y : 0, noseHi = fbC.length ? Math.max(...fbC.map(x => x.f.y)) - nose0 : 0, noseEnd = fbC.length ? fbC[fbC.length - 1].f.y - nose0 : 1;   // relative to how it flew in (a tilted camera flies nose-down)
-      // an upright cradle's pitch back is 60-80°, often slower than a token: the nose seen going high and coming back down counts too
-      const pPlus = this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 50) || noseHi > 0.7, pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 40) || (noseHi > 0.7 && noseEnd < noseHi - 0.45);   // a slow cradle's pitch back can start well before the pass back
-      const rAny = toks.some(x => x.ax === 'R' && x.raw >= 60) || (turn >= 100 && tilt >= 50), bigR = toks.some(x => x.ax === 'R' && x.raw >= 150), back = this.backFrac(t - 0.35, t) > 0.6;
-      // an over/under pass in the same moment belongs to an obstacle trick (Split-S, loops, Mattys), not a pole trick
-      const obst = this.crossLog.some(c => c.kind === 'O' && c.t > ps.tc - 3.5 && c.t < t + 0.1);   // (passing under a canopy or bar is fine)
-      const bumped = this.contacts.some(c => c.t > ps.tc - 1.2 && c.t < t + 0.05);   // knocked round by hitting something isn't a whip
-      const pBack = toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 120) || this.cur.some(c => c && c.ax === 'P' && c.dir > 0 && c.raw >= 90);   // a big pitch back (even one still going: a loop) is a snap/cradle/loop, not a whip
-      // pilot: lots of ordinary movement round a pole was being called a Whiplash. It has to be the real thing: a close pass,
-      // whipped right round (heading turns ~180) with the pole kept in view, coming out level and travelling backward away
-      // from it — and the game now waits to see that it holds (the Watcher's check, 0.7 s later) before confirming.
-      const levelOut = !!this.lastD && this.lastD.up().y > 0.55;
-      const rewound = this.rewinds.some(r => r.t1 > ps.tc - 1.5 && r.t0 < t);   // stopping and going back the way you came is a rewind, not a whip
-      // owner, 2026-11-19: "Cradles and whiplashes are not inverted maneuvers": the quad never goes past upside-down-ish
-      // (a whip's roll toward the pole may reach knife-edge; a cradle's pitch back keeps the nose up, the belly never skyward)
-      const upright = this.minUpBetween(ps.tc - 2.0, t) > -0.15;
-      if (!obst && !pBack && !bumped && !rewound && ps.dmin < 2.0 && vf >= 0.65 && turn >= 135 && back && levelOut && rAny && (upright || this.pend.some(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5))) {
-        const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
-        if (prev) mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
-        else mk({ name: 'Whiplash', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id], poleObj: ps.obj, holdNearPole: ps.obj, underObj: toks.some(x => x.ax === 'R' && x.raw >= 150 && (x.inv === true || x.inv > x.n * 0.5)) ? (this.crossLog.find(c => c.kind === 'U' && c.t > ps.tc - 2.6 && c.t <= t && (o => o && o.obstacle && !o.round)(this.world.objs.find(o => o.id === c.obj))) || {}).obj : undefined });   /* rolled upside-down under a bar or frame (a whip stays the right way up; a tree's canopy over its own trunk does not count) */
-      } else if (!obst && upright && bankMax < 0.7 && vf >= 0.3 && pPlus && pMinus && !bigR && !this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'R' && x.raw >= 50) && back && turnC < 60 && !(this.lastCradle && this.lastCradle.obj === ps.obj && t >= this.lastCradle.t && t - this.lastCradle.t < 3)) { this.lastCradle = { obj: ps.obj, t }; mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] }); }   // one cradle per swing (a second close pass of the same pole in it is not another)
-    }
-    if (fresh.includes('rewind')) { const rw = this.rewinds[this.rewinds.length - 1];
-      if (rw && !this.claimUsed.has(rw.id)) { const P = this.poles.find(p => Math.hypot(rw.p.x - p.x, rw.p.z - p.z) < 3);
-        if (P) { const vf = this.poleView(P, rw.t0 - 1.2, rw.t1, 60);
-          const toks = this.toksIn(rw.t0 - 1.5, rw.t1 + 0.2), side = this.maxSideTilt(rw.t0 - 1.2, rw.t1);
-          const passed = this.crossLog.some(c => (c.kind === 'O' || (c.kind === 'U' && c.upY < 0.3)) && c.t > rw.t0 - 1.5 && c.t < rw.t1 + 0.1);   // Split-S etc. turn back too (upright under a tree canopy is fine)
-          // flown flat: past it and back the way you came (a climb-and-fall-back is a stall rewind), with a quarter roll, not a full one
-          const climbed = this.fbIn(rw.t0 - 2.5, rw.t1).some(x => x.v.y > 1.2), fullRoll = toks.some(x => x.ax === 'R' && x.raw >= 250);
-          if (!passed && !climbed && !fullRoll && vf >= 0.45 && (toks.some(x => x.ax === 'R' && x.raw >= 60) || side >= 55)) mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] }); } } }
-    return out;
-  }
-  update(d, dt, rc) {
-    this.time += dt; this.lastD = d;
-    if (rc) { const L = this.lastRc || (this.lastRc = { thr: 0, roll: 0, pitch: 0, yaw: 0 }); L.thr = rc.thr ?? 0; L.roll = rc.roll ?? 0; L.pitch = rc.pitch ?? 0; L.yaw = rc.yaw ?? 0; } else this.lastRc = null;   // one object, reused: this runs 1000 times a second
-    const t = this.time, rates = d.pilotRates(), up = d.up(), trates = this.tokRates(d, rates); TOL_X = this.learned.tol;
-    if (LIBRARY || CHALLENGES) this.libTick(d, t, rates, dt);
-    this.trackCrossings(d, t);
-    const newCross = this.crossLog.length !== this.nCross; this.nCross = this.crossLog.length;
-    this.continuousDetectors(d, dt, t, rc);
-    if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
-    if (this.contacts.length && t - this.contacts[0].t >= 6) { let i = 0; while (i < this.contacts.length && t - this.contacts[i].t >= 6) i++; this.contacts.splice(0, i); }
-    const ctxEv = this.sense(d, dt, t, rates, up);
-    if (d.crashed && !this.crashSeen) {               // finished tricks still count; anything mid-air is lost
-      this.crashSeen = true;
-      for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) if (p.tDone < t - 0.15) this.commit(p, t);
-      this.pend = []; this.cur = [null, null, null]; this.toks.forEach(k => k.usedUntil = k.t1); this.live = null; this.orb = {};
-      this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['Crash'], near: null });
-      this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks: [] }); return;
-    }
-    if (!d.crashed) this.crashSeen = false;
-    // attitude log for the revolution witness (see normalized): time, how upright, total rotation so far (any axis, degrees)
-    // …and the signed rotation so far on each pilot axis (roll, pitch, yaw: the sweep witness needs which axis turned)
-    { let H = this.attLog || (this.attLog = []), l = H[H.length - 1]; if (l && t < l[0]) { H.length = 0; l = null; } this.totRot = (this.totRot || 0) + len(d.w) * R2D * dt;
-      const A = this.axRot || (this.axRot = [0, 0, 0]); for (let i = 0; i < 3; i++) A[i] += (rates[i] || 0) * dt;
-      if (!l || t - l[0] >= 0.01) { H.push([t, up.y, this.totRot, A[0], A[1], A[2]]); if (H.length > 1100) H.splice(0, 100); } }
-    let finished = false; const loopCtx = this.crossLog.some(c => t - c.t < 4);
-    for (let k = 0; k < 3; k++) {
-      const r = trates[k], ar = Math.abs(r), c = this.cur[k];
-      if (c) {
-        if (ar >= TOK_TH && Math.sign(r) === c.dir) {
-          if (c.slow) { c.raw += c.slow; c.slow = 0; c.slowT = 0; c.slowCross = false; }   // slow stretch rejoined: one rotation
-          c.raw += ar * dt; c.t1 = t; c.low = 0; c.n++; if (up.y < -0.2) c.inv++;
-          c.off += (Math.abs(trates[(k + 1) % 3]) + Math.abs(trates[(k + 2) % 3])) * dt; c.rateSum += ar; c.rateSq += ar * ar;
-          if (t - c.tl[c.tl.length - 1][0] >= 0.01) c.tl.push([t, c.raw]);
-        } else if (ar >= TOK_TH) { this.finishTok(k); finished = true; this.startTok(k, r, t, up, dt); }
-        else if (k === 1 && ar >= SLOW_TH && Math.sign(r) === c.dir && (c.slowT || 0) < SLOW_MAX && loopCtx) {
-          // big floaty loops (demo: powerloop round a tall statue) pitch well under TOK_TH for seconds at a time:
-          // keep the pitch token open while it keeps turning the same way near an obstacle
-          c.slow = (c.slow || 0) + ar * dt; c.slowT = (c.slowT || 0) + dt; c.low = 0; if (newCross) c.slowCross = true;
-        }
-        else { c.low += dt; if (c.low > TOK_END) { this.finishTok(k); finished = true; } }
-      } else if (ar >= TOK_TH && d.armed) this.startTok(k, r, t, up, dt);
-    }
-    if (finished || ctxEv) this.trigger(t, false);
-    if (newCross) this.trigger(t, true);
-    // Loop monitor (pilot: "a system that monitors a loop"): while the pitch keeps turning, every full turn is looked at
-    // as it completes. If the flight path looped round with it, smoothly, in clear air, that lap is a Powerloop there
-    // and then; the rotation carries on and the next turn is judged on its own (loops flown back to back used to add up
-    // to something that matched nothing). A lap broken by a hit or a hard change of motion is not counted.
-    { const c = this.cur[1]; if (c) { const total = c.raw + (c.slow || 0), turned = total - (c.lapBase || 0);
-        if (turned >= 350) { c.lapBase = total; (c.laps = c.laps || []).push(t); this.trigger(t, false, c); } } }
-    // tricks waiting on a situation (rewind, flying backward, …) get re-checked a few times a second
-    if (this.pend.some(p => p.hold === HOLD_OBST) && t - this.lastRetrig > 0.1) { this.lastRetrig = t; this.trigger(t, false); }
-    // an upside-down yaw spin just ended: keep looking for a little while to see the quad come back upright
-    else if (t - this.lastRetrig > 0.1 && up.y > 0.45 && this.toks.length) { const k = this.toks[this.toks.length - 1]; if (k.usedUntil < k.t1 && ((k.ax === 'Y' && k.raw > 250 && t - k.t1 < 2.0 && k.inv > k.n * 0.5 && up.y > 0.55) || (k.ax !== 'Y' && k.raw >= 150 && k.raw < 312 && t - k.t1 < 0.6))) { this.lastRetrig = t; this.trigger(t, false); } }   // …or a roll/flip that read short finish its slow tail (revolution witness)
-    if (this.pend.length) for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
-      if (t < p.deadline) continue;
-      const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
-      // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
-      const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen) ? HOLD_MAX + 1.4 : HOLD_MAX;
-      if (!p.lap && t - p.tDone < cap && (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))) continue;
-      if (this.loopInProgress(p, t)) continue;
-      if (t - p.tDone < 2.2 && this.powerRollComing(p)) continue;   // the loop of a Power Roll still coming round to the pass back under
-      if (p.name === 'Jump Rope' && [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 200 && k.t0 >= p.t0 - 0.5)) { this.pend = this.pend.filter(x => x !== p); continue; }   // a big roll came during the wait: a Double Dutch / Burrito / Side Loop, not a plain jump
-      if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3)) continue;   // often the start of a Burrito Roll
-      // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
-      // 'rollbacks' under the swing set were being called Whiplash)
-      if (p.name === 'Whiplash' && p.underObj != null && this.crossLog.some(c => c.kind === 'U' && c.obj === p.underObj && c.t > p.tDone - 0.1)) { this.pend = this.pend.filter(x => x !== p); continue; }
-      if ((p.name === 'Whiplash' || p.name === 'Cradle') && this.minUpBetween(p.tDone, t) < -0.15) { this.pend = this.pend.filter(x => x !== p); continue; }   // turned upside-down before it was confirmed: not a whip / cradle (owner: never inverted)
-      if (p.name === 'Whiplash' && p.underObj != null && t - p.tDone < 3.2) continue;   // give the way back under a moment to happen
-      if (p.name === 'Whiplash' && t - p.tDone < 3.5 && this.lastD && !this.lastD.crashed && (() => { const P = this.poles.find(q => q.id === p.poleObj); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })()) continue;   // the second whip of a Pole Dance may follow
-      this.commit(p, t);
-    }
-    this.toks = this.toks.filter(k => t - k.t1 < 6);
-  }
-  startTok(k, r, t, up, dt) { this.cur[k] = { k, ax: 'RPY'[k], dir: Math.sign(r), raw: Math.abs(r) * dt, t0: t, t1: t, low: 0, n: 1, inv: up.y < -0.2 ? 1 : 0, off: 0, rateSum: Math.abs(r), rateSq: r * r, tl: [[t, 0]], usedUntil: -1e9 }; }
-  finishTok(k) { const c = this.cur[k]; this.cur[k] = null; if (!c) return;
-    if (c.slow && c.slowCross) { c.raw += c.slow; c.t1 = this.time; c.tl.push([this.time, c.raw]); }   // slow tail through a pass still counts
-    if (c.raw < 45) return; this.toks.push(c); }
-  // unclaimed rotation as tidy tokens: trimmed to what's left, wobble removed, nested moves split out, pauses merged
-  normalized(opts = {}) {
-    const now = this.time; let L = [];
-    const add = (src, t1) => {
-      const t0 = Math.max(src.t0, src.usedUntil);
-      if (t1 - t0 < 0.02) return;
-      const raw = rawAt(src, t1) - rawAt(src, t0); if (raw < 45) return;
-      const f = raw / Math.max(1, src.raw);
-      L.push({ ax: src.ax, dir: src.dir, k: src.k, t0, t1, raw, raw0: 0, base: src, n: Math.max(1, Math.round(src.n * f)), inv: Math.round(src.inv * f), off: src.off * f, rateSum: src.rateSum * f, rateSq: src.rateSq * f, spans: [{ tok: src, a: t0, b: t1 }] });
+  // the pilot's own profile over the community's: each loosening knob takes the looser value; the rest is the pilot's
+  function mergeProfiles(c, p) {
+    if (!c) return p || null;
+    const o = p ? JSON.parse(JSON.stringify(p)) : {},
+      L = o.learn || {};
+    o.learn = {
+      ...L,
+      tol: Math.max(+L.tol || 0, c.learn.tol),
+      rev: Math.max(+L.rev || 0, c.learn.rev),
+      crossBack: Math.max(+L.crossBack || 0, c.learn.crossBack)
     };
-    for (const k of this.toks) if (now - k.t1 < 4 && k.t1 - k.usedUntil > 0.03) add(k, k.t1);
-    if (opts.partial) for (const c of this.cur) if (c && c.raw >= 45) add(c, now);
-    L.sort((a, b) => a.t0 - b.t0);
-    L = L.filter(a => !(a.raw < 120 && L.some(b => b !== a && b.raw > 2 * a.raw && b.ax !== a.ax && a.t0 >= b.t0 - 0.03 && a.t1 <= b.t1 + 0.03)));
-    for (let guard = 0; guard < 4; guard++) {     // nested: e.g. the roll inside a Power Roll's loop
-      const A = L.find(a => L.some(b => b !== a && b.ax !== a.ax && b.raw >= 150 && b.t0 > a.t0 + 0.04 && b.t1 < a.t1 - 0.04)); if (!A) break;
-      const B = L.find(b => b !== A && b.ax !== A.ax && b.raw >= 150 && b.t0 > A.t0 + 0.04 && b.t1 < A.t1 - 0.04);
-      const p1 = sliceTok(A, A.t0, B.t0), p2 = sliceTok(A, B.t1, A.t1);
-      const during = A.raw - p1.raw - p2.raw; p1.off = Math.max(0, p1.off - B.raw * p1.raw / A.raw); p2.off = Math.max(0, p2.off - B.raw * p2.raw / A.raw);
-      L = L.filter(x => x !== A).concat([p1, p2].filter(x => x.raw >= 45)).sort((a, b) => a.t0 - b.t0);
-      B.off += Math.max(0, during) * 0;
+    if (c.rate) {
+      o.rate = { ...(o.rate || {}) };
+      for (const ax of 'RPY') if (c.rate[ax]) o.rate[ax] = o.rate[ax] ? Math.min(o.rate[ax], c.rate[ax]) : c.rate[ax];
     }
-    L = L.filter(a => a.raw >= 60);
-    // A half roll (or half flip) flown with some of the other axis mixed in is still one move: with a steep camera the
-    // pilot rolls inverted AND tips the nose to keep the view level, which shows up as a small pitch (roll) rotation
-    // inside the big one. Fold it in (pilot: inverted yaw spins weren't found at other camera angles).
-    L = L.filter(a => !(a.raw < 100 && L.some(b => b !== a && b.ax !== 'Y' && b.ax !== a.ax && b.raw >= 140 && Math.min(a.t1, b.t1) - Math.max(a.t0, b.t0) >= 0.7 * (a.t1 - a.t0))));
-    if (opts.splitAt) {                             // cut at loop boundaries (upright pass under an obstacle mid-rotation)
-      for (const tc of opts.splitAt) { const i = L.findIndex(a => a.ax === 'P' && tc > a.t0 + 0.15 && tc < a.t1 - 0.15); if (i >= 0) { const A = L[i]; L.splice(i, 1, sliceTok(A, A.t0, tc), sliceTok(A, tc, A.t1)); } }
-    }
-    const out = [];
-    for (const a of L) {
-      const l = out[out.length - 1], gap = l ? a.t0 - l.t1 : 99;
-      const floatOver = l && gap < 1.3 && this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25)
-        && ![...this.toks, ...this.cur.filter(Boolean)].some(x => x.ax !== a.ax && x.raw >= 150 && x.t0 >= l.t1 - 0.05 && x.t1 <= a.t0 + 0.05);   // a yaw/roll at the peak (claimed or not) is its own token   // throttle-cut float over the top of a loop
-      const segPause = !floatOver && a.ax !== 'Y' && gap >= SEG_GAP && Math.abs(l?.raw - 180) < 55 && Math.abs(a.raw - 180) < 55
-        && this.sweptBetween(l.t1, a.t0) / gap < 55;   // a real segment pause is nearly still (demo 13–35°/s); a floaty loop top keeps turning   // 180 · pause · 180 = Segmented, keep apart
-      if (l && l.ax === a.ax && l.dir === a.dir && !l.cut && !segPause && (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) && !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))) {
-        const fl = floatOver && a.ax === 'P' ? this.sweptBetween(l.t1, a.t0) : 0;   // slow float over the top: still rotation
-        out[out.length - 1] = { ...l, raw: l.raw + a.raw + fl, t1: a.t1, n: l.n + a.n, inv: l.inv + a.inv, off: l.off + a.off, rateSum: l.rateSum + a.rateSum, rateSq: l.rateSq + a.rateSq,
-          maxGap: fl || floatOver ? (l.maxGap || 0) : Math.max(l.maxGap || 0, gap), segments: (l.segments || 1) + (floatOver ? 0 : 1), floated: floatOver || l.floated, spans: [...l.spans, ...a.spans], base: null };
-      } else out.push({ ...a, maxGap: a.maxGap || 0, segments: 1 });
-    }
-    // Revolution witness (first shared flights, 2026-11: a quarter of real rolls and flips measured 200–310° and were
-    // dropped). One axis of the gyro under-reads a real roll: the camera tilt moves part of it onto yaw, the stick is
-    // rarely dead straight, and the slow start and finish fall under the token threshold. The attitude does not care:
-    // upright → upside-down → upright again with about one turn of total rotation, most of it on this axis, IS the
-    // full roll or flip. Count it as one (the off-axis part still makes it sloppy), and fold in what rode along.
-    let fused = out;
-    for (const t of out) { if (t.ax === 'Y' || t.raw < 195 - this.learned.rev || t.raw >= 312 || !this.attLog) continue;
-      const H = this.attLog; let u0 = -1, uMin = 1, u1 = -1, r0 = null, r1 = null;
-      // …but not when another axis shares or carries on the turn (half roll then pull through = a Split-S; half flip blended into a half roll = a Juicy Flick)
-      if ([...this.toks, ...this.cur.filter(Boolean)].some(o => o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < t.t1 + 0.1 && o.t1 > t.t0 - 0.3)) continue;
-      for (const h of H) { if (h[0] < t.t0 - 0.2) continue; if (h[0] > t.t1 + 0.2) break; if (r0 === null) r0 = h[2]; r1 = h[2];
-        if (h[0] <= t.t0 + 0.05) u0 = Math.max(u0, h[1]); if (h[0] >= t.t0 && h[0] <= t.t1) uMin = Math.min(uMin, h[1]); if (h[0] >= t.t1 - 0.05) u1 = Math.max(u1, h[1]); }
-      const tot = (r1 ?? 0) - (r0 ?? 0);
-      if (u0 >= 0.45 && uMin <= -0.5 && u1 >= 0.45 && tot >= 262 && tot <= 450 && t.raw >= 0.6 * tot) {
-        t.rev = true; t.off += Math.max(0, 330 - t.raw) * 0.5; t.raw = Math.max(t.raw, 322);
-        fused = fused.filter(o => o === t || o.ax === t.ax || o.raw >= 170 || Math.min(o.t1, t.t1 + 0.3) - Math.max(o.t0, t.t0 - 0.3) < 0.5 * (o.t1 - o.t0)); } }
-    // Sweep witness (owner, 2026-11-18: big sweeping Mattys in open air, each climbing ~12 m over 3-4 s at 100-160 °/s, did
-    // not count; "can the game accommodate bigger / sweeping movements like a big sweeping half matty?"). The slow parts of a
-    // big sweep fall under the token threshold, so the measured flip is only 100-200° of it, and the revolution witness
-    // above only looks inside the token. This one looks up to SWEEP_LOOK s either side: upright → upside-down → upright
-    // again, one turn in total (from the attitude log), most of it on this token's axis, nothing else rolling or flipping
-    // in between: the whole sweep is one full flip / roll (rev, sweep; sloppy for the off-axis part; same-axis pieces of
-    // the same sweep fold into it).
-    for (const t of fused) { if (t.rev || (t.ax !== 'R' && t.ax !== 'P') || t.raw < 100 || t.raw >= 312 || !this.attLog) continue;
-      const H = this.attLog, ai = t.ax === 'R' ? 3 : 4; let i0 = -1, i1 = -1, uMin = 1;
-      for (let i = H.length - 1; i >= 0; i--) { const h = H[i]; if (h[0] > t.t0) continue; if (h[0] < t.t0 - SWEEP_LOOK) break; if (h[1] >= 0.45) { i0 = i; break; } }
-      for (let i = 0; i < H.length; i++) { const h = H[i]; if (h[0] < t.t1) continue; if (h[0] > t.t1 + SWEEP_LOOK) break; if (h[1] >= 0.45) { i1 = i; break; } }
-      if (i0 < 0 || i1 < 0) continue;
-      while (i0 > 0 && H[i0][1] < 0.97 && H[i0 - 1][1] >= H[i0][1] - 0.002 && t.t0 - H[i0 - 1][0] <= SWEEP_LOOK) i0--;   // out to the most upright moment either side
-      while (i1 < H.length - 1 && H[i1][1] < 0.97 && H[i1 + 1][1] >= H[i1][1] - 0.002 && H[i1 + 1][0] - t.t1 <= SWEEP_LOOK) i1++;
-      if (H[i1][0] - H[i0][0] > 7) continue;
-      for (let i = i0; i <= i1; i++) uMin = Math.min(uMin, H[i][1]);
-      const ts = H[i0][0], te = H[i1][0], tot = H[i1][2] - H[i0][2], onAx = Math.abs(H[i1][ai] - H[i0][ai]);
-      if (uMin > -0.5 || onAx < 262 || onAx > 450 || onAx < 0.6 * tot) continue;
-      if ([...this.toks, ...this.cur.filter(Boolean)].some(o => o !== t && o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < te && o.t1 > ts)) continue;   // a Split-S or a Juicy Flick shares the turn
-      // a sweep keeps turning: a stop in the middle (under 40 °/s for over 0.2 s, away from the slow ends) is a Segmented Flip / Roll
-      { let still = 0, worst = 0; const m0 = ts + 0.15 * (te - ts), m1 = te - 0.15 * (te - ts);
-        for (let i = i0 + 1; i <= i1; i++) { const h = H[i], g = H[i - 1], dtt = h[0] - g[0]; if (h[0] < m0 || h[0] > m1 || dtt <= 0) { still = 0; continue; }
-          if (Math.abs(h[ai] - g[ai]) / dtt < 40) { still += dtt; worst = Math.max(worst, still); } else still = 0; }
-        if (worst > 0.2) continue; }
-      // …and two clear halves on this axis with a gap between them are one too (a demo's pause is short and noisy)
-      if (out.some(o => o !== t && o.ax === t.ax && o.raw >= 140 && o.t0 < te && o.t1 > ts) && t.raw >= 140) continue;
-      t.rev = true; t.sweep = true; t.off += Math.max(0, 330 - t.raw) * 0.5; t.raw = Math.max(t.raw, 322); t.t0 = Math.min(t.t0, ts); t.t1 = Math.max(t.t1, te);
-      fused = fused.filter(o => o === t || o.ax !== t.ax || o.t0 < ts - 0.05 || o.t1 > te + 0.05); }
-    if (fused !== out) { const keep = fused.slice(); out.length = 0; out.push(...keep); }
-    for (const t of out) { t.deg = Math.max(90, Math.round(t.raw / 90) * 90); t.inv = t.inv > t.n * 0.5; t.offRatio = t.off / Math.max(1, t.raw); }
-    return out;
+    if (c.air) o.air = Math.max(o.air || 0, c.air);
+    return o;
   }
-  crossWindow(t0) { return this.crossLog.filter(c => c.t >= t0 - 2.2 - this.learned.crossBack && !c.used); }
-  nearAny() { const d = this.lastD; return !!d && (this.nearObstacle(d, 3) || this.crossLog.some(c => this.time - c.t < 3)); }
-  candidates(N, obstOnly) {
-    const out = [];
-    { const ob = this.matchObstacle([], this.crossWindow(this.time - 1.0));
-      if (ob && this.time - ob.ct1 < 0.03) { ob.claims = ob.part.map(c => 'x' + c.t.toFixed(3)); ob.t0 = ob.part[0].t; ob.draft = true; out.push(ob); } }
-    for (let k = 1; k <= Math.min(4, N.length); k++) {
-      const suf = N.slice(-k);
-      if (!obstOnly) {
-        if (k === 2 && !this.orbiting() && suf[0].ax === suf[1].ax && suf[0].dir === suf[1].dir && suf[0].ax !== 'Y' && Math.abs(suf[0].raw - 180) < 55 && Math.abs(suf[1].raw - 180) < 55) {
-          const gap = suf[1].t0 - suf[0].t1; if (gap >= SEG_GAP && gap < 1.6 && this.sweptBetween(suf[0].t1, suf[1].t0) / gap < 55) out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
-        }
-        // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
-        // demo yaws (Vanny) measured down to ~266°/s; at the pilot's own rates a yaw inside a sequence can be slower (a lone slow yaw is just a turn)
-        const fast = suf.every(x => x.rateSum / x.n >= this.minRate(x.ax, x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
-        const orbit = this.orbiting();
-        const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
-        if (fast && !orbit && airOK) for (const tr of OPEN_TRICKS) { if (tr.name === 'Yaw Spin' && suf[0].inv) continue;   /* a yaw spin flown upside-down is the Inverted Yaw Spin's middle, never the beginner trick */ if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf })) continue; for (const pp of tr.parsed) { const m = matchTokens(pp, suf); if (m) { out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 }); break; } } }
-        if (!orbit) { const ol = this.matchOpenLoop(suf) || this.matchOpenSplit(suf); if (ol) out.push(ol); }
-        if (!orbit) for (const tr of CONTEXT_TRICKS) for (const pp of tr.parsed) {
-          const m = matchTokens(pp, suf); if (!m) continue;
-          const ok = this.reqOK(tr.req, suf); if (!ok) continue;
-          if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf, obj: ok.obj })) continue;
-          out.push({ name: tr.name, toks: suf, err: m.err, clen: 1, claims: ok.claims, tapRef: ok.tapRef, obstacle: ok.obstacle, draft: tr.draft }); break;
-        }
-      }
-      const ob = this.matchObstacle(suf, this.crossWindow(suf[0].t0));
-      const def = ob && OBSTACLE_TRICKS.find(x => x.name === ob.name);
-      if (ob && (ob.ct1 >= suf[0].t0 - 0.15 || (def && def.passFirst && ob.ct1 >= suf[0].t0 - 1.0))) {   // passFirst: the pass, some air, then the rotation
-        if (def && def.draft) ob.draft = true;
-        if (ob.part) ob.claims = ob.part.map(c => 'x' + c.t.toFixed(3));
-        if (def && def.tap) { const tp = this.tapIn(def.tap, ob.obj, suf[0].t0 - 0.4, ob.ct1 + 0.15); if (tp) { ob.claims = [tp.id]; ob.tapRef = tp; } }
-        out.push(ob);
+  const DRT_SPLIT_T = 1.0,
+    DRT_SPLIT_R = 300,
+    DRT_SPLIT_MIN = 540; // a trippy turning into a DRT: this much roll within this long
+  const DRT_ROLL = 1.8,
+    DRT_SPAN = 120,
+    DRT_RATE = 150,
+    DRT_HOLD = 1.5,
+    DRT_STILL = 2.5,
+    DRT_BACK = 150; // Double Rolling Trippy: roll per degree round the pole; how much of the trippy; rolling fast (deg/s) in the look (s) keeps the lap alive this long still / this far back
+  const STICK_ON = 0.08,
+    TRIPPY_FLAT = 0.8,
+    LOCK_ANG = 50; // a stick counts as pushed; how upright a sticks-opposed trippy may be flown; 'locked in' = the pole within this of the camera's line, in the top half
+  const SPLIT_DROP = 1.0; // m an open-air Split-S comes out below where its half roll began
+  const POWER_ROLL_SPAN = 4.5,
+    POWER_ROLL_OVER = new Set(['Immelmann', 'Split S', "Rubik's Cube", 'Roll']); // s from the first pass under to the last; what a Power Roll replaces
+  const SPLIT_LOOK = 4; // s from the half roll's start to the pass under (the attitude Split-S)
+  let TOL_X = 0; // extra angle tolerance learned for this pilot (set by the detector each step; see learnFromLabels)
+  function matchTokens(pat, toks) {
+    if (pat.length !== toks.length) return null;
+    const vars = {};
+    let err = 0;
+    for (let i = 0; i < pat.length; i++) {
+      const p = pat[i],
+        t = toks[i];
+      if (p.ax !== t.ax) return null;
+      if (p.inv && !t.inv) return null;
+      const tol = (p.loose ? 95 : 50) + TOL_X;
+      if (Math.abs(t.raw - p.deg) > tol) return null;
+      err += Math.max(0, Math.abs(t.raw - p.deg) - (p.loose ? 55 : 0)) / p.deg;
+      if (p.dir === '+' && t.dir !== 1) return null;
+      if (p.dir === '-' && t.dir !== -1) return null;
+      if (p.dir !== '*' && p.dir !== '+' && p.dir !== '-') {
+        const neg = p.dir[0] === '-',
+          v = neg ? p.dir[1] : p.dir;
+        const want = neg ? -1 : 1;
+        if (vars[v] === undefined) vars[v] = t.dir * want;
+        else if (vars[v] * want !== t.dir) return null;
       }
     }
+    if (vars.a !== undefined && vars.b !== undefined && vars.a === vars.b && pat.some(p => p.dir.includes('b'))) {
+      // a and b must differ only when both used as separate vars
+    }
+    return { err: err / pat.length };
+  }
+
+  // crossing requirement strings: 'UOU' 'OU' 'UO' 'U' 'O' with alternating direction rules
+  const OBSTACLE_NAMES = new Set(); // filled below from OBSTACLE_TRICKS (the library's obstacle check)
+  const OBSTACLE_TRICKS = [
+    { name: 'Powerloop', pats: ['P+~360'], cross: 'UOU', end: 'fwd' },
+    { name: 'Power Flip', pats: ['P+~720'], cross: 'UOU', end: 'fwd' },
+    { name: 'Reversed Power Flip', pats: ['P+180 P-360 P+180'], cross: 'UOU', end: 'fwd' },
+    { name: 'Power Roll', pats: ['P+180 Ra360 P+180'], cross: 'UOU', end: 'fwd' },
+    { name: 'Inverted 360 Powerloop', pats: ['P+180 Ya360i P+180'], cross: 'UOU', end: 'fwd' },
+    { name: 'Barani', pats: ['P+180 Ya180i P+~180', 'P+180 Ya180i P-~180'], cross: 'UOU', end: 'back' },
+    // as pilots really fly it (shared flight, 2026-11-17): half loop up IN FRONT of the object (no pass under first), half
+    // yaw upside-down over it (~140°), then a sloppy Matty (~265°, often read as two pieces) out under it flying backward
+    { name: 'Barani', pats: ['P+180 Ya180i P-~180', 'P+180 Ya180i P+~180'], cross: 'OU', end: 'back' },
+    { name: 'Rollani', pats: ['P+180 Ya180i Rb360 P*180'], cross: 'UOU', end: 'back' },
+    { name: 'Flipani', pats: ['P+180 Ya180i P-540', 'P+180 Ya180i P-360 P+180'], cross: 'UOU', end: 'back' },
+    { name: 'Immelmann', pats: ['P+180 Ra180'], cross: 'UO' },
+    { name: 'Matty Flip', pats: ['P-~360'], end: 'back', cross: 'OU' },
+    { name: 'Anti Matty', pats: ['P+~360'], cross: 'OU', end: 'back' },
+    { name: 'Power Matty', pats: ['P-~720'], cross: 'OU', end: 'back' },
+    // demo GIF pitches down ~45–90° before the roll, leaving ~270–315° for the Matty after it
+    { name: 'Matty Twister', pats: ['Ra360 P-~360', 'P-~90 Ra360 P-~270'], cross: 'OU', end: 'back' },
+    { name: 'Matty Roll', pats: ['P-270 Ra360 P-90', 'P-270 Ra360'], cross: 'OU', end: 'back' },
+    { name: 'Matty 360', pats: ['P-~180 Ya360 P-~180', 'P-~270 Ya360'], cross: 'OU', end: 'back' },
+    { name: 'Split S', pats: ['Ra180 P+~180', 'Ra~180 P+~180'], cross: 'OU', end: 'fwd' },
+    { name: '540 Split S', pats: ['Ra540 P+180'], cross: 'OU', end: 'fwd' },
+    { name: 'Splitback', pats: ['Ra180 P+~540'], cross: 'OU', end: 'fwd' },
+    { name: 'Split Yaw', pats: ['Ra180 P+~90 Yb180', 'Ra180 Yb180 P+~90'], cross: 'OU', end: 'back' },
+    // pilot feedback: needs to be detected better. The second half of a Matty is anything from ~100 to ~250 of pitch, the end often floaty
+    { name: 'Half Matty', pats: ['Ra180 P*~180'], cross: 'U', end: 'back' },
+    { name: '540 Half Matty', pats: ['Ra540 P*~180'], cross: 'U', end: 'back' },
+    { name: 'Forani', pats: ['P-180 Ya180i P*180'], cross: 'U', end: 'back' },
+    // pilot feedback: far too many false Snapbacks. TPW: pass UNDER first, then pitch back to inverted and roll 180, tracking the object
+    { name: 'Snapback', pats: ['P+180 Ra180'], cross: 'U', passFirst: true }, // the Watcher checks the rest (under first, tracking, no loop)
+    { name: 'Blind Loop', pats: ['Ya180 P+360'], cross: 'OU' },
+    // ---- phase 2 (rules from the TPW descriptions; marked draft until confirmed with pilot examples)
+    // demo GIF: the loop comes all the way round to level on the start side, hovers ~1.3 s, then Split-S back over and under
+    {
+      name: 'Power Split',
+      pats: ['P+~180 Ra180 P+~180', 'P+~270 Ra180 P+~180', 'P+~360 Ra180 P+~180'],
+      cross: 'UOOU',
+      pauseOK: 2.0,
+      draft: true
+    },
+    { name: 'Power Swap', pats: ['P+~180 Ra180 P-180'], cross: 'UOU', end: 'back', draft: true },
+    // demo GIF: loop round to level on the start side (no pass back under), hover ~0.7 s, Matty back over and under
+    {
+      name: 'Power Switch',
+      pats: ['P+~180 P-~360', 'P+~270 P-~270', 'P+~180 P-~270', 'P+~360 P-~360', 'P+~360 P-~270'],
+      cross: 'UOOU',
+      end: 'back',
+      pauseOK: 1.6,
+      draft: true
+    },
+    { name: 'Immelloop', pats: ['P+~180 Ra180', 'P+~180 Ra180 P+~90'], cross: 'UOU', end: 'back', draft: true },
+    { name: 'Immelmatt', pats: ['P+~180 Ra180 P-~270'], cross: 'UOU', end: 'back', draft: true },
+    { name: 'Half Mavvy', pats: ['Ra180 P*~180'], cross: 'UOU', end: 'back', draft: true },
+    { name: "Mavik's Loop", pats: ['P-~180 R*360 P-~180', 'P-~180 R*360 P+~180'], cross: 'UOU', draft: true },
+    { name: 'Mavani', pats: ['P-~180 Ya180i P*~180'], cross: 'UOU', end: 'back', draft: true },
+    { name: 'Donkey Loop', pats: ['P-~180 Ya360i P*~180'], cross: 'UOU', draft: true },
+    { name: 'Mavvelmann', pats: ['P-~180 Ra180'], cross: 'UO', draft: true },
+    {
+      name: 'Split Stall Matty Rewind',
+      pats: ['Ra180 P-~270', 'Ra180 P+~90 P-~270', 'Ra180 P-~360'],
+      cross: 'OU',
+      end: 'back',
+      draft: true
+    },
+    { name: 'Maverick Tap Rewind', pats: ['P-~360', 'P-~90 P-~270'], cross: 'UOU', end: 'back', tap: { face: 'bottom' }, draft: true },
+    {
+      name: 'Power Switch Tap',
+      pats: ['P+~180 P-~270', 'P+~270 P-~180', 'P+~180 P-~360'],
+      cross: 'UOU',
+      end: 'back',
+      tap: { face: 'bottom' },
+      draft: true
+    },
+    { name: 'True Barani', pats: ['P-180 Ya180i P+180'], cross: 'OU', end: 'fwd' } // demo GIF unclear (see tricktionary-reference.md)
+  ];
+  for (const T of OBSTACLE_TRICKS) {
+    OBSTACLE_NAMES.add(T.name);
+    MAYBE_NAMES.add(T.name);
+  }
+  const OPEN_TRICKS = [
+    // prowhooper.com (text + demo GIFs) has these the other way round from the spreadsheet; the site wins. Same points.
+    // pilots' corrections (2026-11-22, 3 pilots): the roll runs long (~420-440°) and the flip out comes up short (~105-140°)
+    { name: "Rubik's Cube", pats: ['Pa180 R*360 Pa180', 'Pa180 R*~360 Pa~180'] },
+    { name: "Cubik's Rube", pats: ['Ra180 P*360 Ra180'] },
+    // pilot feedback: sloppy reps (~300-330 of spin) are normal and should count; the grade reflects the error
+    // (the half flip in/out is loose: with the camera tilted the nose ends up short of, or past, a clean 180)
+    { name: 'Inverted Yaw Spin', pats: ['Pa~180 Y*~360i Pa~180', 'Ra180 Y*~360i Ra180', 'Pa~180 Y*~360i R*180', 'Ra180 Y*~360i P*~180'] },
+    { name: 'Vanny Roll', pats: ['Ya180 R*360 Ya180'] },
+    { name: 'Double Flip', pats: ['P*720'] },
+    { name: 'Double Roll', pats: ['R*720'] },
+    // pilot: needs better detection. The roll often blends into the end of the flick (the roll splits the pitch token)
+    // owner, 2026-11-20: a Juicy Flick followed by a forward double roll: the flick's 180 roll runs on two more turns (2½ rolls in
+    // all, one way), or the double roll comes after a breath; the flick may still blend into the roll
+    { name: 'Juicy Tornado', pats: ['P-180 R*~900', 'P-180 Ra~180 Ra~720', 'P-~135 R*~900 P-~45'] },
+    { name: 'Juicy Flick', pats: ['P-180 R*180', 'P-~135 R*180 P-~45'] },
+    { name: 'Inverted Rewind', pats: ['Ra180 R-a180', 'Pa180 P-a180'] },
+    { name: 'Flip', pats: ['P*360'] },
+    { name: 'Roll', pats: ['R*360'] },
+    { name: 'Yaw Spin', pats: ['Y*360'] }
+  ];
+  // rotation patterns that also need a situation: a tap, a stall, a rewind, a climb, tracking an object…
+  for (const T of OPEN_TRICKS) MAYBE_NAMES.add(T.name);
+  const CONTEXT_TRICKS = [
+    { name: 'Roll Tap', pats: ['R*~360', 'R*~270'], req: { tap: { face: 'bottom', surface: 'wall' } }, draft: true },
+    {
+      name: 'Loop Tap',
+      pats: ['R*~90 P+~180', 'R*~90 P+~270', 'P+~90 R*~90 P+~180'],
+      req: { tap: { face: 'bottom', surface: 'wall' } },
+      draft: true
+    },
+    { name: 'Ceiling Tap', pats: ['P+~180', 'P+~270'], req: { tap: { face: 'bottom', surface: 'ceiling' } }, draft: true },
+    {
+      name: 'Downtown Tap',
+      pats: ['R*~180 P-~360', 'R*~180 P+~90 P-~360', 'R*~180 P-~270'],
+      req: { tap: { face: 'any', surface: 'any' } },
+      draft: true
+    },
+    // demo GIF: ascends in front of an indoor cube (~1 m), not a tall object
+    // owner, 2026-11-23 (after the audit of prowhooper.com): an Eject Roll needs no gap (a climb in front of an object, as the site says);
+    // flown up and out of a square opening that lies flat (the top of a cube) it is a Cube Eject. `flatGap`: true = any flat gap,
+    // 'square' = its sides within 30 % of each other, 'down' = crossed going down
+    { name: 'Cube Eject', pats: ['P-~180 R*~360'], req: { climbBefore: true, flatGap: 'square' }, draft: true },
+    { name: 'Eject Roll', pats: ['P-~180 R*~360'], req: { climbBefore: true, nearTall: 0.8, notFlatGap: 'square' }, draft: true },
+    {
+      name: 'Loop to Matty',
+      pats: ['P+~180 P-~180', 'P+~180 P-~270', 'P+~180 P-~360'],
+      req: { flatGap: 'down', endBack: true },
+      draft: true
+    },
+    {
+      name: 'Stellar Eject Roll',
+      pats: ['P-~180 R*~360 P-~180', 'P-~180 R*~360 P-~270'],
+      req: { climbBefore: true, endBack: true },
+      draft: true
+    },
+    // demos (Tricktionary): stall rewinds done next to the pilot (~1.8 m) and an indoor staircase; only plain Stall Rewind asks for 10 ft
+    { name: 'Stall Flip Rewind', pats: ['P*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
+    { name: 'Stall 360 Rewind', pats: ['R*~360'], req: { stallIn: true, nearTall: 1.5 }, draft: true },
+    // TPW: a SEGMENTED front flip at the stall beside an object. A continuous Matty (pilot: Mattys were read as this) is a Matty.
+    { name: 'Stall Matty Rewind', pats: ['P-~360'], req: { stallIn: true, endBack: true, segmented: true, nearTall: true }, draft: true },
+    { name: 'Stall Half Matty Rewind', pats: ['Y*~180 Ra180 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
+    { name: 'Stall 540 Half Matty Rewind', pats: ['Y*~180 Ra540 P*~180'], req: { rewindIn: true, endBack: true }, draft: true },
+    {
+      name: 'Inverted Yaw Tracking',
+      pats: [
+        'Ra180 Y-a~180i P-~180',
+        'Ra180 Y-a~360i P-~180',
+        'Ra180 Y-a~270i P-~180',
+        'Ra180 Y-a~180i Ra180',
+        'Ra180 Y-a~360i Ra180',
+        'Ra180 Y-a~270i Ra180'
+      ],
+      req: { track: 0.7 },
+      draft: true
+    }
+  ];
+  for (const t of [...OBSTACLE_TRICKS, ...OPEN_TRICKS, ...CONTEXT_TRICKS]) t.parsed = t.pats.map(parsePattern);
+  const TAP_TRICKS = new Set(
+    [...OBSTACLE_TRICKS, ...CONTEXT_TRICKS]
+      .filter(t => t.tap || (t.req && t.req.tap))
+      .map(t => t.name)
+      .concat(['Wall Tap', 'Face Punch'])
+  );
+
+  class TrickDetector {
+    constructor(world) {
+      this.world = world;
+      this.reset();
+      if (COMMUNITY && this.setPilot) this.setPilot(null);
+    }
+    reset() {
+      this.pending = null;
+      this.debug = [];
+      this.active = false;
+      this.samples = [];
+      this.restT = 0;
+      this.events = [];
+      this.crossLog = [];
+      this.prevSide = {};
+      this.contacts = [];
+      this.out = [];
+      this.wallRide = null;
+      this.diveMaxY = 0;
+      this.dive = null;
+      this.climb = null;
+      this.slide = null;
+      this.perch = null;
+      this.stick = null;
+      this.dead = null;
+      this.deadPend = null;
+      this.deadMute = null;
+      this.yHist = [];
+      this.lastTap = -10;
+      this.time = 0;
+    }
+    // call every physics step (or every few)
+    update(d, dt, rc) {
+      this.time += dt;
+      const t = this.time,
+        up = d.up(),
+        rates = d.pilotRates();
+      const rmag = Math.hypot(rates[0], rates[1], rates[2]);
+      this.trackCrossings(d, t);
+      this.continuousDetectors(d, dt, t, rc);
+      if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
+      const resting = rmag < 75 && up.y > 0.05;
+      if (this.pending) {
+        const lc = this.crossLog[this.crossLog.length - 1];
+        if (lc && lc.t > this.pending.endT && !lc.used) {
+          lc.used = true;
+          this.pending.evalT = Math.min(this.pending.evalT, t + 0.25);
+        }
+      }
+      if (this.pending && (t >= this.pending.evalT || (rmag > 150 && !this.active))) {
+        const pnd = this.pending;
+        this.pending = null;
+        this.evaluate(pnd, t);
+      }
+      if (!this.active) {
+        if (rmag > 150 && d.armed) {
+          this.active = true;
+          this.samples = [];
+          this.winStart = t;
+          this.restT = 0;
+        } else {
+          if (!this.pending) this.contacts = this.contacts.filter(c => t - c.t < 0.3);
+          return;
+        }
+      }
+      this.samples.push({
+        t,
+        r: rates,
+        up,
+        pos: v3(d.pos.x, d.pos.y, d.pos.z),
+        vel: v3(d.vel.x, d.vel.y, d.vel.z),
+        q: { w: d.q.w, x: d.q.x, y: d.q.y, z: d.q.z }
+      });
+      if (d.crashed) {
+        this.close(d, t, true);
+        return;
+      }
+      if (resting) {
+        this.restT += dt;
+        if (this.restT > 0.55) this.close(d, t, false);
+      } else this.restT = 0;
+      if (t - this.winStart > 12) this.close(d, t, false);
+    }
+    // Only objects near the quad can be crossed. The list of them is rebuilt every 0.1 s with a 30 m margin (a whoop covers
+    // at most ~3 m in that time), so the result is the same as checking every object every step, for a fraction of the CPU
+    // (performance, 2026-11-17). An object leaving the list forgets which side the quad was on, as if seen for the first time.
+    nearObjs(d, t) {
+      if (this.nearT != null && t >= this.nearT && t - this.nearT < 0.1 && this.nearW === this.world) return this.near;
+      this.nearT = t;
+      this.nearW = this.world;
+      const out = [],
+        keep = new Set();
+      for (const o of this.world.objs) {
+        if (!o.round && !o.obstacle && !o.gap) continue;
+        let r = o._nearR;
+        if (r == null) {
+          const pts = [];
+          if (o.round) pts.push([o.round.c, (o.round.box ? Math.max(o.round.box.hx, o.round.box.hz) : o.round.r) + 3]);
+          if (o.obstacle) {
+            pts.push([o.obstacle.a, 0], [o.obstacle.b, 0]);
+          }
+          if (o.gap) pts.push([o.gap.c, Math.max(o.gap.hu, o.gap.hv)]);
+          let cx = 0,
+            cz = 0;
+          for (const [p] of pts) {
+            cx += p.x;
+            cz += p.z;
+          }
+          cx /= pts.length;
+          cz /= pts.length;
+          r = 0;
+          for (const [p, e] of pts) r = Math.max(r, Math.hypot(p.x - cx, p.z - cz) + e);
+          o._nearC = [cx, cz];
+          o._nearR = r;
+        }
+        if (o.round) {
+          if (Math.hypot(d.pos.x - o.round.c.x, d.pos.z - o.round.c.z) > o._nearR + 30) continue;
+        } // a tree's line is re-aimed round its centre
+        else if (Math.hypot(d.pos.x - o._nearC[0], d.pos.z - o._nearC[1]) > o._nearR + 30) continue;
+        out.push(o);
+        keep.add(o.id);
+      }
+      if (this.near)
+        for (const o of this.near)
+          if (!keep.has(o.id)) {
+            delete this.prevSide[o.id];
+            delete this.prevSide['g' + o.id];
+          }
+      this.near = out;
+      return out;
+    }
+    trackCrossings(d, t) {
+      for (const o of this.nearObjs(d, t)) {
+        if (o.round) {
+          // round obstacle (tree): aim the over/under line across the approach, hold it while nearby
+          const R = o.round,
+            st = (this.roundSt = this.roundSt || {})[o.id] || (this.roundSt[o.id] = {});
+          const dh = Math.hypot(d.pos.x - R.c.x, d.pos.z - R.c.z),
+            vh = Math.hypot(d.vel.x, d.vel.z);
+          const closing = vh > 1.0 && dh > 0.8 && ((R.c.x - d.pos.x) * d.vel.x + (R.c.z - d.pos.z) * d.vel.z) / (dh * vh) > 0.6;
+          if (dh < (R.box ? Math.max(R.box.hx, R.box.hz) : R.r) + 3) st.tNear = t;
+          // never re-aim mid-trick (big Split-Back: ~3 s over→under); the log is only scanned when a re-aim is otherwise due
+          if (vh > 0.5 && (t - (st.tNear ?? -9) > 2.5 || closing) && !this.crossLog.some(c => c.obj === o.id && t - c.t < 5)) {
+            // far away, or heading in at it: aim across the approach
+            const ax = d.vel.x / vh,
+              az = d.vel.z / vh;
+            if (!st.ax || ax * st.ax + az * st.az < 0.97) {
+              st.ax = ax;
+              st.az = az;
+              delete this.prevSide[o.id];
+              const rr = R.box ? Math.min(R.box.hx / Math.max(0.05, Math.abs(az)), R.box.hz / Math.max(0.05, Math.abs(ax))) : R.r; // a rectangle is as wide as it is across this approach
+              o.obstacle = {
+                a: v3(R.c.x + az * rr, 0, R.c.z - ax * rr),
+                b: v3(R.c.x - az * rr, 0, R.c.z + ax * rr),
+                under: R.under,
+                over: R.over
+              };
+            }
+          }
+        }
+        if (o.obstacle) {
+          const { a, b, under, over } = o.obstacle;
+          const ab = sub(b, a);
+          ab.y = 0;
+          const L = len(ab);
+          const u = mul(ab, 1 / L);
+          const n = v3(-u.z, 0, u.x);
+          const rel = sub(d.pos, a);
+          const side = dot(rel, n) > 0 ? 1 : -1;
+          const along = dot(rel, u);
+          const key = o.id,
+            prev = this.prevSide[key];
+          this.prevSide[key] = side;
+          if (prev !== undefined && prev !== side && along > -0.35 && along < L + 0.35) {
+            let kind = null;
+            if (d.pos.y < under && d.pos.y > (o.obstacle.floor || 0)) kind = 'U';
+            else if (d.pos.y > over && d.pos.y < over + 7) kind = 'O'; // floor: a high bar's unders only count close below it (the Murderdome's ring truss over its chain gates)
+            if (kind) {
+              const f = d.fwd(),
+                fh = Math.hypot(f.x, f.z),
+                vh = Math.hypot(d.vel.x, d.vel.z);
+              const fwdDot = fh > 0.2 && vh > 0.8 ? (f.x * d.vel.x + f.z * d.vel.z) / (fh * vh) : 0;
+              const rr = d.right(),
+                rh = Math.hypot(rr.x, rr.z);
+              const latDot = rh > 0.2 && vh > 0.8 ? Math.abs(rr.x * d.vel.x + rr.z * d.vel.z) / (rh * vh) : 0; // 1 = flying sideways
+              const latS = Math.sign(rr.x * d.vel.x + rr.z * d.vel.z) || 0; // which way sideways: +1 = toward the quad's right
+              // dithering back and forth across the line (floaty loop tops, a wobbly hover over a bar) isn't a pass: the
+              // same kind of crossing straight back within 0.25 s cancels the one before
+              let li = -1;
+              for (let i = this.crossLog.length - 1; i >= 0; i--)
+                if (this.crossLog[i].obj === o.id) {
+                  li = i;
+                  break;
+                }
+              const L = li >= 0 ? this.crossLog[li] : null;
+              if (L && L.kind === kind && t - L.t < 0.25 && !L.used) {
+                this.crossLog.splice(li, 1);
+                this.nCross = Math.min(this.nCross ?? 0, this.crossLog.length);
+              } else
+                this.crossLog.push({
+                  t,
+                  obj: o.id,
+                  name: o.name,
+                  kind,
+                  dir: side,
+                  fwdDot,
+                  latDot,
+                  latS,
+                  upY: d.up().y,
+                  spd: vh,
+                  hOver: d.pos.y - over,
+                  p: v3(d.pos.x, (under + over) / 2, d.pos.z)
+                });
+            }
+          }
+        }
+        if (o.gap) {
+          const g = o.gap,
+            rel = sub(d.pos, g.c),
+            s = dot(rel, g.n) > 0 ? 1 : -1,
+            key = 'g' + o.id,
+            prev = this.prevSide[key];
+          this.prevSide[key] = s;
+          if (prev !== undefined && prev !== s) {
+            const vAx = g.round ? null : cross(g.n, g.u);
+            const du = dot(rel, g.u),
+              dv = g.round ? dot(rel, cross(g.n, g.u)) : dot(rel, vAx);
+            const inside = g.round ? Math.hypot(du, dv) < g.hu : Math.abs(du) < g.hu + 0.02 && Math.abs(dv) < g.hv + 0.02;
+            const f = d.fwd(),
+              vl = len(d.vel),
+              fwdDot = vl > 0.8 ? dot(f, d.vel) / vl : 0;
+            // how narrow the gap is (its short side) and how well the quad's up axis lines up with that side (knife-edged through it)
+            const narrow = g.round ? 2 * g.hu : 2 * Math.min(g.hu, g.hv),
+              nAx = g.round ? null : g.hu <= g.hv ? g.u : vAx,
+              up = d.up(),
+              nAlign = nAx ? Math.abs(dot(up, nAx)) : 1;
+            if (inside)
+              this.crossLog.push({
+                t,
+                obj: o.id,
+                name: o.name,
+                kind: 'G',
+                dir: s,
+                rollAbs: Math.abs(d.right().y),
+                up,
+                fwdDot,
+                narrow: +narrow.toFixed(3),
+                nAlign: +nAlign.toFixed(2),
+                spd: vl,
+                flat: Math.abs(g.n.y) > 0.7 || undefined,
+                sq: g.round || Math.min(g.hu, g.hv) / Math.max(g.hu, g.hv) >= 0.7 || undefined,
+                low: o.low || undefined
+              });
+          }
+        }
+      }
+      if (this.crossLog.length && t - this.crossLog[0].t >= 20) this.crossLog = this.crossLog.filter(c => t - c.t < 20); // only when something has expired (it ran every step)
+    }
+    tokenize(samples) {
+      const toks = [];
+      let cur = null;
+      let idle = 0;
+      const AX = ['R', 'P', 'Y'];
+      for (let i = 1; i < samples.length; i++) {
+        const s = samples[i],
+          dt = s.t - samples[i - 1].t;
+        const ar = s.r.map(Math.abs);
+        let k = 0;
+        if (ar[1] > ar[k]) k = 1;
+        if (ar[2] > ar[k]) k = 2;
+        if (ar[k] < 95) {
+          idle += dt;
+          if (cur) cur.idleAfter += dt;
+          continue;
+        }
+        const dir = Math.sign(s.r[k]);
+        if (cur && cur.k === k && cur.dir === dir && cur.idleAfter < 0.28) {
+          cur.maxGap = Math.max(cur.maxGap || 0, cur.idleAfter);
+          cur.raw += ar[k] * dt;
+          cur.t1 = s.t;
+          cur.idleAfter = 0;
+          cur.n++;
+          cur.inv += s.up.y < -0.2 ? 1 : 0;
+          cur.off += (ar[(k + 1) % 3] + ar[(k + 2) % 3]) * dt;
+        } else {
+          if (cur && cur.k === k && cur.dir === dir) {
+            // same axis after a pause: segmented
+            cur.segments = (cur.segments || 1) + 1;
+            cur.maxGap = Math.max(cur.maxGap || 0, cur.idleAfter);
+            cur.raw += ar[k] * dt;
+            cur.t1 = s.t;
+            cur.idleAfter = 0;
+            cur.n++;
+            continue;
+          }
+          cur = { k, ax: AX[k], dir, raw: ar[k] * dt, t0: s.t, t1: s.t, idleAfter: 0, n: 1, inv: s.up.y < -0.2 ? 1 : 0, off: 0 };
+          toks.push(cur);
+        }
+      }
+      // drop tiny tokens, merge neighbours that become adjacent
+      let f = toks.filter(t => t.raw > 60);
+      const merged = [];
+      for (const t of f) {
+        const l = merged[merged.length - 1];
+        if (l && l.ax === t.ax && l.dir === t.dir) {
+          l.raw += t.raw;
+          l.t1 = t.t1;
+          l.n += t.n;
+          l.inv += t.inv;
+          l.off += t.off;
+          l.idleAfter = t.idleAfter;
+          l.maxGap = Math.max(l.maxGap || 0, l.idleAfter);
+        } else merged.push({ ...t });
+      }
+      for (const t of merged) {
+        t.deg = Math.max(90, Math.round(t.raw / 90) * 90);
+        t.inv = t.inv > t.n * 0.5;
+        t.offRatio = t.off / t.raw;
+      }
+      return merged;
+    }
+    close(d, t, crashed) {
+      this.active = false;
+      const S = this.samples;
+      if (S.length < 5) return;
+      const w = { S, endT: t, crashed };
+      // Obstacle tricks often finish *after* the rotation stops (e.g. the pass back under the
+      // object at the end of a Matty / Powerloop), so wait a moment for trailing crossings.
+      const t0 = S[0].t - 2.2;
+      const nearObs = this.crossLog.some(c => c.t >= t0) || this.nearObstacle(d, 3.5);
+      if (crashed || !nearObs) this.evaluate(w, t);
+      else {
+        w.evalT = t + 1.4;
+        this.pending = w;
+      }
+    }
+    evaluate(w, now) {
+      const S = w.S,
+        crashed = w.crashed,
+        t = now;
+      const toks = this.tokenize(S);
+      const t0 = S[0].t - 2.2,
+        t1 = now;
+      const crosses = this.crossLog.filter(c => c.t >= t0 && c.t <= t1);
+      const contacts = this.contacts.filter(c => c.t >= S[0].t - 0.1 && c.t <= Math.min(t1, w.endT + 0.6));
+      this.contacts = this.contacts.filter(c => c.t > t1);
+      const res = [];
+      const dbg = {
+        t: +now.toFixed(2),
+        toks: toks
+          .map(
+            tk =>
+              tk.ax +
+              (tk.dir > 0 ? '+' : '-') +
+              Math.round(tk.raw) +
+              (tk.inv ? 'i' : '') +
+              (tk.maxGap > 0.15 ? `(stall ${tk.maxGap.toFixed(2)}s)` : '')
+          )
+          .join(' '),
+        cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - S[0].t).toFixed(1)}s`).join(' '),
+        result: [],
+        near: null,
+        samples: S.filter((_, i) => i % 20 === 0).map(x => [
+          +(x.t - S[0].t).toFixed(3),
+          +x.pos.x.toFixed(3),
+          +x.pos.y.toFixed(3),
+          +x.pos.z.toFixed(3),
+          +x.q.w.toFixed(4),
+          +x.q.x.toFixed(4),
+          +x.q.y.toFixed(4),
+          +x.q.z.toFixed(4),
+          ...x.r.map(v => Math.round(v))
+        ])
+      };
+      (this.debug = this.debug || []).push(dbg);
+      if (this.debug.length > 12) this.debug.shift();
+      if (crashed) {
+        dbg.result.push('Crash');
+        this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks });
+        return;
+      }
+      if (!toks.length) return;
+      // obstacle-based first (needs crossings), else open air greedy
+      const ob = this.matchObstacle(toks, crosses);
+      const sg =
+        toks.length === 1 &&
+        (toks[0].ax === 'P' || toks[0].ax === 'R') &&
+        toks[0].segments >= 2 &&
+        toks[0].maxGap >= 0.42 &&
+        Math.abs(toks[0].raw - 360) < 60
+          ? toks[0]
+          : null;
+      if (ob) res.push(ob);
+      else if (sg) res.push({ name: 'Segmented Flips/Rolls', toks: [sg], err: 0.05, segmentedOK: true });
+      else {
+        let i = 0;
+        while (i < toks.length) {
+          let best = null;
+          for (let k = Math.min(4, toks.length - i); k >= 1 && !best; k--) {
+            const slice = toks.slice(i, i + k);
+            for (const tr of OPEN_TRICKS) {
+              for (const pp of tr.parsed) {
+                const m = matchTokens(pp, slice);
+                if (m) {
+                  best = { name: tr.name, toks: slice, err: m.err, k };
+                  break;
+                }
+              }
+              if (best) break;
+            }
+          }
+          if (best) {
+            res.push(best);
+            i += best.k;
+          } else i++;
+        }
+      }
+      if (!ob) {
+        const nm = this.nearMiss(toks, crosses);
+        if (nm) {
+          dbg.near = nm;
+          this.emit({ name: 'near', near: nm });
+        }
+      }
+      for (const r of res) {
+        dbg.result.push(r.name);
+        const grade = this.grade(r, contacts, toks);
+        this.emit({ name: r.name, exec: grade.exec, clean: grade.clean, obstacle: r.obstacle || null, toks: r.toks, notes: grade.notes });
+      }
+    }
+    matchObstacle(toks, crosses) {
+      // group crossings per obstacle
+      const byObj = {};
+      for (const c of crosses) if (c.kind !== 'G') (byObj[c.obj] = byObj[c.obj] || []).push(c);
+      let best = null;
+      for (const id in byObj) {
+        const seq = byObj[id];
+        const kinds = seq.map(c => c.kind).join('');
+        for (const tr of OBSTACLE_TRICKS) {
+          const need = tr.cross;
+          const pos = kinds.lastIndexOf(need);
+          if (pos < 0) continue;
+          // direction alternation check
+          const part = seq.slice(pos, pos + need.length);
+          let ok = true;
+          if (need === 'UOU' && !(part[0].dir !== part[1].dir && part[1].dir !== part[2].dir)) ok = false;
+          if ((need === 'OU' || need === 'UO') && part[0].dir === part[1].dir) ok = false;
+          if (!ok) continue;
+          if (!endOK(tr, part[part.length - 1])) continue;
+          if (!tr.lateral && part.every(c => c.latDot > 0.7)) continue; // sideways passes = jump-rope family
+          if (need === 'UOU' && this.stayedUpright && this.stayedUpright(part[0].t, part[2].t) && toks.some(x => x.ax === 'P' && x.dir > 0))
+            continue; // a loop that stayed upright (body or view) is a maverick, not a powerloop
+          if (
+            tr.tap &&
+            !(this.tapIn && this.tapIn(tr.tap, +id, toks.length ? toks[0].t0 - 0.4 : part[0].t, part[part.length - 1].t + 0.15))
+          )
+            continue;
+          if (
+            this.watcher &&
+            (this.vetoedFor(tr.name, toks.length ? toks[0].t0 : part[0].t) ||
+              !this.watcher.pre(tr.name, { toks, part, obj: +id, t0: toks.length ? toks[0].t0 : part[0].t }))
+          )
+            continue; // the Watcher's hard checks
+          // match against big tokens (ignore trailing/leading 90s if needed)
+          const variants = [toks, trimNinety(toks), dropSmall(toks)];
+          for (const tv of variants)
+            for (const pp of tr.parsed) {
+              const m = matchTokens(pp, tv);
+              if (!m) continue;
+              if (tr.name === 'Mavvelmann' && this.mavvelOK && !this.mavvelOK(tv, part)) continue;
+              if (tr.name === 'Matty Twister' && this.twisterOK && !this.twisterOK(tv, part, +id)) continue;
+              const early =
+                tr.name === 'Barani' &&
+                this.horizonAt &&
+                (() => {
+                  const y = tv.find(k => k.ax === 'Y');
+                  return y && !this.horizonAt(y.t0);
+                })();
+              const cand = {
+                name: early ? 'Power Swap' : tr.name,
+                toks: tv,
+                err: m.err + (tv !== toks ? 0.15 : 0),
+                obstacle: seq[0].name,
+                obj: +id,
+                clen: need.length,
+                part,
+                ct1: part[part.length - 1].t,
+                ...(early ? { earlyYaw: true } : {})
+              };
+              if (m && better(cand, best)) best = cand;
+            }
+        }
+        // maverick family: UOU, no big pitch, never inverted (except mavvy roll's roll)
+        if (/UOU/.test(kinds)) {
+          const bigP = toks.filter(x => x.ax === 'P' && x.raw > 200);
+          const rolls = toks.filter(x => x.ax === 'R');
+          const part = seq.slice(kinds.lastIndexOf('UOU'), kinds.lastIndexOf('UOU') + 3);
+          const r1 = rolls.length === 1 ? rolls[0] : null; // a Mavvy Roll's roll is the one time it may go inverted
+          const upright = !this.stayedUpright
+            ? true
+            : r1
+              ? this.stayedUpright(part[0].t, r1.t0 - 0.03) && this.stayedUpright(r1.t1 + 0.03, part[2].t)
+              : this.stayedUpright(part[0].t, part[2].t); // maverick: forward-looking the whole way (body or camera view)
+          const sideOver = part[1].kind === 'O' && part[1].latDot > 0.85 && Math.abs(part[1].fwdDot) < 0.3 && part[1].upY < -0.3; // over the top sideways and upside-down: a Side Loop, never a maverick (owner's review of RodFPV)
+          // a Maverick Loop (no roll) is judged by its top (owner, 2026-11-27: his Mavericks round Clappy's wires were missed, and every Maverick
+          // call pilots rejected went over forward, sideways or nearly upside-down): over the object upright and travelling backward
+          // (MAV_OVER_UP, MAV_OVER_BACK), and never on its back on the way round (MAV_MIN_UP), so a steep dive down the far side (nose straight
+          // down, up.y ~0) still counts; a Mavvy Roll keeps the old "upright apart from its roll"
+          const mavTop =
+            !rolls.length && part[1].kind === 'O' && (part[1].upY ?? 1) > MAV_OVER_UP && (part[1].fwdDot ?? -1) < -MAV_OVER_BACK;
+          const mavOK = rolls.length
+            ? upright
+            : mavTop &&
+              (!this.minUpBetween ||
+                Math.max(this.minUpBetween(part[0].t, part[2].t), this.minCamUpBetween(part[0].t, part[2].t)) > MAV_MIN_UP);
+          if (
+            !bigP.length &&
+            mavOK &&
+            !sideOver &&
+            part[0].dir !== part[1].dir &&
+            !part.every(c => c.latDot > 0.7) &&
+            (part[0].spd ?? 9) >= 1.5 &&
+            (part[2].spd ?? 9) >= (r1 ? 0.5 : 1.5) &&
+            (part[1].spd ?? 9) >= (r1 ? 0 : 0.8)
+          ) {
+            // a Mavvy Roll nearly stops over the top to roll (the 360 roll rules out drift)
+            const nm = rolls.length === 1 && Math.abs(rolls[0].raw - 360) < 60 ? 'Mavvy Roll' : rolls.length === 0 ? 'Maverick Loop' : null;
+            const cand = { name: nm, toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part, ct1: part[2].t };
+            if (nm && better(cand, best)) best = cand;
+          }
+        }
+        // jump-rope family: passes made flying sideways
+        // Only on things you really jump-rope: a bar with room to fly under it (pilot: they triggered on benches, the picnic
+        // table and other objects that aren't over/under bars). Not trees, not the pilot, nothing lower than 0.9 m.
+        const jo = this.world.objs.find(o => o.id === +id),
+          jumpable = !jo || (jo.obstacle && !jo.round && jo.kind !== 'pilot' && jo.obstacle.under >= 0.9);
+        if (jumpable) {
+          const lat = seq.filter(c => c.latDot > 0.6);
+          const lk = lat.map(c => c.kind).join('');
+          const R = toks.filter(x => x.ax === 'R'),
+            P = toks.filter(x => x.ax === 'P'),
+            Y = toks.filter(x => x.ax === 'Y');
+          const pick = (nm, cl, pp) => {
+            const cand = {
+              name: nm,
+              toks,
+              err: 0.12,
+              obstacle: seq[0].name,
+              obj: +id,
+              clen: cl,
+              part: pp,
+              ct1: pp[pp.length - 1].t,
+              draft: true
+            };
+            if (better(cand, best)) best = cand;
+          };
+          if (lat.length >= 2 && !P.some(x => x.raw > 200) && lat.slice(-2).every(c => (c.spd ?? 9) >= 1.5)) {
+            const pp = lat.slice(-3);
+            // (owner's review, 2026-11-18: side loops and jump ropes were called as each other) the book tells them apart by
+            // how the quad goes over the top: a Side Loop is UPSIDE-DOWN over it, rolling toward it all the way round (a slow,
+            // steady roll; back-to-back side loops roll on from one loop into the next, so there is no clean 360 token per
+            // loop); a Jump Rope stays upright; a Double Dutch flicks a fast 360 the other way at the peak.
+            const rate = x => x.raw / Math.max(0.05, x.t1 - x.t0),
+              ov = lat.filter(c => c.kind === 'O').pop();
+            const uA = ov && seq.filter(c => c.kind === 'U' && c.t < ov.t).pop(),
+              uB = ov && seq.find(c => c.kind === 'U' && c.t > ov.t),
+              loopT = uA && uB ? uB.t - uA.t : 0; // a Double Dutch's flick is quick, or at least short against the loop; a side loop rolls most of the way round
+            const fast =
+              ov &&
+              R.find(
+                x =>
+                  x.t1 >= ov.t - 0.8 &&
+                  x.t0 <= ov.t + 1.2 &&
+                  x.raw <= 520 &&
+                  ((x.raw >= 270 && rate(x) >= 330) || (x.raw >= 220 && loopT > 0 && x.t1 - x.t0 <= 0.45 * loopT))
+              );
+            const sideLoop =
+              /UOU$/.test(lk) &&
+              (() => {
+                const o = pp[1];
+                return o.kind === 'O' && o.upY < -0.3 && !fast && (!this.sweptBetween || this.sweptBetween(pp[0].t, pp[2].t) >= 240);
+              })();
+            if (sideLoop || (/UOU$/.test(lk) && !fast && pp[1].upY < 0 && R.some(x => Math.abs(x.raw - 360) < 80)))
+              pick('Side Loop', 3, pp);
+            else if (
+              /U$/.test(lk) &&
+              (() => {
+                // Burrito: big roll before crossing over, rewind down the same side, finish under
+                const rb = R.filter(x => x.raw >= 150).pop();
+                if (!rb) return false;
+                const noOver = !lat.some(c => c.kind === 'O' && c.t > rb.t0 - 0.6); // a Double Dutch rolls at the peak, over the object
+                // (owner, 2026-11-18: trippy spins were called Burrito Rolls) a Burrito is a sideways move on an over/under, not
+                // done while circling a pole and looking up it: a roll made while the quad was going round a pole is the trippy's
+                {
+                  const inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, rb.t1) - Math.max(w.t0, rb.t0)), 0);
+                  if (inPose >= 0.4 * Math.max(0.1, rb.t1 - rb.t0)) return false;
+                } // the roll was mostly flown in a trippy's pose round a pole
+                // (owner, 2026-11-23, the site's words: "begin with one Jump Rope, then, as you initiate … another … before you cross over
+                // the object, do a roll in the opposite direction and rewind back down the same side") the Jump Rope comes first: over
+                // this object sideways and upright, back under it, within BURRITO_JR s before the roll; and the roll goes AGAINST the way
+                // the jump rope went round the object (a roll with it is a Side Loop's: there dir = -latS of the over pass)
+                const jO = lat.filter(c => c.kind === 'O' && c.t < rb.t0 && c.t > rb.t0 - BURRITO_JR).pop(),
+                  jU = jO && lat.find(c => c.kind === 'U' && c.t > jO.t && c.t < rb.t0 + 0.3);
+                if (!jO || !jU || !(jO.upY > 0.2)) return false;
+                if (jO.latS && Math.sign(rb.dir) !== jO.latS) return false;
+                return noOver;
+              })()
+            )
+              pick('Burrito Roll', 2, lat.slice(-2));
+            else if (fast || (ov && R.some(x => Math.abs(x.raw - 360) < 80 && rate(x) >= 230))) pick('Double Dutch', 2, lat.slice(-2));
+            /* (a Double Dutch jumps over: without a pass over the object a quick roll under it is no Double Dutch) */
+            // the flick at the peak is fast; a slow roll all the way round is a side loop
+            else if (
+              Y.some(x => Math.abs(x.raw - 360) < 80) &&
+              (() => {
+                // (owner, 2026-11-20: "a cinnamon roll is not an inverted trick") a jump rope with a slow yaw: upright over the top and all the way through, like a Cradle
+                const p2 = lat.slice(-2),
+                  ov = p2.find(c => c.kind === 'O');
+                if (ov && ov.upY != null && ov.upY < -0.15) return false;
+                if (this.trackFrac && this.trackFrac(p2[0].t - 0.3, p2[1].t) < CINNAMON_VIEW)
+                  return false; /* the site: the object stays in view all the way round */
+                {
+                  const yb = Y.find(x => Math.abs(x.raw - 360) < 80),
+                    inPose = (this.circled || []).reduce((a, w) => a + Math.max(0, Math.min(w.t1, yb.t1) - Math.max(w.t0, yb.t0)), 0);
+                  if (inPose >= 0.4 * Math.max(0.1, yb.t1 - yb.t0)) return false;
+                } // the yaw of a trippy going round its pole (HemmingsonFPV's warehouse trippy was called Cinnamon Roll twice), as for the Burrito
+                return !this.minUpBetween || this.minUpBetween(p2[0].t - 0.5, p2[1].t) > -0.15;
+              })()
+            )
+              pick('Cinnamon Roll', 2, lat.slice(-2));
+            // pilot feedback: jump ropes were credited too eagerly and got in the way of Split-S. A plain Jump Rope has no big
+            // roll or pitch (a Split-S has a 180 roll and a half loop) and both passes really are sideways
+            else if (
+              /^(OU|UO)$/.test(lk.slice(-2)) &&
+              lat[lat.length - 1].t - lat[lat.length - 2].t < 3 &&
+              lat[lat.length - 1].dir !== lat[lat.length - 2].dir &&
+              !R.some(x => x.raw > 120) &&
+              !P.some(x => x.raw > 110) &&
+              lat.slice(-2).every(c => c.latDot > 0.75 && Math.abs(c.fwdDot) < 0.6) &&
+              lat.slice(-2).every(c => c.kind !== 'O' || c.upY > 0.2)
+            )
+              pick('Jump Rope', 2, lat.slice(-2)); // upright over the top   // one over + one under, there and back
+          }
+        }
+        // beginner switch: maverick over, stall, rewind back over, back under flying backward — no big rotation
+        if (/UOOU$/.test(kinds) && !toks.some(x => x.raw > 160) && seq.slice(-4).filter(c => (c.spd ?? 9) >= 1.2).length >= 3) {
+          const pp = seq.slice(-4);
+          if (endOK({ end: 'back' }, pp[3])) {
+            const cand = {
+              name: 'Beginner Switch',
+              toks,
+              err: 0.1,
+              obstacle: seq[0].name,
+              obj: +id,
+              clen: 4,
+              part: pp,
+              ct1: pp[3].t,
+              draft: true
+            };
+            if (better(cand, best)) best = cand;
+          }
+        }
+        if (/OU/.test(kinds) && !best) {
+          const p2 = seq.slice(kinds.lastIndexOf('OU'), kinds.lastIndexOf('OU') + 2);
+          const big = toks.filter(x => x.raw > 200);
+          // over flying forward, under flying backward, both at speed, no flip (the braking nod is too small to be a token)
+          const brisk = p2.every(c => (c.spd ?? 9) >= 1.5) && (p2[0].fwdDot > 0.3 || toks.some(x => x.ax === 'P' && x.raw >= 60));
+          // pilot: Matty flips inside combos were still called Beginner Matty. Mid-combo the flip is often slow, broken up or
+          // partly claimed by the trick before, so no single big pitch token is left. Go by how far the quad actually tumbled
+          // between going over and coming back under: a beginner matty only nods (well under a half turn), a Matty goes round.
+          const tumble = this.sweptBetween ? this.sweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) : 0; // and it must be FORWARD: the tail of a powerloop between the two passes (pilot review of RodFPV: Power Flip read as Matty + Power Flip) is the other way round
+          const flipped =
+            tumble >= 230 &&
+            (!this.fwdSweptBetween || this.fwdSweptBetween(p2[0].t - 0.5, p2[1].t + 0.1) >= 0.6 * tumble) &&
+            !(this.cur && this.cur[1] && this.cur[1].raw > 45) &&
+            !toks.some(x => x.ax === 'R' && x.raw > 120) &&
+            !toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw > 120) &&
+            !toks.some(x => x.ax === 'Y' && x.raw > 120);
+          // a Beginner Matty never goes inverted and never tumbles (pilot: a powerloop round the covered walkway was called one):
+          // if it tumbled but the flip can't be read yet (rotation still going), say nothing and wait
+          const gentle = tumble < 200 && (!this.stayedUpright || this.stayedUpright(p2[0].t - 0.3, p2[1].t));
+          if (!big.length && brisk && (flipped || gentle) && p2[0].dir !== p2[1].dir && endOK({ end: 'back' }, p2[1]))
+            best = {
+              name: flipped ? 'Matty Flip' : 'Beginner Matty',
+              /* owner, 2026-11-23: the climb back over is not required */ toks,
+              err: 0.1,
+              obstacle: seq[0].name,
+              obj: +id,
+              clen: 2,
+              part: p2,
+              ct1: p2[1].t
+            };
+        }
+        if (/OUO/.test(kinds) && !best) {
+          const big = toks.filter(x => x.raw > 200);
+          const p3 = seq.slice(kinds.lastIndexOf('OUO'), kinds.lastIndexOf('OUO') + 3);
+          // over, back under flying BACKWARD and upright, up and over again — upright the whole way round
+          const bm =
+            p3[1].fwdDot < -0.2 &&
+            p3[1].upY > 0.45 &&
+            p3[0].dir !== p3[1].dir &&
+            p3[1].dir !== p3[2].dir &&
+            p3[2].t - p3[0].t < 6 &&
+            (!this.stayedUpright || this.stayedUpright(p3[0].t, p3[2].t)) &&
+            (!this.sweptBetween || this.sweptBetween(p3[0].t, p3[2].t) < 260);
+          if (bm && !big.length && p3.every(c => (c.spd ?? 9) >= 1.5) && toks.some(x => x.ax === 'P' && x.raw >= 60))
+            best = { name: 'Beginner Matty', toks, err: 0.1, obstacle: seq[0].name, obj: +id, clen: 3, part: p3, ct1: p3[2].t };
+        }
+      }
+      // knife edge through a gap. Owner, 2026-11-20: a Knife Edge (and the Reverse one) only counts through a NARROW gap: its
+      // short side at most KNIFE_X quad widths (the pilot's own whoop: ducts and all), with the quad rolled so its up axis lies
+      // along that short side. A rolled pass through a wide gate is just a banked pass. Ninja Star keeps any gap.
+      const qW = this.quadWidth(),
+        knifeOK = c => c.narrow == null || (c.narrow <= KNIFE_X * qW + 0.005 && (c.nAlign ?? 1) > 0.5);
+      const g = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8),
+        gk = crosses.find(c => c.kind === 'G' && c.rollAbs > 0.8 && knifeOK(c));
+      if (!best && g) {
+        const rl = toks.filter(x => x.ax === 'R');
+        if (gk && rl.length >= 1 && rl.every(x => x.raw < 160))
+          best = { name: 'Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
+        const yw = toks.find(x => x.ax === 'Y' && Math.abs(x.raw - 360) < 70);
+        if (yw && (g.narrow == null || g.narrow <= NINJA_X * qW + 0.005))
+          best = { name: 'Ninja Star', toks, err: 0.1, obstacle: g.name, obj: g.obj, clen: 1, part: [g], ct1: g.t };
+        if (gk && gk.fwdDot < -0.4 && toks.some(x => x.ax === 'P' && x.raw > 120))
+          best = { name: 'Reverse Knife Edge', toks, err: 0.1, obstacle: gk.name, obj: gk.obj, clen: 1, part: [gk], ct1: gk.t };
+      }
+      // Split-S by attitude (2026-11-21: 16 of 34 confirmed Split-S labels were missed). The half roll is measured well, the pull-through
+      // is not (55-140 deg read for a real half loop: slow ends under the token threshold, part of it on yaw with camera tilt). When
+      // nothing in the table fits: one half roll, at most a nose-up pull, over then under ONE object, upside-down on the way and upright
+      // under it, flying forward the other way from where the roll began = a Split-S.
+      if (!best && this.fbIn)
+        for (const id in byObj) {
+          const seq = byObj[id],
+            kinds = seq.map(c => c.kind).join(''),
+            pos = kinds.lastIndexOf('OU');
+          if (pos < 0) continue;
+          const part = seq.slice(pos, pos + 2),
+            big = toks.filter(x => x.raw >= 90),
+            R = big.filter(x => x.ax === 'R');
+          if (
+            part[0].dir === part[1].dir ||
+            R.length !== 1 ||
+            R[0].raw < 100 ||
+            R[0].raw > 250 ||
+            big.some(x => x !== R[0] && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < R[0].t0 - 0.1))
+          )
+            continue;
+          const r = R[0],
+            u = part[1];
+          if (
+            !(u.upY > 0.5) ||
+            !(u.fwdDot > 0.2) ||
+            part.every(c => c.latDot > 0.7) ||
+            r.t0 > u.t ||
+            u.t - r.t0 > SPLIT_LOOK ||
+            part[0].t < r.t0 - 1.5
+          )
+            continue;
+          const W = this.fbIn(r.t0 - 0.1, u.t);
+          if (W.length < 4 || Math.min(...W.map(x => x.up.y)) > -0.3) continue;
+          const f0 = W[0].f,
+            f1 = W[W.length - 1].f,
+            h0 = Math.hypot(f0.x, f0.z),
+            h1 = Math.hypot(f1.x, f1.z);
+          if (h0 < 0.3 || h1 < 0.3 || (f0.x * f1.x + f0.z * f1.z) / (h0 * h1) > -0.4) continue;
+          if (this.watcher && (this.vetoedFor('Split S', r.t0) || !this.watcher.pre('Split S', { toks, part, obj: +id, t0: r.t0 })))
+            continue;
+          const tv = big.filter(x => x === r || x.ax === 'P');
+          best = { name: 'Split S', toks: tv, err: 0.4, obstacle: seq[0].name, obj: +id, clen: 2, part, ct1: u.t, splitWitness: true };
+          break;
+        }
+      const pr = this.powerRollWitness && this.powerRollWitness(byObj, toks);
+      if (pr && (!best || (best.clen || 0) < 3 || POWER_ROLL_OVER.has(best.name))) best = pr;
+      return best;
+    }
+    // Power Roll as pilots fly it (owner's labels, 2026-11-27: "a power roll is more of a loop motion, with a roll at the top"; the
+    // difference from a Rubik's Cube is the over/under object). Read from the raw rotations: ONE continuous loop on pitch (P+ 300-460
+    // deg; the table's P+180 / P+180 halves are rarely cut apart) with a 250-460 deg roll inside it, over the top, while going under,
+    // over and back under one object, out upright and flying forward. The game cut these into Immelmann + Split S or a Rubik's Cube.
+    powerRollWitness(byObj, given = []) {
+      const T = this.toks;
+      if (!Array.isArray(T) || !this.fbIn) return null;
+      for (const id in byObj) {
+        const seq = byObj[id],
+          kinds = seq.map(c => c.kind).join(''),
+          pos = kinds.lastIndexOf('UOU');
+        if (pos < 0) continue;
+        const [u0, o, u1] = seq.slice(pos, pos + 3);
+        if (u0.dir === o.dir || o.dir === u1.dir || u1.t - u0.t > POWER_ROLL_SPAN) continue;
+        if (!(u1.upY > 0.5) || !(u1.fwdDot > 0.2)) continue;
+        const P = T.filter(k => k.ax === 'P' && k.dir > 0 && k.t1 > u0.t - 0.8 && k.t0 < u1.t + 0.3),
+          pSum = P.reduce((s, k) => s + k.raw, 0);
+        if (pSum < 300 || pSum > 460) continue;
+        const p0 = Math.min(...P.map(k => k.t0)),
+          p1 = Math.max(...P.map(k => k.t1));
+        const R = T.find(
+          k =>
+            k.ax === 'R' &&
+            k.raw >= 250 &&
+            k.raw <= 460 &&
+            (k.t0 + k.t1) / 2 > p0 &&
+            (k.t0 + k.t1) / 2 < p1 &&
+            o.t > k.t0 - 0.7 &&
+            o.t < k.t1 + 0.7
+        );
+        if (!R) continue;
+        if (T.some(k => k.ax === 'P' && k.dir < 0 && k.raw > 120 && k.t1 > p0 && k.t0 < p1)) continue; // a flip the other way inside it: not a loop with a roll
+        if (
+          this.watcher &&
+          (this.vetoedFor('Power Roll', p0) || !this.watcher.pre('Power Roll', { toks: [...P, R], part: [u0, o, u1], obj: +id, t0: p0 }))
+        )
+          continue;
+        // the call takes the detector's own pieces of these rotations (so they are used up and no Rubik's Cube / Roll is read from them too)
+        const own = given.filter(x => x.ax !== 'Y' && x.t1 > p0 - 0.15 && x.t0 < p1 + 0.15);
+        if (!own.some(x => x.ax === 'R' && x.raw >= 200) || own.filter(x => x.ax === 'P').reduce((s, x) => s + x.raw, 0) < 250) continue;
+        return {
+          name: 'Power Roll',
+          toks: own,
+          err: 0.3,
+          obstacle: seq[0].name,
+          obj: +id,
+          clen: 3,
+          part: [u0, o, u1],
+          ct1: u1.t,
+          powerRollWitness: true
+        };
+      }
+      return null;
+    }
+    nearMiss(toks, crosses) {
+      const objs = [...new Set(crosses.filter(c => c.kind !== 'G').map(c => c.obj))];
+      let best = null;
+      for (const tr of OBSTACLE_TRICKS)
+        for (const tv of [toks, trimNinety(toks), dropSmall(toks)])
+          for (const pp of tr.parsed) {
+            if (tr.tap || tr.draft) continue;
+            if (!matchTokens(pp, tv)) continue;
+            const cand = { name: tr.name, need: tr.cross, end: tr.end };
+            if (
+              !best ||
+              cand.need.length > best.need.length ||
+              (cand.need.length === best.need.length && trickPoints(cand.name) > trickPoints(best.name))
+            )
+              best = cand;
+          }
+      if (!best) return null;
+      const words = { U: 'under', O: 'over' };
+      if (!objs.length) return null;
+      const id = objs[0],
+        cs = crosses.filter(c => c.obj === id),
+        seq = cs.map(c => c.kind).join('');
+      if (seq.endsWith(best.need) || (best.need.length > 1 && seq.includes(best.need))) {
+        const last = cs[cs.length - 1];
+        if (last && last.upY < 0.45) return `Almost ${best.name} on ${last.name}: you weren't upright on the last pass ${words[last.kind]}`;
+        if (best.end === 'back') return `Almost ${best.name} on ${last.name}: finish upright, facing the object, flying backward under it`;
+        if (best.end === 'fwd') return `Almost ${best.name} on ${last.name}: finish flying forward under it`;
+      }
+      return `Almost ${best.name} on ${crosses.find(c => c.obj === id).name}: needs ${best.need
+        .split('')
+        .map(k => words[k])
+        .join(' → ')}, saw ${
+        seq
+          ? seq
+              .split('')
+              .map(k => words[k])
+              .join(' → ')
+          : 'nothing'
+      }`;
+    }
+    grade(r, contacts, allToks) {
+      let clean = 100;
+      const notes = [];
+      const used = r.toks;
+      // rotation accuracy
+      clean -= Math.min(30, (r.err || 0) * 120);
+      // pauses / segmentation inside the trick
+      const pauseOK = (OBSTACLE_TRICKS.find(x => x.name === r.name) || {}).pauseOK || 0; // a level-out hover that is part of the trick
+      for (let i = 0; i < used.length - 1 && !r.segmentedOK; i++) {
+        const gap = used[i + 1].t0 - used[i].t1;
+        if (gap > 0.22 && gap > pauseOK) {
+          clean -= Math.min(30, (gap - 0.22) * 90);
+          notes.push('segmented');
+        }
+      }
+      if (!r.segmentedOK)
+        for (const t of used)
+          if (t.maxGap > 0.1) {
+            clean -= Math.min(50, (t.maxGap - 0.06) * 180);
+            notes.push('stalled mid-rotation');
+          }
+      // off-axis wobble
+      for (const t of used)
+        if (t.offRatio > 0.35) {
+          clean -= Math.min(20, (t.offRatio - 0.35) * 60);
+          notes.push('off-axis');
+        }
+      // leftover rotation tokens not part of the trick
+      const extra = allToks.length - used.length;
+      if (extra > 0 && r.obstacle) {
+        clean -= 8 * extra;
+        notes.push('extra rotation');
+      }
+      clean = Math.round(clamp(clean, 0, 100));
+      let exec = clean >= 70 ? 'CLEAN' : 'SLOPPY';
+      const bumps = contacts.filter(c => !c.tap);
+      if (bumps.length) {
+        exec = 'BUMP';
+        notes.push('contact');
+      }
+      return { exec, clean, notes };
+    }
+    continuousDetectors(d, dt, t, rc) {
+      const up = d.up(),
+        speed = len(d.vel);
+      // Wall tap: gentle contact with a wall surface, bottom of the whoop toward the wall
+      if (!this.liveTaps && d.contactThisStep && d.armed && !d.contactGround && d.contactNormal && Math.abs(d.contactNormal.y) < 0.5) {
+        const o = this.world.objs[d.contactOwner];
+        if (
+          o &&
+          (o.kind === 'wall' || o.kind === 'building' || o.wallNormal) &&
+          dot(up, d.contactNormal) > 0.55 &&
+          d.lastImpact < 3 &&
+          t - this.lastTap > 1.2
+        ) {
+          this.lastTap = t;
+          this.contacts.forEach(c => {
+            if (t - c.t < 0.05) c.tap = true;
+          });
+          this.emit({ name: 'Wall Tap', exec: 'CLEAN', clean: Math.round(100 - d.lastImpact * 10), obstacle: o.name, continuous: true });
+        }
+      }
+      // Wall ride: travel along a wall, close, rolled so that thrust axis points away from wall
+      // pilot feedback (x2): with a steep camera you can't get flat against the wall, so the frame doesn't need to be close:
+      // start within ~0.9 m with the belly turned toward the wall (roll ≥ ~35° even when pitched forward), then hold the ride
+      // out to 1.3 m and through short wobbles (0.25 s). Must be travelling along the wall, not turning away from it.
+      const w = this.nearWall(d),
+        WR0 = this.wallRide;
+      const along = w && speed > 0.5 && Math.abs(dot(d.vel, w.n)) / speed < 0.6,
+        tiltW = w ? dot(up, w.n) : 0;
+      const riding =
+        w && along && speed > 1.0 && d.armed && !d.crashed && (WR0 ? w.dist < 1.3 && tiltW > 0.25 : w.dist < 0.9 && tiltW > 0.4);
+      if (riding) {
+        if (!this.wallRide) {
+          const f0 = d.fwd();
+          this.wallRide = {
+            t0: t,
+            p0: v3(d.pos.x, d.pos.y, d.pos.z),
+            n0: w.n,
+            h0: Math.atan2(f0.x, f0.z),
+            name: w.name,
+            contact: false,
+            fd: 0,
+            n: 0
+          };
+        }
+        const WR = this.wallRide;
+        WR.lastIn = t;
+        // a banked turn away from the wall isn't a ride: the heading swings round and the quad drifts off the wall
+        {
+          const fh = d.fwd();
+          let dh = Math.atan2(fh.x, fh.z) - WR.h0;
+          dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+          WR.ok = Math.abs(dh) * R2D < 20 && dot(sub(d.pos, WR.p0), WR.n0) < 0.35;
+        }
+        if (d.contactThisStep) WR.contact = true;
+        const f = d.fwd();
+        WR.fd += speed > 0.5 ? dot(f, d.vel) / speed : 0;
+        WR.n++;
+        if (!WR.emitted && WR.ok && t - WR.t0 > 0.35 && len(sub(d.pos, WR.p0)) > 1.2) {
+          // live: scores the moment it qualifies
+          WR.emitted = true;
+          WR.name2 = WR.fd / Math.max(1, WR.n) < -0.4 ? 'Reverse Wall Ride' : 'Wall Ride';
+          this.emit({ name: WR.name2, exec: WR.contact ? 'BUMP' : 'CLEAN', clean: 90, obstacle: WR.name, continuous: true, live: true });
+        }
+      } else if (this.wallRide && !d.crashed && t - this.wallRide.lastIn < 0.25) {
+        // brief wobble off the wall: still the same ride
+      } else if (this.wallRide) {
+        const L = len(sub(d.pos, this.wallRide.p0));
+        const backward = this.wallRide.fd / Math.max(1, this.wallRide.n) < -0.4;
+        if (!this.wallRide.emitted && this.wallRide.ok && this.wallRide.lastIn - this.wallRide.t0 > 0.35 && L > 1.2 && !d.crashed)
+          this.emit({
+            name: backward ? 'Reverse Wall Ride' : 'Wall Ride',
+            exec: this.wallRide.contact ? 'BUMP' : 'CLEAN',
+            clean: 90,
+            obstacle: this.wallRide.name,
+            continuous: true
+          });
+        this.wallRide = null;
+      }
+      // Dive (TPW, and the pilot's definition after it was called far too often: 24 calls in 35 minutes, 3 of 4 judged
+      // wrong). A dive is ONE committed descent: nose down, falling fast, pulled out level near the ground. It counts
+      //   - in the open only from really high up (12 m or more, dropping at least 9 m), or
+      //   - beside a tall structure (a wall or building within 3 m for most of the way down), from 6 m, dropping 4.5 m:
+      //     "almost a wall ride, but not quite, just a diving motion".
+      // Coming down from height in a glide, a spiral or a tumble is just coming down.
+      {
+        const D = this.dive,
+          vy = d.vel.y,
+          f = d.fwd();
+        if (!D) {
+          if (d.armed && !d.crashed && vy < -3 && d.pos.y >= 6)
+            this.dive = { t0: t, y0: d.pos.y, T: 0, nose: 0, near: 0, minVy: vy, hit: false, lvl: 0, name: null, rot: this.totRot || 0 };
+        } else if (d.crashed || !d.armed) this.dive = null;
+        else {
+          if (vy < -1.5) {
+            D.T += dt;
+            D.lvl = 0;
+            D.minVy = Math.min(D.minVy, vy);
+            if (f.y < -0.42) D.nose += dt; // nose at least 25 degrees below level
+            if (Math.round(t * 1000) % 20 === 0) {
+              let best = null;
+              for (const o of this.world.objs) {
+                if (!(o.kind === 'wall' || o.kind === 'building')) continue;
+                for (const pr of o.prims) {
+                  if (pr.type !== 'box' || pr.aabb.max.y < d.pos.y - 0.5) continue;
+                  const r = sphereVs(pr, d.pos, 3.0);
+                  if (r && Math.abs(r.n.y) <= 0.3 && (!best || r.d > best.d)) best = { d: r.d, name: o.name };
+                }
+              }
+              if (best) {
+                D.near += 0.02;
+                D.name = best.name;
+              }
+            }
+            if (d.contactThisStep && d.lastImpact > 0.6) D.hit = true;
+          } else {
+            D.lvl += dt; // levelling out: judge it once the descent has clearly ended
+            if (D.lvl > 0.12) {
+              const drop = D.y0 - d.pos.y,
+                beside = D.T > 0 && D.near / D.T >= 0.5,
+                tumble = (this.totRot || 0) - D.rot > 420;
+              const committed = D.T >= 0.5 && D.nose / D.T >= 0.4 && D.minVy <= -7 && !D.hit && !tumble && up.y > 0.4 && d.pos.y < 3.5;
+              if (committed && ((beside && D.y0 >= 6 && drop >= 4.5) || (D.y0 >= 12 && drop >= 9)))
+                this.emit({
+                  name: 'Building Dive',
+                  exec: 'CLEAN',
+                  clean: beside ? 95 : 90,
+                  obstacle: beside ? D.name : 'open air',
+                  continuous: true
+                }); /* owner, 2026-11-23: an open-air dive counts too */
+              this.dive = null;
+            }
+          }
+          if (this.dive && t - D.t0 > 8) this.dive = null;
+        }
+      }
+      // Stall rewind: climb (>2.5 m/s up) beside something tall, stall, come back down without rotating
+      if (d.vel.y > 2.5 && d.armed && !this.climb) this.climb = { t0: t, y0: d.pos.y, p0: v3(d.pos.x, 0, d.pos.z), rot: 0, peak: d.pos.y };
+      if (this.climb) {
+        const rr = d.pilotRates();
+        this.climb.rot += (Math.abs(rr[0]) + Math.abs(rr[1])) * dt;
+        this.climb.peak = Math.max(this.climb.peak, d.pos.y);
+        if (d.vel.y < -2.5 && this.climb.peak - this.climb.y0 > 2.5 && this.climb.rot < 120 && this.nearTall(d, 3)) {
+          const back = Math.hypot(d.pos.x - this.climb.p0.x, d.pos.z - this.climb.p0.z);
+          if (back < 2.5) this.emit({ name: 'Stall Rewind', exec: 'CLEAN', clean: 88, obstacle: this.nearTall(d, 3), continuous: true });
+          this.climb = null;
+        } else if (t - this.climb.t0 > 4 || this.climb.rot > 200) this.climb = null;
+      }
+      // Slide Disarm (TPW: disarm on the move, slide across the ground or an object's surface, re-arm before stopping, fly
+      // away). The slide itself is measured here; arming events start and finish it (onArmChange), postStep confirms the
+      // fly-away. Any surface counts, not just the ground (pilot: sliding over things is the fun of it).
+      if (d.contactThisStep) this.lastTouch = t;
+      this.stickTick(d, t);
+      this.deadTick(d, t);
+      this.cornerTick(d, dt, t);
+      this.uhTick(d, t);
+      this.rollbackTick(d, t);
+      const sl = this.slide;
+      if (sl) {
+        const hs = Math.hypot(d.vel.x, d.vel.z);
+        if (d.contactThisStep && d.contactNormal && d.contactNormal.y > 0.5) {
+          sl.lastC = t;
+          const o = this.world.objs[d.contactOwner];
+          sl.surface = d.contactGround || !o ? 'the ground' : o.name;
+        }
+        const on = t - sl.lastC < 0.15;
+        if (on) sl.dist += hs * dt;
+        if (on && hs < 0.15) {
+          if (sl.stopT == null) sl.stopT = t;
+        } else sl.stopT = null;
+        if (d.crashed || t - sl.t > 10 || (sl.stopT != null && t - sl.stopT > 1.0)) this.slide = null; // came to rest: the moment has passed
+      }
+    }
+    // Rollback and Juicy Rollback (owner, 2026-11-23: "make sure our understanding of rollback is based on these attempts": RodFPV's 9
+    // labels on Clappy's footbridge, re-flown). Under an object flying on; straight after (or as) it passes, over onto its back by PITCH
+    // (back, a Snapback's way = Rollback: 136-189 deg measured; forward, a Juicy Flick's = Juicy Rollback: 173-200), a roll back upright
+    // (114-417 deg as the gyro split it with yaw), and back UNDER the same object the other way, upright and travelling backward,
+    // 1.6-2.4 s after the first pass. Judged when the pass back under comes: nothing else is read from that stretch
+    rollbackTick(d, t) {
+      const L = this.crossLog,
+        n0 = this.rbN ?? 0;
+      this.rbN = L.length;
+      if (L.length <= n0) {
+        if (L.length < n0) this.rbN = L.length;
+        return;
+      }
+      for (let i = Math.min(n0, L.length); i < L.length; i++) {
+        const u2 = L[i];
+        if (u2.kind !== 'U' || !(u2.upY > 0.45) || !(u2.fwdDot < -0.4) || t - (this.rbT ?? -9) < 1.0) continue;
+        let u1 = null;
+        for (let j = i - 1; j >= 0 && u2.t - L[j].t <= ROLLBACK_BACK; j--) {
+          const c = L[j];
+          if (c.obj !== u2.obj) continue;
+          if (c.kind === 'O') break;
+          if (c.kind === 'U' && c.dir !== u2.dir && u2.t - c.t >= 0.6) {
+            u1 = c;
+            break;
+          }
+        }
+        if (!u1) continue;
+        const H = (this.attLog || []).filter(r => r[0] >= u1.t - 1.3 && r[0] <= u2.t),
+          k = H.findIndex(r => r[1] < 0);
+        if (k < 0 || Math.min(...H.map(r => r[1])) > -0.3) continue;
+        const tI = H[k][0],
+          a = H.find(r => r[0] >= tI - 0.7) || H[0],
+          b = H.find(r => r[0] >= tI + 0.15) || H[H.length - 1],
+          dP = b[4] - a[4],
+          dR = b[3] - a[3];
+        if (tI > u1.t + 1.0 || Math.abs(dP) < 90 || Math.abs(dR) > Math.abs(dP)) continue; // onto its back by roll is a Half Matty's way in, not this
+        {
+          let roll = 0;
+          for (let q = 1; q < H.length; q++) roll += Math.abs(H[q][3] - H[q - 1][3]);
+          if (roll < ROLLBACK_ROLL) continue;
+        } // it comes upright again by ROLL (Rod's: 114-417 deg); a Matty that happens to pass under twice flips all the way round on pitch
+        const t0 = u1.t - 1.3;
+        this.rbT = t;
+        for (const q of this.toks) if (q.t1 > t0 && q.t0 <= t) q.usedUntil = Math.max(q.usedUntil, q.t1);
+        for (const c of this.cur) if (c) c.usedUntil = t;
+        this.pend = (this.pend || []).filter(q => !(q.tDone > t0));
+        this.emit({
+          name: dP > 0 ? 'Rollback' : 'Juicy Rollback',
+          exec: 'CLEAN',
+          clean: 88,
+          obstacle: u2.name,
+          toks: [],
+          dur: +(u2.t - u1.t).toFixed(2),
+          draft: true
+        });
+      }
+    }
+    // a call made from the way in (Snapback, Juicy Flick, a Roll or Yaw Spin read from the same turn) waits for the pass back under
+    rollbackWait(p, t) {
+      if (!ROLLBACK_HOLD.has(p.name)) return false;
+      const L = this.crossLog,
+        d = this.lastD;
+      if (!d) return false;
+      for (let j = L.length - 1; j >= 0 && t - L[j].t < ROLLBACK_BACK; j--) {
+        const c = L[j];
+        if (c.kind !== 'U' || c.t < p.t0 - 1.3 || c.t > p.tDone + 0.3 || this.minUpBetween(c.t - 1.3, t) >= -0.3) continue;
+        // only while it is coming back: Rod's rewinds are already travelling back toward the object when the turn ends (the pass back
+        // under came 0.4 s or less after it); a Snapback that flies on or stops is called without more delay
+        const at = this.fbIn(c.t - 0.03, c.t + 0.03)[0];
+        if (at && t - p.tDone >= ROLLBACK_SEE) {
+          const rx = d.pos.x - at.p.x,
+            rz = d.pos.z - at.p.z,
+            r = Math.hypot(rx, rz) || 1,
+            away = (d.vel.x * rx + d.vel.z * rz) / r;
+          if (away > -0.5) return false;
+        }
+        return true;
+      }
+      return false;
+    }
+    // Inverted Uh-uh as it happens: from going upside-down to coming upright again within 4 s, the head shake in between (`uhuh`).
+    // The half flip / roll in and out and the little yaws are its own: nothing else is read from them
+    uhTick(d, t) {
+      const uy = d.up().y,
+        U = this.uh || (this.uh = { inv: false, t0: 0 });
+      if (!d.armed || d.crashed) {
+        U.inv = false;
+        return;
+      }
+      if (!U.inv) {
+        if (uy < -0.6) {
+          U.inv = true;
+          U.t0 = t;
+        }
+        return;
+      }
+      if (uy > 0.6) {
+        U.inv = false;
+        const T = t - U.t0,
+          own = () => {
+            for (const k of this.toks) if (k.t1 > U.t0 - 0.7 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1);
+            for (const c of this.cur) if (c) c.usedUntil = t;
+            this.pend = (this.pend || []).filter(p => !(p.tDone > U.t0 - 0.7));
+          };
+        if (T >= 0.5 && T <= 4 && !this.live && this.uhuh(U.t0, t)) {
+          own();
+          this.emit({ name: 'Inverted Uh-uh', exec: 'CLEAN', clean: 88, toks: [], dur: +T.toFixed(2), draft: true });
+        } else if (T >= IYT_MIN && T <= IYT_MAX && !Object.values(this.orb).some(o => o && this.orbSpan(o) > 250)) {
+          /* a pass looks like the start of an orbit to the orbit tracker: only a real lap rules it out */ const tk = this.iyTrack(U.t0, t); // Inverted Yaw Tracking: the pass, judged as it comes upright
+          if (tk) {
+            own();
+            const cl = Math.round(clamp(100 - tk.off * 1.6 - (1 - tk.frac) * 40, 40, 98));
+            this.emit({
+              name: 'Inverted Yaw Tracking',
+              exec: cl >= 72 ? 'CLEAN' : 'SLOPPY',
+              clean: cl,
+              toks: [],
+              dur: +T.toFixed(2),
+              obstacle: tk.name,
+              draft: true,
+              notes: [
+                `tracked ${tk.name} through ${Math.round(Math.abs(tk.sweep))}°`,
+                tk.off < 15 ? 'locked on' : 'the object drifted off centre'
+              ]
+            });
+          }
+        }
+      } else if (t - U.t0 > IYT_MAX) U.inv = false;
+    }
+    // Inverted Yaw Tracking's witness (owner, 2026-11-27, after headmazta's tutorial: "it's focused on tracking an object as you pass by
+    // it while inverted"): upside-down from a to b, the quad travels past ONE solid thing, the thing's bearing sweeps by, and the yaw
+    // follows it so it stays in the middle of the picture left to right. Any amount of yaw that matches the pass (a slow track makes no
+    // rotation token at all, so this reads the attitude, not tokens); the right yaw direction for the side it is on is implied (yawing
+    // the other way loses it). A spin on the spot beside a pole has no sweep; an orbit is not a pass (the path must be fairly straight).
+    trackTargets(pos, R) {
+      if (!this.trkObjs) {
+        const poleObj = new Set(this.poles.map(P => P.objId));
+        this.trkObjs = [];
+        for (const o of this.world.objs) {
+          if (o.kind === 'edge' || o.removed || poleObj.has(o.id) || !o.prims || !o.prims.length) continue;
+          let x0 = 1e9,
+            x1 = -1e9,
+            y0 = 1e9,
+            y1 = -1e9,
+            z0 = 1e9,
+            z1 = -1e9;
+          for (const q of o.prims) {
+            if (!q.aabb) continue;
+            x0 = Math.min(x0, q.aabb.min.x);
+            x1 = Math.max(x1, q.aabb.max.x);
+            y0 = Math.min(y0, q.aabb.min.y);
+            y1 = Math.max(y1, q.aabb.max.y);
+            z0 = Math.min(z0, q.aabb.min.z);
+            z1 = Math.max(z1, q.aabb.max.z);
+          }
+          if (x1 < x0 || y1 < 0.4 || Math.max(x1 - x0, z1 - z0) > IYT_BIG) continue;
+          const cx = (x0 + x1) / 2,
+            cz = (z0 + z1) / 2;
+          this.trkObjs.push({ name: o.name, x: cx, z: cz, point: y => v3(cx, clamp(y, y0, y1), cz) });
+        }
+      }
+      return [...this.poles, ...this.trkObjs].filter(P => Math.hypot(P.x - pos.x, P.z - pos.z) < R);
+    }
+    iyTrack(a, b) {
+      const A = this.fbIn(a, b),
+        W = A.filter(x => x.up.y < -0.3);
+      if (W.length < 20) return null;
+      if (A.filter(x => x.up.y < -0.8).length < A.length * IYT_FLAT) return null; // held on its back, not rolling through it (a barrel roll round a pole)
+      if (this.crossLog.some(c => (c.kind === 'O' || c.kind === 'U') && c.t >= a - 0.3 && c.t <= b + 0.1)) return null; // over or under something on its back is a loop's top (a Barani yaws there too), not a pass beside a thing
+      const c = Math.cos(this.camTilt * D2R),
+        s = Math.sin(this.camTilt * D2R),
+        wrap = v => Math.atan2(Math.sin(v), Math.cos(v)),
+        mid = W[W.length >> 1];
+      let path = 0;
+      for (let i = 1; i < W.length; i++) path += Math.hypot(W[i].p.x - W[i - 1].p.x, W[i].p.z - W[i - 1].p.z);
+      const chord = Math.hypot(W[W.length - 1].p.x - W[0].p.x, W[W.length - 1].p.z - W[0].p.z);
+      if (path < IYT_TRAVEL || chord < path * 0.7) return null;
+      const cam = W.map(x => {
+        const vx = x.f.x * c + x.up.x * s,
+          vz = x.f.z * c + x.up.z * s;
+        return Math.hypot(vx, vz) > 0.3 ? Math.atan2(vx, vz) : null;
+      });
+      let yaw = 0,
+        prev = null;
+      for (const h of cam) {
+        if (h == null) continue;
+        if (prev != null) yaw += wrap(h - prev);
+        prev = h;
+      }
+      let best = null;
+      for (const P of this.trackTargets(mid.p, IYT_NEAR + 4)) {
+        let sweep = 0,
+          pb = null,
+          k = 0,
+          n = 0,
+          off = 0,
+          dmin = 1e9;
+        for (let i = 0; i < W.length; i++) {
+          const x = W[i],
+            dx = P.x - x.p.x,
+            dz = P.z - x.p.z,
+            dd = Math.hypot(dx, dz);
+          dmin = Math.min(dmin, dd);
+          const be = Math.atan2(dx, dz);
+          if (pb != null) sweep += wrap(be - pb);
+          pb = be;
+          n++;
+          if (cam[i] != null) {
+            const e = Math.abs(wrap(cam[i] - be)) * R2D;
+            if (e < IYT_VIEW) {
+              k++;
+              off += e;
+            }
+          }
+        }
+        if (dmin > IYT_NEAR || dmin < 0.25 || Math.abs(sweep) * R2D < IYT_SWEEP || Math.abs(sweep) * R2D > 220) continue;
+        if (yaw * sweep <= 0 || Math.abs(yaw) < Math.abs(sweep) * 0.5) continue;
+        const frac = k / n;
+        if (frac < IYT_FRAC) continue;
+        if (!best || frac > best.frac) best = { name: P.name, frac, off: off / Math.max(1, k), sweep: sweep * R2D, yaw: yaw * R2D };
+      }
+      return best;
+    }
+    // Corner Climb (owner, 2026-11-23: the masterclass's building-corner trippy "is its own trick"): in the trippy's look (the corner held
+    // up in the picture; rolled over, or flown flatter with roll and yaw opposed), swinging round an upright corner of a wall or
+    // building one way and back the other, never a full lap, and climbing. Each swing must reach both faces of the corner (a pass
+    // back and forth in front of one face is not round the corner). Called once, at the third swing with a metre climbed.
+    cornerTick(d, dt, t) {
+      if (!this.corners || !this.corners.length) return;
+      if (!d.armed || d.crashed) {
+        this.cc = null;
+        return;
+      }
+      if (t - this.cnT > 0.3) {
+        this.cnT = t;
+        this.cnNear = this.corners.filter(
+          c => Math.hypot(c.x - d.pos.x, c.z - d.pos.z) < 8 && d.pos.y > c.y0 - 0.5 && d.pos.y < c.y1 + 1.5
+        );
+      }
+      let cc = this.cc;
+      if (!cc && !this.cnNear.length) return;
+      let c = cc ? cc.c : null;
+      if (!c) {
+        let bd = 1e9;
+        for (const k of this.cnNear) {
+          const dd = Math.hypot(k.x - d.pos.x, k.z - d.pos.z);
+          if (dd < bd) {
+            bd = dd;
+            c = k;
+          }
+        }
+      }
+      const rx = d.pos.x - c.x,
+        rz = d.pos.z - c.z,
+        dist = Math.hypot(rx, rz);
+      if (dist > 7 || d.pos.y > c.y1 + 1.5) {
+        this.cc = null;
+        return;
+      }
+      const up = d.up(),
+        f = d.fwd(),
+        rc = this.lastRc,
+        o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0;
+      this.cnSo += (o - this.cnSo) * Math.min(1, dt / 0.35);
+      const ys = [1, 2, 3, 4.5].map(dy => Math.min(c.y1, d.pos.y + dy));
+      ys.push(c.y1);
+      const topVis =
+        dist > 0.3 &&
+        ys.some(y => {
+          const v = this.viewOf(d.pos, up, f, v3(c.x, y, c.z));
+          return v.top && v.ang < 75;
+        });
+      const pose = topVis && (up.y < 0.35 || (this.cnSo > 0.5 && up.y < TRIPPY_FLAT)),
+        ang = Math.atan2(rz, rx),
+        side = rx * c.n1.x + rz * c.n1.z - (rx * c.n2.x + rz * c.n2.z);
+      if (!cc) {
+        if (pose) this.cc = { c, ang, acc: 0, dir: 0, rev: 0, n: 0, y0: d.pos.y, t0: t, lastPose: t, lo: side, hi: side, done: false };
+        return;
+      }
+      let da = ang - cc.ang;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      cc.ang = ang;
+      if (pose) cc.lastPose = t;
+      else {
+        if (t - cc.lastPose > 0.9) this.cc = null;
+        return;
+      }
+      const sg = Math.sign(da),
+        deg = Math.abs(da) * R2D;
+      if (!sg) return;
+      if (!cc.dir) cc.dir = sg;
+      const good = () => cc.acc >= CORNER_MIN && cc.acc < 300 && cc.lo < -CORNER_SIDE && cc.hi > CORNER_SIDE;
+      if (sg === cc.dir) {
+        cc.acc += deg;
+        cc.rev = 0;
+        cc.lo = Math.min(cc.lo, side);
+        cc.hi = Math.max(cc.hi, side);
+        if (cc.acc >= 300) {
+          cc.n = 0;
+          cc.y0 = d.pos.y;
+          cc.t0 = t;
+        }
+      } // a whole lap is a Trippy Spin's business
+      else {
+        cc.rev += deg;
+        if (cc.rev > 20) {
+          if (good()) cc.n++;
+          else {
+            cc.n = 0;
+            cc.y0 = d.pos.y;
+            cc.t0 = t;
+            cc.done = false;
+          }
+          cc.dir = sg;
+          cc.acc = cc.rev;
+          cc.rev = 0;
+          cc.lo = cc.hi = side;
+        }
+      }
+      if (!cc.done && !this.live && cc.n + (good() ? 1 : 0) >= CORNER_SWINGS && d.pos.y - cc.y0 >= CORNER_UP) {
+        cc.done = true;
+        for (const k of this.toks) if (k.t1 > cc.t0 && k.t0 <= t) k.usedUntil = Math.max(k.usedUntil, k.t1);
+        this.emit({
+          name: 'Corner Climb',
+          exec: 'CLEAN',
+          clean: 90,
+          continuous: true,
+          obstacle: c.name,
+          meters: +(d.pos.y - cc.y0).toFixed(1),
+          dur: +(t - cc.t0).toFixed(2),
+          toks: [],
+          draft: true
+        });
+      }
+    }
+    // Wall Stick (owner, 2026-11-19): held against a wall or the side of anything (a sideways contact, not the ground or a top),
+    // nearly still, for WALL_STICK_MIN or more, then a clean fly-away (postStep: a second off every surface, armed, moving).
+    // Needs the game's wall grip (tune.wallGrip) to be possible at ordinary throttle.
+    stickTick(d, t) {
+      const n = d.contactNormal,
+        side = d.contactThisStep && n && Math.abs(n.y) < 0.7 && !d.contactGround,
+        slow = len(d.vel) < 0.35;
+      let st = this.stick;
+      if (side && slow && d.armed && !d.crashed) {
+        if (!st) st = this.stick = { t0: t, lastC: t, obstacle: null };
+        st.lastC = t;
+        const o = this.world.objs[d.contactOwner];
+        if (o && o.name) st.obstacle = o.name;
+      } else if (st && (t - st.lastC > 0.15 || d.crashed || !d.armed)) {
+        const held = st.lastC - st.t0;
+        this.stick = null;
+        if (held >= WALL_STICK_MIN && !d.crashed && d.armed && !this.pendingFly)
+          this.pendingFly = { name: 'Wall Stick', t, y0: d.pos.y, obstacle: st.obstacle, seconds: held };
+      }
+    }
+    // ---- disarm tricks (owner, 2026-11-21; not in the TPW book): disarm in the air, let the quad's own momentum carry the rotation,
+    // re-arm before it touches anything, fly on. Disarm Flip / Disarm Roll: DEAD_TURN of pitch / roll with the motors off. Disarm
+    // Spin: the same on yaw, a flat spin, upright; Dead Pirate Spin: upside-down. Disarm Loop: a loop whose top is flown dead
+    // (DEAD_LOOP_OFF of pitch with the motors off inside one continuous turn of DEAD_TURN, upside-down over the top of a climb).
+    // The ordinary reading of the same rotation (Flip, Roll, Yaw Spin, Powerloop…) is not called beside it (deadMute, in commit).
+    deadTick(d, t) {
+      const Y = this.yHist || (this.yHist = []);
+      if (!Y.length || t - Y[Y.length - 1][0] >= 0.05 || t < Y[Y.length - 1][0]) {
+        if (Y.length && t < Y[Y.length - 1][0]) Y.length = 0;
+        Y.push([t, d.pos.y, Math.hypot(d.vel.x, d.vel.z)]);
+        if (Y.length > 120) Y.shift();
+      }
+      const D = this.dead;
+      if (D) {
+        if (d.crashed || d.contactThisStep) {
+          this.dead = null;
+          this.deadMute = { a: D.t - 0.05, b: t + 2.5 };
+        } /* it landed or hit something with the motors off: nothing from that rotation */ else {
+          const u = d.up().y;
+          D.up += u;
+          D.n++;
+        }
+      }
+      const M = this.deadMute;
+      if (M && t > M.b) this.deadMute = null;
+      const P = this.deadPend;
+      if (!P) return;
+      if (d.crashed || !d.armed || d.contactThisStep) {
+        this.deadPend = null;
+        return;
+      } // it has to be caught and flown away
+      if (t - P.t < DEAD_AWAY) return;
+      this.deadPend = null;
+      let name = P.name,
+        deg = P.deg;
+      if (!name) {
+        // the loop: one continuous pitch turn from before the disarm to now, upside-down on the way, after a climb, upright again
+        const H = this.attLog || [],
+          from = P.t0 - 2.5;
+        let best = 0,
+          minUp = 1,
+          a0 = null;
+        for (let i = H.length - 1; i >= 0 && H[i][0] >= from; i--) {
+          const v = P.sgn * (this.axRot[1] - H[i][4]);
+          if (v > best) {
+            best = v;
+            a0 = H[i][0];
+          }
+        }
+        if (a0 != null) for (let i = H.length - 1; i >= 0 && H[i][0] >= a0; i--) minUp = Math.min(minUp, H[i][1]);
+        const ys = Y.filter(y => a0 != null && y[0] >= a0 - 0.3),
+          climb = ys.length ? Math.max(...ys.map(y => y[1])) - ys[0][1] : 0,
+          vIn = ys.length ? Math.max(...ys.slice(0, 8).map(y => y[2])) : 0;
+        if (best >= DEAD_TURN && minUp < -0.5 && climb >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V && d.up().y > 0.4) {
+          name = 'Disarm Loop';
+          deg = best;
+        } // flown into, up and over: a flip on the spot is not a loop
+      }
+      if (!name) return;
+      this.emit({
+        name,
+        exec: Math.abs(deg - 360) <= 40 || deg > 400 ? 'CLEAN' : 'SLOPPY',
+        clean: Math.max(50, Math.round(100 - Math.abs(Math.min(deg, 360) - 360) / 2)),
+        continuous: true,
+        obstacle: 'open air',
+        seconds: +P.secs.toFixed(2),
+        deg: Math.round(deg),
+        deadDeg: Math.round(P.deg),
+        draft: true
+      });
+    }
+    onArmChange(d, armed) {
+      const t = this.time,
+        speed = len(d.vel);
+      if (!armed && !d.crashed && !d.contactThisStep && t - (this.lastTouch ?? -9) > 0.2)
+        this.dead = { t, A0: (this.axRot || [0, 0, 0]).slice(), up: 0, n: 0 }; // disarmed in the air
+      if (armed) {
+        const D = this.dead;
+        this.dead = null;
+        if (D && !d.crashed && !d.contactThisStep && t - D.t >= 0.12) {
+          const A = this.axRot || [0, 0, 0],
+            r = [0, 1, 2].map(i => Math.abs(A[i] - D.A0[i])),
+            sum = r[0] + r[1] + r[2] || 1,
+            k = r.indexOf(Math.max(...r)),
+            upM = D.n ? D.up / D.n : 1;
+          let name = null;
+          if (r[k] >= DEAD_TURN && r[k] >= 0.6 * sum)
+            name = k === 1 ? 'Disarm Flip' : k === 0 ? 'Disarm Roll' : upM > 0.5 ? 'Disarm Spin' : upM < -0.5 ? 'Dead Pirate Spin' : null;
+          // a loop's dead top: enough pitch with the motors off, after a climb (a flip carried only part of the way round, dead, stays a Flip)
+          const Y = (this.yHist || []).filter(y => y[0] >= D.t - 2.5),
+            climbed = Y.length ? Math.max(...Y.map(y => y[1])) - Math.min(...Y.map(y => y[1])) : 0,
+            vIn = Y.length ? Math.max(...Y.map(y => y[2])) : 0;
+          const loop = !name && k === 1 && r[1] >= DEAD_LOOP_OFF && r[1] >= 0.6 * sum && climbed >= DEAD_LOOP_UP && vIn >= DEAD_LOOP_V;
+          if (name || loop) {
+            this.deadPend = { name, t, t0: D.t, deg: r[k], sgn: Math.sign(A[1] - D.A0[1]) || 1, secs: t - D.t };
+            this.deadMute = { a: D.t - (name ? 0.7 : 2.5), b: t + DEAD_AWAY + 1.8 };
+          }
+        }
+      }
+      if (!armed && !d.crashed) {
+        if (speed > 1.2)
+          this.slide = { t, dist: 0, lastC: -9, stopT: null, surface: null }; // disarmed on the move: a slide may follow
+        else if (d.pos.y > 4.5 && speed < 1 && d.up().y > 0.8 && (d.contactThisStep || t - (this.lastTouch ?? -9) < 0.3))
+          this.perch = { t, y: d.pos.y }; // resting on something (a hover with the motors cut for a moment was called a Perch)
+      } else if (armed) {
+        // re-armed while still sliding (a moment's grace after it stops), having really slid (whoops stop quickly: 0.75 m)
+        const sl = this.slide;
+        if (sl && sl.dist >= 0.75 && (sl.stopT == null || t - sl.stopT < 0.6))
+          this.pendingFly = { name: 'Slide Disarm', t, y0: d.pos.y, obstacle: sl.surface, meters: sl.dist };
+        if (this.perch && d.pos.y > 4.4) this.pendingFly = { name: 'Perch', t, y0: -9 };
+        this.slide = null;
+        this.perch = null;
+      }
+    }
+    postStep(d) {
+      const pf = this.pendingFly;
+      if (!pf) return;
+      const away =
+        pf.name === 'Perch'
+          ? d.pos.y > 0.6
+          : pf.name === 'Wall Stick'
+            ? this.time - (this.lastTouch ?? -9) > 1.0 && d.armed
+            : d.pos.y > pf.y0 + 0.35 || this.time - (this.lastTouch ?? -9) > 0.35; // off the surface and flying (a wall stick: a whole second clear of everything)
+      if (d.crashed || this.time - pf.t > (pf.name === 'Wall Stick' ? 5 : 4)) this.pendingFly = null;
+      else if (away && len(d.vel) > 1) {
+        this.emit({
+          name: pf.name,
+          exec: 'CLEAN',
+          clean: 90,
+          continuous: true,
+          obstacle: pf.obstacle || undefined,
+          meters: pf.meters,
+          seconds: pf.seconds,
+          draft: pf.name === 'Wall Stick' || undefined
+        });
+        this.pendingFly = null;
+      }
+    }
+    nearWall(d) {
+      let best = null;
+      for (const o of this.world.objs) {
+        if (!(o.kind === 'wall' || o.kind === 'building' || o.kind === 'fence')) continue;
+        for (const pr of o.prims) {
+          if (pr.type !== 'box') continue;
+          const r = sphereVs(pr, d.pos, 1.4);
+          if (!r) continue;
+          const dist = 1.4 - r.d;
+          if (Math.abs(r.n.y) > 0.3) continue;
+          if (!best || dist < best.dist) best = { dist, n: r.n, name: o.name };
+        }
+      }
+      return best;
+    }
+    nearObstacle(d, r) {
+      for (const o of this.world.objs) {
+        if (!o.obstacle) continue;
+        const { a, b } = o.obstacle;
+        const ab = sub(b, a),
+          t = clamp(dot(sub(d.pos, a), ab) / dot(ab, ab), 0, 1),
+          q = add(a, mul(ab, t));
+        if (Math.hypot(d.pos.x - q.x, d.pos.z - q.z) < r) return true;
+      }
+      return false;
+    }
+    nearTall(d, h) {
+      for (const o of this.world.objs) {
+        if (o.kind === 'edge') continue; // the map's invisible edge is no structure (a Stall Rewind / Eject Roll "on the Map Edge")
+        for (const pr of o.prims) {
+          if (pr.aabb.max.y < h) continue;
+          const dx = Math.max(pr.aabb.min.x - d.pos.x, 0, d.pos.x - pr.aabb.max.x),
+            dz = Math.max(pr.aabb.min.z - d.pos.z, 0, d.pos.z - pr.aabb.max.z);
+          if (Math.hypot(dx, dz) < 2.5) return o.name;
+        }
+      }
+      return null;
+    }
+    emit(ev) {
+      ev.t = this.time;
+      this.out.push(ev);
+      if (ev.name !== 'near') {
+        const tk = ev.toks && ev.toks.length ? Math.min(...ev.toks.map(k => k.t0)) : this.time - 2;
+        (this.callLog || (this.callLog = [])).push({ t0: Math.min(tk, this.time - 0.3), t1: this.time });
+        if (this.callLog.length > 40) this.callLog.shift();
+      }
+    }
+    drainMaybes() {
+      const o = this.maybes || [];
+      this.maybes = [];
+      return o;
+    }
+    // the library's ear (see LIBRARY): 25 Hz rotation samples, moves split by quiet, and "maybe" calls where the rules said nothing
+    libTick(d, t, rates, dt) {
+      const L = this.lib || (this.lib = { acc: [0, 0, 0], n: 0, buf: [], burst: null, bursts: [], quiet: 0, queue: [] });
+      for (let k = 0; k < 3; k++) L.acc[k] += rates[k] * dt;
+      L.n += dt;
+      if (L.n >= 1 / LIB_HZ - 1e-9) {
+        {
+          const r = this.lastRc;
+          L.buf.push([t, L.acc[0], L.acc[1], L.acc[2], d.up().y, r ? r.thr : null, r ? r.roll : 0, r ? r.pitch : 0, r ? r.yaw : 0]);
+        }
+        L.acc = [0, 0, 0];
+        L.n = 0;
+        if (L.buf.length > LIB_HZ * 14) L.buf.splice(0, L.buf.length - LIB_HZ * 12);
+      }
+      const on = Math.hypot(rates[0], rates[1], rates[2]) >= LIB_ON && !d.crashed;
+      if (on) {
+        L.quiet = 0;
+        if (!L.burst) L.burst = { a: t, b: t, rot: 0 };
+        L.burst.b = t;
+        L.burst.rot += Math.hypot(rates[0], rates[1], rates[2]) * dt;
+      } else if (L.burst) {
+        L.quiet += dt;
+        if (L.quiet >= LIB_QUIET) {
+          const B = L.burst;
+          L.burst = null;
+          L.bursts.push(B);
+          if (L.bursts.length > 4) L.bursts.shift();
+          // the move just ended: the last 1-3 bursts (joined while the air between them is under a second) are candidates
+          const cands = [];
+          let a = B.a,
+            rot = 0;
+          for (let i = L.bursts.length - 1; i >= 0; i--) {
+            const x = L.bursts[i];
+            if (i < L.bursts.length - 1 && L.bursts[i + 1].a - x.b > 1.0) break;
+            a = x.a;
+            rot += x.rot;
+            if (rot >= 150 && B.b - a <= 7) cands.push({ a, b: B.b, rot });
+          }
+          if (cands.length) L.queue.push({ due: t + LIB_WAIT, cands });
+        }
+      }
+      if (L.queue.length && t >= L.queue[0].due) this.libJudge(L.queue.shift(), t);
+    }
+    libSeq(a, b) {
+      return (this.lib ? this.lib.buf : []).filter(r => r[0] >= a - 0.02 && r[0] <= b + 0.06);
+    }
+    libSigOf(a, b) {
+      const R = this.libSeq(a, b),
+        sig = libSig(
+          R.map(r => [r[1], r[2], r[3]]),
+          LIB_HZ,
+          R.map(r => r[4])
+        );
+      if (!sig) return null;
+      const [i0, i1] = sig.span,
+        A = R[i0][0] - 1 / LIB_HZ,
+        B = R[i1][0];
+      Object.defineProperty(sig, 'at', { value: [A, B] }); // when the move was (the detector's clock), for tools/library.js's motion
+      // the passes during the move (an over/under can come just before the rotation starts: a Matty goes over, then flips)
+      sig.ps = this.crossLog
+        .filter(c => c.t >= A - 0.6 && c.t <= B + 0.3 && (c.kind === 'O' || c.kind === 'U' || c.kind === 'G'))
+        .map(c => c.kind)
+        .join('')
+        .slice(0, 8);
+      // the sticks over the move, when they were recorded (not for a GIF or an old trace)
+      const M = R.slice(i0, i1 + 1);
+      if (
+        M.length >= 3 &&
+        M.every(r => r[5] != null) &&
+        M.some(r => Math.abs(r[6]) > 0.05 || Math.abs(r[7]) > 0.05 || Math.abs(r[8]) > 0.05)
+      ) {
+        const th = [];
+        for (let i = 0; i < 8; i++) th.push(Math.round(clamp(M[Math.round((i / 7) * (M.length - 1))][5], 0, 1) * 100));
+        let on = 0,
+          all = 0;
+        for (const r of M) {
+          const a3 = [Math.abs(r[1]), Math.abs(r[2]), Math.abs(r[3])],
+            k = a3[0] >= a3[1] && a3[0] >= a3[2] ? 0 : a3[1] >= a3[2] ? 1 : 2;
+          all += a3[k];
+          if (Math.abs(r[6 + k]) > 0.15) on += a3[k];
+        }
+        sig.k = { th, cmd: all > 0 ? Math.round((on / all) * 100) : 0 };
+      }
+      return sig;
+    }
+    drainChallenges() {
+      const o = this.chals || [];
+      this.chals = [];
+      return o;
+    }
+    // trick challenges (see CHALLENGES): the move just judged by the library's ear, against the one being tried (any flight, even
+    // where the rules called something: the pilot's own move is what is compared) and the confirmed ones (only where nothing was called)
+    chalJudge(q, t) {
+      if (!CHALLENGES) return;
+      const covered = (a, b) => (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3),
+        seen = this.chalLog || (this.chalLog = []),
+        sigs = q.cands.map(c => this.libSigOf(c.a, c.b));
+      for (const ch of CHALLENGES) {
+        let best = null;
+        q.cands.forEach((c, i) => {
+          const g = sigs[i];
+          if (!g) return;
+          const dd = libDist(g, ch.sig);
+          if (!best || dd < best.d) best = { c, d: dd, g };
+        });
+        if (!best || seen.some(x => x.id === ch.id && x.t1 >= best.c.a - 0.2)) continue;
+        const hit = {
+          chal: ch.id,
+          name: ch.name,
+          t0: +best.c.a.toFixed(3),
+          t1: +best.c.b.toFixed(3),
+          at: +t.toFixed(3),
+          dist: +best.d.toFixed(3),
+          sig: { d: best.g.d, c: best.g.c, u: best.g.u, ps: best.g.ps }
+        };
+        if (ch.try && best.d <= CH_PASS) {
+          (this.chals || (this.chals = [])).push({ ...hit, try: true });
+          seen.push({ id: ch.id, t1: best.c.b });
+          continue;
+        }
+        if (ch.live && best.d <= CH_LIVE && !covered(best.c.a, best.c.b)) {
+          const lib = LIBRARY ? libMatch(best.g).find(x => x.name !== ch.name) : null;
+          if (lib && lib.pos <= best.d) continue; // it is nearer to a trick the game already knows (its own examples in the library do not count against it)
+          (this.chals || (this.chals = [])).push({ ...hit, live: true, pts: ch.pts });
+          seen.push({ id: ch.id, t1: best.c.b });
+        }
+      }
+      if (seen.length > 30) seen.splice(0, seen.length - 30);
+    }
+    libJudge(q, t) {
+      this.chalJudge(q, t);
+      if (!LIBRARY) return;
+      const covered = (a, b) =>
+        (this.callLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) ||
+        (this.maybeLog || []).some(c => c.t1 >= a - 0.3 && c.t0 <= b + 0.3) ||
+        (this.chalLog || []).some(c => c.t1 >= a - 0.3 && c.t1 <= b + 0.3); // a live community trick already called it
+      let pick = null;
+      for (const c of q.cands) {
+        if (covered(c.a, c.b)) return; // the rules called something here (or a maybe already went out): nothing to add
+        const m = libMatch(this.libSigOf(c.a, c.b)),
+          top = m[0];
+        if (!top) continue;
+        const B = LIBRARY.by[top.name];
+        if (!B || !B.trusted || !B.sayable || top.pos > LIB_THR || top.neg <= top.pos + 0.04) continue;
+        if (m[1] && m[1].pos < top.pos + LIB_GAP) continue; // another trick fits nearly as well: too close to call
+        if (OBSTACLE_NAMES.has(top.name) && !this.crossLog.some(x => x.t > c.a - 2.3 && x.t < c.b + 0.4)) continue; // an obstacle trick needs its object
+        if (!pick || top.pos < pick.top.pos) pick = { c, top };
+      }
+      if (!pick) return;
+      const sim = +clamp(1 - pick.top.pos / (LIB_THR * 1.6), 0, 1).toFixed(2);
+      (this.maybeLog || (this.maybeLog = [])).push({ t0: pick.c.a, t1: pick.c.b });
+      if (this.maybeLog.length > 20) this.maybeLog.shift();
+      (this.maybes || (this.maybes = [])).push({
+        name: pick.top.name,
+        maybe: true,
+        t0: +pick.c.a.toFixed(3),
+        t1: +pick.c.b.toFixed(3),
+        at: +t.toFixed(3),
+        sim,
+        byDemo: pick.top.demo
+      });
+    }
+    drain() {
+      const o = this.out;
+      this.out = [];
+      return o;
+    }
+  }
+
+  // ================================================================= LIVE (STREAMING) TRICK RECOGNITION
+  // Rotation is tokenised live per body axis; every completed token or obstacle pass triggers a match
+  // against all trick patterns on the *tail* of recent events. A match becomes a "pending" trick shown
+  // immediately; it locks in after a short hold unless a longer/better trick extends it (Flip → Rubik's,
+  // Flip → Powerloop), or the closing obstacle pass is still on its way. Tricks claim *time slices* of
+  // rotations, so one continuous rotation can feed several tricks (chained powerloops).
+  // Tricktionary demo (Segmented Flips/Rolls GIF, real-time via OSD timer): pauses of ~0.23 s (flip) and ~0.27 s (roll)
+  // between the two 180s. The written rule says 0.5 s; the demo is how it's actually flown.
+  const SEG_GAP = 0.18;
+  const SLOW_TH = 30,
+    SLOW_MAX = 2.5; // slow-pitch continuation inside loops near an obstacle
+  const KNIFE_X = 4,
+    NINJA_X = 3,
+    SWITCH_LAPS = 1,
+    HORIZON_VIEW = 55,
+    QUAD_W = 0.09; /* the site's sizes (owner, 2026-11-23): Knife Edge through a gap up to 4 whoops wide, Ninja Star up to 3; a Trippy Switch needs a whole lap the other way; a Barani's yaw starts once the horizon is in view (camera at most this far above it), else it is a Power Swap */ // Knife Edge: gaps no wider than ~2.75 quad widths (owner: "about two" — an Air65 is 0.082 m across, so the playground's 0.22 m Wall Slot is one; a 0.7 m gate is not)
+  // Inverted Yaw Tracking: 0.6-6 s upside-down, 1.2 m or more travelled past a thing no further than 8 m (no wider than 12 m), its bearing
+  // sweeping 45 deg or more, held within 35 deg of the picture's centre line for 60 % of it
+  const IYT_MIN = 0.6,
+    IYT_MAX = 6,
+    IYT_TRAVEL = 1.2,
+    IYT_NEAR = 8,
+    IYT_BIG = 12,
+    IYT_SWEEP = 45,
+    IYT_VIEW = 35,
+    IYT_FRAC = 0.6,
+    IYT_FLAT = 0.55;
+  const TOK_TH = 95,
+    TOK_END = 0.06,
+    HOLD = 0.08,
+    HOLD_OBST = 1.3,
+    HOLD_MAX = 1.6;
+  // "air" between the segments of a trick (pilot feedback): whoop tricks are built from basic segments, and real pilots
+  // leave some space between them (to set up for an object, or just float). Up to AIR_OPEN s between two rotations still
+  // makes one trick; a pending smaller trick waits that long (while the quad holds steady) for the next segment.
+  const AIR_OPEN = 1.0;
+  function rawAt(tok, tt) {
+    const tl = tok.tl;
+    if (!tl || !tl.length) return tt <= tok.t0 ? 0 : tok.raw;
+    if (tt <= tl[0][0]) return 0;
+    if (tt >= tok.t1) return tok.raw;
+    let i = 0;
+    while (i < tl.length - 1 && tl[i + 1][0] < tt) i++;
+    const p = tl[i],
+      q = tl[i + 1] || [tok.t1, tok.raw];
+    return q[0] > p[0] ? p[1] + ((q[1] - p[1]) * (tt - p[0])) / (q[0] - p[0]) : p[1];
+  }
+  function clipSpans(spans, a, b) {
+    return spans.map(s => ({ tok: s.tok, a: Math.max(s.a, a), b: Math.min(s.b, b) })).filter(s => s.b - s.a > 0.005);
+  }
+  function sliceTok(T, a, b) {
+    // part of a normalized token between times a..b
+    const ra = T.raw0 + (rawAt(T.base, a) - rawAt(T.base, T.t0)),
+      rb = T.raw0 + (rawAt(T.base, b) - rawAt(T.base, T.t0));
+    const raw = Math.max(0, T.base ? rb - ra : (T.raw * (b - a)) / Math.max(1e-3, T.t1 - T.t0));
+    const f = raw / Math.max(1, T.raw);
+    return {
+      ...T,
+      t0: a,
+      t1: b,
+      raw,
+      raw0: T.raw0 + (ra - T.raw0),
+      n: Math.max(1, Math.round(T.n * f)),
+      inv: Math.round(T.inv * f),
+      off: T.off * f,
+      rateSum: T.rateSum * f,
+      rateSq: T.rateSq * f,
+      spans: clipSpans(T.spans, a, b)
+    };
+  }
+  function spansOverlap(A, B) {
+    for (const x of A) for (const y of B) if (x.tok === y.tok && Math.min(x.b, y.b) - Math.max(x.a, y.a) > 0.03) return true;
+    return false;
+  }
+  class StreamDetector extends TrickDetector {
+    reset() {
+      super.reset();
+      this.cur = [null, null, null];
+      this.toks = [];
+      this.pend = [];
+      this.crashSeen = false;
+      this.nCross = 0;
+      this.lastD = null;
+      this.hmChain = [];
+      this.liveTaps = true;
+      this.camTilt = this.camTilt ?? 20;
+      this.live = null;
+      this.lastTrippy = null;
+      {
+        const st = this.watcher && this.watcher.style;
+        this.watcher = new Watcher(this);
+        if (st) this.watcher.style = st;
+      }
+      this.vetoes = [];
+      this.reviews = []; // second judge; reviews go to the game's replay card
+      this.fb = [];
+      this.taps = [];
+      this.stalls = [];
+      this.rewinds = [];
+      this.passes = [];
+      this.orbSegs = [];
+      this.faces = [];
+      this.near = null;
+      this.nearT = null;
+      this.nearPT = null;
+      this.nearP = null; // near-object caches (a map edited in place is a new layout)
+      this.orb = {};
+      this.circled = [];
+      this.passTr = {};
+      this.vst = {};
+      this.hst = {};
+      this.airPole = null;
+      this.lastTapT = -9;
+      this.lastFaceT = -9;
+      this.newEv = [];
+      this.claimUsed = new Set();
+      this.lastRetrig = 0;
+      // anything you can fly around: every free-standing upright post/trunk ≥1.2 m tall (lamp posts, trees, hoop,
+      // swing-set legs, slide-tower posts, monkey-bar & jungle-gym uprights, the pilot). Fence posts and wall pipes are excluded.
+      // the upright corners of walls and buildings 3 m or taller (Corner Climb): where, how high, and the two faces that meet there
+      this.corners = [];
+      this.cc = null;
+      this.cnNear = [];
+      this.cnT = -9;
+      this.cnSo = 0;
+      for (const o of this.world.objs) {
+        if (o.kind !== 'building' && o.kind !== 'wall') continue;
+        for (const p of o.prims || []) {
+          if (p.type !== 'box' || p.leaf || Math.abs(p.m[4]) < 0.99 || p.h.y < 1.5 || Math.max(p.h.x, p.h.z) < 0.5) continue;
+          for (const sx of [-1, 1])
+            for (const sz of [-1, 1])
+              this.corners.push({
+                name: o.name,
+                objId: o.id,
+                x: p.c.x + p.m[0] * p.h.x * sx + p.m[2] * p.h.z * sz,
+                z: p.c.z + p.m[6] * p.h.x * sx + p.m[8] * p.h.z * sz,
+                y0: p.c.y - p.h.y,
+                y1: p.c.y + p.h.y,
+                n1: { x: p.m[0] * sx, z: p.m[6] * sx },
+                n2: { x: p.m[2] * sz, z: p.m[8] * sz }
+              });
+        }
+      }
+      this.poles = [];
+      this.trkObjs = null;
+      for (const o of this.world.objs) {
+        if (o.kind === 'fence' || o.kind === 'building' || o.kind === 'wall') continue;
+        if (o.kind === 'pilot') {
+          const c = o.prims.find(p => p.type === 'sphere').c;
+          this.poles.push({
+            id: o.id * 100,
+            objId: o.id,
+            name: 'the pilot',
+            x: c.x,
+            z: c.z,
+            y0: 0,
+            y1: 1.8,
+            point: y => v3(c.x, clamp(y, 0, 1.8), c.z)
+          });
+          continue;
+        }
+        o.prims.forEach((p, i) => {
+          if (p.type !== 'capsule' || p.leaf || p.r > (o.kind === 'tree' || o.kind === 'pole' ? 0.6 : 0.25) || p.r < 0.012) return; // not chains; a tree's trunk may be thick (pilot: no trippy round Moose's lone trees)
+          const ab = sub(p.b, p.a),
+            L = len(ab);
+          if (L < 1.2 || Math.abs(ab.y) / L < 0.8) return;
+          const lo = p.a.y < p.b.y ? p.a : p.b,
+            hi = p.a.y < p.b.y ? p.b : p.a,
+            y0 = lo.y,
+            y1 = hi.y;
+          const pt = y => {
+            const f = clamp((y - y0) / (y1 - y0), 0, 1);
+            return v3(lo.x + (hi.x - lo.x) * f, y0 + (y1 - y0) * f, lo.z + (hi.z - lo.z) * f);
+          };
+          const mid = pt((y0 + y1) / 2);
+          this.poles.push({ id: o.id * 100 + i, objId: o.id, name: o.name, x: mid.x, z: mid.z, y0, y1, point: pt });
+        });
+      }
+    }
+    // ---------------------------------------------------------------- building blocks
+    viewOf(p, up, f, pt) {
+      const c = Math.cos(this.camTilt * D2R),
+        s = Math.sin(this.camTilt * D2R);
+      const cam = norm(add(mul(f, c), mul(up, s))),
+        camUp = norm(sub(mul(up, c), mul(f, s)));
+      const dir = norm(sub(pt, p));
+      return { ang: Math.acos(clamp(dot(cam, dir), -1, 1)) * R2D, top: dot(dir, camUp) > 0.05 };
+    }
+    sense(d, dt, t, rates, up) {
+      let ev = false;
+      const f = d.fwd(),
+        vh = Math.hypot(d.vel.x, d.vel.z);
+      if (!this.fb.length || t - this.fb[this.fb.length - 1].t >= 0.01) {
+        this.fb.push({
+          t,
+          p: v3(d.pos.x, d.pos.y, d.pos.z),
+          v: v3(d.vel.x, d.vel.y, d.vel.z),
+          up,
+          f,
+          rc: this.lastRc ? { thr: this.lastRc.thr, roll: this.lastRc.roll, pitch: this.lastRc.pitch, yaw: this.lastRc.yaw } : null
+        });
+        if (this.fb.length > 900) this.fb.shift();
+      }
+      // deliberate taps: soft contact with anything but the ground, remembering which side of the quad touched
+      if (d.contactThisStep && d.armed && !d.crashed && !d.contactGround && d.contactNormal) {
+        const o = this.world.objs[d.contactOwner];
+        if (o && o.kind === 'edge') {
+          /* the map's invisible edge: not a trick */
+        } else if (o && o.kind === 'pilot' && t - this.lastFaceT > 1 && d.pos.y > 1.35) {
+          this.lastFaceT = t;
+          this.faces.push({ t, id: 'face' + t.toFixed(3), obj: o.id });
+          this.newEv.push('face');
+          ev = true;
+        } else if (d.lastImpact < 3.2 && t - this.lastTapT > 0.25) {
+          const n = d.contactNormal,
+            nB = qinv(d.q, n);
+          const face = nB.y > 0.55 ? 'bottom' : nB.y < -0.55 ? 'top' : 'side';
+          const surface = n.y < -0.6 ? 'ceiling' : Math.abs(n.y) < 0.5 ? 'wall' : 'top';
+          this.lastTapT = t;
+          this.taps.push({
+            t,
+            obj: d.contactOwner,
+            kind: o && o.kind,
+            wallish: !!(o && (o.kind === 'wall' || o.kind === 'building' || o.wallNormal)),
+            name: o && o.name,
+            face,
+            surface,
+            impact: d.lastImpact,
+            id: 'tap' + t.toFixed(3)
+          });
+          this.newEv.push('tap');
+          ev = true;
+        }
+      }
+      // vertical stall: climbing → apex → falling
+      const vs = this.vst;
+      if (d.vel.y > 1.5) {
+        if (!vs.climb) {
+          vs.climb = true;
+          vs.t0 = t;
+          vs.y0 = d.pos.y;
+        }
+        vs.apexT = null;
+      } else if (vs.climb && d.vel.y < 0.3 && vs.apexT == null) {
+        vs.apexT = t;
+        vs.apexY = d.pos.y;
+      }
+      if (vs.climb && vs.apexT != null && d.vel.y < -1.0) {
+        this.stalls.push({ t0: vs.t0, tApex: vs.apexT, yApex: vs.apexY, climb: vs.apexY - vs.y0, t });
+        vs.climb = false;
+        vs.apexT = null;
+        this.newEv.push('stall');
+        ev = true;
+      }
+      if (vs.climb && t - vs.t0 > 4) vs.climb = false;
+      // horizontal rewind: moving one way → stop → moving back the way you came
+      const hs = this.hst;
+      if (vh > 1.5) {
+        const u = v3(d.vel.x / vh, 0, d.vel.z / vh);
+        if (hs.slowT != null && hs.uBefore) {
+          if (dot(u, hs.uBefore) < -0.5 && t - hs.slowT < 2.5) {
+            this.rewinds.push({ t0: hs.slowT, t1: t, p: v3(d.pos.x, d.pos.y, d.pos.z), id: 'rw' + t.toFixed(3) });
+            this.newEv.push('rewind');
+            ev = true;
+          }
+          hs.slowT = null;
+        }
+        hs.u = u;
+        hs.uBefore = u;
+      } else if (vh < 0.7 && hs.u && hs.slowT == null) hs.slowT = t;
+      if (hs.slowT != null && t - hs.slowT > 2.5) hs.slowT = null;
+      // Open-air trippies (pilot: "open air trippies aren't being counted"): the same coordinated, rolled-over orbit with
+      // nothing in the middle. The game knows where every pole is, so when the quad is rolled past knife-edge and
+      // circling a point that is NOT a pole, that point becomes a pole of its own for as long as the circling lasts: the
+      // centre of the turn, measured from the path. Everything after that (laps, the "held at the top of the picture"
+      // check, how round it is) is the ordinary orbit code. Only trippies count this way; an upright circle is just a turn.
+      {
+        const A = this.airPole,
+          hd = Math.atan2(d.vel.z, d.vel.x);
+        let dh = hs.hd == null ? 0 : hd - hs.hd;
+        while (dh > Math.PI) dh -= 2 * Math.PI;
+        while (dh < -Math.PI) dh += 2 * Math.PI;
+        hs.hd = hd;
+        const om = vh > 0.8 ? dh / dt : 0;
+        hs.om = (hs.om || 0) + (om - (hs.om || 0)) * Math.min(1, dt / 0.12);
+        const R = Math.abs(hs.om) > 0.35 ? vh / Math.abs(hs.om) : 99,
+          turning = d.armed && up.y < 0.35 && vh > 0.8 && R >= 0.3 && R <= 4.5;
+        const cx = turning ? d.pos.x - d.vel.z / hs.om : 0,
+          cz = turning ? d.pos.z + d.vel.x / hs.om : 0;
+        const nearReal =
+          turning &&
+          this.poles.some(P => {
+            const o = this.orb[P.id];
+            return (
+              (o && o.acc > 90) || (Math.hypot(P.x - cx, P.z - cz) < Math.max(1.5, R * 0.8) && d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5)
+            );
+          });
+        if (!A) {
+          const c = hs.airC;
+          if (!turning || nearReal) hs.airC = null;
+          else if (!c) hs.airC = { t0: t, x: cx, z: cz, n: 1, sx: cx, sz: cz, dir: Math.sign(hs.om) };
+          else if (Math.sign(hs.om) !== c.dir || Math.hypot(cx - c.sx / c.n, cz - c.sz / c.n) > Math.max(1.2, R)) hs.airC = null;
+          else {
+            c.sx += cx;
+            c.sz += cz;
+            c.n++;
+            if (t - c.t0 > 0.45) {
+              const P = {
+                id: 'air',
+                air: true,
+                objId: 'air',
+                name: 'open air',
+                x: c.sx / c.n,
+                z: c.sz / c.n,
+                y0: d.pos.y - 5,
+                y1: d.pos.y + 5,
+                tTurn: t,
+                t0: t
+              };
+              P.point = y => v3(P.x, y, P.z);
+              this.airPole = P;
+              hs.airC = null;
+            }
+          }
+        } else {
+          if (turning) {
+            A.tTurn = t;
+            const k = Math.min(1, dt / 1.2);
+            A.x += (cx - A.x) * k;
+            A.z += (cz - A.z) * k;
+            A.y0 = Math.min(A.y0, d.pos.y - 3);
+            A.y1 = Math.max(A.y1, d.pos.y + 3);
+          } // an open-air orbit drifts: follow it slowly
+          const liveHere = this.live && this.live.key === 'air';
+          if (!d.armed || (nearReal && !liveHere) || t - A.tTurn > (liveHere ? 1.0 : 0.6)) {
+            const ob = this.orb.air;
+            if (ob && ob.acc > 0) {
+              this.endOrbit(A, ob, 'exit');
+              ev = true;
+            }
+            delete this.orb.air;
+            delete this.passTr.air;
+            this.airPole = null;
+          }
+        }
+      }
+      // poles: passes (closest approach then clear) and orbits (angle swept around the pole)
+      // only poles within 40 m can be passed or orbited (both need the quad within 9 m); the list is rebuilt every 0.1 s, so
+      // a pole drops off it long after it has been reset as "far" (performance, 2026-11-17)
+      if (this.nearPT == null || t < this.nearPT || t - this.nearPT >= 0.1 || this.nearPA !== this.poles) {
+        this.nearPT = t;
+        this.nearPA = this.poles;
+        this.nearP = this.poles.filter(P => {
+          const a = P.point(P.y0),
+            b = P.point(P.y1);
+          return Math.min(Math.hypot(d.pos.x - a.x, d.pos.z - a.z), Math.hypot(d.pos.x - b.x, d.pos.z - b.z)) < 40;
+        });
+      }
+      for (const P of this.airPole ? [...this.nearP, this.airPole] : this.nearP) {
+        // fast path (input lag on low-end machines, 2026-11-19): a pole well out of reach of a pass (6 m) and of an orbit (9 m)
+        // with nothing tracked on it does exactly nothing below, so skip the work (the same calls, checked on every flight)
+        if (!P.air) {
+          if (P.sp == null) {
+            const a = P.point(P.y0),
+              b = P.point(P.y1);
+            P.sp = Math.hypot(a.x - b.x, a.z - b.z) / 2 + 0.01;
+          }
+          if (Math.hypot(d.pos.x - P.x, d.pos.z - P.z) - P.sp > 9.5 && !this.orb[P.id]) {
+            const q = this.passTr[P.id];
+            if (!q || (q.dmin === 99 && !q.lock && !q.far)) continue;
+          }
+        }
+        const at = P.point(d.pos.y),
+          dx = d.pos.x - at.x,
+          dz = d.pos.z - at.z,
+          dist = Math.hypot(dx, dz);
+        const inY = d.pos.y > P.y0 - 0.3 && d.pos.y < P.y1 + 1.5;
+        const pt = this.passTr[P.id] || (this.passTr[P.id] = { dmin: 99, tc: 0 });
+        if (P.air) {
+          /* nothing is there to pass */
+        } else if (dist > 6 || !inY) {
+          pt.dmin = 99;
+          pt.lock = false;
+          pt.far = 0;
+        } else if (pt.lock) {
+          pt.far = Math.max(pt.far || 0, dist);
+          if (dist < pt.far - 0.3) {
+            pt.lock = false;
+            pt.far = 0;
+            pt.dmin = dist;
+            pt.tc = t;
+          }
+        } // one pass per approach: wait until it heads back in
+        else {
+          if (dist < pt.dmin) {
+            pt.dmin = dist;
+            pt.tc = t;
+          }
+          if (pt.dmin < 2.5 && dist > pt.dmin + 1.1) {
+            this.passes.push({ obj: P.id, name: P.name, tc: pt.tc, dmin: pt.dmin, t, id: 'pass' + P.id + '@' + pt.tc.toFixed(2) });
+            pt.dmin = 99;
+            pt.lock = true;
+            pt.far = dist;
+            this.newEv.push('pass');
+            ev = true;
+          }
+        }
+        let ob = this.orb[P.id];
+        const ang = Math.atan2(dz, dx);
+        const rMax = Math.max(5.5, Math.min(9, 2 + (P.y1 - P.y0) * 0.75)); // big spins: tall poles (flagpole, trees) get wider trippies
+        if (dist < 0.25 || dist > rMax || !inY || !d.armed) {
+          if (ob && ob.acc > 0) {
+            this.endOrbit(P, ob, 'exit');
+            ev = true;
+          }
+          this.orb[P.id] = null;
+          continue;
+        }
+        if (!ob) {
+          this.orb[P.id] = {
+            acc: 0,
+            dir: 0,
+            t0: t,
+            t1: t,
+            lastAng: ang,
+            n: 0,
+            inv: 0,
+            view: 0,
+            top: 0,
+            roll: 0,
+            rev: 0,
+            still: 0,
+            flips: 0,
+            st: 0,
+            tAcc: 0,
+            oAcc: 0,
+            run: 0,
+            rs: 0,
+            rs2: 0,
+            rn: 0,
+            ws: 0,
+            ws2: 0,
+            as: 0,
+            as2: 0,
+            aw: 0,
+            pl: 0,
+            pt: 0
+          };
+          continue;
+        }
+        let da = ang - ob.lastAng;
+        while (da > Math.PI) da -= 2 * Math.PI;
+        while (da < -Math.PI) da += 2 * Math.PI;
+        ob.lastAng = ang;
+        // "stopped orbiting" goes by ground speed round the pole, not just angle: a wide lap of a tall pole is slow in
+        // degrees (pilot: flagpole trippies weren't detected), and an uneven one may nearly stop for a moment
+        // a Double Rolling Trippy rolls round the line to the pole and can all but stop going round for a moment, or swing back a
+        // little (the owner's labelled run, 2026-11-25: the lap restarted every 2-3 s): while it is rolling fast in the trippy look,
+        // give it longer before it counts as stopped or reversed, and keep counting its roll
+        const rollingIn = ob.poseT0 != null && t - (ob.lastPose ?? -9) < DRT_HOLD && Math.abs(rates[0]) > DRT_RATE;
+        if (ob.poseT0 != null) ob.pRoll = (ob.pRoll || 0) + rates[0] * dt;
+        if (Math.abs(da) / dt < Math.min(25 * D2R, 0.8 / Math.max(dist, 0.5))) {
+          ob.still += dt;
+          if (ob.still > (rollingIn ? DRT_STILL : 1.0) && ob.acc > 0) {
+            this.endOrbit(P, ob, 'exit');
+            ev = true;
+            this.orb[P.id] = null;
+          }
+          continue;
+        }
+        ob.still = 0;
+        const sg = Math.sign(da);
+        if (!ob.dir) {
+          ob.dir = sg;
+          ob.t0 = t;
+        }
+        if (sg === ob.dir) {
+          // how round the path is: distance from the pole, weighted by the angle swept at that distance. A circle keeps its
+          // distance; flying straight past (a Cradle, a Whiplash, any fly-by) sweeps nearly 180° while the distance goes
+          // from far to close to far (pilot: cradles were being called orbits)
+          {
+            const w = Math.abs(da) * R2D;
+            ob.as += w * dist;
+            ob.as2 += w * dist * dist;
+            ob.aw += w;
+          }
+          {
+            const vr = (d.vel.x * dx + d.vel.z * dz) / Math.max(dist, 1e-3),
+              vh2 = d.vel.x * d.vel.x + d.vel.z * d.vel.z;
+            ob.pl += Math.sqrt(vh2) * dt;
+            ob.pt += Math.sqrt(Math.max(0, vh2 - vr * vr)) * dt;
+          } // how much of the way was ROUND the pole rather than toward/away from it
+          // which way the quad leans: a trippy is ROLLED (its top toward the pole); a fast orbit leans just as far by pitching
+          // its nose down at the pole (pilots: RodFPV's orbits round Clappy's sakura trees at 10-16 m/s ran pitch -65..-75°,
+          // roll 10-40°, and were called Trippy Spin)
+          const rolled = !(f.y < -0.6 && up.y > -0.15); // not 'nose well below the horizon while still right-way-up' (inverted trippies and nose-up-the-pole ones are fine)
+          const back = Math.min(ob.rev || 0, Math.abs(da) * R2D);
+          ob.acc += Math.abs(da) * R2D - back;
+          ob.rev = Math.max(0, (ob.rev || 0) - Math.abs(da) * R2D);
+          ob.n++; // ground given back while rolling is flown again before it counts ob.t1 = t; if (up.y < 0.15 && rolled) ob.inv++;   // trippies are rolled to knife-edge or past it (a banked upright lap is ~0.5)
+          // in view: level with the quad, or lower down the trunk (a fast orbit looks down at the pole: pilot RodFPV)
+          const vi = this.viewOf(d.pos, up, f, P.point(d.pos.y)),
+            inView =
+              vi.ang < 55 || [-1, -2].some(dy => d.pos.y + dy >= P.y0 - 0.2 && this.viewOf(d.pos, up, f, P.point(d.pos.y + dy)).ang < 55);
+          if (inView) ob.view++;
+          {
+            const ys = [-3, -2, -1, 1, 2, 3].map(dy => d.pos.y + dy);
+            for (let y = d.pos.y + 4.5; y < P.y1; y += 1.5) ys.push(y);
+            ys.push(P.y1); // any part of it, up to the top of a tall pole
+            let lockNow = false;
+            const topVis = ys.some(y => {
+              const vt = this.viewOf(d.pos, up, f, P.point(y));
+              if (vt.top && vt.ang < LOCK_ANG) lockNow = true;
+              return vt.top && vt.ang < 75;
+            });
+            if (topVis) ob.top++;
+            if (!lockNow)
+              lockNow = ys.some(y => {
+                const vt = this.viewOf(d.pos, up, f, P.point(y));
+                return vt.top && vt.ang < LOCK_ANG;
+              }); // pole held in the top half of the screen
+            // Trippy by what the pilot SEES (pilot: use visual confirmation more, forgive the way in and out): the pole held in
+            // the top of the picture while rolled well over. Only that stretch is the trippy: an upright lap on the way in or
+            // out, or a flip into it, isn't counted for or against. Its radius and pace are kept to judge how tidy it was.
+            // the sticks (the Infinity Loops masterclass, 2026-11-23; all 25 confirmed trippies in the shared flights against the orbits):
+            // in a trippy roll and yaw are pushed OPPOSITE ways ("wonky nips"), in an ordinary orbit the same way. `so` is that,
+            // smoothed over ~0.35 s (-1 together .. +1 opposed; 0 with no sticks recorded, as in the Node tests' fake flights)
+            {
+              const rc = this.lastRc,
+                o = rc && Math.abs(rc.roll) > STICK_ON && Math.abs(rc.yaw) > STICK_ON ? (rc.roll * rc.yaw < 0 ? 1 : -1) : 0;
+              ob.so = (ob.so || 0) + (o - (ob.so || 0)) * Math.min(1, dt / 0.35);
+              if (o > 0) ob.sOpp = (ob.sOpp || 0) + dt;
+              else if (o < 0) ob.sSame = (ob.sSame || 0) + dt;
+            }
+            // …or held flatter than knife-edge with the sticks opposed: a high camera tilt flies the same trippy much flatter (the
+            // masterclass; HemmingsonFPV's and the owner's missed trippies never went under up.y 0.35)
+            const wonky = ob.so > 0.5 && up.y < TRIPPY_FLAT;
+            const dA = Math.abs(da) * R2D - back,
+              pose = topVis && (up.y < 0.35 || (f.y > 0.7 && Math.abs(rates[0]) > 120) || wonky) && rolled; // or nose up the pole and still rolling (pilot review of RodFPV's flagpole trippies: nose 55-75° up, rolling ~270°/s, up.y hovering at 0.25-0.55, each lap cut off from the next; a nose-up pull-out that has stopped rolling is not a lap)
+            // the trippy pose while circling a pole (the pole held up in the picture, rolled over or nose up the pole): no Burrito
+            // Roll then (owner: a burrito is never flown looking up at a pole); once 90° of the circle has been flown in the pose
+            if (pose && ob.tAcc > 90) {
+              const W = this.circled || (this.circled = []),
+                last = W[W.length - 1];
+              if (last && last.ob === ob && t - last.t1 < 0.25) last.t1 = t;
+              else {
+                W.push({ ob, t0: t, t1: t });
+                if (W.length > 12) W.shift();
+              }
+            }
+            if (pose) {
+              ob.tAcc += dA;
+              ob.lastPose = t;
+              if (ob.poseT0 == null) {
+                ob.run += dA;
+                if (ob.run > 20) {
+                  ob.poseT0 = t;
+                  ob.accStart = ob.acc - ob.run;
+                }
+              }
+              ob.rs += dist;
+              ob.rs2 += dist * dist;
+              ob.rn++;
+              const wr = dA / dt;
+              ob.ws += wr;
+              ob.ws2 += wr * wr;
+              if (lockNow) ob.lock = (ob.lock || 0) + 1;
+            } else if (ob.poseT0 == null) ob.run = 0;
+            if (up.y > 0.35 && inView) ob.oAcc += dA;
+          }
+          ob.roll += rates[0] * dt;
+          const st = up.y > 0.35 ? 1 : up.y < -0.35 ? -1 : 0;
+          if (st && ob.st && st !== ob.st) ob.flips++;
+          if (st) ob.st = st; // upright <-> inverted changes
+          if (ob.poseT0 != null && t - ob.lastPose > 0.9 && this.live && this.live.ob === ob && this.live.name === 'Trippy Spin') {
+            this.endOrbit(P, ob, 'exit');
+            ev = true;
+            this.orb[P.id] = null;
+            continue;
+          }
+          // a plain trippy that turns into a Double Rolling one (the owner's run: one lap of trippy, then rolling): bank the trippy's
+          // laps and judge the rolling on its own (the last DRT_SPLIT_T s rolled DRT_SPLIT_R deg or more, 2.5x the orbit's sweep)
+          {
+            const H = ob.hist || (ob.hist = []);
+            if (!H.length || t - H[H.length - 1][0] >= 0.1) {
+              H.push([t, ob.acc, ob.pRoll || 0]);
+              while (H.length && t - H[0][0] > 2.5) H.shift();
+            }
+            const h = H.find(x => t - x[0] <= DRT_SPLIT_T),
+              dR = h ? Math.abs((ob.pRoll || 0) - h[2]) : 0,
+              dAc = h ? ob.acc - h[1] : 0;
+            if (
+              h &&
+              t - h[0] > DRT_SPLIT_T - 0.15 &&
+              this.live &&
+              this.live.ob === ob &&
+              this.live.name === 'Trippy Spin' &&
+              this.orbSpan(ob) >= 330 &&
+              dR >= DRT_SPLIT_R &&
+              dR >= 2.5 * Math.max(dAc, 30)
+            ) {
+              this.endOrbit(P, ob, 'split');
+              ev = true;
+              this.orb[P.id] = {
+                acc: 0,
+                dir: ob.dir,
+                t0: h[0],
+                t1: t,
+                lastAng: ang,
+                n: 1,
+                inv: 0,
+                view: 0,
+                top: 0,
+                roll: 0,
+                rev: 0,
+                still: 0,
+                flips: 0,
+                st: 0,
+                tAcc: 0,
+                oAcc: 0,
+                run: 0,
+                rs: 0,
+                rs2: 0,
+                rn: 0,
+                ws: 0,
+                ws2: 0,
+                as: 0,
+                as2: 0,
+                aw: 0,
+                pl: 0,
+                pt: 0,
+                poseT0: h[0],
+                accStart: 0,
+                lastPose: t,
+                pRoll: Math.sign(ob.pRoll || 1) * dR,
+                split: true
+              };
+              continue;
+            }
+          }
+        } else {
+          ob.rev += Math.abs(da) * R2D;
+          if (ob.rev > (rollingIn ? DRT_BACK : 30)) {
+            if (ob.acc > 0) {
+              this.endOrbit(P, ob, 'reverse');
+              ev = true;
+            }
+            this.orb[P.id] = {
+              acc: 0,
+              dir: sg,
+              t0: t,
+              t1: t,
+              lastAng: ang,
+              n: 0,
+              inv: 0,
+              view: 0,
+              top: 0,
+              roll: 0,
+              rev: 0,
+              still: 0,
+              flips: 0,
+              st: 0,
+              tAcc: 0,
+              oAcc: 0,
+              run: 0,
+              rs: 0,
+              rs2: 0,
+              rn: 0,
+              ws: 0,
+              ws2: 0,
+              as: 0,
+              as2: 0,
+              aw: 0,
+              pl: 0,
+              pt: 0
+            };
+          }
+        }
+      }
+      this.updateLive(t);
+      if (t - (this.prunedAt || 0) >= 0.05 || t < (this.prunedAt || 0)) {
+        this.prunedAt = t; // forgetting old sightings does not need doing every millisecond
+        this.taps = this.taps.filter(x => t - x.t < 8);
+        this.stalls = this.stalls.filter(x => t - x.t < 8);
+        this.rewinds = this.rewinds.filter(x => t - x.t1 < 8);
+        this.passes = this.passes.filter(x => t - x.t < 8);
+        this.orbSegs = this.orbSegs.filter(x => t - x.t1 < 10);
+        this.faces = this.faces.filter(x => t - x.t < 4);
+      }
+      return ev;
+    }
+    // ---- live orbit tricks (Trippy Spin, Orbit, Double Rolling Trippy): count every half lap, bank on exit, lose on crash
+    orbSpan(ob) {
+      return ob.poseT0 != null ? ob.acc - ob.accStart : 0;
+    } // degrees swept since the trippy view was first held
+    orbitKind(ob) {
+      if (!ob || !ob.n) return null;
+      const span = this.orbSpan(ob),
+        laps = Math.max(0.25, ob.acc / 360),
+        inv = ob.inv / ob.n,
+        view = ob.view / ob.n;
+      // a Double Rolling Trippy (the owner's video and labelled run, 2026-11-25): a trippy that keeps rolling round the line to the
+      // pole, the pole still up in the picture, so the body rolls far more than the orbit alone turns it: his labelled ones 2.6-3.4 deg
+      // of roll per degree round the pole, plain trippies 0.6-0.9. It never needs to come upright (his never went past knife-edge; the
+      // old "through upright every lap" test called Split S, Flips and Mattys near poles instead)
+      if (span >= DRT_SPAN && ob.tAcc / span >= 0.45 && Math.abs(ob.pRoll || 0) / span >= DRT_ROLL) return 'Double Rolling Trippy Spin';
+      if (ob.split && Math.abs(ob.pRoll || 0) >= DRT_SPLIT_MIN && Math.abs(ob.pRoll || 0) / Math.max(span, 1) >= DRT_ROLL)
+        return 'Double Rolling Trippy Spin'; // the rolling after a trippy: in the owner's run it hardly went round at all
+      if (span >= 120 && ob.tAcc / span >= 0.55) return 'Trippy Spin';
+      const mr = ob.aw ? ob.as / ob.aw : 0,
+        round = mr > 0 ? Math.sqrt(Math.max(0, ob.as2 / ob.aw - mr * mr)) / mr : 1; // 0 = a circle; a straight fly-by is 0.5+
+      const around = ob.pl > 0 ? ob.pt / ob.pl : 0;
+      if (!ob.air && ob.acc >= 150 && inv < 0.35 && view >= 0.6 && ob.tAcc < 0.25 * ob.acc && round < 0.35 && around >= 0.8)
+        return 'Orbits';
+      return null;
+    }
+    // laps are laps round the pole; a Double Rolling Trippy split off a trippy can barely go round (the owner's run), so its rolling
+    // counts as well, at two rolls a lap ("double"), whichever is more
+    orbLapDeg(ob, kind) {
+      return kind === 'Double Rolling Trippy Spin' && ob.split
+        ? Math.max(this.orbSpan(ob), Math.abs(ob.pRoll || 0) / 2)
+        : kind === 'Trippy Spin' || kind === 'Double Rolling Trippy Spin'
+          ? this.orbSpan(ob)
+          : ob.acc;
+    }
+    updateLive(t) {
+      // the post with the most sweep owns the live trick (circling the slide tower sweeps all 4 posts at once)
+      let best = null,
+        bestP = null;
+      for (const P of this.airPole ? [...this.poles, this.airPole] : this.poles) {
+        const ob = this.orb[P.id];
+        if (ob && P.air) ob.air = true;
+        if (ob && ob.acc > (best ? best.acc : 0) && this.orbitKind(ob)) {
+          best = ob;
+          bestP = P;
+        }
+      }
+      const L = this.live;
+      if (L && this.orb[L.key] && this.orb[L.key] === L.ob) {
+        const k = this.orbitKind(L.ob);
+        if (k) L.name = k;
+        L.laps = Math.floor((this.orbLapDeg(L.ob, L.name) + 40) / 180) / 2;
+        L.t1 = t;
+        if (L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') L.t0 = L.ob.poseT0;
+      } else if (!L && best)
+        this.live = {
+          key: bestP.id,
+          objId: bestP.objId,
+          pole: bestP.name,
+          ob: best,
+          name: this.orbitKind(best),
+          dir: best.dir,
+          t0: ['Trippy Spin', 'Double Rolling Trippy Spin'].includes(this.orbitKind(best)) ? best.poseT0 : best.t0,
+          t1: t,
+          laps: Math.floor((this.orbLapDeg(best, this.orbitKind(best)) + 40) / 180) / 2
+        };
+      const N = this.live;
+      if (
+        N &&
+        this.lastTrippy &&
+        !N.switched &&
+        N.name !== 'Orbits' &&
+        N.objId === this.lastTrippy.objId &&
+        N.dir !== this.lastTrippy.dir &&
+        N.t0 - this.lastTrippy.t < 1.6 &&
+        N.laps >= SWITCH_LAPS
+      ) {
+        N.switched = true;
+        this.emit({ name: 'Trippy Switch', exec: 'CLEAN', clean: 95, obstacle: N.pole, toks: [], live: true });
+        this.lastTrippy = null;
+      }
+    }
+    finishLive(reason) {
+      const L = this.live;
+      this.live = null;
+      if (!L) return;
+      // Pilot: completed laps were flown clean, so they score even if the run ends in a crash; only the lap in progress
+      // is lost (the same as finished loops and tricks before a crash, which always counted).
+      const d = this.lastD;
+      if (!d) return;
+      const bailed = d.crashed || !d.armed;
+      if (bailed) L.laps = Math.floor(L.laps);
+      if (L.laps < 1) return; // under one lap doesn't count
+      const base = (trickPoints(L.name) * L.laps) / 2; // TPW values are for two laps
+      for (const k of this.toks) if (k.t1 > L.t0 && k.t0 < L.t1) k.usedUntil = Math.max(k.usedUntil, k.t1);
+      for (const sg of this.orbSegs) if (sg.t1 > L.t0 - 0.3 && sg.t0 < L.t1 + 0.3) this.claimUsed.add(sg.id);
+      // how tidy: an even circle at an even pace, holding the view, is clean; egg shapes, surging and losing the view are sloppy
+      let clean = 92,
+        notes = [];
+      const ob = L.ob;
+      if ((L.name === 'Trippy Spin' || L.name === 'Double Rolling Trippy Spin') && ob && ob.rn > 20) {
+        const mr = ob.rs / ob.rn,
+          cvR = Math.sqrt(Math.max(0, ob.rs2 / ob.rn - mr * mr)) / mr,
+          mw = ob.ws / ob.rn,
+          cvW = Math.sqrt(Math.max(0, ob.ws2 / ob.rn - mw * mw)) / (mw || 1),
+          hold = ob.tAcc / Math.max(1, this.orbSpan(ob));
+        const lock = (ob.lock || 0) / ob.rn; // 'locked in' (the masterclass): the object never leaves the top of the screen
+        clean = Math.round(
+          Math.max(40, 100 - Math.max(0, cvR - 0.06) * 120 - Math.max(0, cvW - 0.2) * 40 - (1 - hold) * 60 - Math.max(0, 0.85 - lock) * 15)
+        );
+        if (cvR > 0.15) notes.push('uneven circle');
+        if (cvW > 0.4) notes.push('uneven pace');
+        if (hold < 0.8) notes.push('lost the view at times');
+        else if (lock >= 0.9) notes.push('locked in');
+        else if (lock < 0.6) notes.push('the object wandered off the top of the screen');
+      }
+      // the stick witness: a trippy's roll and yaw are opposed, an orbit's together. A soft vote (the call's confidence), never a veto
+      let watch;
+      if (ob && (ob.sOpp || 0) + (ob.sSame || 0) > 0.4) {
+        const share = (ob.sOpp || 0) / ((ob.sOpp || 0) + (ob.sSame || 0)),
+          ok = L.name === 'Orbits' ? 1 - share : share;
+        watch = {
+          conf: +clamp(0.35 + 0.65 * ok, 0, 1).toFixed(2),
+          fails: ok < 0.5 ? ['sticks'] : [],
+          votes: { sticks: { n: 1, ok: +ok.toFixed(2) } }
+        };
+        if (ok < 0.5)
+          notes.push(L.name === 'Orbits' ? 'roll and yaw were opposed, as in a trippy' : 'roll and yaw went the same way, as in an orbit');
+      }
+      if (bailed) notes.push('completed laps kept');
+      this.emit({
+        name: L.name,
+        exec: clean < 70 ? 'SLOPPY' : 'CLEAN',
+        clean,
+        notes,
+        obstacle: L.pole,
+        basePts: Math.round(base),
+        laps: L.laps,
+        dur: +Math.max(0, L.t1 - L.t0).toFixed(2),
+        toks: [],
+        live: true,
+        draft: true,
+        ...(watch ? { watch } : {})
+      });
+      if (reason === 'reverse' && L.name !== 'Orbits') this.lastTrippy = { objId: L.objId, dir: L.dir, t: this.time };
+    }
+    liveState() {
+      const out = [];
+      if (this.live && this.live.laps >= 0.5)
+        out.push({
+          name: this.live.name,
+          laps: this.live.laps,
+          pts: Math.round((trickPoints(this.live.name) * this.live.laps) / 2),
+          counts: this.live.laps >= 1
+        });
+      if (this.wallRide && this.wallRide.emitted)
+        out.push({ name: this.wallRide.name2 || 'Wall Ride', meters: len(sub(this.lastD.pos, this.wallRide.p0)) });
+      if (this.slide && this.slide.dist > 0.3)
+        out.push({ name: this.slide.dist >= 0.75 ? 'Slide Disarm · re-arm!' : 'Sliding', meters: this.slide.dist });
+      if (this.dead && this.lastD && !this.lastD.armed) out.push({ name: 'Motors off · re-arm!' });
+      return out;
+    }
+    endOrbit(P, ob, reason) {
+      const c0 = ob && ob.poseT0 != null ? ob.poseT0 - 0.1 : ob ? ob.t0 - 0.3 : 0;
+      if (ob && ob.acc > 270) {
+        for (const k of this.toks) if (k.t0 >= c0 && k.t0 <= ob.t1) k.usedUntil = Math.max(k.usedUntil, k.t1);
+        for (const c of this.cur) if (c && c.t0 >= c0 + 0.3 - 0.3) c.usedUntil = this.time;
+      } // rotation during an orbit is the orbit's, not a separate roll
+      if (this.live && this.live.ob === ob) this.finishLive(reason);
+      if (ob.acc < 250 || !ob.n || P.air) return;
+      this.orbSegs.push({
+        obj: P.id,
+        name: P.name,
+        dir: ob.dir,
+        acc: ob.acc,
+        t0: ob.t0,
+        t1: ob.t1,
+        inv: ob.inv / ob.n,
+        view: ob.view / ob.n,
+        top: ob.top / ob.n,
+        roll: ob.roll,
+        id: 'orb' + P.id + '@' + ob.t0.toFixed(2)
+      });
+      this.newEv.push('orbit');
+    }
+    // Rates for rotation tokens. A spin around the WORLD vertical with the body held tilted (an inverted yaw spin with a
+    // 30° camera: the pilot keeps the horizon in view) shows up in body rates as yaw·cos(tilt) plus a steady pitch/roll
+    // component. When rotation about the vertical clearly dominates body yaw, count it as yaw (heading change) and keep
+    // only the rest as pitch/roll. Plain body-yaw spins and flips are unchanged.
+    tokRates(d, rates) {
+      const g = qinv(d.q, v3(0, 1, 0)); // world up, in body axes (x right, y up, z back)
+      if (Math.abs(g.y) < 0.5) return rates;
+      const w = d.w,
+        h = w.x * g.x + w.y * g.y + w.z * g.z;
+      const wm = Math.hypot(w.x, w.y, w.z);
+      if (!(Math.abs(h) > 0.85 * wm && Math.abs(h) > Math.abs(w.y) * 1.03 && Math.abs(h) * R2D > 60)) return rates; // only a spin about the vertical
+      const px = w.x - h * g.x,
+        pz = w.z - h * g.z;
+      return [-pz * R2D, px * R2D, -h * Math.sign(g.y) * R2D];
+    }
+    // Angle swept by the direction of travel in the vertical plane of the move (degrees, + = up/over the top the way a
+    // powerloop goes). A real loop's path turns ~360 with the pitch; a flip in place barely moves; a Matty's path turns
+    // ~180 the other way (forward, down, then backward).
+    pathSweep(a, b) {
+      const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.y, x.v.z) > 0.6);
+      if (W.length < 6) return { sweep: 0, speed: 0, rise: 0 };
+      const v0 = W[0].v,
+        hl = Math.hypot(v0.x, v0.z) || 1,
+        hx = v0.x / hl,
+        hz = v0.z / hl;
+      let prev = null,
+        acc = 0,
+        sp = 0;
+      for (const x of W) {
+        const g = Math.atan2(x.v.y, x.v.x * hx + x.v.z * hz);
+        if (prev != null) {
+          let d = g - prev;
+          while (d > Math.PI) d -= 2 * Math.PI;
+          while (d < -Math.PI) d += 2 * Math.PI;
+          acc += d;
+        }
+        prev = g;
+        sp += Math.hypot(x.v.x, x.v.y, x.v.z);
+      }
+      const ys = W.map(x => x.p.y);
+      return { sweep: acc * R2D, speed: sp / W.length, rise: Math.max(...ys) - Math.min(...ys) };
+    }
+    // Was the loop one smooth motion? No hit, no hard change of speed or direction (more than about 12 g for a moment),
+    // and the turning stayed on the pitch axis rather than wandering onto roll and yaw.
+    loopSmooth(t0, t1, tok) {
+      if (this.contacts.some(c => c.t > t0 - 0.05 && c.t < t1 + 0.05 && c.impact > 0.6)) return false;
+      const W = this.fbIn(t0, t1);
+      for (let i = 5; i < W.length; i++) {
+        const a = W[i - 5].v,
+          b = W[i].v;
+        if (Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) > 6) return false;
+      }
+      if (tok && tok.raw > 0 && tok.off / tok.raw > 0.6) return false;
+      return true;
+    }
+    // Loops and Mattys flown in open air (pilot request): the powerloop family when the path loops round with the pitch,
+    // the Matty family when the path goes forward -> down -> backward and the quad ends flying backward.
+    matchOpenLoop(toks) {
+      if (!toks.length || !toks.some(k => k.ax === 'P' && k.raw >= 250)) return null;
+      const t0 = toks[0].t0,
+        t1 = toks[toks.length - 1].t1;
+      // An obstacle only takes the loop away from the open-air reading when the loop really went ROUND it: under and over
+      // the same thing. Passing over a roof edge or under some far-off bar while looping in clear air is still an open
+      // loop (pilot, on the school map where the Surveyor finds an over/under everywhere: open powerloops weren't counted).
+      {
+        const near = this.crossLog.filter(
+          c => (c.kind === 'U' || (c.kind === 'O' && !(c.hOver > 2.5))) && c.t > t0 - 1.2 && c.t < Math.max(t1, this.time) + 0.3
+        );
+        // a Matty only waits for an object's own reading when it really went over and then under one object (owner, Clappy Park:
+        // sweeping open-air Mattys beside the shops brushed an awning, a window and the façade trim and were never called)
+        var objMatty = near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
+        var overOpen = near.some(o => o.kind === 'O' && !near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t));
+        if (near.some(c => c.kind === 'U' && near.some(o => o.kind === 'O' && o.obj === c.obj))) return null;
+        if (near.some(c => c.kind === 'U' && c.t > t0 - 0.25 && c.t < t0 + 0.6) && this.time - t1 < 0.45) return null;
+      } // went in under something: give the way back under a moment to show up
+      const ps = this.pathSweep(t0 - 0.25, t1 + 0.25);
+      if (ps.speed < 1.6 || ps.rise < 0.8) return null;
+      let best = null;
+      for (const tr of OBSTACLE_TRICKS) {
+        const loopFam =
+          tr.cross === 'UOU' && !tr.tap && !/Mav|Donkey|Half Mavvy|Power Swap|Power Switch|Barani|Rollani|Flipani/.test(tr.name);
+        const mattyFam = tr.cross === 'OU' && tr.end === 'back';
+        if (!loopFam && !mattyFam) continue;
+        // The path must loop with the pitch. Shared flights (2026-11-17, pilot-labelled open powerloops read as Flip / Wall
+        // Ride): the sweep's sign depends on which way the quad happened to be travelling when the window opened, and a
+        // tall, slow loop turns the path less than a full 270 because it stalls over the top. So: either way round, and a
+        // loop that climbs 1.5 m and takes over a second counts from half a turn of path.
+        if (loopFam && !(Math.abs(ps.sweep) >= 270 || (Math.abs(ps.sweep) >= 180 && ps.rise >= 1.5 && t1 - t0 >= 1.0))) continue;
+        if (mattyFam && objMatty) continue; // over then under one object: that object's own Matty reading takes it
+        if (mattyFam && overOpen && this.time - t1 < 0.6) continue; // went over something: give the way back under it a moment to show up
+        // a Matty's path goes forward -> down -> backward; a big sweeping one (owner, 2026-11-18: punch up ~12 m, flip forward over
+        // the top, fall back flying backward, 3-4 s) turns the path the other way round, up over the top, while the nose flips
+        // forward: allowed when it climbs 3 m and takes 1.5 s (a powerloop ends flying forward, so it never reads as one)
+        const fwdFlip = tr.pats.every(q => /P-/.test(q)); // the nose flips forward, against the path (not an Anti Matty: a backflip turns with the path, like a loop)
+        if (
+          mattyFam &&
+          !(
+            (ps.sweep <= -120 || (fwdFlip && ps.sweep >= 180 && ps.rise >= 3 && t1 - t0 >= 1.5)) &&
+            this.backFrac(this.time - 0.3, this.time) >= 0.6
+          )
+        )
+          continue;
+        for (const pp of tr.parsed) {
+          const m = matchTokens(pp, toks);
+          if (!m) continue;
+          if (loopFam && !this.loopSmooth(t0, t1, toks.length === 1 ? toks[0] : null)) continue; // the loop monitor: a broken loop is not a loop
+          const cand = { name: tr.name, toks, err: m.err + 0.05, clen: 0.5, obstacle: 'open air', openAir: true };
+          if (!best || better(cand, best)) best = cand;
+        }
+      }
+      return best;
+    }
+    // Open-air Split-S (owner, 2026-11-21: "yup", it counts; 5 confirmed labels had no object under them): one half roll to upside-down,
+    // a nose-up pull through, out upright and flying forward the other way, at least SPLIT_DROP lower than where the roll began. No
+    // other big rotation in it. An over-then-under of one object is that object's own Split-S (matchObstacle), and a pass over
+    // something gets a moment for the way back under it to show up.
+    matchOpenSplit(toks) {
+      const big = toks.filter(x => x.raw >= 90),
+        R = big.filter(x => x.ax === 'R');
+      if (R.length !== 1) return null;
+      const r = R[0],
+        P = toks.filter(x => x.ax === 'P' && x.dir > 0 && x.raw >= 45 && x.t0 >= r.t0 - 0.1);
+      if (
+        r.raw < 120 ||
+        r.raw > 250 ||
+        !P.length ||
+        big.some(x => x !== r && (x.ax !== 'P' || x.dir < 0 || x.raw > 275 || x.t0 < r.t0 - 0.1))
+      )
+        return null;
+      const t1 = Math.max(r.t1, ...P.map(x => x.t1));
+      if (t1 - r.t0 > SPLIT_LOOK || this.time - t1 > 1.2) return null;
+      const near = this.crossLog.filter(c => (c.kind === 'U' || c.kind === 'O') && c.t > r.t0 - 0.6 && c.t < this.time + 0.1);
+      if (near.some(o => o.kind === 'O' && near.some(u => u.kind === 'U' && u.obj === o.obj && u.t > o.t))) return null;
+      if (near.some(o => o.kind === 'O' && !(o.hOver > 2.5)) && this.time - t1 < 0.6) return null;
+      const W = this.fbIn(r.t0 - 0.1, this.time);
+      if (W.length < 6) return null;
+      const a = W[0],
+        b = W[W.length - 1];
+      if (Math.min(...W.map(x => x.up.y)) > -0.5 || b.up.y < 0.6 || a.up.y < 0.5 || a.p.y - b.p.y < SPLIT_DROP) return null;
+      const h0 = Math.hypot(a.f.x, a.f.z),
+        h1 = Math.hypot(b.f.x, b.f.z),
+        sp = Math.hypot(b.v.x, b.v.z);
+      if (h0 < 0.3 || h1 < 0.3 || sp < 1.2) return null;
+      if ((a.f.x * b.f.x + a.f.z * b.f.z) / (h0 * h1) > -0.5 || (b.v.x * b.f.x + b.v.z * b.f.z) / (sp * h1) < 0.3) return null;
+      if (this.contacts.some(c => c.t >= r.t0 && c.t <= this.time && (c.impact || 0) > 0.8)) return null;
+      return {
+        name: 'Split S',
+        toks: toks.filter(x => x === r || P.includes(x)),
+        err: 0.3,
+        clen: 0.5,
+        obstacle: 'open air',
+        openAir: true
+      };
+    }
+    keptInView(pt, a, b, frac) {
+      if (!pt) return true;
+      const W = this.fbIn(a, b);
+      if (!W.length) return false;
+      return W.filter(x => this.viewOf(x.p, x.up, x.f, pt).ang < 75).length / W.length >= frac;
+    }
+    // fraction of frames with some part of the pole (from 1.5 m below you to 3 m above, within its length) near the middle of the picture
+    poleView(P, a, b, ang) {
+      const W = this.fbIn(a, b);
+      if (!W.length || !P) return 0;
+      return (
+        W.filter(x =>
+          [-1.5, -0.75, 0, 0.75, 1.5, 3].some(dy => {
+            const y = x.p.y + dy;
+            if (y < P.y0 - 0.2 || y > P.y1 + 0.2) return false;
+            return this.viewOf(x.p, x.up, x.f, P.point(y)).ang < ang;
+          })
+        ).length / W.length
+      );
+    }
+    headingTurn(a, b) {
+      const W = this.fbIn(a, b);
+      if (W.length < 2) return 0;
+      const hd = x => {
+        const v = Math.abs(x.up.y) > 0.3 ? x.f : x.up;
+        return Math.atan2(v.x * Math.sign(x.up.y || 1), v.z * Math.sign(x.up.y || 1));
+      };
+      const h0 = hd(W[0]),
+        h1 = hd(W[W.length - 1]);
+      let d = Math.abs(h1 - h0) * R2D;
+      if (d > 180) d = 360 - d;
+      return d;
+    }
+    maxTilt(a, b) {
+      const W = this.fbIn(a, b);
+      return W.length ? Math.max(...W.map(x => Math.acos(clamp(x.up.y, -1, 1)) * R2D)) : 0;
+    }
+    maxSideTilt(a, b) {
+      const W = this.fbIn(a, b);
+      return W.length
+        ? Math.max(
+            ...W.map(x => {
+              const r = cross(x.f, x.up);
+              return Math.asin(clamp(Math.abs(r.y), 0, 1)) * R2D;
+            })
+          )
+        : 0;
+    }
+    orbiting() {
+      return Object.values(this.orb).some(o => o && o.acc > 150 && (this.orbSpan(o) > 60 || o.oAcc > 150 || (o.flips || 0) >= 2));
+    }
+    tapIn(spec, obj, a, b) {
+      return (
+        this.taps.find(
+          x =>
+            !this.claimUsed.has(x.id) &&
+            x.t >= a &&
+            x.t <= b &&
+            (obj == null || x.obj === obj) &&
+            (!spec.face || spec.face === 'any' || x.face === spec.face) &&
+            (!spec.surface || spec.surface === 'any' || x.surface === spec.surface)
+        ) || null
+      );
+    }
+    fbIn(a, b) {
+      return this.fb.filter(x => x.t >= a && x.t <= b);
+    }
+    sweptBetween(a, b) {
+      const W = this.fbIn(a, b);
+      let s = 0;
+      for (let i = 1; i < W.length; i++) s += Math.acos(Math.max(-1, Math.min(1, dot(W[i - 1].up, W[i].up))));
+      return s * R2D;
+    }
+    // the same, only the part that turned the nose DOWN (top toward the nose: a forward flip, a Matty) minus the part that
+    // turned it up (a powerloop's way round): a Matty's tumble is forward
+    fwdSweptBetween(a, b) {
+      const W = this.fbIn(a, b);
+      let s = 0;
+      for (let i = 1; i < W.length; i++) {
+        const u0 = W[i - 1].up,
+          u1 = W[i].up,
+          g = Math.acos(Math.max(-1, Math.min(1, dot(u0, u1))));
+        const dd = (u1.x - u0.x) * W[i - 1].f.x + (u1.y - u0.y) * W[i - 1].f.y + (u1.z - u0.z) * W[i - 1].f.z;
+        s += dd >= 0 ? g : -g;
+      }
+      return s * R2D;
+    }
+    minUpBetween(a, b) {
+      const W = this.fbIn(a, b);
+      return W.length ? Math.min(...W.map(x => x.up.y)) : 1;
+    }
+    // the same, judged by the camera (what the pilot sees): with a 30° camera, a maverick's nose-down descent has the body
+    // ~110° nose down while the view is still forward-looking
+    minCamUpBetween(a, b) {
+      const W = this.fbIn(a, b);
+      if (!W.length) return 1;
+      const c = Math.cos(this.camTilt * D2R),
+        s = Math.sin(this.camTilt * D2R);
+      return Math.min(...W.map(x => x.up.y * c - x.f.y * s));
+    }
+    // stayed upright by the body OR by the camera view: pilots hold the quad differently for different camera angles
+    // the site's Barani (owner, 2026-11-23): the half loop goes on until the horizon is in the top half of the picture before the yaw
+    // starts; a yaw begun while still looking at the sky makes it a Power Swap. True once the camera's line is within HORIZON_VIEW of level
+    horizonAt(t) {
+      const W = this.fbIn(t - 0.03, t + 0.03);
+      if (!W.length) return true;
+      const x = W[0],
+        c = Math.cos(this.camTilt * D2R),
+        s = Math.sin(this.camTilt * D2R),
+        cam = norm(add(mul(x.f, c), mul(x.up, s)));
+      return Math.asin(clamp(cam.y, -1, 1)) * R2D <= HORIZON_VIEW;
+    }
+    // Inverted Uh-uh (the site; credited there to Heads of Infinity Loops): upside-down between the half flip / roll in and the one out,
+    // the nose shakes left, right, left(, right) and ends about where it began: three swings of UHUH_SWING deg or more, no spin
+    uhuh(a, b) {
+      const H = (this.attLog || []).filter(r => r[0] >= a && r[0] <= b && r[1] < -0.4);
+      if (H.length < 15) return false;
+      let ext = H[0][5],
+        dir = 0,
+        n = 0,
+        big = 0;
+      for (const r of H) {
+        const y = r[5];
+        if (!dir) {
+          if (Math.abs(y - ext) >= UHUH_SWING) {
+            dir = Math.sign(y - ext);
+            n = 1;
+            big = Math.abs(y - ext);
+            ext = y;
+          }
+        } else if ((y - ext) * dir > 0) {
+          big = Math.max(big, 0);
+          ext = y;
+        } else if (Math.abs(y - ext) >= UHUH_SWING) {
+          dir = -dir;
+          n++;
+          ext = y;
+        }
+      }
+      const net = Math.abs(H[H.length - 1][5] - H[0][5]),
+        span = Math.max(...H.map(r => r[5])) - Math.min(...H.map(r => r[5]));
+      return n >= 3 && net <= 70 && span <= 200;
+    }
+    // Matty Twister by the book (owner, 2026-11-24: one was called "despite not trying and not being over an object"): fly over the
+    // object; the 360 roll is made WHILE OVER it (it starts from just before the over pass to a second after, above the object's top);
+    // the Matty flip follows at once, in one motion; the pass under comes out of the flip
+    twisterOK(tv, part, id) {
+      const R = tv.filter(k => k.ax === 'R'),
+        P = tv.filter(k => k.ax === 'P'),
+        ro = R.sort((a, b) => b.raw - a.raw)[0],
+        fl = P[P.length - 1],
+        O = part[0],
+        U = part[1];
+      if (!ro || !fl || !O || !U) return false;
+      if (ro.t0 < O.t - TWIST_BEFORE || ro.t0 > O.t + TWIST_AFTER) return false; // rolled while over the object
+      const o = this.world.objs.find(x => x.id === id),
+        top = o && o.obstacle ? o.obstacle.over : null,
+        at = this.fbIn(ro.t0 - 0.03, ro.t0 + 0.03)[0];
+      if (top != null && at && at.p.y < top - 0.15) return false; // and above it, not beside or below
+      if (fl.t1 < ro.t1 - 0.05 || fl.t0 - ro.t1 > TWIST_FLOW) return false; // the flip follows the roll at once
+      if (U.t < ro.t0 || U.t - ro.t1 > TWIST_UNDER) return false; // and comes out under the object
+      return true;
+    }
+    // Mavvelmann by the book (owner, 2026-11-23): an Immelmann with a maverick's way up. Under the object, round and above it looking
+    // forward the whole way (upright from the under pass to the flick; over the top travelling backward), THEN, above it, a quick 180
+    // pitch down to upside-down, and promptly a 180 roll to level out
+    mavvelOK(tv, part) {
+      const fl = tv.find(k => k.ax === 'P'),
+        ro = tv.find(k => k.ax === 'R'),
+        U = part[0],
+        O = part[1];
+      if (!fl || !ro || !U || !O) return false;
+      if (!this.stayedUpright(U.t, Math.max(U.t, fl.t0 - 0.03))) return false; // the maverick motion: never inverted on the way up and over
+      if (O.t <= fl.t0 && O.fwdDot && O.fwdDot > MAVVEL_BACK) return false; // over the top with backward motion
+      if (fl.t0 < O.t - MAVVEL_EARLY || fl.t0 > O.t + MAVVEL_LATE) return false; // the flick comes when you are above the object
+      if (fl.t1 - fl.t0 > MAVVEL_FLICK) return false; // a quick flick
+      if (ro.t0 - fl.t1 > MAVVEL_PROMPT) return false; // the roll follows promptly
+      if (this.minUpBetween(fl.t0 + (fl.t1 - fl.t0) * 0.6, ro.t0 + 0.05) > -0.3) return false; // upside-down after the flick
+      const end = this.fbIn(ro.t1, ro.t1 + 0.25);
+      if (end.length && Math.max(...end.map(x => x.up.y)) < 0.4) return false; // levelled out
+      return true;
+    }
+    stayedUpright(a, b) {
+      return Math.max(this.minUpBetween(a, b), this.minCamUpBetween(a, b)) > 0.1;
+    }
+    backFrac(a, b) {
+      const W = this.fbIn(a, b).filter(x => Math.hypot(x.v.x, x.v.z) > 0.8);
+      if (!W.length) return 0;
+      return (
+        W.filter(x => {
+          const fh = Math.hypot(x.f.x, x.f.z) || 1,
+            vh = Math.hypot(x.v.x, x.v.z);
+          return (x.f.x * x.v.x + x.f.z * x.v.z) / (fh * vh) < -0.35;
+        }).length / W.length
+      );
+    }
+    trackFrac(a, b) {
+      // best fraction of time any pole or obstacle stayed in the camera view
+      const W = this.fbIn(a, b);
+      if (!W.length) return 0;
+      let best = 0;
+      const pts = [
+        ...this.poles.map(P => y => P.point(y)),
+        ...this.world.objs
+          .filter(o => o.obstacle)
+          .map(o => {
+            const m = mul(add(o.obstacle.a, o.obstacle.b), 0.5);
+            return () => v3(m.x, o.obstacle.under, m.z);
+          })
+      ];
+      for (const pt of pts) {
+        let k = 0;
+        for (const x of W) if (len(sub(pt(x.p.y), x.p)) < 8 && this.viewOf(x.p, x.up, x.f, pt(x.p.y)).ang < 40) k++;
+        best = Math.max(best, k / W.length);
+      }
+      return best;
+    }
+    // a context trick's situation: null if not met, else what it claims
+    reqOK(req, toks) {
+      const t0 = toks[0].t0,
+        t1 = toks[toks.length - 1].t1,
+        now = this.time,
+        out = { claims: [] };
+      if (req.tap) {
+        const tp = this.tapIn(req.tap, null, t0 - 0.2, t1 + 0.25);
+        if (!tp) return null;
+        out.claims.push(tp.id);
+        out.tapRef = tp;
+        out.obstacle = tp.name;
+      }
+      if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return null;
+      if (req.flatGap || req.notFlatGap) {
+        const want = req.flatGap || req.notFlatGap,
+          g = this.crossLog.find(
+            c =>
+              c.kind === 'G' &&
+              c.flat &&
+              c.t >= t0 - 2.5 &&
+              c.t <= t1 + 0.6 &&
+              (want !== 'square' || c.sq) &&
+              (want !== 'down' || (c.dir < 0 && c.t >= t0))
+          );
+        if (req.flatGap ? !g : g) return null;
+        if (g && req.flatGap) out.obstacle = g.name;
+      }
+      if (req.nearTall) {
+        const s0 = this.fbIn(t0 - 0.05, t0 + 0.05)[0];
+        const nm = s0 && this.nearTall({ pos: s0.p }, req.nearTall === true ? 3 : req.nearTall);
+        if (!nm) return null;
+        out.obstacle = out.obstacle || nm;
+        // a stall rewind rises beside the object and comes back down: it never passes over/under one (loops, jump ropes do)
+        if (
+          req.nearTall !== true &&
+          this.crossLog.some(c => (c.kind === 'U' || c.kind === 'O') && c.t > t0 - 1.0 && c.t < Math.max(t1, now) + 0.1)
+        )
+          return null;
+        if (req.stallIn && req.nearTall !== true) {
+          // flip/roll at the stall: nearly in place, unlike a loop beside the object
+          const W = this.fbIn(t0, t1);
+          if (W.length > 2) {
+            const ext = k => Math.max(...W.map(x => x.p[k])) - Math.min(...W.map(x => x.p[k]));
+            if (Math.hypot(ext('x'), ext('z')) > 1.6 || ext('y') > 1.6) return null;
+          }
+        }
+      }
+      if (req.stallIn && !this.stalls.some(x => x.tApex >= t0 - 0.45 && x.tApex <= t1 + 0.45 && x.climb >= 1.0)) return null;
+      if (req.rewindIn) {
+        const rw = this.rewinds.find(x => x.t1 >= t0 - 0.3 && x.t0 <= t1 + 1.0 && !this.claimUsed.has(x.id));
+        if (!rw) return null;
+        out.claims.push(rw.id);
+      }
+      if (req.endBack && this.backFrac(now - 0.3, now) < 0.6) return null;
+      if (req.track) {
+        const yk = toks.find(k => k.ax === 'Y'),
+          tk = this.iyTrack((yk ? yk.t0 : t0) - 0.1, (yk ? yk.t1 : t1) + 0.1);
+        if (!tk) return null;
+        out.obstacle = out.obstacle || tk.name;
+      } // the yaw segment itself keeps it centred (not the air around it)
+      if (
+        req.segmented &&
+        !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2) &&
+        !(toks.length >= 2 && toks[1].t0 - toks[0].t1 >= 0.2)
+      )
+        return null;
+      return out;
+    }
+    reqPre(req, toks) {
+      // could this situation still complete? (used to hold a simpler trick a little longer)
+      const t0 = toks[0].t0,
+        d = this.lastD;
+      if (!d) return false;
+      if (req.tap) {
+        const w = this.nearWall(d);
+        const ceil = this.world.prims.some(
+          p =>
+            p.aabb.min.y > d.pos.y &&
+            p.aabb.min.y - d.pos.y < 0.7 &&
+            d.pos.x > p.aabb.min.x &&
+            d.pos.x < p.aabb.max.x &&
+            d.pos.z > p.aabb.min.z &&
+            d.pos.z < p.aabb.max.z
+        );
+        if (!((w && w.dist < 0.7) || ceil)) return false;
+      }
+      if (req.climbBefore && !this.fbIn(t0 - 1.5, t0 + 0.05).some(x => x.v.y > 1.5)) return false;
+      if (req.flatGap && req.flatGap !== 'down' && !this.crossLog.some(c => c.kind === 'G' && c.flat && c.t >= t0 - 2.5)) return false;
+      if (req.stallIn && !(this.vst.climb || this.stalls.some(x => x.tApex >= t0 - 0.45))) return false;
+      if (req.segmented && !toks.some(k => (k.segments || 1) >= 2 && (k.maxGap || 0) >= 0.2)) return false; // a continuous flip can't become a segmented one
+      if (req.rewindIn && !(this.hst.slowT != null || this.rewinds.some(x => x.t1 >= t0 - 0.3))) return false;
+      if (req.endBack && Math.hypot(d.vel.x, d.vel.z) > 2.5 && this.backFrac(this.time - 0.2, this.time) < 0.2) return false;
+      if (req.track && !this.trackTargets(d.pos, IYT_NEAR + 2).length) return false;
+      return true;
+    }
+    toksIn(a, b) {
+      return this.normalized().filter(x => x.t1 > a && x.t0 < b);
+    }
+    eventCands(t) {
+      const out = [],
+        fresh = this.newEv;
+      this.newEv = [];
+      const mk = o => {
+        const c = { err: 0.1, clen: 2, draft: true, toks: [], ...o };
+        c.t0 = c.t0 ?? (c.toks[0] ? c.toks[0].t0 : t);
+        c.tDone = c.tDone ?? t;
+        out.push(c);
+      };
+      // Inverted Yaw Spin as pilots really finish it (first labelled flight, 2026-11-17: called a Yaw Spin): half flip or roll
+      // in, the spin upside-down, then back upright any way that works — often a quick tug and a slow pull-out that never
+      // makes a clean 180 token. Entry + inverted spin + "is upright again within 2 s" is the trick; the textbook pattern
+      // (with a crisp exit) still matches first when it is there.
+      {
+        const N = this.normalized(),
+          ri = [...N].reverse().findIndex(k => k.ax === 'Y' && k.inv && k.raw >= 270 && k.raw <= 830),
+          yi = ri < 0 ? -1 : N.length - 1 - ri,
+          y = yi >= 0 ? N[yi] : null,
+          e = y && yi > 0 ? N[yi - 1] : null;
+        if (
+          y &&
+          e &&
+          t - y.t1 < 2.0 &&
+          t - y.t1 > 0.15 &&
+          e.ax !== 'Y' &&
+          e.raw >= 120 &&
+          e.raw <= 260 &&
+          y.t0 - e.t1 <= this.airAllowed(e.t1, y.t0) &&
+          this.lastD &&
+          this.lastD.up().y > 0.55 &&
+          !N.slice(yi + 1).some(k => k.raw >= 130) &&
+          !this.claimUsed.has('iys' + y.t0.toFixed(2)) &&
+          !this.orbiting()
+        )
+          mk({
+            name: 'Inverted Yaw Spin',
+            toks: N.slice(yi - 1),
+            err: 0.3,
+            clen: 0,
+            draft: false,
+            claims: ['iys' + y.t0.toFixed(2)],
+            t0: e.t0,
+            notes: ['loose exit']
+          });
+      }
+      for (const tp of this.taps)
+        if (!this.claimUsed.has(tp.id) && t - tp.t < 1.5 && tp.face === 'bottom' && tp.surface === 'wall' && tp.wallish)
+          mk({
+            name: 'Wall Tap',
+            clen: 0.5,
+            draft: false,
+            t0: tp.t,
+            tDone: tp.t,
+            claims: [tp.id],
+            tapRef: tp,
+            obstacle: tp.name,
+            holdIfSpin: true
+          });
+      for (const fc of this.faces)
+        if (!this.claimUsed.has(fc.id))
+          mk({ name: 'Face Punch', clen: 0.5, t0: fc.t, tDone: fc.t, claims: [fc.id], tapRef: fc, obstacle: 'the pilot', draft: false });
+      if (fresh.includes('pass'))
+        for (const ps of this.passes.filter(x => x.t === t && !this.claimUsed.has(x.id))) {
+          const P = this.poles.find(p => p.id === ps.obj);
+          // pilot feedback: pole tricks were hard to get. Passing close beside a pole puts the bit at your own height out at the
+          // side of the picture, but you're still looking at the pole (above/below you): any part of it in view counts. And a
+          // whip round the pole often reads as a heading swing (yaw) rather than roll, with a 30° camera.
+          const vf = this.poleView(P, ps.tc - 0.3, t, 60);
+          // heading from before the move began to now (this whip's own rotations; a slow cradle's can start up to 3 s back)
+          const toks = this.toksIn(ps.tc - 1.5, t),
+            turn = this.headingTurn(Math.min(ps.tc - 0.8, ...toks.map(k => k.t0 - 0.2)), t),
+            tilt = this.maxTilt(ps.tc - 0.8, t);
+          const turnC = this.headingTurn(Math.min(ps.tc - 0.8, ...this.toksIn(ps.tc - 3.0, t).map(k => k.t0 - 0.2)), t);
+          const fbC = this.fbIn(ps.tc - 3.0, t),
+            bankMax = fbC.length ? Math.max(...fbC.map(x => Math.abs(x.f.z * x.up.x - x.f.x * x.up.z))) : 0,
+            nose0 = fbC.length ? fbC[0].f.y : 0,
+            noseHi = fbC.length ? Math.max(...fbC.map(x => x.f.y)) - nose0 : 0,
+            noseEnd = fbC.length ? fbC[fbC.length - 1].f.y - nose0 : 1; // relative to how it flew in (a tilted camera flies nose-down)
+          // an upright cradle's pitch back is 60-80°, often slower than a token: the nose seen going high and coming back down counts too
+          const pPlus = this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 50) || noseHi > 0.7,
+            pMinus = toks.some(x => x.ax === 'P' && x.dir < 0 && x.raw >= 40) || (noseHi > 0.7 && noseEnd < noseHi - 0.45); // a slow cradle's pitch back can start well before the pass back
+          const rAny = toks.some(x => x.ax === 'R' && x.raw >= 60) || (turn >= 100 && tilt >= 50),
+            bigR = toks.some(x => x.ax === 'R' && x.raw >= 150),
+            back = this.backFrac(t - 0.35, t) > 0.6;
+          // an over/under pass in the same moment belongs to an obstacle trick (Split-S, loops, Mattys), not a pole trick
+          const obst = this.crossLog.some(c => c.kind === 'O' && c.t > ps.tc - 3.5 && c.t < t + 0.1); // (passing under a canopy or bar is fine)
+          const bumped = this.contacts.some(c => c.t > ps.tc - 1.2 && c.t < t + 0.05); // knocked round by hitting something isn't a whip
+          const pBack =
+            toks.some(x => x.ax === 'P' && x.dir > 0 && x.raw >= 120) || this.cur.some(c => c && c.ax === 'P' && c.dir > 0 && c.raw >= 90); // a big pitch back (even one still going: a loop) is a snap/cradle/loop, not a whip
+          // pilot: lots of ordinary movement round a pole was being called a Whiplash. It has to be the real thing: a close pass,
+          // whipped right round (heading turns ~180) with the pole kept in view, coming out level and travelling backward away
+          // from it — and the game now waits to see that it holds (the Watcher's check, 0.7 s later) before confirming.
+          const levelOut = !!this.lastD && this.lastD.up().y > 0.55;
+          const rewound = this.rewinds.some(r => r.t1 > ps.tc - 1.5 && r.t0 < t); // stopping and going back the way you came is a rewind, not a whip
+          // owner, 2026-11-19: "Cradles and whiplashes are not inverted maneuvers": the quad never goes past upside-down-ish
+          // (a whip's roll toward the pole may reach knife-edge; a cradle's pitch back keeps the nose up, the belly never skyward)
+          const upright = this.minUpBetween(ps.tc - 2.0, t) > -0.15;
+          if (
+            !obst &&
+            !pBack &&
+            !bumped &&
+            !rewound &&
+            ps.dmin < 2.0 &&
+            vf >= 0.65 &&
+            turn >= 135 &&
+            back &&
+            levelOut &&
+            rAny &&
+            (upright || this.pend.some(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5))
+          ) {
+            const prev = this.pend.find(p => p.name === 'Whiplash' && p.poleObj === ps.obj && t - p.tDone < 5);
+            if (prev)
+              mk({ name: 'Pole Dance', obstacle: ps.name, toks: this.toksIn(prev.t0, t), t0: prev.t0, claims: [...prev.claims, ps.id] });
+            else
+              mk({
+                name: 'Whiplash',
+                obstacle: ps.name,
+                toks,
+                t0: ps.tc - 1.0,
+                claims: [ps.id],
+                poleObj: ps.obj,
+                holdNearPole: ps.obj,
+                underObj: toks.some(x => x.ax === 'R' && x.raw >= 150 && (x.inv === true || x.inv > x.n * 0.5))
+                  ? (
+                      this.crossLog.find(
+                        c =>
+                          c.kind === 'U' &&
+                          c.t > ps.tc - 2.6 &&
+                          c.t <= t &&
+                          (o => o && o.obstacle && !o.round)(this.world.objs.find(o => o.id === c.obj))
+                      ) || {}
+                    ).obj
+                  : undefined
+              }); /* rolled upside-down under a bar or frame (a whip stays the right way up; a tree's canopy over its own trunk does not count) */
+          } else if (
+            !obst &&
+            upright &&
+            bankMax < 0.7 &&
+            vf >= 0.3 &&
+            pPlus &&
+            pMinus &&
+            !bigR &&
+            !this.toksIn(ps.tc - 3.0, t).some(x => x.ax === 'R' && x.raw >= 50) &&
+            back &&
+            turnC < 60 &&
+            !(this.lastCradle && this.lastCradle.obj === ps.obj && t >= this.lastCradle.t && t - this.lastCradle.t < 3)
+          ) {
+            this.lastCradle = { obj: ps.obj, t };
+            mk({ name: 'Cradle', obstacle: ps.name, toks, t0: ps.tc - 1.0, claims: [ps.id] });
+          } // one cradle per swing (a second close pass of the same pole in it is not another)
+        }
+      if (fresh.includes('rewind')) {
+        const rw = this.rewinds[this.rewinds.length - 1];
+        if (rw && !this.claimUsed.has(rw.id)) {
+          const P = this.poles.find(p => Math.hypot(rw.p.x - p.x, rw.p.z - p.z) < 3);
+          if (P) {
+            const vf = this.poleView(P, rw.t0 - 1.2, rw.t1, 60);
+            const toks = this.toksIn(rw.t0 - 1.5, rw.t1 + 0.2),
+              side = this.maxSideTilt(rw.t0 - 1.2, rw.t1);
+            const passed = this.crossLog.some(
+              c => (c.kind === 'O' || (c.kind === 'U' && c.upY < 0.3)) && c.t > rw.t0 - 1.5 && c.t < rw.t1 + 0.1
+            ); // Split-S etc. turn back too (upright under a tree canopy is fine)
+            // flown flat: past it and back the way you came (a climb-and-fall-back is a stall rewind), with a quarter roll, not a full one
+            const climbed = this.fbIn(rw.t0 - 2.5, rw.t1).some(x => x.v.y > 1.2),
+              fullRoll = toks.some(x => x.ax === 'R' && x.raw >= 250);
+            if (!passed && !climbed && !fullRoll && vf >= 0.45 && (toks.some(x => x.ax === 'R' && x.raw >= 60) || side >= 55))
+              mk({ name: 'Side-Lock Rewind', obstacle: P.name, toks, t0: rw.t0 - 1.0, claims: [rw.id] });
+          }
+        }
+      }
+      return out;
+    }
+    update(d, dt, rc) {
+      this.time += dt;
+      this.lastD = d;
+      if (rc) {
+        const L = this.lastRc || (this.lastRc = { thr: 0, roll: 0, pitch: 0, yaw: 0 });
+        L.thr = rc.thr ?? 0;
+        L.roll = rc.roll ?? 0;
+        L.pitch = rc.pitch ?? 0;
+        L.yaw = rc.yaw ?? 0;
+      } else this.lastRc = null; // one object, reused: this runs 1000 times a second
+      const t = this.time,
+        rates = d.pilotRates(),
+        up = d.up(),
+        trates = this.tokRates(d, rates);
+      TOL_X = this.learned.tol;
+      if (LIBRARY || CHALLENGES) this.libTick(d, t, rates, dt);
+      this.trackCrossings(d, t);
+      const newCross = this.crossLog.length !== this.nCross;
+      this.nCross = this.crossLog.length;
+      this.continuousDetectors(d, dt, t, rc);
+      if (d.contactThisStep && d.armed) this.contacts.push({ t, owner: d.contactOwner, impact: d.lastImpact, n: d.contactNormal, up });
+      if (this.contacts.length && t - this.contacts[0].t >= 6) {
+        let i = 0;
+        while (i < this.contacts.length && t - this.contacts[i].t >= 6) i++;
+        this.contacts.splice(0, i);
+      }
+      const ctxEv = this.sense(d, dt, t, rates, up);
+      if (d.crashed && !this.crashSeen) {
+        // finished tricks still count; anything mid-air is lost
+        this.crashSeen = true;
+        for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) if (p.tDone < t - 0.15) this.commit(p, t);
+        this.pend = [];
+        this.cur = [null, null, null];
+        this.toks.forEach(k => (k.usedUntil = k.t1));
+        this.live = null;
+        this.orb = {};
+        this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['Crash'], near: null });
+        this.emit({ name: 'Crash', exec: 'CRASH', pts: 0, toks: [] });
+        return;
+      }
+      if (!d.crashed) this.crashSeen = false;
+      // attitude log for the revolution witness (see normalized): time, how upright, total rotation so far (any axis, degrees)
+      // …and the signed rotation so far on each pilot axis (roll, pitch, yaw: the sweep witness needs which axis turned)
+      {
+        let H = this.attLog || (this.attLog = []),
+          l = H[H.length - 1];
+        if (l && t < l[0]) {
+          H.length = 0;
+          l = null;
+        }
+        this.totRot = (this.totRot || 0) + len(d.w) * R2D * dt;
+        const A = this.axRot || (this.axRot = [0, 0, 0]);
+        for (let i = 0; i < 3; i++) A[i] += (rates[i] || 0) * dt;
+        if (!l || t - l[0] >= 0.01) {
+          H.push([t, up.y, this.totRot, A[0], A[1], A[2]]);
+          if (H.length > 1100) H.splice(0, 100);
+        }
+      }
+      let finished = false;
+      const loopCtx = this.crossLog.some(c => t - c.t < 4);
+      for (let k = 0; k < 3; k++) {
+        const r = trates[k],
+          ar = Math.abs(r),
+          c = this.cur[k];
+        if (c) {
+          if (ar >= TOK_TH && Math.sign(r) === c.dir) {
+            if (c.slow) {
+              c.raw += c.slow;
+              c.slow = 0;
+              c.slowT = 0;
+              c.slowCross = false;
+            } // slow stretch rejoined: one rotation
+            c.raw += ar * dt;
+            c.t1 = t;
+            c.low = 0;
+            c.n++;
+            if (up.y < -0.2) c.inv++;
+            c.off += (Math.abs(trates[(k + 1) % 3]) + Math.abs(trates[(k + 2) % 3])) * dt;
+            c.rateSum += ar;
+            c.rateSq += ar * ar;
+            if (t - c.tl[c.tl.length - 1][0] >= 0.01) c.tl.push([t, c.raw]);
+          } else if (ar >= TOK_TH) {
+            this.finishTok(k);
+            finished = true;
+            this.startTok(k, r, t, up, dt);
+          } else if (k === 1 && ar >= SLOW_TH && Math.sign(r) === c.dir && (c.slowT || 0) < SLOW_MAX && loopCtx) {
+            // big floaty loops (demo: powerloop round a tall statue) pitch well under TOK_TH for seconds at a time:
+            // keep the pitch token open while it keeps turning the same way near an obstacle
+            c.slow = (c.slow || 0) + ar * dt;
+            c.slowT = (c.slowT || 0) + dt;
+            c.low = 0;
+            if (newCross) c.slowCross = true;
+          } else {
+            c.low += dt;
+            if (c.low > TOK_END) {
+              this.finishTok(k);
+              finished = true;
+            }
+          }
+        } else if (ar >= TOK_TH && d.armed) this.startTok(k, r, t, up, dt);
+      }
+      if (finished || ctxEv) this.trigger(t, false);
+      if (newCross) this.trigger(t, true);
+      // Loop monitor (pilot: "a system that monitors a loop"): while the pitch keeps turning, every full turn is looked at
+      // as it completes. If the flight path looped round with it, smoothly, in clear air, that lap is a Powerloop there
+      // and then; the rotation carries on and the next turn is judged on its own (loops flown back to back used to add up
+      // to something that matched nothing). A lap broken by a hit or a hard change of motion is not counted.
+      {
+        const c = this.cur[1];
+        if (c) {
+          const total = c.raw + (c.slow || 0),
+            turned = total - (c.lapBase || 0);
+          if (turned >= 350) {
+            c.lapBase = total;
+            (c.laps = c.laps || []).push(t);
+            this.trigger(t, false, c);
+          }
+        }
+      }
+      // tricks waiting on a situation (rewind, flying backward, …) get re-checked a few times a second
+      if (this.pend.some(p => p.hold === HOLD_OBST) && t - this.lastRetrig > 0.1) {
+        this.lastRetrig = t;
+        this.trigger(t, false);
+      }
+      // an upside-down yaw spin just ended: keep looking for a little while to see the quad come back upright
+      else if (t - this.lastRetrig > 0.1 && up.y > 0.45 && this.toks.length) {
+        const k = this.toks[this.toks.length - 1];
+        if (
+          k.usedUntil < k.t1 &&
+          ((k.ax === 'Y' && k.raw > 250 && t - k.t1 < 2.0 && k.inv > k.n * 0.5 && up.y > 0.55) ||
+            (k.ax !== 'Y' && k.raw >= 150 && k.raw < 312 && t - k.t1 < 0.6))
+        ) {
+          this.lastRetrig = t;
+          this.trigger(t, false);
+        }
+      } // …or a roll/flip that read short finish its slow tail (revolution witness)
+      if (this.pend.length)
+        for (const p of [...this.pend].sort((a, b) => a.t0 - b.t0)) {
+          if (t < p.deadline) continue;
+          const spinning = !p.toks.length && p.part && this.cur.some(c => c && c.raw > 45);
+          // a slow next segment still turning (pilot's rates, big floaty Mattys) keeps the wait open a bit longer
+          const cap = this.cur.some(c => c && c.raw > 90 && c.t0 >= p.tDone - 0.1 && c.t0 - p.tDone < this.airOpen)
+            ? HOLD_MAX + 1.4
+            : HOLD_MAX;
+          if (
+            !p.lap &&
+            t - p.tDone < cap &&
+            (spinning || this.extendable(p) || (!p.loopEnd && p.spans.some(sp => this.cur.includes(sp.tok))))
+          )
+            continue;
+          if (this.loopInProgress(p, t)) continue;
+          if (t - p.tDone < 2.2 && this.powerRollComing(p)) continue; // the loop of a Power Roll still coming round to the pass back under
+          if (
+            p.name === 'Jump Rope' &&
+            [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 200 && k.t0 >= p.t0 - 0.5)
+          ) {
+            this.pend = this.pend.filter(x => x !== p);
+            continue;
+          } // a big roll came during the wait: a Double Dutch / Burrito / Side Loop, not a plain jump
+          if (p.name === 'Jump Rope' && t - p.tDone < 2.0 && this.lastD && !this.lastD.crashed && this.nearObstacle(this.lastD, 3))
+            continue; // often the start of a Burrito Roll
+          // went under something on the way in and came back under it on the way out: that is not a whip round a pole (pilot:
+          // 'rollbacks' under the swing set were being called Whiplash)
+          if (
+            p.name === 'Whiplash' &&
+            p.underObj != null &&
+            this.crossLog.some(c => c.kind === 'U' && c.obj === p.underObj && c.t > p.tDone - 0.1)
+          ) {
+            this.pend = this.pend.filter(x => x !== p);
+            continue;
+          }
+          if ((p.name === 'Whiplash' || p.name === 'Cradle') && this.minUpBetween(p.tDone, t) < -0.15) {
+            this.pend = this.pend.filter(x => x !== p);
+            continue;
+          } // turned upside-down before it was confirmed: not a whip / cradle (owner: never inverted)
+          if (p.name === 'Whiplash' && p.underObj != null && t - p.tDone < 3.2) continue; // give the way back under a moment to happen
+          if (
+            p.name === 'Whiplash' &&
+            t - p.tDone < 3.5 &&
+            this.lastD &&
+            !this.lastD.crashed &&
+            (() => {
+              const P = this.poles.find(q => q.id === p.poleObj);
+              return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5;
+            })()
+          )
+            continue; // the second whip of a Pole Dance may follow
+          this.commit(p, t);
+        }
+      this.toks = this.toks.filter(k => t - k.t1 < 6);
+    }
+    startTok(k, r, t, up, dt) {
+      this.cur[k] = {
+        k,
+        ax: 'RPY'[k],
+        dir: Math.sign(r),
+        raw: Math.abs(r) * dt,
+        t0: t,
+        t1: t,
+        low: 0,
+        n: 1,
+        inv: up.y < -0.2 ? 1 : 0,
+        off: 0,
+        rateSum: Math.abs(r),
+        rateSq: r * r,
+        tl: [[t, 0]],
+        usedUntil: -1e9
+      };
+    }
+    finishTok(k) {
+      const c = this.cur[k];
+      this.cur[k] = null;
+      if (!c) return;
+      if (c.slow && c.slowCross) {
+        c.raw += c.slow;
+        c.t1 = this.time;
+        c.tl.push([this.time, c.raw]);
+      } // slow tail through a pass still counts
+      if (c.raw < 45) return;
+      this.toks.push(c);
+    }
+    // unclaimed rotation as tidy tokens: trimmed to what's left, wobble removed, nested moves split out, pauses merged
+    normalized(opts = {}) {
+      const now = this.time;
+      let L = [];
+      const add = (src, t1) => {
+        const t0 = Math.max(src.t0, src.usedUntil);
+        if (t1 - t0 < 0.02) return;
+        const raw = rawAt(src, t1) - rawAt(src, t0);
+        if (raw < 45) return;
+        const f = raw / Math.max(1, src.raw);
+        L.push({
+          ax: src.ax,
+          dir: src.dir,
+          k: src.k,
+          t0,
+          t1,
+          raw,
+          raw0: 0,
+          base: src,
+          n: Math.max(1, Math.round(src.n * f)),
+          inv: Math.round(src.inv * f),
+          off: src.off * f,
+          rateSum: src.rateSum * f,
+          rateSq: src.rateSq * f,
+          spans: [{ tok: src, a: t0, b: t1 }]
+        });
+      };
+      for (const k of this.toks) if (now - k.t1 < 4 && k.t1 - k.usedUntil > 0.03) add(k, k.t1);
+      if (opts.partial) for (const c of this.cur) if (c && c.raw >= 45) add(c, now);
+      L.sort((a, b) => a.t0 - b.t0);
+      L = L.filter(
+        a => !(a.raw < 120 && L.some(b => b !== a && b.raw > 2 * a.raw && b.ax !== a.ax && a.t0 >= b.t0 - 0.03 && a.t1 <= b.t1 + 0.03))
+      );
+      for (let guard = 0; guard < 4; guard++) {
+        // nested: e.g. the roll inside a Power Roll's loop
+        const A = L.find(a => L.some(b => b !== a && b.ax !== a.ax && b.raw >= 150 && b.t0 > a.t0 + 0.04 && b.t1 < a.t1 - 0.04));
+        if (!A) break;
+        const B = L.find(b => b !== A && b.ax !== A.ax && b.raw >= 150 && b.t0 > A.t0 + 0.04 && b.t1 < A.t1 - 0.04);
+        const p1 = sliceTok(A, A.t0, B.t0),
+          p2 = sliceTok(A, B.t1, A.t1);
+        const during = A.raw - p1.raw - p2.raw;
+        p1.off = Math.max(0, p1.off - (B.raw * p1.raw) / A.raw);
+        p2.off = Math.max(0, p2.off - (B.raw * p2.raw) / A.raw);
+        L = L.filter(x => x !== A)
+          .concat([p1, p2].filter(x => x.raw >= 45))
+          .sort((a, b) => a.t0 - b.t0);
+        B.off += Math.max(0, during) * 0;
+      }
+      L = L.filter(a => a.raw >= 60);
+      // A half roll (or half flip) flown with some of the other axis mixed in is still one move: with a steep camera the
+      // pilot rolls inverted AND tips the nose to keep the view level, which shows up as a small pitch (roll) rotation
+      // inside the big one. Fold it in (pilot: inverted yaw spins weren't found at other camera angles).
+      L = L.filter(
+        a =>
+          !(
+            a.raw < 100 &&
+            L.some(
+              b =>
+                b !== a &&
+                b.ax !== 'Y' &&
+                b.ax !== a.ax &&
+                b.raw >= 140 &&
+                Math.min(a.t1, b.t1) - Math.max(a.t0, b.t0) >= 0.7 * (a.t1 - a.t0)
+            )
+          )
+      );
+      if (opts.splitAt) {
+        // cut at loop boundaries (upright pass under an obstacle mid-rotation)
+        for (const tc of opts.splitAt) {
+          const i = L.findIndex(a => a.ax === 'P' && tc > a.t0 + 0.15 && tc < a.t1 - 0.15);
+          if (i >= 0) {
+            const A = L[i];
+            L.splice(i, 1, sliceTok(A, A.t0, tc), sliceTok(A, tc, A.t1));
+          }
+        }
+      }
+      const out = [];
+      for (const a of L) {
+        const l = out[out.length - 1],
+          gap = l ? a.t0 - l.t1 : 99;
+        const floatOver =
+          l &&
+          gap < 1.3 &&
+          this.crossLog.some(c => c.kind === 'O' && c.t > l.t1 - 0.25 && c.t < a.t0 + 0.25) &&
+          ![...this.toks, ...this.cur.filter(Boolean)].some(
+            x => x.ax !== a.ax && x.raw >= 150 && x.t0 >= l.t1 - 0.05 && x.t1 <= a.t0 + 0.05
+          ); // a yaw/roll at the peak (claimed or not) is its own token   // throttle-cut float over the top of a loop
+        const segPause =
+          !floatOver &&
+          a.ax !== 'Y' &&
+          gap >= SEG_GAP &&
+          Math.abs(l?.raw - 180) < 55 &&
+          Math.abs(a.raw - 180) < 55 &&
+          this.sweptBetween(l.t1, a.t0) / gap < 55; // a real segment pause is nearly still (demo 13–35°/s); a floaty loop top keeps turning   // 180 · pause · 180 = Segmented, keep apart
+        if (
+          l &&
+          l.ax === a.ax &&
+          l.dir === a.dir &&
+          !l.cut &&
+          !segPause &&
+          (gap < 0.2 || (gap < 0.42 && l.raw + a.raw < 420) || floatOver) &&
+          !(opts.splitAt && opts.splitAt.some(tc => Math.abs(tc - a.t0) < 0.02))
+        ) {
+          const fl = floatOver && a.ax === 'P' ? this.sweptBetween(l.t1, a.t0) : 0; // slow float over the top: still rotation
+          out[out.length - 1] = {
+            ...l,
+            raw: l.raw + a.raw + fl,
+            t1: a.t1,
+            n: l.n + a.n,
+            inv: l.inv + a.inv,
+            off: l.off + a.off,
+            rateSum: l.rateSum + a.rateSum,
+            rateSq: l.rateSq + a.rateSq,
+            maxGap: fl || floatOver ? l.maxGap || 0 : Math.max(l.maxGap || 0, gap),
+            segments: (l.segments || 1) + (floatOver ? 0 : 1),
+            floated: floatOver || l.floated,
+            spans: [...l.spans, ...a.spans],
+            base: null
+          };
+        } else out.push({ ...a, maxGap: a.maxGap || 0, segments: 1 });
+      }
+      // Revolution witness (first shared flights, 2026-11: a quarter of real rolls and flips measured 200–310° and were
+      // dropped). One axis of the gyro under-reads a real roll: the camera tilt moves part of it onto yaw, the stick is
+      // rarely dead straight, and the slow start and finish fall under the token threshold. The attitude does not care:
+      // upright → upside-down → upright again with about one turn of total rotation, most of it on this axis, IS the
+      // full roll or flip. Count it as one (the off-axis part still makes it sloppy), and fold in what rode along.
+      let fused = out;
+      for (const t of out) {
+        if (t.ax === 'Y' || t.raw < 195 - this.learned.rev || t.raw >= 312 || !this.attLog) continue;
+        const H = this.attLog;
+        let u0 = -1,
+          uMin = 1,
+          u1 = -1,
+          r0 = null,
+          r1 = null;
+        // …but not when another axis shares or carries on the turn (half roll then pull through = a Split-S; half flip blended into a half roll = a Juicy Flick)
+        if (
+          [...this.toks, ...this.cur.filter(Boolean)].some(
+            o => o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < t.t1 + 0.1 && o.t1 > t.t0 - 0.3
+          )
+        )
+          continue;
+        for (const h of H) {
+          if (h[0] < t.t0 - 0.2) continue;
+          if (h[0] > t.t1 + 0.2) break;
+          if (r0 === null) r0 = h[2];
+          r1 = h[2];
+          if (h[0] <= t.t0 + 0.05) u0 = Math.max(u0, h[1]);
+          if (h[0] >= t.t0 && h[0] <= t.t1) uMin = Math.min(uMin, h[1]);
+          if (h[0] >= t.t1 - 0.05) u1 = Math.max(u1, h[1]);
+        }
+        const tot = (r1 ?? 0) - (r0 ?? 0);
+        if (u0 >= 0.45 && uMin <= -0.5 && u1 >= 0.45 && tot >= 262 && tot <= 450 && t.raw >= 0.6 * tot) {
+          t.rev = true;
+          t.off += Math.max(0, 330 - t.raw) * 0.5;
+          t.raw = Math.max(t.raw, 322);
+          fused = fused.filter(
+            o => o === t || o.ax === t.ax || o.raw >= 170 || Math.min(o.t1, t.t1 + 0.3) - Math.max(o.t0, t.t0 - 0.3) < 0.5 * (o.t1 - o.t0)
+          );
+        }
+      }
+      // Sweep witness (owner, 2026-11-18: big sweeping Mattys in open air, each climbing ~12 m over 3-4 s at 100-160 °/s, did
+      // not count; "can the game accommodate bigger / sweeping movements like a big sweeping half matty?"). The slow parts of a
+      // big sweep fall under the token threshold, so the measured flip is only 100-200° of it, and the revolution witness
+      // above only looks inside the token. This one looks up to SWEEP_LOOK s either side: upright → upside-down → upright
+      // again, one turn in total (from the attitude log), most of it on this token's axis, nothing else rolling or flipping
+      // in between: the whole sweep is one full flip / roll (rev, sweep; sloppy for the off-axis part; same-axis pieces of
+      // the same sweep fold into it).
+      for (const t of fused) {
+        if (t.rev || (t.ax !== 'R' && t.ax !== 'P') || t.raw < 100 || t.raw >= 312 || !this.attLog) continue;
+        const H = this.attLog,
+          ai = t.ax === 'R' ? 3 : 4;
+        let i0 = -1,
+          i1 = -1,
+          uMin = 1;
+        for (let i = H.length - 1; i >= 0; i--) {
+          const h = H[i];
+          if (h[0] > t.t0) continue;
+          if (h[0] < t.t0 - SWEEP_LOOK) break;
+          if (h[1] >= 0.45) {
+            i0 = i;
+            break;
+          }
+        }
+        for (let i = 0; i < H.length; i++) {
+          const h = H[i];
+          if (h[0] < t.t1) continue;
+          if (h[0] > t.t1 + SWEEP_LOOK) break;
+          if (h[1] >= 0.45) {
+            i1 = i;
+            break;
+          }
+        }
+        if (i0 < 0 || i1 < 0) continue;
+        while (i0 > 0 && H[i0][1] < 0.97 && H[i0 - 1][1] >= H[i0][1] - 0.002 && t.t0 - H[i0 - 1][0] <= SWEEP_LOOK) i0--; // out to the most upright moment either side
+        while (i1 < H.length - 1 && H[i1][1] < 0.97 && H[i1 + 1][1] >= H[i1][1] - 0.002 && H[i1 + 1][0] - t.t1 <= SWEEP_LOOK) i1++;
+        if (H[i1][0] - H[i0][0] > 7) continue;
+        for (let i = i0; i <= i1; i++) uMin = Math.min(uMin, H[i][1]);
+        const ts = H[i0][0],
+          te = H[i1][0],
+          tot = H[i1][2] - H[i0][2],
+          onAx = Math.abs(H[i1][ai] - H[i0][ai]);
+        if (uMin > -0.5 || onAx < 262 || onAx > 450 || onAx < 0.6 * tot) continue;
+        if (
+          [...this.toks, ...this.cur.filter(Boolean)].some(
+            o => o !== t && o.ax !== t.ax && o.ax !== 'Y' && o.raw >= 110 && o.t0 < te && o.t1 > ts
+          )
+        )
+          continue; // a Split-S or a Juicy Flick shares the turn
+        // a sweep keeps turning: a stop in the middle (under 40 °/s for over 0.2 s, away from the slow ends) is a Segmented Flip / Roll
+        {
+          let still = 0,
+            worst = 0;
+          const m0 = ts + 0.15 * (te - ts),
+            m1 = te - 0.15 * (te - ts);
+          for (let i = i0 + 1; i <= i1; i++) {
+            const h = H[i],
+              g = H[i - 1],
+              dtt = h[0] - g[0];
+            if (h[0] < m0 || h[0] > m1 || dtt <= 0) {
+              still = 0;
+              continue;
+            }
+            if (Math.abs(h[ai] - g[ai]) / dtt < 40) {
+              still += dtt;
+              worst = Math.max(worst, still);
+            } else still = 0;
+          }
+          if (worst > 0.2) continue;
+        }
+        // …and two clear halves on this axis with a gap between them are one too (a demo's pause is short and noisy)
+        if (out.some(o => o !== t && o.ax === t.ax && o.raw >= 140 && o.t0 < te && o.t1 > ts) && t.raw >= 140) continue;
+        t.rev = true;
+        t.sweep = true;
+        t.off += Math.max(0, 330 - t.raw) * 0.5;
+        t.raw = Math.max(t.raw, 322);
+        t.t0 = Math.min(t.t0, ts);
+        t.t1 = Math.max(t.t1, te);
+        fused = fused.filter(o => o === t || o.ax !== t.ax || o.t0 < ts - 0.05 || o.t1 > te + 0.05);
+      }
+      if (fused !== out) {
+        const keep = fused.slice();
+        out.length = 0;
+        out.push(...keep);
+      }
+      for (const t of out) {
+        t.deg = Math.max(90, Math.round(t.raw / 90) * 90);
+        t.inv = t.inv > t.n * 0.5;
+        t.offRatio = t.off / Math.max(1, t.raw);
+      }
+      return out;
+    }
+    crossWindow(t0) {
+      return this.crossLog.filter(c => c.t >= t0 - 2.2 - this.learned.crossBack && !c.used);
+    }
+    nearAny() {
+      const d = this.lastD;
+      return !!d && (this.nearObstacle(d, 3) || this.crossLog.some(c => this.time - c.t < 3));
+    }
+    candidates(N, obstOnly) {
+      const out = [];
+      {
+        const ob = this.matchObstacle([], this.crossWindow(this.time - 1.0));
+        if (ob && this.time - ob.ct1 < 0.03) {
+          ob.claims = ob.part.map(c => 'x' + c.t.toFixed(3));
+          ob.t0 = ob.part[0].t;
+          ob.draft = true;
+          out.push(ob);
+        }
+      }
+      for (let k = 1; k <= Math.min(4, N.length); k++) {
+        const suf = N.slice(-k);
+        if (!obstOnly) {
+          if (
+            k === 2 &&
+            !this.orbiting() &&
+            suf[0].ax === suf[1].ax &&
+            suf[0].dir === suf[1].dir &&
+            suf[0].ax !== 'Y' &&
+            Math.abs(suf[0].raw - 180) < 55 &&
+            Math.abs(suf[1].raw - 180) < 55
+          ) {
+            const gap = suf[1].t0 - suf[0].t1;
+            if (gap >= SEG_GAP && gap < 1.6 && this.sweptBetween(suf[0].t1, suf[1].t0) / gap < 55)
+              out.push({ name: 'Segmented Flips/Rolls', toks: suf, err: 0.05, segmentedOK: true, clen: 0 });
+          }
+          // open-air tricks are snappy: a slow carving turn that adds up to 360° is not a trick
+          // demo yaws (Vanny) measured down to ~266°/s; at the pilot's own rates a yaw inside a sequence can be slower (a lone slow yaw is just a turn)
+          const fast = suf.every(x => x.rateSum / x.n >= this.minRate(x.ax, x.ax === 'Y' ? (suf.length > 1 ? 160 : 220) : 180));
+          const orbit = this.orbiting();
+          const airOK = suf.every((x, i) => !i || x.t0 - suf[i - 1].t1 <= this.airAllowed(suf[i - 1].t1, x.t0));
+          if (fast && !orbit && airOK)
+            for (const tr of OPEN_TRICKS) {
+              if (tr.name === 'Yaw Spin' && suf[0].inv) continue;
+              /* a yaw spin flown upside-down is the Inverted Yaw Spin's middle, never the beginner trick */ if (
+                this.vetoedFor(tr.name, suf[0].t0) ||
+                !this.watcher.pre(tr.name, { toks: suf })
+              )
+                continue;
+              for (const pp of tr.parsed) {
+                const m = matchTokens(pp, suf);
+                if (m) {
+                  out.push({ name: tr.name, toks: suf, err: m.err, clen: 0 });
+                  break;
+                }
+              }
+            }
+          if (!orbit) {
+            const ol = this.matchOpenLoop(suf) || this.matchOpenSplit(suf);
+            if (ol) out.push(ol);
+          }
+          if (!orbit)
+            for (const tr of CONTEXT_TRICKS)
+              for (const pp of tr.parsed) {
+                const m = matchTokens(pp, suf);
+                if (!m) continue;
+                const ok = this.reqOK(tr.req, suf);
+                if (!ok) continue;
+                if (this.vetoedFor(tr.name, suf[0].t0) || !this.watcher.pre(tr.name, { toks: suf, obj: ok.obj })) continue;
+                out.push({
+                  name: tr.name,
+                  toks: suf,
+                  err: m.err,
+                  clen: 1,
+                  claims: ok.claims,
+                  tapRef: ok.tapRef,
+                  obstacle: ok.obstacle,
+                  draft: tr.draft
+                });
+                break;
+              }
+        }
+        const ob = this.matchObstacle(suf, this.crossWindow(suf[0].t0));
+        const def = ob && OBSTACLE_TRICKS.find(x => x.name === ob.name);
+        if (ob && (ob.ct1 >= suf[0].t0 - 0.15 || (def && def.passFirst && ob.ct1 >= suf[0].t0 - 1.0))) {
+          // passFirst: the pass, some air, then the rotation
+          if (def && def.draft) ob.draft = true;
+          if (ob.part) ob.claims = ob.part.map(c => 'x' + c.t.toFixed(3));
+          if (def && def.tap) {
+            const tp = this.tapIn(def.tap, ob.obj, suf[0].t0 - 0.4, ob.ct1 + 0.15);
+            if (tp) {
+              ob.claims = [tp.id];
+              ob.tapRef = tp;
+            }
+          }
+          out.push(ob);
+        }
+      }
+      return out;
+    }
+    trigger(t, byCross, lapTok) {
+      const variants = lapTok
+        ? [{ N: this.normalized({ partial: true, splitAt: lapTok.laps.slice(0, -1) }), obstOnly: false }]
+        : [{ N: this.normalized(), obstOnly: false }];
+      if (byCross) variants.push({ N: this.normalized({ partial: true }), obstOnly: true });
+      const ups = this.crossLog.filter(c => c.kind === 'U' && !c.used && c.upY > 0.5 && t - c.t < 4).map(c => c.t);
+      if (ups.length) variants.push({ N: this.normalized({ partial: byCross, splitAt: ups }), obstOnly: true });
+      let best = null;
+      const knocked = c =>
+        c.toks.length &&
+        !c.tapRef &&
+        this.contacts.some(x => !x.tap && x.impact > 0.8 && x.t >= c.toks[0].t0 - 0.3 && x.t <= c.toks[0].t0 + 0.15);
+      const pool = [];
+      for (const v of variants) pool.push(...this.candidates(v.N, v.obstOnly));
+      if (lapTok) {
+        const keep = pool.filter(c => c.openAir && c.name === 'Powerloop' && c.toks.length === 1 && c.toks[0].ax === 'P');
+        pool.length = 0;
+        pool.push(...keep.map(c => ({ ...c, lap: true })));
+      } // mid-rotation only a plain, clean open loop is decided early
+      else pool.push(...this.eventCands(t));
+      for (const c of pool) if (!knocked(c) && better(c, best)) best = c;
+      if (!best) return;
+      best.spans = best.toks.flatMap(x => x.spans || []);
+      best.claims = best.claims || [];
+      if (best.t0 === undefined) best.t0 = best.toks[0].t0;
+      best.tDone = Math.max(best.tDone ?? -1e9, best.toks.length ? best.toks[best.toks.length - 1].t1 : -1e9, best.ct1 || -1e9);
+      const clash = p => spansOverlap(p.spans, best.spans) || p.claims.some(k => best.claims.includes(k));
+      if (this.pend.some(p => p.name === best.name && Math.abs(p.t0 - best.t0) < 0.6)) return; // same trick seen around a neighbouring post
+      const overlap = this.pend.filter(clash);
+      for (const p of overlap) if (!better(best, p)) return; // an existing pending trick is at least as good
+      this.pend = this.pend.filter(p => !overlap.includes(p));
+      const last = best.part && best.part[best.part.length - 1];
+      best.loopEnd = !!(last && last.kind === 'U' && last.upY > 0.5) || !!best.lap; // ends at an upright pass under (or a monitored open lap): done even if rotation carries on
+      const ctxPre =
+        best.toks.length &&
+        CONTEXT_TRICKS.some(
+          tr =>
+            tr.name !== best.name &&
+            better({ name: tr.name, clen: 1, toks: best.toks }, best) &&
+            [best.toks, trimNinety(best.toks)].some(tv => tv.length && tr.parsed.some(pp => matchTokens(pp, tv))) &&
+            this.reqPre(tr.req, best.toks)
+        );
+      const spin = best.holdIfSpin && (this.cur.some(c => c && c.raw > 45) || this.toks.some(k => t - k.t1 < 0.3 && k.raw > 60));
+      const pole =
+        best.holdNearPole != null &&
+        this.lastD &&
+        (() => {
+          const P = this.poles.find(p => p.id === best.holdNearPole);
+          return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5;
+        })();
+      const sw =
+        best.holdSwitch &&
+        (() => {
+          const o = this.orb[best.holdSwitch.obj];
+          return o && o.acc > 20 && o.dir !== best.holdSwitch.dir;
+        })();
+      // right beside a pole with the pass not finished yet: a pole trick (Cradle, Whiplash) may claim these rotations
+      const passing =
+        !best.clen &&
+        best.toks.length &&
+        this.lastD &&
+        this.poles.some(P => {
+          const pt = this.passTr[P.id];
+          return pt && !pt.lock && pt.dmin < 2.5 && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 2.6;
+        });
+      best.hold = this.obstaclePrefix(best) || ctxPre || spin || pole || sw || passing ? HOLD_OBST : HOLD;
+      if (best.name === 'Whiplash') best.hold = Math.max(best.hold, 0.7); // wait a hair longer before confirming
+      if (best.lap) best.hold = 0; // a monitored lap is decided the moment it completes
+      best.deadline = t + best.hold;
+      this.pend.push(best);
+    }
+    powerRollComing(c, crosses = this.crossWindow(c.t0)) {
+      // a Power Roll on its way: under then over one object, the loop's pitch still going (or just done) round a roll: wait for the pass back under
+      if (!POWER_ROLL_OVER.has(c.name) || !Array.isArray(this.toks)) return false;
+      {
+        const byO = {};
+        for (const x of crosses) if (x.kind === 'U' || x.kind === 'O') (byO[x.obj] = byO[x.obj] || []).push(x);
+        for (const id in byO) {
+          const L = byO[id];
+          if (
+            !L.map(x => x.kind)
+              .join('')
+              .endsWith('UO')
+          )
+            continue;
+          const u0 = L[L.length - 2];
+          if (u0.t < (c.t0 ?? this.time) - 3) continue;
+          const P = [...this.toks, ...this.cur.filter(Boolean)].filter(
+              k => k.ax === 'P' && k.dir > 0 && (k.t1 == null || k.t1 > u0.t - 0.8)
+            ),
+            pSum = P.reduce((s, k) => s + k.raw, 0);
+          if (
+            pSum >= 120 &&
+            [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 250 && (k.t1 == null || k.t1 > u0.t))
+          )
+            return true;
+        }
+      }
+      return false;
+    }
+    obstaclePrefix(c) {
+      // a bigger obstacle trick is half-done with these same rotations
+      const crosses = this.crossWindow(c.t0);
+      if (this.powerRollComing(c, crosses)) return 'Power Roll';
+      const byObj = {};
+      for (const x of crosses) if (x.kind !== 'G') (byObj[x.obj] = byObj[x.obj] || []).push(x);
+      for (const tr of OBSTACLE_TRICKS) {
+        if (tr.cross.length <= (c.clen || 0)) continue;
+        if (tr.tap && !this.taps.some(x => x.t >= c.t0 - 0.4)) continue;
+        if (!c.toks.length || ![c.toks, trimNinety(c.toks), dropSmall(c.toks)].some(tv => tr.parsed.some(pp => matchTokens(pp, tv))))
+          continue;
+        for (const id in byObj) {
+          const L = byObj[id],
+            kinds = L.map(x => x.kind).join('');
+          for (let j = 1; j < tr.cross.length; j++) {
+            if (!kinds.endsWith(tr.cross.slice(0, j))) continue;
+            // the passes seen so far must be the *start* of this trick: the first one can't come after the rotation began
+            const first = L[L.length - j];
+            if (first.t > c.t0 + 0.15) continue;
+            return tr.name;
+          }
+        }
+      }
+      return null;
+    }
+    loopInProgress(p, t) {
+      // open-air rotation done at the top of a loop (under, then over the same object): wait for the way back
+      if (this.rollbackWait(p, t)) return true;
+      if (p.part || !p.toks.length || t - p.tDone > 3.0) return false;
+      const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O');
+      const last = X[X.length - 1];
+      if (!last || last.kind !== 'O' || t - last.t > 3.6) return false;
+      if (last.latDot > 0.6 && last.t > p.t0 - 0.6) return true; // jump-rope peak (sideways over): wait for the way back down (Double Dutch)
+      if (p.t0 > last.t - 0.4 && t - last.t < 3.2) return true; // Matty family: rotation after going over, the pass back under follows (slow, floaty ones take ~3 s)
+      return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
+    }
+    // in the air between two segments: nothing rotating yet, but the rotations so far are the start of a longer open-air
+    // trick and the quad is holding steady (not tumbling) — give the next segment up to AIR_OPEN to begin
+    // how much air a gap may have: hanging upside down (or on edge) mid-trick means another segment has to come, so more
+    // Pilot profile (from the warm-up, see the game's Pilot Warm-up): typical rotation speed per axis (deg/s) and the pilot's
+    // natural gap between segments. It only ever loosens: slower pilots' rotations still count as deliberate, and pilots who
+    // leave more air get more (up to 1.8 s).
+    setPilot(p) {
+      this.pilotOwn = p || null;
+      this.community = COMMUNITY;
+      p = mergeProfiles(COMMUNITY, p || null);
+      this.pilot = p || null;
+      this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null;
+    }
+    // what was learned from this pilot's review labels (learnFromLabels): only ever looser, and only within these bounds
+    get learned() {
+      if (this._learnOf !== this.pilot || !this._learned) {
+        const L = this.pilot && this.pilot.learn,
+          n = (v, max) => (Number.isFinite(+v) ? clamp(+v, 0, max) : 0);
+        this._learnOf = this.pilot;
+        this._learned = L
+          ? { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) }
+          : LEARN_NONE;
+      }
+      return this._learned || LEARN_NONE;
+    }
+    get airOpen() {
+      const a = this.pilot && this.pilot.air;
+      return a ? clamp(Math.max(AIR_OPEN, a * 1.8 + 0.2), AIR_OPEN, 1.8) : AIR_OPEN;
+    }
+    minRate(ax, base) {
+      const r = this.pilot && this.pilot.rate && this.pilot.rate[ax];
+      return r ? Math.min(base, Math.max(90, r * 0.5)) : base;
+    }
+    airAllowed(a, b) {
+      const W = this.fbIn(a, b),
+        A = this.airOpen;
+      return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? A * 1.5 : A;
+    }
+    awaitingSegment(p) {
+      const t = this.time,
+        gap = t - p.tDone;
+      if (!p.toks.length || p.part || (p.clen || 0) > 0 || gap > this.airAllowed(p.tDone, t)) return false; // an open-air extension never beats a context/obstacle trick
+      if (gap > 0.15 && this.sweptBetween(p.tDone, t) / gap > 150) return false;
+      const N0 = this.normalized();
+      for (const tr of OPEN_TRICKS)
+        for (const pp of tr.parsed)
+          for (let j = 1; j < pp.length; j++) {
+            const before = N0.slice(-j);
+            if (
+              before.length !== j ||
+              !spansOverlap(
+                before.flatMap(x => x.spans),
+                p.spans
+              )
+            )
+              continue;
+            if (before[before.length - 1].t1 < p.tDone - 0.05) continue;
+            if (matchTokens(pp.slice(0, j), before)) return true;
+          }
+      return false;
+    }
+    extendable(p) {
+      // could rotation happening right now turn this into a bigger trick?
+      if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
+      const pLast = p.toks[p.toks.length - 1];
+      if (!pLast) return false;
+      const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < this.airOpen);
+      if (!live.length) return this.awaitingSegment(p);
+      const near = this.crossWindow(p.t0).some(c => c.kind !== 'G'); // obstacle tricks only once a pass has happened
+      const N0 = this.normalized(),
+        pool = near ? [...OPEN_TRICKS, ...OBSTACLE_TRICKS.filter(x => !x.tap)] : OPEN_TRICKS;
+      for (const c of live) {
+        const last = { ax: c.ax, dir: c.dir, raw: c.raw };
+        for (const tr of pool)
+          for (const pp of tr.parsed)
+            for (let j = 1; j < pp.length; j++) {
+              const before = N0.slice(-j);
+              if (before.length !== j) continue;
+              if (
+                !spansOverlap(
+                  before.flatMap(x => x.spans),
+                  p.spans
+                )
+              )
+                continue;
+              if (!matchTokens(pp.slice(0, j), before)) continue;
+              const nx = pp[j];
+              if (nx.ax !== last.ax) continue;
+              if ((nx.dir === '+' && last.dir !== 1) || (nx.dir === '-' && last.dir !== -1)) continue;
+              if (last.raw > nx.deg + 95) continue;
+              return true;
+            }
+      }
+      return false;
+    }
+    quadWidth() {
+      const p = this.lastD && this.lastD.p;
+      return p && p.arm ? 2 * (p.arm + (p.rDuct || 0.018)) : QUAD_W;
+    } // the whoop across, ducts and all (Air65 ≈ 0.08 m)
+    vetoedFor(name, t0) {
+      return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35);
+    }
+    commit(p, t) {
+      this.pend = this.pend.filter(x => x !== p);
+      // a rotation carried with the motors off is a disarm trick's (deadTick), never also a Flip / Roll / Yaw Spin / Powerloop
+      {
+        const D = this.dead,
+          M = this.deadMute;
+        if ((D && p.tDone > D.t - 0.05) || (M && p.t0 < M.b && p.tDone > M.a)) {
+          for (const sp of p.spans || []) sp.tok.usedUntil = Math.max(sp.tok.usedUntil, sp.b);
+          return;
+        }
+      }
+      if ((p.name === 'Inverted Rewind' || p.name === 'Segmented Flips/Rolls') && this.uhuh(p.t0, p.tDone)) p.name = 'Inverted Uh-uh';
+      const rv = this.watcher.review(p),
+        floor = this.watcher.on && this.community && this.community.floor[p.name];
+      if (!rv.veto && floor && rv.conf < floor) {
+        rv.veto = true;
+        rv.why = `under the community's ${Math.round(floor * 100)}% for ${p.name}`;
+      }
+      if (rv.veto) {
+        // the Watcher says no: remember it, tell the game why, and let the detector find the next-best reading
+        this.vetoes.push({ name: p.name, t0: p.t0, t });
+        this.vetoes = this.vetoes.filter(v => t - v.t < 8);
+        this.pushReview(rv);
+        this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['watcher: not ' + p.name + ' (' + rv.why + ')'], near: null });
+        if (!this.crashSeen) {
+          this.trigger(t, false);
+          if (p.part) this.trigger(t, true);
+        }
+        return;
+      }
+      for (const s of p.spans) s.tok.usedUntil = Math.max(s.tok.usedUntil, s.b);
+      for (const k of p.claims || []) this.claimUsed.add(k);
+      if ((p.claims || []).some(k => k.startsWith('orb')))
+        for (const sg of this.orbSegs) if (sg.t1 > p.t0 - 0.3 && sg.t0 < p.tDone + 0.3) this.claimUsed.add(sg.id);
+      if ((p.claims || []).some(k => k.startsWith('pass')))
+        for (const ps of this.passes) if (Math.abs(ps.t - p.tDone) < 0.6) this.claimUsed.add(ps.id);
+      if (p.tapRef)
+        this.contacts.forEach(c => {
+          if (Math.abs(c.t - p.tapRef.t) < 0.12) c.tap = true;
+        });
+      for (const k of this.toks) if (k.t1 < p.t0 - 0.05) k.usedUntil = Math.max(k.usedUntil, k.t1); // leftovers before this trick
+      if (p.part) p.part.slice(0, -1).forEach(c => (c.used = true)); // the last pass may start the next trick
+      // …and one move is one obstacle trick: the passes of OTHER objects made during it are used up too (a Matty over a sakura
+      // tree in front of a shop also went over and back under the shop's awning, window and trim, and the over-then-under
+      // fallback called three Mattys for one flip: the bot's run on Clappy Park, 2026-11-18)
+      if (p.part && p.part.length) {
+        const a0 = Math.min(...p.part.map(c => c.t)) - 0.3,
+          a1 = Math.max(...p.part.map(c => c.t)) + 0.35,
+          own = p.part[0].obj;
+        for (const c of this.crossLog) if (c.obj !== own && c.t >= a0 && c.t <= a1) c.used = true;
+      }
+      // a hit on the way out is a bump too (owner, 2026-11-21, from pilots' grades: 11 calls the game graded clean were graded bump,
+      // and in four the quad hit something between the end of the move and the call, which is made a little later): any contact
+      // during the move, and a real knock (BUMP_AFTER) after it up to now
+      const contacts = this.contacts.filter(
+        c => c.t >= p.t0 - 0.05 && (c.t <= p.tDone + 0.05 || (c.t <= t + 1e-6 && (c.impact || 0) >= BUMP_AFTER))
+      );
+      const g = this.grade(p, contacts, p.toks);
+      for (const k of p.toks) {
+        const m = k.rateSum / k.n,
+          v = Math.sqrt(Math.max(0, k.rateSq / k.n - m * m));
+        const cv = v / (m || 1);
+        if (cv > 0.45) {
+          g.clean = Math.max(0, g.clean - Math.round((cv - 0.45) * 40));
+          g.notes.push('uneven rotation speed');
+        }
+      }
+      if (g.exec === 'CLEAN' && g.clean < 70) g.exec = 'SLOPPY';
+      const crosses = this.crossWindow(p.t0);
+      const near = p.hold === HOLD_OBST && !p.clen ? this.nearMiss(p.toks, crosses) : null;
+      const latency = +(t - p.tDone).toFixed(3);
+      if (!p.toks.length) {
+        g.clean = Math.max(g.clean, 90);
+        if (g.exec === 'SLOPPY') g.exec = 'CLEAN';
+      }
+      this.pushDebug({
+        t: +t.toFixed(2),
+        toks: p.toks
+          .map(
+            tk =>
+              tk.ax +
+              (tk.dir > 0 ? '+' : '-') +
+              Math.round(tk.raw) +
+              (tk.inv ? 'i' : '') +
+              (tk.maxGap > 0.15 ? `(stall ${tk.maxGap.toFixed(2)}s)` : '')
+          )
+          .join(' '),
+        cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - p.t0).toFixed(1)}s`).join(' '),
+        result: [p.name],
+        near,
+        latency
+      });
+      if (near) this.emit({ name: 'near', near });
+      this.pushReview(rv);
+      this.watcher.learn(p, rv);
+      // Half Matty Pendulum (owner, 2026-11-18): the third Half Matty in a row on the same object, each starting within
+      // PENDULUM_GAP of the last one's end and nothing else in between, is called as one Pendulum (scored once, not as a
+      // third halved Half Matty). Any other trick breaks the chain.
+      const pd = pendulumStep(this.hmChain, p),
+        name = pd.name;
+      this.hmChain = pd.chain;
+      this.emit({
+        name,
+        exec: g.exec,
+        clean: g.clean,
+        obstacle: p.obstacle || null,
+        toks: p.toks,
+        notes: g.notes,
+        latency,
+        draft: !!p.draft || name === 'Half Matty Pendulum',
+        watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id), t0: rv.t0, t1: rv.t1 }
+      }); // t0 / t1: the window the Watcher judged (the detector's clock)
+    }
+    pushReview(rv) {
+      this.reviews.push(rv);
+      if (this.reviews.length > 20) this.reviews.shift();
+    }
+    drainReviews() {
+      const r = this.reviews;
+      this.reviews = [];
+      return r;
+    }
+    pushDebug(x) {
+      (this.debug = this.debug || []).push(x);
+      if (this.debug.length > 12) this.debug.shift();
+    }
+    provisional() {
+      return this.pend.map(p => p.name);
+    }
+    busy() {
+      return (
+        this.pend.length > 0 ||
+        this.cur.some(c => c && c.raw > 45) ||
+        !!this.live ||
+        !!(this.wallRide && this.wallRide.emitted) ||
+        !!(this.slide && this.slide.dist > 0.3) ||
+        !!this.pendingFly ||
+        !!this.dead ||
+        !!this.deadPend ||
+        !!(this.stick && this.time - this.stick.t0 > 0.5)
+      );
+    }
+  }
+
+  // ================================================================= THE WATCHER (second, live judge)
+  // The detector proposes a trick from the rotation pattern and the obstacle passes. The Watcher cross-checks the proposal
+  // against the other live sources of the same moment, each one an independent witness:
+  //   path    where the quad went relative to the object (sim truth: passes, loops, rise, travel direction)
+  //   view    what the FPV camera saw (object kept in view, inverted, looking at the sky / ground), camera tilt included
+  //   sticks  what the pilot actually commanded (deliberate stick on the rotating axis, throttle punches and cuts)
+  //   timing  how long each phase took compared with the prowhooper.com demo GIFs, scaled to this pilot's own speed
+  // and against each trick's TPW library description (the hard checks: things the trick cannot do without).
+  // A hard check that fails vetoes the call (the detector then takes its next-best reading). Otherwise every source that has
+  // something to say votes; the votes are averaged per source (one source, one vote) into a confidence. Two candidates that
+  // tie on the rotation pattern are settled by that confidence, and a call that most witnesses contradict is dropped.
+  // Video Review never runs it (no world, no sticks): det.watcherOn = false.
+  //
+  // demo timing (seconds per phase, measured from the GIFs: docs/tricktionary-reference.md) and the demo pilot's rates
+  const DEMO_TIMING = {
+    'Flip': [['P', 0.4]],
+    'Double Flip': [['P', 0.85]],
+    'Roll': [['R', 0.36]],
+    'Double Roll': [['R', 0.8]],
+    'Yaw Spin': [['Y', 1.0]],
+    'Inverted Rewind': [
+      ['*', 0.3],
+      ['*', 0.3]
+    ],
+    'Vanny Roll': [
+      ['Y', 0.56],
+      ['R', 0.5],
+      ['Y', 0.64]
+    ],
+    "Rubik's Cube": [
+      ['P', 0.3],
+      ['R', 0.53],
+      ['P', 0.4]
+    ],
+    "Cubik's Rube": [
+      ['R', 0.26],
+      ['P', 0.7],
+      ['R', 0.42]
+    ],
+    'Juicy Flick': [
+      ['P', 0.27],
+      ['R', 0.34]
+    ],
+    'Snapback': [
+      ['P', 0.3],
+      ['R', 0.37]
+    ],
+    'Inverted Yaw Spin': [
+      ['R', 0.26],
+      ['Y', 0.56],
+      ['R', 0.3]
+    ],
+    'Half Matty': [
+      ['R', 0.25],
+      ['P', 0.6]
+    ],
+    '540 Half Matty': [
+      ['R', 0.6],
+      ['P', 0.6]
+    ],
+    'Immelmann': [
+      ['P', 0.6],
+      ['R', 0.4]
+    ]
+  };
+  const DEMO_RATE = { R: 950, P: 850, Y: 600 }; // typical demo rotation speed per axis (°/s), same source
+  const WATCH_GENERIC = [
+    { id: 'landed', src: 'path', label: 'landed upright', fn: W => W.endsUpright() },
+    { id: 'sticks', src: 'sticks', label: 'rotation came from the sticks (not a bump)', fn: W => W.commanded() },
+    { id: 'timing', src: 'timing', label: 'timed like the demo (at your speed)', fn: W => W.demoTiming() },
+    { id: 'air', src: 'path', label: 'held steady in the air between segments', fn: W => W.heldBetween() }
+  ];
+  const WATCH = {
+    'Snapback': [
+      {
+        id: 'under',
+        src: 'path',
+        label: 'passed under the object first, upright and flying forward',
+        hard: 'pre',
+        fn: W => W.underFirst()
+      },
+      { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
+      { id: 'orbit2', src: 'path', label: 'not part of an orbit/trippy', hard: 'post', fn: W => W.notOrbit() },
+      { id: 'noloop', src: 'path', label: 'snapped back right there (no half loop up and over)', hard: 'post', fn: W => W.noLoopOver(1.6) },
+      { id: 'track', src: 'view', label: 'kept the object in view', hard: 'post', fn: W => W.tracked(0.35) },
+      { id: 'sky', src: 'view', label: 'looked up past the object', fn: W => W.looked('up') },
+      { id: 'face', src: 'view', label: 'finished looking back at it', fn: W => W.endsFacing() },
+      { id: 'quick', src: 'timing', label: 'quick pitch back to inverted', fn: W => W.quick('P', 0.7) },
+      { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() }
+    ],
+    'Juicy Flick': [
+      { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
+      { id: 'down', src: 'view', label: 'flicked nose-down through the ground view', fn: W => W.looked('down') },
+      { id: 'inv', src: 'view', label: 'reached inverted', fn: W => W.inverted() },
+      { id: 'quick', src: 'timing', label: 'quick flick', fn: W => W.quick('P', 0.75) },
+      { id: 'punch', src: 'sticks', label: 'throttle on through the flick', fn: W => W.throttle('punch', W.t0 - 0.15, W.t0 + 0.4) },
+      { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() },
+      { id: 'back', src: 'path', label: 'carried on flying backward', fn: W => W.endsBackward() }
+    ],
+    'Matty Flip': [
+      { id: 'track', src: 'view', label: 'kept the object in view on the way down', fn: W => W.trackedBetween('O', 'U', 0.4) },
+      { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
+      { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
+      { id: 'cut', src: 'sticks', label: 'throttle cut over the top', fn: W => W.throttle('cut', W.t0 - 0.4, W.t1) }
+    ],
+    'Beginner Matty': [
+      {
+        id: 'noflip',
+        src: 'path',
+        label: 'no flip, just the backward swing',
+        fn: W => ({ ok: !W.toks.some(k => k.ax === 'P' && k.raw > 150) })
+      },
+      { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
+      { id: 'track', src: 'view', label: 'kept the object in view', fn: W => W.tracked(0.4) }
+    ],
+    'Half Matty': [
+      { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
+      { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() }
+    ],
+    'Stall Matty Rewind': [
+      {
+        id: 'seg',
+        src: 'path',
+        label: 'segmented front flip (stall in the middle)',
+        fn: W => ({ ok: W.toks.some(k => (k.maxGap || 0) >= 0.2) || (W.toks.length >= 2 && W.toks[1].t0 - W.toks[0].t1 >= 0.2) })
+      },
+      { id: 'back', src: 'path', label: 'rewound backward past the object', fn: W => W.endsBackward() },
+      { id: 'cut', src: 'sticks', label: 'throttle cut before the stall', fn: W => W.throttle('cut', W.t0 - 0.5, W.t1) }
+    ],
+    'Split S': [
+      { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
+      { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() }
+    ],
+    '540 Split S': [
+      { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
+      { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() }
+    ],
+    'Powerloop': [
+      { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
+      { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
+      { id: 'punch', src: 'sticks', label: 'throttle up the side', fn: W => W.throttle('punch', W.t0 - 0.5, W.t1) }
+    ],
+    'Immelmann': [
+      { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
+      { id: 'roll', src: 'sticks', label: 'clean 180 roll at the peak', fn: W => W.cleanRoll() }
+    ],
+    'Maverick Loop': [
+      { id: 'uptop', src: 'view', label: 'upright and looking forward over the top', fn: W => W.uprightAt('O') },
+      { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) }
+    ],
+    'Whiplash': [
+      { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
+      {
+        id: 'holds',
+        src: 'view',
+        label: 'still level, still looking at the pole, still backing away after the whip',
+        hard: 'post',
+        fn: W => W.whipHolds()
+      },
+      { id: 'noorbit', src: 'path', label: 'not just circling the pole', hard: 'post', fn: W => W.notOrbit() },
+      { id: 'track', src: 'view', label: 'kept the pole in view', fn: W => ({ ok: true }) }
+    ],
+    'Cradle': [{ id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) }],
+    'Jump Rope': [
+      {
+        id: 'side',
+        src: 'path',
+        label: 'sideways over/under the object',
+        fn: W => ({
+          ok: (W.part || []).every(c => c.latDot > 0.6),
+          val: Math.round(Math.min(...(W.part || [{ latDot: 0 }]).map(c => c.latDot)) * 100) + '%'
+        })
+      }
+    ],
+    'Inverted Yaw Spin': [{ id: 'inv', src: 'view', label: 'stayed inverted through the spin', fn: W => W.invertedDuring('Y', 0.7) }]
+  };
+  class Watcher {
+    constructor(det) {
+      this.det = det;
+      this.style = { R: null, P: null, Y: null };
+    }
+    get on() {
+      return this.det.watcherOn !== false;
+    }
+    ctx(name, c) {
+      const det = this.det,
+        toks = c.toks || [],
+        part = c.part || null;
+      const t0 = c.t0 ?? (toks.length ? toks[0].t0 : part ? part[0].t : det.time);
+      const t1 = c.tDone ?? Math.max(toks.length ? toks[toks.length - 1].t1 : -1e9, part ? part[part.length - 1].t : -1e9, t0);
+      const objId = c.obj ?? (part && part.length ? part[0].obj : null);
+      const W = new WatchCtx(det, this, name, toks, part, t0, t1, objId, c.err);
+      W.poleId = c.poleObj;
+      return W;
+    }
+    pre(name, c) {
+      if (!this.on) return true;
+      const L = WATCH[name];
+      if (!L) return true;
+      const W = this.ctx(name, c);
+      for (const k of L)
+        if (k.hard === 'pre') {
+          const r = k.fn(W);
+          if (!r.ok) return false;
+        }
+      return true;
+    }
+    judge(p, hardOnly) {
+      const W = this.ctx(p.name, p),
+        L = [...(WATCH[p.name] || []), ...(p.toks && p.toks.length ? WATCH_GENERIC : [])];
+      const checks = [];
+      for (const k of L) {
+        if (hardOnly && !k.hard) continue;
+        let r;
+        try {
+          r = k.fn(W);
+        } catch (e) {
+          r = null;
+        }
+        if (!r || r.na) continue; // this witness has nothing to say here (no sticks recorded, no object, no demo timing)
+        checks.push({ id: k.id, src: k.src, label: k.label, ok: !!r.ok, val: r.val, hard: !!k.hard, w: r.w ?? 1 });
+      }
+      const fail = checks.find(k => k.hard && !k.ok);
+      const by = {};
+      for (const k of checks)
+        if (!k.hard) {
+          const b = by[k.src] || (by[k.src] = { n: 0, ok: 0 });
+          b.n += k.w;
+          b.ok += k.ok ? k.w : 0;
+        }
+      if (p.toks && p.toks.length && p.err != null) by.rotation = { n: 1, ok: clamp(1 - p.err * 2, 0, 1) }; // the pattern matcher is a witness too
+      if (LIBRARY && LIBRARY.by[p.name] && LIBRARY.by[p.name].pos && this.det.lib) {
+        // the library: how much does this move look like the examples of this trick (and not another)?
+        const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05),
+          m = sig ? libMatch(sig) : [],
+          me = m.find(x => x.name === p.name);
+        if (me) {
+          let v = clamp(1 - (me.pos - 0.15) / (LIB_THR * 1.4), 0, 1);
+          const other = m.find(x => x.name !== p.name);
+          if (other && other.pos < me.pos - 0.08) v *= 0.6;
+          if (me.neg < me.pos) v *= 0.6;
+          by.library = { n: 1, ok: v };
+        }
+      }
+      // The learned witness does NOT vote yet (2026-11-21): the library's pilot examples are measured over whole label tiles (a
+      // Roll example runs 1.8-3.8 s with other motion in it), a live call over the detector's own tight window, and a clean 360
+      // roll measured that way got 14 %. It votes once it is trained on call-window signatures (WITNESS.live, set by the trainer).
+      if (WITNESS && WITNESS.live && WITNESS.vote.has(p.name)) {
+        const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05),
+          pw = sig ? witnessProb(sig, p.name) : null;
+        if (pw != null) by.learned = { n: 1, ok: clamp(pw / 0.25, 0, 1) };
+      }
+      const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]),
+        VW = { library: 2 }; // the library leans on the demo GIFs: it counts double
+      const wsum = votes.reduce((a, v) => a + (VW[v[0]] || 1), 0),
+        conf = votes.length ? votes.reduce((a, v) => a + v[1] * (VW[v[0]] || 1), 0) / wsum : 1;
+      // the veto stays with the measured witnesses: the library only moves the confidence (it is still young)
+      const vv = votes.filter(v => v[0] !== 'library' && v[0] !== 'learned'),
+        vconf = vv.length ? vv.reduce((a, v) => a + v[1], 0) / vv.length : 1,
+        out = vv.length >= 3 && vconf < 0.3;
+      return {
+        name: p.name,
+        veto: !!fail || out,
+        why: fail ? fail.label : out ? 'most witnesses disagree' : null,
+        checks,
+        votes: Object.fromEntries(votes.map(([k, v]) => [k, +v.toFixed(2)])),
+        conf: +conf.toFixed(2),
+        t0: +W.t0.toFixed(3),
+        t1: +W.t1.toFixed(3)
+      };
+    }
+    review(p) {
+      if (!this.on) return { name: p.name, veto: false, checks: [], votes: {}, conf: 1 };
+      return this.judge(p, false);
+    }
+    // this pilot's own rotation speed per axis, learned live from tricks every witness agreed on (feeds the timing witness)
+    learn(p, rv) {
+      if (!this.on || rv.conf < 0.6) return;
+      for (const k of p.toks || []) {
+        const dur = k.t1 - k.t0;
+        if (dur < 0.08 || k.raw < 150) continue;
+        const r = k.raw / dur,
+          o = this.style[k.ax];
+        this.style[k.ax] = o == null ? r : o * 0.85 + r * 0.15;
+      }
+    }
+    speedFactor(ax) {
+      const r = this.style[ax] ?? this.det.pilotRate?.[ax] ?? null;
+      return r ? clamp(DEMO_RATE[ax] / r, 0.6, 3) : 1.4;
+    }
+  }
+  class WatchCtx {
+    constructor(det, wa, name, toks, part, t0, t1, objId, err) {
+      Object.assign(this, { det, wa, name, toks, part, t0, t1, objId, err });
+    }
+    get obj() {
+      if (this._o === undefined) this._o = this.objId != null ? this.det.world.objs.find(o => o.id === this.objId) || null : null;
+      return this._o;
+    }
+    // the point of the object the pilot is looking at from position p (bar/branch line at mid height; tree canopy centre)
+    objPt(p) {
+      const o = this.obj;
+      if (!o || !o.obstacle) return null;
+      const { a, b, under, over } = o.obstacle,
+        y = (under + over) / 2;
+      if (o.round) return v3(o.round.c.x, y, o.round.c.z);
+      const ab = v3(b.x - a.x, 0, b.z - a.z),
+        L2 = ab.x * ab.x + ab.z * ab.z || 1,
+        f = clamp(((p.x - a.x) * ab.x + (p.z - a.z) * ab.z) / L2, 0, 1);
+      return v3(a.x + ab.x * f, y, a.z + ab.z * f);
+    }
+    fr(a, b) {
+      return this.det.fbIn(a, b);
+    }
+    view(x) {
+      const pt = this.objPt(x.p);
+      return pt ? this.det.viewOf(x.p, x.up, x.f, pt).ang : 180;
+    }
+    cam(x) {
+      const c = Math.cos(this.det.camTilt * D2R),
+        s = Math.sin(this.det.camTilt * D2R);
+      return norm(add(mul(x.f, c), mul(x.up, s)));
+    }
+    cross(kind) {
+      return (
+        (this.part || []).find(c => c.kind === kind) ||
+        this.det.crossLog.find(
+          c => c.kind === kind && (this.objId == null || c.obj === this.objId) && c.t >= this.t0 - 1.2 && c.t <= this.t1 + 0.6
+        ) ||
+        null
+      );
+    }
+    // ---- checks: each returns { ok, val }
+    underFirst() {
+      const c = this.part && this.part[0];
+      if (!c || c.kind !== 'U') return { ok: false, val: 'no pass under' };
+      const okT = c.t <= this.t0 + 0.25 && c.t >= this.t0 - 1.0;
+      return { ok: okT && c.upY > 0.5 && c.fwdDot > 0.2, val: `${(c.t - this.t0).toFixed(2)} s, fwd ${c.fwdDot.toFixed(1)}` };
+    }
+    notOrbit() {
+      const d = this.det,
+        a = this.t0 - 0.4,
+        b = this.t1 + 0.4;
+      // flying straight past a pole sweeps < 180° round it (≈160° inside the orbit radius), so only more than that is an orbit
+      const seg = d.orbSegs.some(s => s.t1 > a && s.t0 < b && s.acc > 300) || Object.values(d.orb).some(o => o && o.acc > 300 && o.t1 > a);
+      return { ok: !seg };
+    }
+    noLoopOver(maxRise) {
+      const over = this.det.crossLog.some(c => c.kind === 'O' && c.obj === this.objId && c.t > this.t0 - 0.1 && c.t < this.t1 + 0.6);
+      const ys = this.fr(this.t0, this.t1).map(x => x.p.y),
+        rise = ys.length ? Math.max(...ys) - ys[0] : 0;
+      return { ok: !over && rise < maxRise, val: over ? 'went over it' : `rose ${rise.toFixed(1)} m` };
+    }
+    tracked(frac) {
+      const F = this.fr(this.t0, this.t1);
+      if (!F.length || this.objId == null) return { ok: this.objId == null, val: 'n/a' };
+      const f = F.filter(x => this.view(x) < 70).length / F.length;
+      return { ok: f >= frac, val: Math.round(f * 100) + '%' };
+    }
+    trackedBetween(k1, k2, frac) {
+      const a = this.cross(k1),
+        b = this.cross(k2);
+      if (!a || !b || b.t <= a.t) return { ok: true, val: 'n/a' };
+      const F = this.fr(a.t, b.t);
+      if (!F.length) return { ok: true, val: 'n/a' };
+      const f = F.filter(x => this.view(x) < 70).length / F.length;
+      return { ok: f >= frac, val: Math.round(f * 100) + '%' };
+    }
+    facingAt(kind) {
+      const c = this.cross(kind);
+      if (!c) return { ok: true, val: 'n/a' };
+      const F = this.fr(c.t - 0.35, c.t - 0.05);
+      const ok = F.some(x => this.view(x) < 75);
+      return { ok };
+    }
+    quick(ax, maxT) {
+      const T = this.toks.filter(k => k.ax === ax).reduce((s, k) => s + (k.t1 - k.t0), 0);
+      return { ok: T > 0 && T <= maxT, val: T.toFixed(2) + ' s' };
+    }
+    looked(dir) {
+      const F = this.fr(this.t0, this.t1);
+      const ok = F.some(x => {
+        const c = this.cam(x);
+        return dir === 'up' ? c.y > 0.55 : c.y < -0.55;
+      });
+      return { ok };
+    }
+    inverted() {
+      return { ok: this.fr(this.t0, this.t1 + 0.1).some(x => x.up.y < -0.4) };
+    }
+    invertedAt(kind) {
+      const c = this.cross(kind);
+      if (!c) return { ok: true, val: 'n/a' };
+      return { ok: c.upY < -0.2, val: 'up ' + c.upY.toFixed(2) };
+    }
+    invertedNear(kind, a, b) {
+      const c = this.cross(kind);
+      if (!c) return { na: true };
+      return { ok: this.fr(c.t + a, c.t + b).some(x => x.up.y < -0.3) };
+    }
+    uprightAt(kind) {
+      const c = this.cross(kind);
+      if (!c) return { ok: true, val: 'n/a' };
+      return { ok: c.upY > 0.3, val: 'up ' + c.upY.toFixed(2) };
+    }
+    invertedDuring(ax, frac) {
+      const k = this.toks.find(x => x.ax === ax);
+      if (!k) return { ok: true, val: 'n/a' };
+      const F = this.fr(k.t0, k.t1);
+      if (!F.length) return { ok: true };
+      const f = F.filter(x => x.up.y < -0.2).length / F.length;
+      return { ok: f >= frac, val: Math.round(f * 100) + '%' };
+    }
+    cleanRoll() {
+      const R = this.toks.filter(k => k.ax === 'R');
+      if (!R.length) return { ok: false, val: 'no roll' };
+      const k = R[R.length - 1],
+        rate = k.rateSum / k.n,
+        off = k.off / Math.max(1, k.raw);
+      return { ok: rate >= 220 && off < 0.8, val: `${Math.round(rate)}°/s` };
+    }
+    endsUpright() {
+      return { ok: this.fr(this.t1, this.t1 + 0.6).some(x => x.up.y > 0.5) };
+    }
+    endsFacing() {
+      if (this.objId == null) return { ok: true, val: 'n/a' };
+      return { ok: this.fr(this.t1 - 0.05, this.t1 + 0.4).some(x => this.view(x) < 75) };
+    }
+    endsBackward() {
+      const F = this.fr(this.t1 - 0.1, this.t1 + 0.5).filter(x => Math.hypot(x.v.x, x.v.z) > 0.7);
+      if (!F.length) return { ok: true, val: 'slow' };
+      const b =
+        F.filter(x => (x.v.x * x.f.x + x.v.z * x.f.z) / (Math.hypot(x.v.x, x.v.z) * (Math.hypot(x.f.x, x.f.z) || 1)) < -0.2).length /
+        F.length;
+      return { ok: b >= 0.5, val: Math.round(b * 100) + '%' };
+    }
+    heldBetween() {
+      // the space between two segments: the quad keeps the attitude the last segment left it in
+      const G = [];
+      for (let i = 1; i < this.toks.length; i++) {
+        const a = this.toks[i - 1].t1,
+          b = this.toks[i].t0;
+        if (b - a > 0.12) G.push([a, b]);
+      }
+      if (!G.length) return { na: true };
+      const worst = Math.max(...G.map(([a, b]) => this.det.sweptBetween(a, b) / (b - a)));
+      return { ok: worst < 120, val: G.map(([a, b]) => (b - a).toFixed(2)).join('/') + ' s air' };
+    }
+    whipHolds() {
+      const P = this.det.poles.find(p => p.id === this.poleId);
+      if (!P) return { na: true };
+      const F = this.fr(this.t1, this.t1 + 0.6);
+      if (F.length < 10) return { na: true };
+      const lvl = F.filter(x => x.up.y > 0.5).length / F.length,
+        see = this.det.poleView(P, this.t1, this.t1 + 0.6, 65),
+        bk = this.det.backFrac(this.t1, this.t1 + 0.6),
+        slow = F.every(x => Math.hypot(x.v.x, x.v.z) < 0.8);
+      return { ok: lvl >= 0.7 && see >= 0.6 && (bk >= 0.5 || slow), val: `level ${Math.round(lvl * 100)}% view ${Math.round(see * 100)}%` };
+    }
+    noOverNear(after) {
+      const o = this.det.crossLog.some(c => c.kind === 'O' && c.t > this.t0 - 0.5 && c.t < this.t1 + after);
+      return { ok: !o };
+    }
+    loopSweep(min) {
+      const ps = this.det.pathSweep(this.t0 - 0.3, this.t1 + 0.3);
+      return { ok: Math.abs(ps.sweep) >= min, val: Math.round(Math.abs(ps.sweep)) + '°' };
+    }
+    // ---- sticks witness. Frames carry the pilot's sticks; no stick movement anywhere near = nothing recorded (n/a)
+    sticks(a, b) {
+      const F = this.fr(a, b).filter(x => x.rc);
+      if (F.length < 3) return null;
+      const live =
+        F.some(x => Math.abs(x.rc.roll) > 0.05 || Math.abs(x.rc.pitch) > 0.05 || Math.abs(x.rc.yaw) > 0.05) &&
+        Math.max(...F.map(x => x.rc.thr)) - Math.min(...F.map(x => x.rc.thr)) > 0.005;
+      return live ? F : null;
+    }
+    commanded() {
+      if (!this.toks.length) return { na: true };
+      const F = this.sticks(this.t0 - 0.1, this.t1);
+      if (!F) return { na: true };
+      const key = { R: 'roll', P: 'pitch', Y: 'yaw' };
+      let good = 0;
+      for (const k of this.toks) {
+        const G = F.filter(x => x.t >= k.t0 && x.t <= k.t1);
+        if (!G.length) {
+          good++;
+          continue;
+        }
+        // stick on that axis, pushed the way the quad turned (pitch stick back = nose up = P+; roll right = R+; yaw stick sign is the sim's)
+        const sg = k.ax === 'P' ? -1 : 1,
+          f = G.filter(x => Math.abs(x.rc[key[k.ax]]) > 0.2 && Math.sign(x.rc[key[k.ax]]) * sg === k.dir).length / G.length;
+        if (f >= 0.3) good++;
+      }
+      return { ok: good === this.toks.length, val: `${good}/${this.toks.length} rotations` };
+    }
+    throttle(kind, a, b) {
+      const F = this.sticks(a - 0.6, b + 0.2);
+      if (!F) return { na: true };
+      const base = F.filter(x => x.t < a).map(x => x.rc.thr),
+        hov = base.length ? base.reduce((s, x) => s + x, 0) / base.length : 0.35,
+        G = F.filter(x => x.t >= a && x.t <= b);
+      if (!G.length) return { na: true };
+      if (kind === 'punch') {
+        const m = Math.max(...G.map(x => x.rc.thr));
+        return { ok: m > hov + 0.08 || m > 0.55, val: Math.round(m * 100) + '%' };
+      }
+      const m = Math.min(...G.map(x => x.rc.thr));
+      return { ok: m < Math.min(0.2, hov - 0.1), val: Math.round(m * 100) + '%' };
+    }
+    // ---- timing witness: phase lengths vs the demo GIFs, scaled to this pilot's speed on each axis (learned live)
+    demoTiming() {
+      const D = DEMO_TIMING[this.name];
+      if (!D || !this.toks.length) return { na: true };
+      const T = this.toks.filter(k => k.raw >= 100);
+      if (T.length < D.length) return { na: true };
+      let ok = 0;
+      const vals = [];
+      for (let i = 0; i < D.length; i++) {
+        const [ax, sec] = D[i],
+          k = T[i];
+        if (ax !== '*' && k.ax !== ax) return { na: true };
+        const want = sec * this.wa.speedFactor(k.ax),
+          dur = k.t1 - k.t0;
+        vals.push(dur.toFixed(2));
+        if (dur >= want * 0.3 && dur <= want * 2.6) ok++;
+      }
+      return { ok: ok === D.length, val: vals.join('/') + ' s' };
+    }
+    dove() {
+      const c = this.cross('O'),
+        u = this.cross('U');
+      if (!c || !u) return { ok: true, val: 'n/a' };
+      return { ok: this.fr(c.t, u.t).some(x => x.v.y < -1.0) };
+    }
+  }
+
+  // context tricks read only from how the quad moved around the rotation (a stall, a climb before it): no touch, no pass.
+  // One of them never takes part of a longer trick's rotations (pilots, 2026-11-22: Rubik's Cubes read as 360 Stall Rewind
+  // or Eject Roll: the half flip in looks like the stall or the climb)
+  const SOFT_CTX = new Set(CONTEXT_TRICKS.filter(t => t.req && (t.req.stallIn || t.req.climbBefore) && !t.req.tap).map(t => t.name));
+  const coversToks = (c, b) =>
+    c.toks.length > b.toks.length && b.toks.every(x => c.toks.some(y => y.ax === x.ax && y.t0 < x.t1 - 0.02 && y.t1 > x.t0 + 0.02));
+  function better(c, b) {
+    if (!b) return true;
+    if ((c.clen || 0) !== (b.clen || 0)) {
+      if (b.clen && SOFT_CTX.has(b.name) && coversToks(c, b)) return true;
+      if (c.clen && SOFT_CTX.has(c.name) && coversToks(b, c)) return false;
+      return (c.clen || 0) > (b.clen || 0);
+    }
+    if (c.toks.length !== b.toks.length) return c.toks.length > b.toks.length;
+    return trickPoints(c.name) > trickPoints(b.name);
+  }
+  // how the trick has to finish at its last obstacle pass: upright, and flying forward or backward
+  function endOK(tr, c) {
+    if (!tr.end || !c) return true;
+    if (c.upY !== undefined && c.upY < 0.45) return false;
+    if (!c.fwdDot) return true; // too slow to tell: don't block
+    return tr.end === 'back' ? c.fwdDot < -0.2 : c.fwdDot > 0.2;
+  }
+  function dropSmall(toks) {
+    // ignore small correction rotations (< 110°) anywhere, then re-merge
+    const out = [];
+    for (const t of toks) {
+      if (t.raw < 110) continue;
+      const l = out[out.length - 1];
+      if (l && l.ax === t.ax && l.dir === t.dir) {
+        out[out.length - 1] = { ...l, raw: l.raw + t.raw, t1: t.t1, maxGap: Math.max(l.maxGap || 0, t.t0 - l.t1) };
+      } else out.push(t);
+    }
     return out;
   }
-  trigger(t, byCross, lapTok) {
-    const variants = lapTok ? [{ N: this.normalized({ partial: true, splitAt: lapTok.laps.slice(0, -1) }), obstOnly: false }] : [{ N: this.normalized(), obstOnly: false }];
-    if (byCross) variants.push({ N: this.normalized({ partial: true }), obstOnly: true });
-    const ups = this.crossLog.filter(c => c.kind === 'U' && !c.used && c.upY > 0.5 && t - c.t < 4).map(c => c.t);
-    if (ups.length) variants.push({ N: this.normalized({ partial: byCross, splitAt: ups }), obstOnly: true });
-    let best = null;
-    const knocked = c => c.toks.length && !c.tapRef && this.contacts.some(x => !x.tap && x.impact > 0.8 && x.t >= c.toks[0].t0 - 0.3 && x.t <= c.toks[0].t0 + 0.15);
-    const pool = [];
-    for (const v of variants) pool.push(...this.candidates(v.N, v.obstOnly));
-    if (lapTok) { const keep = pool.filter(c => c.openAir && c.name === 'Powerloop' && c.toks.length === 1 && c.toks[0].ax === 'P'); pool.length = 0; pool.push(...keep.map(c => ({ ...c, lap: true }))); }   // mid-rotation only a plain, clean open loop is decided early
-    else pool.push(...this.eventCands(t));
-    for (const c of pool) if (!knocked(c) && better(c, best)) best = c;
-    if (!best) return;
-    best.spans = best.toks.flatMap(x => x.spans || []); best.claims = best.claims || [];
-    if (best.t0 === undefined) best.t0 = best.toks[0].t0;
-    best.tDone = Math.max(best.tDone ?? -1e9, best.toks.length ? best.toks[best.toks.length - 1].t1 : -1e9, best.ct1 || -1e9);
-    const clash = p => spansOverlap(p.spans, best.spans) || p.claims.some(k => best.claims.includes(k));
-    if (this.pend.some(p => p.name === best.name && Math.abs(p.t0 - best.t0) < 0.6)) return;   // same trick seen around a neighbouring post
-    const overlap = this.pend.filter(clash);
-    for (const p of overlap) if (!better(best, p)) return;       // an existing pending trick is at least as good
-    this.pend = this.pend.filter(p => !overlap.includes(p));
-    const last = best.part && best.part[best.part.length - 1];
-    best.loopEnd = !!(last && last.kind === 'U' && last.upY > 0.5) || !!best.lap;   // ends at an upright pass under (or a monitored open lap): done even if rotation carries on
-    const ctxPre = best.toks.length && CONTEXT_TRICKS.some(tr => tr.name !== best.name && better({ name: tr.name, clen: 1, toks: best.toks }, best) &&
-      [best.toks, trimNinety(best.toks)].some(tv => tv.length && tr.parsed.some(pp => matchTokens(pp, tv))) && this.reqPre(tr.req, best.toks));
-    const spin = best.holdIfSpin && (this.cur.some(c => c && c.raw > 45) || this.toks.some(k => t - k.t1 < 0.3 && k.raw > 60));
-    const pole = best.holdNearPole != null && this.lastD && (() => { const P = this.poles.find(p => p.id === best.holdNearPole); return P && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 4.5; })();
-    const sw = best.holdSwitch && (() => { const o = this.orb[best.holdSwitch.obj]; return o && o.acc > 20 && o.dir !== best.holdSwitch.dir; })();
-    // right beside a pole with the pass not finished yet: a pole trick (Cradle, Whiplash) may claim these rotations
-    const passing = !best.clen && best.toks.length && this.lastD && this.poles.some(P => { const pt = this.passTr[P.id]; return pt && !pt.lock && pt.dmin < 2.5 && Math.hypot(this.lastD.pos.x - P.x, this.lastD.pos.z - P.z) < 2.6; });
-    best.hold = (this.obstaclePrefix(best) || ctxPre || spin || pole || sw || passing) ? HOLD_OBST : HOLD;
-    if (best.name === 'Whiplash') best.hold = Math.max(best.hold, 0.7);   // wait a hair longer before confirming
-    if (best.lap) best.hold = 0;                                          // a monitored lap is decided the moment it completes
-    best.deadline = t + best.hold;
-    this.pend.push(best);
+  function trimNinety(toks) {
+    let a = 0,
+      b = toks.length;
+    while (a < b && toks[a].deg <= 90) a++;
+    while (b > a && toks[b - 1].deg <= 90) b--;
+    return toks.slice(a, b);
   }
-  powerRollComing(c, crosses = this.crossWindow(c.t0)) {
-    // a Power Roll on its way: under then over one object, the loop's pitch still going (or just done) round a roll: wait for the pass back under
-    if (!POWER_ROLL_OVER.has(c.name) || !Array.isArray(this.toks)) return false; { const byO = {}; for (const x of crosses) if (x.kind === 'U' || x.kind === 'O') (byO[x.obj] = byO[x.obj] || []).push(x);
-      for (const id in byO) { const L = byO[id]; if (!L.map(x => x.kind).join('').endsWith('UO')) continue; const u0 = L[L.length - 2]; if (u0.t < (c.t0 ?? this.time) - 3) continue;
-        const P = [...this.toks, ...this.cur.filter(Boolean)].filter(k => k.ax === 'P' && k.dir > 0 && (k.t1 == null || k.t1 > u0.t - 0.8)), pSum = P.reduce((s, k) => s + k.raw, 0);
-        if (pSum >= 120 && [...this.toks, ...this.cur.filter(Boolean)].some(k => k.ax === 'R' && k.raw >= 250 && (k.t1 == null || k.t1 > u0.t))) return true; } }
-    return false;
-  }
-  obstaclePrefix(c) {     // a bigger obstacle trick is half-done with these same rotations
-    const crosses = this.crossWindow(c.t0);
-    if (this.powerRollComing(c, crosses)) return 'Power Roll';
-    const byObj = {}; for (const x of crosses) if (x.kind !== 'G') (byObj[x.obj] = byObj[x.obj] || []).push(x);
-    for (const tr of OBSTACLE_TRICKS) {
-      if (tr.cross.length <= (c.clen || 0)) continue;
-      if (tr.tap && !this.taps.some(x => x.t >= c.t0 - 0.4)) continue;
-      if (!c.toks.length || ![c.toks, trimNinety(c.toks), dropSmall(c.toks)].some(tv => tr.parsed.some(pp => matchTokens(pp, tv)))) continue;
-      for (const id in byObj) { const L = byObj[id], kinds = L.map(x => x.kind).join('');
-        for (let j = 1; j < tr.cross.length; j++) {
-          if (!kinds.endsWith(tr.cross.slice(0, j))) continue;
-          // the passes seen so far must be the *start* of this trick: the first one can't come after the rotation began
-          const first = L[L.length - j]; if (first.t > c.t0 + 0.15) continue;
-          return tr.name;
-        } }
+
+  // ================================================================= SCORING (TPW calculator rules)
+  const EXEC_MULT = { CLEAN: 1, SLOPPY: 0.65, MISSED: 0, BUMP: 0.5, CRASH: 0 };
+  const REPEAT_MULT = [1, 0.75, 0.5, 0]; // nth time a trick is landed in a run
+  const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the same obstacle
+  const SWITCH_BONUS = [
+    [21, 2.0],
+    [18, 1.7],
+    [15, 1.5],
+    [12, 1.35],
+    [9, 1.2],
+    [6, 1.1],
+    [3, 1.05]
+  ];
+  const TOTW_MULT = [2, 2, 1.5, 1]; // Trick of the Week: 200 / 200 / 150 / 100 %, then 0 (the official rules, 2026-11-25)
+  const STREAK_MAX = 2; // the streak multiplier tops out at x2 (owner, 2026-11-25, from the official rules' "maxes out at 200 %")
+  const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
+  // Daily K.W.A.D. (owner, agreed 2026-11-20): four tricks a day per map, the same for every pilot, from the date (the board's UTC
+  // day) and the map. K and W are open-air tricks flown anywhere (K the simplest, W a step up); A and D are obstacle tricks on a NAMED
+  // object of that map (A one of the three classics, D a harder one, on another object where the map has two). Only tricks the bot's
+  // flights are called on every time (test/stress.js), and only objects where the bot's flight of every pool trick is called on that
+  // object (KWAD_SPOTS, made by tools/kwadspots.js: object -> the pool tricks NOT to ask for there; test/kwad.js checks it). The bonus
+  // is the calculator's: 250 a letter, 2000 more for all four. A map with no table (the hidden ones) keeps the book's fixed set.
+  const KWAD_K = ['Flip', 'Roll', 'Yaw Spin', 'Inverted Rewind'],
+    KWAD_W = ['Double Flip', 'Double Roll', 'Juicy Flick', 'Inverted Yaw Spin', 'Vanny Roll', "Rubik's Cube"];
+  const KWAD_A = ['Powerloop', 'Matty Flip', 'Split S'],
+    KWAD_D = ['Power Flip', 'Maverick Loop', 'Matty 360', 'Immelmann', 'Power Roll'],
+    KWAD_OBJ_TRICKS = [...KWAD_A, ...KWAD_D];
+  // a call on a part of the named object counts for it: "Footbridge Rail" / "Footbridge Stairs" are the Footbridge (owner, 2026-11-27: pilots'
+  // powerloops round the bridge are mostly called on its rail, which sits over the deck, so today's Powerloop on the Footbridge never lit)
+  const kwadOn = (obs, ob) => !!obs && (obs === ob || obs.startsWith(ob + ' '));
+  const KWAD_SPOTS = {
+    'playground': { 'Test Bar 1.6 m': [], 'Test Bar 2.2 m': [], 'Swing Set': [], 'Monkey Bars': [], 'Jungle Gym': [], 'Power Lines': [] },
+    'moose': { 'Swing Set': [], 'Climbing Bars': [], 'Power Lines': [] },
+    'clappy': { 'Footbridge': [], 'Alley Walkway': [], 'Overhead Wires': [], 'Test Bar 2.2 m': [] },
+    'warehouse': { 'Rack Beam': [], 'Catwalk': ['Split S'], 'Crane Bridge': [], 'Hanging Sign': [], 'Cable Tray': [], 'Yard Gate': [] },
+    'ship': { 'Sawhorse Barricade': [], 'Lifeboat': [], 'Crime Scene Tape': [] },
+    'slackvegan': { 'Bakery Low Gate': [], 'Water Tower': [], 'Laundry Line': [] },
+    'murderdome': { 'Blood Oath Gantry': [], 'Witness Me Finish': [], 'Ring Truss': [] }
+  };
+  function dailyKwad(map, day, has) {
+    const T = KWAD_SPOTS[map];
+    if (!T || !/^\d{4}-\d\d-\d\d$/.test(String(day))) return null;
+    const objs = Object.keys(T).filter(o => !has || has(o));
+    if (!objs.length) return null;
+    let h = 2166136261;
+    for (const c of day + '|' + map) {
+      h ^= c.charCodeAt(0);
+      h = Math.imul(h, 16777619);
     }
-    return null;
+    let z = h >>> 0;
+    const r = () => {
+        z = (z + 0x6d2b79f5) | 0;
+        let t = Math.imul(z ^ (z >>> 15), 1 | z);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      },
+      pick = a => a[Math.floor(r() * a.length) % a.length];
+    const K = pick(KWAD_K),
+      Wt = pick(KWAD_W),
+      oA = pick(objs),
+      okA = KWAD_A.filter(t => !T[oA].includes(t)),
+      A = pick(okA.length ? okA : KWAD_A);
+    const rest = objs.filter(o => o !== oA),
+      oD = rest.length ? pick(rest) : oA,
+      okD = KWAD_D.filter(t => !T[oD].includes(t)),
+      D = pick(okD.length ? okD : KWAD_D);
+    return { day, map, K: { trick: K }, W: { trick: Wt }, A: { trick: A, obj: oA }, D: { trick: D, obj: oD } };
   }
-  loopInProgress(p, t) {   // open-air rotation done at the top of a loop (under, then over the same object): wait for the way back
-    if (this.rollbackWait(p, t)) return true;
-    if (p.part || !p.toks.length || t - p.tDone > 3.0) return false;
-    const X = this.crossLog.filter(c => c.kind === 'U' || c.kind === 'O'); const last = X[X.length - 1];
-    if (!last || last.kind !== 'O' || t - last.t > 3.6) return false;
-    if (last.latDot > 0.6 && last.t > p.t0 - 0.6) return true;   // jump-rope peak (sideways over): wait for the way back down (Double Dutch)
-    if (p.t0 > last.t - 0.4 && t - last.t < 3.2) return true;     // Matty family: rotation after going over, the pass back under follows (slow, floaty ones take ~3 s)
-    return X.some(c => c.kind === 'U' && c.obj === last.obj && c.t < last.t && last.t - c.t < 4 && c.t < p.t0);
+  // Owner's chain bonuses (2026-11-20, not in the TPW calculator; kept apart from the trick score like K.W.A.D.): every 5th of the
+  // same trick in a row in one combo is a set: INFINITY LOOPS for Powerloops, BIG BEN for Matty Flips, worth 2000 × the set's
+  // number (5 → 2000, 10 → 4000 more, 15 → 6000 more…). Another trick, a crash, a miss or the combo banking starts over.
+  const CHAIN_BONUS = { Powerloop: 'INFINITY LOOPS', 'Matty Flip': 'BIG BEN' },
+    CHAIN_SET = 5,
+    CHAIN_PTS = 2000;
+  const BURRITO_JR = 4.0; // s before a Burrito Roll's roll in which its opening Jump Rope's over pass must lie
+  const SWEEP_LOOK = 3.0; // s either side of a slow flip / roll the sweep witness looks for upright
+  const PENDULUM_GAP = 1.6; // s from one Half Matty's end to the next one's start, for the Pendulum
+  function pendulumStep(chain, p) {
+    if (p.name !== 'Half Matty') return { name: p.name, chain: [] };
+    const ob = p.obstacle || null,
+      H = (chain || []).filter(h => h.obstacle === ob),
+      run = H.length && p.t0 - H[H.length - 1].t <= PENDULUM_GAP ? H : [];
+    return run.length >= 2 ? { name: 'Half Matty Pendulum', chain: [] } : { name: p.name, chain: [...run, { t: p.tDone, obstacle: ob }] };
   }
-  // in the air between two segments: nothing rotating yet, but the rotations so far are the start of a longer open-air
-  // trick and the quad is holding steady (not tumbling) — give the next segment up to AIR_OPEN to begin
-  // how much air a gap may have: hanging upside down (or on edge) mid-trick means another segment has to come, so more
-  // Pilot profile (from the warm-up, see the game's Pilot Warm-up): typical rotation speed per axis (deg/s) and the pilot's
-  // natural gap between segments. It only ever loosens: slower pilots' rotations still count as deliberate, and pilots who
-  // leave more air get more (up to 1.8 s).
-  setPilot(p) { this.pilotOwn = p || null; this.community = COMMUNITY; p = mergeProfiles(COMMUNITY, p || null); this.pilot = p || null; this.pilotRate = p && p.rate ? { R: p.rate.R, P: p.rate.P, Y: p.rate.Y } : null; }
-  // what was learned from this pilot's review labels (learnFromLabels): only ever looser, and only within these bounds
-  get learned() { if (this._learnOf !== this.pilot || !this._learned) { const L = this.pilot && this.pilot.learn, n = (v, max) => Number.isFinite(+v) ? clamp(+v, 0, max) : 0; this._learnOf = this.pilot; this._learned = L ? { tol: n(L.tol, LEARN_MAX.tol), rev: n(L.rev, LEARN_MAX.rev), crossBack: n(L.crossBack, LEARN_MAX.crossBack) } : LEARN_NONE; } return this._learned || LEARN_NONE; }
-  get airOpen() { const a = this.pilot && this.pilot.air; return a ? clamp(Math.max(AIR_OPEN, a * 1.8 + 0.2), AIR_OPEN, 1.8) : AIR_OPEN; }
-  minRate(ax, base) { const r = this.pilot && this.pilot.rate && this.pilot.rate[ax]; return r ? Math.min(base, Math.max(90, r * 0.5)) : base; }
-  airAllowed(a, b) { const W = this.fbIn(a, b), A = this.airOpen; return W.length && W.reduce((s, x) => s + x.up.y, 0) / W.length < 0.3 ? A * 1.5 : A; }
-  awaitingSegment(p) {
-    const t = this.time, gap = t - p.tDone; if (!p.toks.length || p.part || (p.clen || 0) > 0 || gap > this.airAllowed(p.tDone, t)) return false;   // an open-air extension never beats a context/obstacle trick
-    if (gap > 0.15 && this.sweptBetween(p.tDone, t) / gap > 150) return false;
-    const N0 = this.normalized();
-    for (const tr of OPEN_TRICKS) for (const pp of tr.parsed) for (let j = 1; j < pp.length; j++) {
-      const before = N0.slice(-j); if (before.length !== j || !spansOverlap(before.flatMap(x => x.spans), p.spans)) continue;
-      if (before[before.length - 1].t1 < p.tDone - 0.05) continue;
-      if (matchTokens(pp.slice(0, j), before)) return true;
+  // Gap points (owner, 2026-11-20; not in the TPW calculator, kept on their own line like K.W.A.D. and the chain bonuses): every gap
+  // flown through, armed, is a small trick that keeps the combo alive, worth GAP_MIN..GAP_MAX by how tight it is for the pilot's
+  // whoop (its short side in quad widths: ~3 widths or less = 75, 15 or more = 25), halved each time the same gap repeats in one combo.
+  const GAP_MIN = 25,
+    GAP_MAX = 150,
+    GAP_STEP = 0.1524,
+    GAP_PER = 25; /* the site's Gaps (owner, 2026-11-23): 150 through 6 in or less on the short side, 25 less per 6 in more (125 at 12 in, 100 at 18 in), never under 25 */
+  // Gap call-out names (owner, 2026-11-27: "proper gap names per map"): GAP_NAMES by the object's name (after " opening" / "mouth" are
+  // dropped); a gap the Surveyor found under something (`low`) is "Under the <thing>"; otherwise the object's name with trailing numbers
+  // dropped. The Trick Park keeps its sizes (its names read like a lab sheet). The call-out shows it as "<NAME> GAP" unless it already
+  // reads as a place ("Under the …", "Tunnel", "Door", …).
+  const GAP_NAMES = {
+    'Split Birch': 'Split Birch',
+    'Swing Set': 'Through the Swing Set',
+    'Tire': 'Tire Tunnel',
+    'Trunk Gap': 'Trunk Gap',
+    'Race Gate': 'Race Gate',
+    'Alley': 'Alley Run',
+    'Cube top': 'Cube Top',
+    'Cube west': 'Cube Side',
+    'Cube north': 'Cube Side',
+    'Cube east': 'Cube Side',
+    'Cube south': 'Cube Side',
+    'Trailer underside': 'Under the Trailer',
+    'Box Truck underside': 'Under the Box Truck',
+    'Rack Upright': 'Under the Rack',
+    'Container Tunnel': 'Container Tunnel',
+    'War Rig Cab window': 'War Rig Window',
+    'The Pit Hole': 'The Pit',
+    'Witness Me Finish': 'Witness Me',
+    'Blood Oath Gantry': 'Blood Oath',
+    'Labyrinth Entrance': 'Into the Labyrinth',
+    'Labyrinth Exit': 'Out of the Labyrinth',
+    'Spine Top': 'Down the Spine',
+    'Spine Bottom': 'Out of the Spine',
+    'Lobby Arch': 'Lobby Arch',
+    'Circular Gap': 'Sky Lobby Round Window',
+    'Spine Window': 'Spine Window',
+    'Subway Car Door': 'Subway Car Door',
+    'Subway Car End Door': 'Subway Car End Door',
+    'Yellow Fever Gate': 'Yellow Fever Gate',
+    'Bus Shelter': 'Through the Bus Shelter',
+    'Footbridge Portal West': 'Through the Bridge Portal',
+    'Footbridge Portal East': 'Through the Bridge Portal',
+    'Footbridge Tower': 'Through the Bridge Tower',
+    'Footbridge Tower Top Gap': 'Over the Tower Beam',
+    'Campus Bridge Portal West': 'Through the Campus Bridge Portal',
+    'Campus Bridge Portal East': 'Through the Campus Bridge Portal',
+    'Campus Bridge Tower': 'Through the Campus Bridge Tower',
+    'Campus Bridge Tower Top Gap': 'Over the Campus Tower Beam',
+    'Campus Breezeway': 'Through the Breezeway',
+    'Campus Arcade': 'Through the Arcade',
+    'Campus Passage': 'Through the Campus Passage',
+    'Bell Tower': 'Through the Bell Tower',
+    'Truss Frame': 'Through the Truss',
+    'Pagoda Window': 'Through the Pagoda',
+    'Pagoda Upper Window': 'Through the Pagoda Top',
+    'Pagoda Well': 'Up Through the Pagoda',
+    'Campus Arch': 'Through the Campus Arch',
+    'Lifeboat Squeeze': 'Lifeboat Squeeze',
+    'Chandelier Hoop': 'Chandelier Hoop',
+    'Slide Tube': 'Slide Tube',
+    'Tunnel': 'Tunnel'
+  };
+  const GAP_PLACE =
+    /^(under|through|into|out of|down)\b|\b(gap|tunnel|door|doors|doorway|window|arch|squeeze|run|hoop|tube|slot|grid|skylight|bay|alley|spine|pit|witness me|blood oath|top|side|gate|frame|ring)$/i;
+  function gapName(name, low) {
+    let n = String(name || 'Gap')
+      .replace(/\s+(opening|mouth)$/i, '')
+      .trim();
+    if (!GAP_NAMES[n] && !/ \d+(\.\d+)? m$/.test(n))
+      n = n
+        .replace(/\s+(\d+|[A-Z]\d?)$/, '')
+        .replace(/\s+(\d+|[A-Z]\d?)$/, '')
+        .replace(/ Car \d+ /, ' Car ')
+        .replace(/\s+(North|South|East|West)$/, '')
+        .trim();
+    if (GAP_NAMES[n]) return GAP_NAMES[n];
+    if (/ \d+(\.\d+)? m$/.test(n)) return n; // the Trick Park: "Gap Gate 0.7 m", "Knife Slot 0.2 m"
+    return low ? 'Under the ' + n : n;
+  }
+  function gapLabel(name, low) {
+    const n = gapName(name, low);
+    return GAP_PLACE.test(n) || / \d+(\.\d+)? m$/.test(n) ? n : n + ' Gap';
+  }
+  function gapPoints(narrow) {
+    const over = Math.max(0, (narrow - GAP_STEP) / GAP_STEP);
+    return Math.max(GAP_MIN, Math.min(GAP_MAX, Math.round((GAP_MAX - GAP_PER * over) / 5) * 5));
+  }
+  // INVERTED (owner, 2026-11-25): in 3D mode, every full second upside-down (up.y under INV_UP: within ~45 deg of flat on its back) in
+  // the air, armed, scores INV_PTS. Any touch, a crash or disarming ends the stretch; seconds already scored stay. step() returns how
+  // many seconds this step completed (0 or 1) and keeps `run`, the seconds in the current stretch.
+  const INV_PTS = 200,
+    INV_UP = -0.7,
+    INV_STEP = 50,
+    INV_MAX = 1000;
+  // the longer it lasts, the more each second pays (owner, 2026-11-27): second n of a stretch pays INV_PTS + INV_STEP x (n - 1), up to INV_MAX
+  const invPts = n => Math.min(INV_MAX, INV_PTS + INV_STEP * Math.max(0, (n | 0) - 1));
+  class InvertedTimer {
+    constructor() {
+      this.t = 0;
+      this.run = 0;
+      this.on = false;
     }
-    return false;
+    stop() {
+      const r = this.run;
+      this.t = 0;
+      this.run = 0;
+      this.on = false;
+      return r;
+    }
+    step(dt, s) {
+      // s: { mode3d, armed, crashed, contact, upY }
+      if (!s.mode3d || !s.armed || s.crashed || s.contact || !(s.upY < INV_UP)) {
+        this.stop();
+        return 0;
+      }
+      this.on = true;
+      this.t += dt;
+      if (this.t < 1) return 0;
+      this.t -= 1;
+      this.run++;
+      return 1;
+    }
   }
-  extendable(p) {         // could rotation happening right now turn this into a bigger trick?
-    if (p.toks.length && this.cur.some(c => c && c.raw >= 90 && c.t0 < p.t0 - 0.03 && !p.toks.some(tk => tk.ax === c.ax))) return true;
-    const pLast = p.toks[p.toks.length - 1]; if (!pLast) return false;
-    const live = this.cur.filter(c => c && c.raw >= 20 && c.t0 >= pLast.t1 - 0.05 && c.t0 - p.tDone < this.airOpen);
-    if (!live.length) return this.awaitingSegment(p);
-    const near = this.crossWindow(p.t0).some(c => c.kind !== 'G');   // obstacle tricks only once a pass has happened
-    const N0 = this.normalized(), pool = near ? [...OPEN_TRICKS, ...OBSTACLE_TRICKS.filter(x => !x.tap)] : OPEN_TRICKS;
-    for (const c of live) {
-      const last = { ax: c.ax, dir: c.dir, raw: c.raw };
-      for (const tr of pool) for (const pp of tr.parsed) for (let j = 1; j < pp.length; j++) {
-        const before = N0.slice(-j); if (before.length !== j) continue;
-        if (!spansOverlap(before.flatMap(x => x.spans), p.spans)) continue;
-        if (!matchTokens(pp.slice(0, j), before)) continue;
-        const nx = pp[j]; if (nx.ax !== last.ax) continue;
-        if ((nx.dir === '+' && last.dir !== 1) || (nx.dir === '-' && last.dir !== -1)) continue;
-        if (last.raw > nx.deg + 95) continue;
+  class ScoreKeeper {
+    constructor(totw, kwad) {
+      this.totw = totw || ['Split S', 'Powerloop', 'Matty Flip'];
+      this.kw = kwad || null;
+      this.reset();
+    } // kwad: the day's set (dailyKwad); none = the book's fixed four
+    reset() {
+      this.total = 0;
+      this.trickScore = 0;
+      this.streak = 1;
+      this.streakCount = 0;
+      this.maxStreak = 1;
+      this.counts = {};
+      this.prev = null;
+      this.b2b = 1;
+      this.lastObstacle = null;
+      this.obstRun = 0;
+      this.uniqueObs = new Set();
+      this.kwad = {};
+      this.kwadBonus = 0;
+      this.chain = null;
+      this.chainBonus = 0;
+      this.chains = [];
+      this.gapBonus = 0;
+      this.gapN = 0;
+      this.gapSeen = {};
+      this.commBonus = 0;
+      this.commN = 0;
+      this.invBonus = 0;
+      this.invN = 0;
+      this.invBest = 0;
+      this.commSeen = {};
+      this.comms = [];
+      this.gapBest = null;
+      this.log = [];
+      this.totwCounts = {};
+      this.biggest = null;
+    }
+    add(ev) {
+      const base = ev.basePts ?? trickPoints(ev.name);
+      if (ev.exec === 'MISSED') {
+        this.streak = 1;
+        this.streakCount = 0;
+      } // a failed trick breaks the streak (official rules); it scores nothing below and is no repeat
+      if (ev.exec === 'CRASH') {
+        this.streak = 1;
+        this.streakCount = 0;
+        this.prev = null;
+        this.chain = null;
+        this.log.push({ ...ev, net: 0 });
+        return { ...ev, net: 0, base: 0, streak: this.streak };
+      }
+      if (!base) return null;
+      const execM = EXEC_MULT[ev.exec] ?? 1;
+      const n = this.counts[ev.name] || 0;
+      const totwIdx = this.totw.indexOf(ev.name);
+      let repeatM = REPEAT_MULT[Math.min(n, 3)],
+        totwM = 1;
+      if (totwIdx >= 0) {
+        const c = this.totwCounts[ev.name] || 0;
+        totwM = TOTW_MULT[c] ?? 0;
+        repeatM = 1;
+      }
+      this.b2b = this.prev === ev.name ? this.b2b + 1 : 1;
+      const b2bM = Math.pow(0.5, this.b2b - 1);
+      let obsM = 1;
+      if (ev.obstacle) {
+        this.obstRun = this.lastObstacle === ev.obstacle ? this.obstRun + 1 : 0;
+        obsM = OBST_REPEAT[Math.min(this.obstRun, 6)];
+        this.lastObstacle = ev.obstacle;
+        this.uniqueObs.add(ev.obstacle);
+      }
+      const streakM = this.streak;
+      const net = Math.round(base * execM * repeatM * totwM * b2bM * obsM * streakM);
+      // the streak, by the official rules (owner, 2026-11-25; it was the spreadsheet's): every clean or sloppy trick adds its BASE value
+      // / 10000 (850 points: +8.5 %) for the tricks after it, up to STREAK_MAX; a repeat worth 0 % adds nothing (owner); a bump ends it
+      if (ev.exec === 'BUMP') {
+        this.streak = 1;
+        this.streakCount = 0;
+      } else if (ev.exec === 'CLEAN' || ev.exec === 'SLOPPY') {
+        if (repeatM * totwM > 0) {
+          this.streak = Math.min(STREAK_MAX, this.streak + base / 10000);
+          this.streakCount++;
+        }
+      }
+      this.maxStreak = Math.max(this.maxStreak, this.streak);
+      if (ev.exec !== 'MISSED') {
+        this.counts[ev.name] = n + 1;
+        if (totwIdx >= 0) this.totwCounts[ev.name] = (this.totwCounts[ev.name] || 0) + 1;
+      }
+      this.last = { i: this.log.length, streak0: streakM, execM }; // for lateBump
+      this.prev = ev.name;
+      let kwadHit = null;
+      for (const L in KWAD) {
+        const k = this.kw ? this.kw[L] : KWAD[L],
+          nm = k && (k.trick || k),
+          ob = k && k.obj; // a daily A / D letter needs its named object
+        if (nm === ev.name && (!ob || kwadOn(ev.obstacle, ob)) && !this.kwad[L] && ev.exec !== 'MISSED') {
+          this.kwad[L] = true;
+          this.kwadBonus += 250;
+          kwadHit = L;
+          if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000;
+        }
+      }
+      let chainHit = null;
+      if (CHAIN_BONUS[ev.name] && ev.exec !== 'MISSED') {
+        this.chain = this.chain && this.chain.name === ev.name ? { name: ev.name, n: this.chain.n + 1 } : { name: ev.name, n: 1 };
+        if (this.chain.n % CHAIN_SET === 0) {
+          const k = this.chain.n / CHAIN_SET,
+            pts = CHAIN_PTS * k;
+          this.chainBonus += pts;
+          chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts };
+          this.chains.push(chainHit);
+        }
+      } else this.chain = null;
+      this.trickScore += net;
+      this.total = Math.round(
+        this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus
+      );
+      const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
+      if (!this.biggest || net > this.biggest.net) this.biggest = rec;
+      this.log.push(rec);
+      return rec;
+    }
+    chainBreak() {
+      this.chain = null;
+      this.gapSeen = {};
+      this.commSeen = {};
+    }
+    // a confirmed community trick (a trick challenge two other pilots matched: CHALLENGES): its own line, like gaps, so the TPW trick
+    // score stays the calculator's. The same one again in one combo is halved each time, like a gap.
+    community(name, pts) {
+      const rep = this.commSeen[name] || 0,
+        base = clamp(Math.round(+pts || CH_PTS), 0, 5000),
+        got = Math.round(base * Math.pow(0.5, rep));
+      this.commSeen[name] = rep + 1;
+      this.commBonus += got;
+      this.commN++;
+      const r = { name, pts: got, base, repeat: rep };
+      this.comms.push(r);
+      this.total = Math.round(
+        this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus
+      );
+      return r;
+    } // the combo banked: a new set starts from one, and every gap is fresh again
+    gap(c, qW) {
+      // a gap flown through: { label, pts, base, repeat }
+      const k = c.obj,
+        rep = this.gapSeen[k] || 0,
+        base = gapPoints(c.narrow ?? 1, qW),
+        pts = Math.round(base * Math.pow(0.5, rep));
+      this.gapSeen[k] = rep + 1;
+      this.gapBonus += pts;
+      this.gapN++;
+      const r = { label: gapLabel(c.name, c.low), pts, base, repeat: rep };
+      if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
+      this.total = Math.round(
+        this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus
+      );
+      return r;
+    }
+    // The last trick scored clean or sloppy, and the quad knocked into something on the way out (owner, 2026-11-21: pilots graded
+    // such calls "bump"): it is a BUMP after all. Its points drop to a bump's and the streak is what a bump leaves it at.
+    // Returns the points taken back, or 0 when there was nothing to change.
+    lateBump() {
+      const L = this.last,
+        e = L && this.log[L.i];
+      if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
+      const net = Math.round((e.net * EXEC_MULT.BUMP) / L.execM),
+        back = e.net - net;
+      e.exec = 'BUMP';
+      e.execM = EXEC_MULT.BUMP;
+      e.net = net;
+      e.late = true;
+      this.trickScore -= back;
+      this.streak = 1;
+      this.streakCount = 0;
+      this.last = null;
+      this.total = Math.round(
+        this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus
+      );
+      return back;
+    }
+    // INVERTED (owner, 2026-11-25; 3D mode only): one more full second upside-down in the air. INV_PTS each, no repeat penalty, no
+    // streak, its own line like gaps. run = seconds in this stretch so far.
+    inverted(run) {
+      const p = invPts(run || 1);
+      this.invBonus += p;
+      this.invN++;
+      this.invBest = Math.max(this.invBest, run | 0);
+      this.total = Math.round(
+        this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus
+      );
+      return p;
+    }
+    // a bump or a ground tap BETWEEN tricks (official rules): no trick loses points, the streak ends. True when there was one to lose.
+    bumpBetween() {
+      const had = this.streak > 1;
+      this.streak = 1;
+      this.streakCount = 0;
+      this.last = null;
+      return had;
+    }
+    switchMult() {
+      const u = this.uniqueObs.size;
+      for (const [k, m] of SWITCH_BONUS) if (u >= k) return m;
+      return 1;
+    }
+  }
+
+  // ================================================================= Betaflight diff import
+  // Betaflight's filters and PID extras from a diff (CLI names, text values) or a Blackbox header (numbers, "min,max" pairs)
+  const BF_LPF = ['PT1', 'BIQUAD', 'PT2', 'PT3'];
+  function bfFilters(set, found = []) {
+    const o = {},
+      has = k => set[k] !== undefined && set[k] !== '',
+      num = k => +String(set[k]).split(',')[0];
+    const typ = k => {
+      const v = String(set[k]).toUpperCase();
+      return BF_LPF.includes(v) ? v : BF_LPF[+v] || 'PT1';
+    };
+    const pair = (k, kmin, kmax) =>
+      has(k) && String(set[k]).includes(',')
+        ? String(set[k]).split(',').map(Number)
+        : [has(kmin) ? +set[kmin] : undefined, has(kmax) ? +set[kmax] : undefined];
+    for (const [pre, key, dflt] of [
+      ['gyro', 'gyroLpf', 180],
+      ['dterm', 'dtermLpf', 90]
+    ]) {
+      const [lo, hi] = pair(pre + '_lpf1_dyn_hz', pre + '_lpf1_dyn_min_hz', pre + '_lpf1_dyn_max_hz'),
+        st = has(pre + '_lpf1_static_hz') ? num(pre + '_lpf1_static_hz') : undefined;
+      if (lo > 0) {
+        o[key + 'Hz'] = lo;
+        o[key + 'MaxHz'] = hi > lo ? hi : 0;
+        found.push(pre + '_lpf1_dyn_hz');
+      } // Betaflight: a dynamic lowpass wins over the static one
+      else if (st !== undefined || lo === 0) {
+        o[key + 'Hz'] = st || 0;
+        o[key + 'MaxHz'] = 0;
+        found.push(pre + '_lpf1_static_hz');
+      }
+      if (has(pre + '_lpf1_dyn_expo')) o[key + 'Expo'] = num(pre + '_lpf1_dyn_expo');
+      if (has(pre + '_lpf1_type')) o[key + 'Type'] = typ(pre + '_lpf1_type');
+      if (has(pre + '_lpf2_static_hz')) {
+        o[key + '2Hz'] = num(pre + '_lpf2_static_hz');
+        found.push(pre + '_lpf2_static_hz');
+      }
+      if (has(pre + '_lpf2_type')) o[key + '2Type'] = typ(pre + '_lpf2_type');
+      void dflt;
+    }
+    if (has('tpa_rate')) {
+      o.tpaRate = num('tpa_rate');
+      found.push('tpa_rate');
+    }
+    if (has('tpa_breakpoint')) o.tpaBreakpoint = Math.max(0, Math.min(1, (num('tpa_breakpoint') - 1000) / 1000));
+    if (has('tpa_mode')) o.tpaMode = /^(PD|0)$/i.test(set.tpa_mode) ? 'PD' : 'D';
+    for (const [k, key] of [
+      ['anti_gravity_gain', 'antiGravity'],
+      ['thrust_linear', 'thrustLinear'],
+      ['throttle_boost', 'throttleBoost'],
+      ['motor_output_limit', 'motorOutputLimit']
+    ])
+      if (has(k)) {
+        o[key] = num(k);
+        found.push(k);
+      }
+    return o;
+  }
+  // Betaflight 4.5's stock filters and extras (what a fresh flight controller flies)
+  const BF_STOCK = {
+    gyroLpfHz: 250,
+    gyroLpfMaxHz: 500,
+    gyroLpfExpo: 5,
+    gyroLpfType: 'PT1',
+    gyroLpf2Hz: 500,
+    gyroLpf2Type: 'PT1',
+    dtermLpfHz: 75,
+    dtermLpfMaxHz: 150,
+    dtermLpfExpo: 5,
+    dtermLpfType: 'PT1',
+    dtermLpf2Hz: 150,
+    dtermLpf2Type: 'PT1',
+    tpaRate: 65,
+    tpaBreakpoint: 0.35,
+    tpaMode: 'D',
+    antiGravity: 80,
+    thrustLinear: 0,
+    throttleBoost: 5,
+    motorOutputLimit: 100
+  };
+  // the sim's own (what an untouched tune flies: the physics as it always was)
+  const BF_SIM = {
+    gyroLpfHz: 180,
+    gyroLpfMaxHz: 0,
+    gyroLpfExpo: 5,
+    gyroLpfType: 'PT1',
+    gyroLpf2Hz: 0,
+    gyroLpf2Type: 'PT1',
+    dtermLpfHz: 90,
+    dtermLpfMaxHz: 0,
+    dtermLpfExpo: 5,
+    dtermLpfType: 'PT1',
+    dtermLpf2Hz: 0,
+    dtermLpf2Type: 'PT1',
+    tpaRate: 0,
+    tpaBreakpoint: 0.35,
+    tpaMode: 'D',
+    antiGravity: 0,
+    thrustLinear: 0,
+    throttleBoost: 0,
+    motorOutputLimit: 100,
+    simMaster: 1,
+    simPI: 1,
+    simD: 1,
+    simFF: 1
+  };
+  function importDiff(text, tune) {
+    const t = JSON.parse(JSON.stringify(tune));
+    const set = {};
+    const found = [];
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.match(/^\s*set\s+(\w+)\s*=\s*(.+?)\s*$/i) || line.match(/^\s*H\s+(\w+):(.*)$/);
+      if (m) set[m[1].toLowerCase()] = m[2].trim();
+    }
+    // Blackbox headers carry the PIDs as "rollPID:41,70,37" and the feedforward as "ff_weight:111,110,111"
+    for (const ax of ['roll', 'pitch', 'yaw']) {
+      const v = set[ax.toLowerCase() + 'pid'];
+      if (v) {
+        const [p, i, d] = v.split(',').map(Number);
+        if (isFinite(p)) set['p_' + ax] = p;
+        if (isFinite(i)) set['i_' + ax] = i;
+        if (isFinite(d)) set['d_' + ax] = d;
+      }
+    }
+    if (set.ff_weight && set.ff_weight.includes(','))
+      ['roll', 'pitch', 'yaw'].forEach((ax, j) => {
+        const v = +set.ff_weight.split(',')[j];
+        if (isFinite(v)) set['f_' + ax] = v;
+      });
+    const num = k => (set[k] !== undefined ? +set[k] : undefined);
+    for (const ax of ['roll', 'pitch', 'yaw']) {
+      for (const [k, f] of [
+        ['p', 'p'],
+        ['i', 'i'],
+        ['d', 'd'],
+        ['f', 'f']
+      ]) {
+        const v = num(`${k}_${ax}`);
+        if (v !== undefined) {
+          t.pid[ax][f] = v;
+          found.push(`${k}_${ax}`);
+        }
+      }
+      const d4 = num(`d_max_${ax}`); // BF 4.3+ d_max / d_min — use d_max if present
+      if (d4 !== undefined && d4 > 0) t.pid[ax].d = Math.max(t.pid[ax].d, d4);
+    }
+    if (set.rates_type) {
+      t.ratesType =
+        set.rates_type.toUpperCase() === 'ACTUAL' ? 'ACTUAL' : set.rates_type.toUpperCase() === 'BETAFLIGHT' ? 'BETAFLIGHT' : t.ratesType;
+      found.push('rates_type');
+    }
+    for (const ax of ['roll', 'pitch', 'yaw']) {
+      const rc = num(`${ax}_rc_rate`),
+        sr = num(`${ax}_srate`),
+        ex = num(`${ax}_expo`);
+      const r = t.rates[ax];
+      if (t.ratesType === 'ACTUAL') {
+        if (rc !== undefined) r.center = rc * 10;
+        if (sr !== undefined) r.max = sr * 10;
+        if (ex !== undefined) r.expo = ex / 100;
+      } else {
+        if (rc !== undefined) r.rcRate = rc / 100;
+        if (sr !== undefined) r.superRate = sr / 100;
+        if (ex !== undefined) r.rcExpo = ex / 100;
+      }
+      if (rc !== undefined) found.push(`${ax}_rc_rate`);
+    }
+    if (num('dshot_idle_value') !== undefined) {
+      t.idle = num('dshot_idle_value') / 10000;
+      found.push('dshot_idle_value');
+    }
+    if (num('thr_mid') !== undefined) t.thrMid = num('thr_mid') / 100;
+    if (num('thr_expo') !== undefined) t.thrExpo = num('thr_expo') / 100;
+    if (set.iterm_relax) t.itermRelax = !/^(OFF|0)$/i.test(set.iterm_relax);
+    Object.assign(t, bfFilters(set, found));
+    return { tune: t, found };
+  }
+
+  const EVENT_TRICKS_DRAFT = [
+    'Rollback',
+    'Juicy Rollback',
+    'Inverted Uh-uh',
+    'Corner Climb',
+    'Disarm Flip',
+    'Disarm Roll',
+    'Disarm Spin',
+    'Dead Pirate Spin',
+    'Disarm Loop',
+    'Juicy Tornado',
+    'Wall Stick',
+    'Jump Rope',
+    'Cinnamon Roll',
+    'Double Dutch',
+    'Side Loop',
+    'Burrito Roll',
+    'Beginner Switch',
+    'Orbits',
+    'Trippy Spin',
+    'Trippy Switch',
+    'Double Rolling Trippy Spin',
+    'Cradle',
+    'Whiplash',
+    'Pole Dance',
+    'Side-Lock Rewind',
+    'Reverse Knife Edge',
+    'Reverse Wall Ride'
+  ];
+  // Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
+  const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];
+  const SPOT_BY_CAT = {
+    'Open Air Tricks': ['open air'],
+    'Powerloops': OVER_UNDER,
+    'Maverick Loops': OVER_UNDER,
+    'Matty Flips': [...OVER_UNDER, 'Picnic Table'],
+    'SplitS': OVER_UNDER,
+    'Pole Dancing': ['Flagpole', 'Tree', 'Lamp Post', 'Hoop Pole', 'the pilot'],
+    'Jump Roping': ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower'],
+    'Rewinds': ['Tree', 'Lamp Post', 'Slide Tower', 'the pilot', 'Brick Building'],
+    'Wall Tricks': ['Graffiti Wall', 'Brick Building', 'Fence'],
+    'Gaps': ['Wall Slot', 'Hoop'],
+    'Other Tricks': ['open air']
+  };
+  const SPOT_OVERRIDE = {
+    'Stall Rewind': ['Tree', 'Lamp Post', 'Brick Building'],
+    'Building Dive': ['Brick Building'],
+    'Ceiling Tap': ['Slide Tower roof'],
+    'Maverick Tap Rewind': ['Swing Set', 'Monkey Bars', 'Slide Tower'],
+    'Power Switch Tap': ['Swing Set', 'Monkey Bars', 'Slide Tower'],
+    'Face Punch': ['the pilot'],
+    'Slide Disarm': ['the ground'],
+    'Perch': ['Brick Building roof'],
+    'Eject Roll': ['Tree', 'Lamp Post', 'Slide Tower', 'Brick Building'],
+    'Stellar Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'],
+    'Blind Loop': OVER_UNDER,
+    'Inverted Yaw Tracking': ['Tree', 'Lamp Post', 'the pilot'],
+    'Juicy Flick': ['open air (best tracking an object)'],
+    'Snapback': OVER_UNDER,
+    'Forani': OVER_UNDER,
+    'True Barani': OVER_UNDER
+  };
+  const DEMO_SPOT = {
+    'Flip': 'garage (open air)',
+    'Double Flip': 'backyard',
+    'Roll': 'at the pilot',
+    'Double Roll': 'backyard',
+    'Segmented Flips/Rolls': 'street',
+    'Yaw Spin': 'through an LED cube',
+    'Inverted Rewind': 'backyard',
+    'Vanny Roll': 'street',
+    "Rubik's Cube": 'street',
+    "Cubik's Rube": 'street',
+    'Juicy Flick': 'sidewalk',
+    'Snapback': 'under a tree',
+    'Inverted Yaw Spin': 'street',
+    'Inverted Yaw Tracking': 'tree',
+    'Powerloop': 'tall statue in a fountain',
+    'Immelmann': "through the pilot's legs",
+    'Power Split': 'tree',
+    'Power Flip': 'tree',
+    'Reversed Power Flip': 'indoor cube',
+    'Power Swap': "through the pilot's legs",
+    'Power Switch': 'tree',
+    'Power Roll': 'tree',
+    'Inverted 360 Powerloop': 'tree',
+    'Barani': 'tree',
+    'Maverick Loop': 'tree',
+    'Mavvy Roll': 'tree',
+    'Half Mavvy': 'indoor gate tower',
+    "Mavik's Loop": 'living room',
+    'Mavani': 'tree',
+    'Donkey Loop': 'tree',
+    'Beginner Matty': 'chair',
+    'Matty Flip': 'gap between two cars',
+    'Matty Twister': 'tree branch',
+    'Half Matty': "through the pilot's legs",
+    '540 Half Matty': 'tree',
+    'Matty 360': 'indoor gate',
+    'Forani': 'the pilot (park)',
+    'Split S': 'tree',
+    '540 Split S': 'tree branch',
+    'Splitback': 'gazebo',
+    'Split Yaw': 'gazebo',
+    'Split Stall Matty Rewind': 'gazebo',
+    'Orbits': 'tree',
+    'Cradle': 'the pilot',
+    'Side-Lock Rewind': 'the pilot',
+    'Whiplash': 'tree',
+    'Pole Dance': 'tree',
+    'Trippy Spin': 'tree',
+    'Trippy Switch': 'tree trunk',
+    'Double Rolling Trippy Spin': 'tree trunk',
+    'Jump Rope': 'indoor striped pole',
+    'Cinnamon Roll': 'indoor striped pole',
+    'Burrito Roll': 'play structure slide',
+    'Side Loop': 'play structure slide',
+    'Double Dutch': 'indoor cube',
+    'Stall Flip Rewind': 'indoor staircase',
+    'Stall 360 Rewind': 'the pilot',
+    'Stall Matty Rewind': 'tree',
+    'Stall Half Matty Rewind': 'the pilot',
+    'Building Dive': 'apartment building',
+    'Wall Ride': 'garage door',
+    'Wall Tap': 'garage wall',
+    'Roll Tap': 'fence',
+    'Loop Tap': 'fence',
+    'Ceiling Tap': 'hallway ceiling',
+    'Reverse Wall Ride': 'house wall',
+    'Downtown Tap': 'house wall',
+    'Maverick Tap Rewind': 'indoor beam',
+    'Power Switch Tap': 'indoor beam',
+    'Reverse Knife Edge': 'indoor gate',
+    'Ninja Star': 'gap between two tree trunks',
+    'Eject Roll': 'indoor cube',
+    'Blind Loop': 'tree (site name: Blind Loop)',
+    'True Barani': 'tree',
+    'Stall Rewind': 'house wall',
+    'Beginner Switch': 'gazebo'
+  };
+  function trickSpots(name, cat) {
+    const n = name.trim();
+    return { on: SPOT_OVERRIDE[n] || SPOT_BY_CAT[(cat || '').trim()] || ['open air'], demo: DEMO_SPOT[n] || null };
+  }
+  const DETECTABLE = [
+    ...new Set([
+      ...OBSTACLE_TRICKS.map(t => t.name),
+      ...OPEN_TRICKS.map(t => t.name),
+      ...CONTEXT_TRICKS.map(t => t.name),
+      ...EVENT_TRICKS_DRAFT,
+      'Maverick Loop',
+      'Mavvy Roll',
+      'Beginner Matty',
+      'Knife Edge',
+      'Ninja Star',
+      'Wall Tap',
+      'Wall Ride',
+      'Building Dive',
+      'Stall Rewind',
+      'Slide Disarm',
+      'Perch',
+      'Segmented Flips/Rolls',
+      'Face Punch',
+      'INVERTED'
+    ])
+  ];
+  const DRAFT = new Set([
+    ...OBSTACLE_TRICKS.filter(t => t.draft).map(t => t.name),
+    ...CONTEXT_TRICKS.map(t => t.name),
+    ...EVENT_TRICKS_DRAFT
+  ]);
+  function hoverInfo(p) {
+    let lo = 0,
+      hi = 1;
+    const V = 3.75 * (p.bat.cells || 1); // mid-pack voltage
+    for (let k = 0; k < 30; k++) {
+      const mid = (lo + hi) / 2;
+      const t = motorSteady(p, V * mid).thrust * 4;
+      if (t > p.mass * G) hi = mid;
+      else lo = mid;
+    }
+    const s = motorSteady(p, V * hi);
+    const amps = 4 * s.current * hi + 0.35;
+    return { duty: hi, amps, minutes: ((p.bat.cap * 0.8) / 1000 / amps) * 60 * 0.62 };
+  }
+  // ---- Replay: recorded rows (TRACE_COLS) through a fresh detector at 1 kHz. Shared by the Node tools and the game.
+  // Bot replica (2026-11-17, the pilot's idea): re-fly a stretch of a recorded flight with the REAL physics and the pilot's
+  // own recorded sticks, from the recorded position, attitude, velocity and rates, so one checked trick becomes a small,
+  // self-contained bot flight that can be flown again for training and validation. A trace has no motor speeds, PID
+  // integrators or battery state, so the first `warm` seconds fly "on rails" (state pinned to the recording at every row)
+  // while those settle; from `from` the quad flies free on the sticks alone. Rows come back in the trace's columns, with how
+  // far the free flight drifted from the recording (metres, degrees). Sticks hold between rows (the trace is 100 Hz).
+  function replicaFly(rows, opts) {
+    const { params, tune, world } = opts,
+      warm = opts.warm ?? 0.8,
+      from = opts.from,
+      to = opts.to;
+    if (!rows || rows.length < 10 || !(to > from)) return null;
+    let k = rows.findIndex(r => r[0] >= from - warm);
+    if (k < 0) return null;
+    const hasV = rows[0].length >= 24,
+      hasS = rows[0].length >= 27;
+    const d = new Drone(params, tune || {}, world);
+    d.reset({ pos: v3(rows[k][1], rows[k][2], rows[k][3]), yaw: 0 });
+    if (opts.soc != null) d.soc = opts.soc;
+    const pin = (r, r1) => {
+      d.pos = v3(r[1], r[2], r[3]);
+      d.q = { w: r[4], x: r[5], y: r[6], z: r[7] };
+      d.w = v3(r[9] * D2R, -r[10] * D2R, -r[8] * D2R);
+      d.vel = hasV
+        ? v3(r[21], r[22], r[23])
+        : r1
+          ? v3((r1[1] - r[1]) / (r1[0] - r[0]), (r1[2] - r[2]) / (r1[0] - r[0]), (r1[3] - r[3]) / (r1[0] - r[0]))
+          : v3();
+    };
+    const qAng = (a, b) => 2 * Math.acos(Math.min(1, Math.abs(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z))) * R2D;
+    const out = [],
+      drift = { pos: 0, ang: 0, at: null };
+    d.time = rows[k][0];
+    d.armed = true;
+    d.crashed = false;
+    for (let i = k; i < rows.length - 1 && rows[i][0] <= to; i++) {
+      const r = rows[i],
+        r1 = rows[i + 1],
+        free = r[0] >= from;
+      if (!free) pin(r, r1);
+      d.armed = !!r[13] || r[13] == null;
+      const rc = { thr: r[11], roll: hasS ? r[24] : 0, pitch: hasS ? r[25] : 0, yaw: hasS ? r[26] : 0 };
+      const n = Math.max(1, Math.round((r1[0] - r[0]) * 1000));
+      let hit = null;
+      for (let j = 0; j < n; j++) {
+        d.step(rc, 0.001);
+        if (d.contactThisStep && d.contactNormal)
+          hit = { n: d.contactNormal, obj: d.contactOwner ?? -1, imp: d.lastImpact || 0, g: d.contactGround ? 1 : 0 };
+      }
+      d.time = r1[0];
+      const R = d.pilotRates(),
+        f4 = x => +x.toFixed(4),
+        f3 = x => +x.toFixed(3);
+      out.push([
+        f3(d.time),
+        f4(d.pos.x),
+        f4(d.pos.y),
+        f4(d.pos.z),
+        +d.q.w.toFixed(5),
+        +d.q.x.toFixed(5),
+        +d.q.y.toFixed(5),
+        +d.q.z.toFixed(5),
+        Math.round(R[0]),
+        Math.round(R[1]),
+        Math.round(R[2]),
+        r1[11],
+        hit ? 1 : 0,
+        d.armed ? 1 : 0,
+        d.crashed ? 1 : 0,
+        hit ? f3(hit.n.x) : 0,
+        hit ? f3(hit.n.y) : 0,
+        hit ? f3(hit.n.z) : 0,
+        hit ? hit.obj : -1,
+        hit ? +hit.imp.toFixed(2) : 0,
+        hit ? hit.g : 0,
+        f3(d.vel.x),
+        f3(d.vel.y),
+        f3(d.vel.z),
+        hasS ? r1[24] : 0,
+        hasS ? r1[25] : 0,
+        hasS ? r1[26] : 0
+      ]);
+      if (free) {
+        const e = Math.hypot(d.pos.x - r1[1], d.pos.y - r1[2], d.pos.z - r1[3]),
+          a = qAng(d.q, { w: r1[4], x: r1[5], y: r1[6], z: r1[7] });
+        if (e > drift.pos) drift.pos = +e.toFixed(3);
+        if (a > drift.ang) {
+          drift.ang = +a.toFixed(1);
+          drift.at = r1[0];
+        }
+      }
+    }
+    return { rows: out, drift, from, to, warm, crashed: d.crashed };
+  }
+  function replayTrace(rows, opts = {}) {
+    const det = new StreamDetector(opts.world);
+    det.camTilt = opts.camTilt ?? 20;
+    if (opts.pilot) det.setPilot(opts.pilot);
+    if (opts.hook) opts.hook(det);
+    const d = Object.create(Drone.prototype);
+    d.armed = true;
+    d.crashed = false;
+    d.contactThisStep = false;
+    const dt = 0.001,
+      out = [],
+      dbg = [],
+      maybes = [],
+      chals = [],
+      hasV = rows[0].length >= 24;
+    let k = 0,
+      prev = null,
+      lastRow = -1;
+    const t0 = opts.from ?? rows[0][0],
+      t1 = Math.min(opts.to ?? Infinity, rows[rows.length - 1][0]);
+    while (k < rows.length - 2 && rows[k + 1][0] <= t0) k++;
+    for (let t = t0; t < t1 + (opts.tail ?? 1.6); t += dt) {
+      while (k < rows.length - 2 && rows[k + 1][0] <= t) k++;
+      const a = rows[k],
+        b = rows[Math.min(k + 1, rows.length - 1)];
+      const span = b[0] - a[0],
+        f = span > 0 ? Math.min(1, Math.max(0, (t - a[0]) / span)) : 0;
+      const jump = Math.hypot(b[1] - a[1], b[2] - a[2], b[3] - a[3]) > 1.5;
+      const L = i => (jump ? (f < 0.5 ? a[i] : b[i]) : a[i] + (b[i] - a[i]) * f);
+      d.pos = v3(L(1), L(2), L(3));
+      d.q = qnorm({ w: L(4), x: L(5), y: L(6), z: L(7) });
+      const rr = [L(8), L(9), L(10)].map(v => v * D2R);
+      d.w = v3(rr[1], -rr[2], -rr[0]);
+      if (jump && f >= 0.5 && !d._j) {
+        det.prevSide = {};
+        d._j = true;
+        prev = null;
+      }
+      if (!jump) d._j = false;
+      d.vel = hasV ? v3(L(21), L(22), L(23)) : prev ? mul(sub(d.pos, prev), 1 / dt) : v3();
+      prev = d.pos;
+      const src = f < 0.5 ? a : b;
+      d.armed = !!src[13];
+      d.crashed = !!src[14];
+      const ri = f < 0.5 ? k : k + 1;
+      d.contactThisStep = false; // contacts: once per recorded row that had one
+      if (src[12] && ri !== lastRow) {
+        lastRow = ri;
+        d.contactThisStep = true;
+        if (src.length >= 21) {
+          d.contactNormal = v3(src[15], src[16], src[17]);
+          d.contactOwner = src[18];
+          d.lastImpact = src[19];
+          d.contactGround = !!src[20];
+        } else {
+          d.contactNormal = v3(0, 1, 0);
+          d.contactGround = true;
+          d.lastImpact = 1;
+          d.contactOwner = -1;
+        }
+      }
+      // sticks (format v2 traces carry them; older ones don't): give the detector the pilot's inputs too
+      const rc =
+        src.length >= 27 ? { thr: src[11], roll: src[24], pitch: src[25], yaw: src[26] } : { thr: src[11] ?? 0, roll: 0, pitch: 0, yaw: 0 };
+      if (d._wasArmed !== undefined && d._wasArmed !== d.armed) det.onArmChange(d, d.armed); // the game tells the detector about arming (Slide Disarm, Perch)
+      d._wasArmed = d.armed;
+      det.update(d, dt, rc);
+      det.postStep(d);
+      for (const e of det.drain()) out.push({ ...e, t });
+      if (det.maybes && det.maybes.length) for (const m of det.drainMaybes()) maybes.push({ ...m, t });
+      if (det.chals && det.chals.length) for (const c of det.drainChallenges()) chals.push({ ...c, t });
+      if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src)
+        dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
+    }
+    // a lap trick still being flown when the stretch ends (a long trippy labelled early, re-flown in a window): what it would be
+    // called so far, marked `open` (the tools count it as found; nothing is scored from it)
+    {
+      const L = det.live;
+      if (L && L.laps >= 1 && opts.open)
+        out.push({
+          name: L.name,
+          exec: 'OPEN',
+          laps: L.laps,
+          dur: +Math.max(0, L.t1 - L.t0).toFixed(2),
+          obstacle: L.pole,
+          toks: [],
+          live: true,
+          open: true,
+          t: t1 + (opts.tail ?? 1.6)
+        });
+    }
+    return { events: out, debug: dbg, det, maybes, chals };
+  }
+
+  // ---- Learning from the pilot's own review labels.
+  // A review label says "this stretch of my flight was trick X" (or "that call was not a trick"), and the flight's trace
+  // carries everything that happened in it: attitude, rotation, position (so every over/under pass and gap is measured
+  // again on replay) and the sticks. The learner re-flies each labelled stretch through the detector with a slightly
+  // looser pilot profile and keeps a loosening only if it turns labelled misses into hits WITHOUT turning a "not a
+  // trick" into a call, losing a call the pilot confirmed, or adding calls in those stretches. Knobs (never tighter than
+  // the defaults, each with a hard cap): angle tolerance, how short a full roll/flip may read, how long ago an over/under
+  // pass may be and still belong to the trick, how slow a rotation may be, and how much air between segments.
+  const LEARN_STEPS = [
+    { key: 'tol', what: 'angle tolerance', step: L => L.learn.tol < LEARN_MAX.tol && (L.learn.tol += 10) },
+    { key: 'rev', what: 'short-reading rolls and flips', step: L => L.learn.rev < LEARN_MAX.rev && (L.learn.rev += 15) },
+    {
+      key: 'crossBack',
+      what: 'time allowed between an over/under pass and the trick',
+      step: L => L.learn.crossBack < LEARN_MAX.crossBack - 1e-6 && (L.learn.crossBack = +(L.learn.crossBack + 0.4).toFixed(2))
+    },
+    ...['R', 'P', 'Y'].map(ax => ({
+      key: 'rate' + ax,
+      what: { R: 'slower rolls', P: 'slower flips and loops', Y: 'slower yaw spins' }[ax],
+      step: L => {
+        const r = (L.rate = L.rate || {}),
+          cur = r[ax] || 360;
+        if (cur <= 190) return false;
+        r[ax] = Math.round(cur * 0.8);
+        return true;
+      }
+    })),
+    {
+      key: 'air',
+      what: 'air between segments',
+      step: L => {
+        const a = L.air || 0.45;
+        if (a >= 0.85) return false;
+        L.air = +(a + 0.15).toFixed(2);
         return true;
       }
     }
-    return false;
-  }
-  quadWidth() { const p = this.lastD && this.lastD.p; return p && p.arm ? 2 * (p.arm + (p.rDuct || 0.018)) : QUAD_W; }   // the whoop across, ducts and all (Air65 ≈ 0.08 m)
-  vetoedFor(name, t0) { return (this.vetoes || []).some(v => v.name === name && Math.abs(v.t0 - t0) < 0.35); }
-  commit(p, t) {
-    this.pend = this.pend.filter(x => x !== p);
-    // a rotation carried with the motors off is a disarm trick's (deadTick), never also a Flip / Roll / Yaw Spin / Powerloop
-    { const D = this.dead, M = this.deadMute; if ((D && p.tDone > D.t - 0.05) || (M && p.t0 < M.b && p.tDone > M.a)) { for (const sp of p.spans || []) sp.tok.usedUntil = Math.max(sp.tok.usedUntil, sp.b); return; } }
-    if ((p.name === 'Inverted Rewind' || p.name === 'Segmented Flips/Rolls') && this.uhuh(p.t0, p.tDone)) p.name = 'Inverted Uh-uh';
-    const rv = this.watcher.review(p), floor = this.watcher.on && this.community && this.community.floor[p.name];
-    if (!rv.veto && floor && rv.conf < floor) { rv.veto = true; rv.why = `under the community's ${Math.round(floor * 100)}% for ${p.name}`; }
-    if (rv.veto) {   // the Watcher says no: remember it, tell the game why, and let the detector find the next-best reading
-      this.vetoes.push({ name: p.name, t0: p.t0, t }); this.vetoes = this.vetoes.filter(v => t - v.t < 8);
-      this.pushReview(rv); this.pushDebug({ t: +t.toFixed(2), toks: '', cross: '', result: ['watcher: not ' + p.name + ' (' + rv.why + ')'], near: null });
-      if (!this.crashSeen) { this.trigger(t, false); if (p.part) this.trigger(t, true); }
-      return;
+  ];
+  const learnClone = p => {
+    const c = JSON.parse(JSON.stringify(p || {}));
+    c.learn = { tol: 0, rev: 0, crossBack: 0, ...(c.learn || {}) };
+    return c;
+  };
+  // runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
+  function learnWindows(run) {
+    const T0 = run.span ? run.span[0] : run.rows[0][0],
+      T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0],
+      L = run.labels
+        .filter(
+          l =>
+            l &&
+            Number.isFinite(l.repStart) &&
+            Number.isFinite(l.t) &&
+            !l.undone &&
+            (l.verdict === 'yes' || l.verdict === 'no') &&
+            (l.actual || l.verdict === 'no')
+        ) /* decided labels only: an undecided trick teaches nothing */
+        .map(l => ({
+          a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4),
+          b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6),
+          want: l.actual && l.actual !== 'not a trick' && !l.custom ? l.actual : null,
+          /* a trick the pilot named themselves has no rule to loosen */ not: l.verdict === 'no' ? l.target : null,
+          laps: l.laps
+        }))
+        .sort((x, y) => x.a - y.a);
+    const W = [];
+    for (const l of L) {
+      const w = W[W.length - 1],
+        a = Math.max(T0, l.a - 4),
+        b = Math.min(T1, l.b + 1.2);
+      if (w && a <= w.b) {
+        w.b = Math.max(w.b, b);
+        w.labels.push(l);
+      } else W.push({ a, b, labels: [l] });
     }
-    for (const s of p.spans) s.tok.usedUntil = Math.max(s.tok.usedUntil, s.b);
-    for (const k of p.claims || []) this.claimUsed.add(k);
-    if ((p.claims || []).some(k => k.startsWith('orb'))) for (const sg of this.orbSegs) if (sg.t1 > p.t0 - 0.3 && sg.t0 < p.tDone + 0.3) this.claimUsed.add(sg.id);
-    if ((p.claims || []).some(k => k.startsWith('pass'))) for (const ps of this.passes) if (Math.abs(ps.t - p.tDone) < 0.6) this.claimUsed.add(ps.id);
-    if (p.tapRef) this.contacts.forEach(c => { if (Math.abs(c.t - p.tapRef.t) < 0.12) c.tap = true; });
-    for (const k of this.toks) if (k.t1 < p.t0 - 0.05) k.usedUntil = Math.max(k.usedUntil, k.t1); // leftovers before this trick
-    if (p.part) p.part.slice(0, -1).forEach(c => c.used = true); // the last pass may start the next trick
-    // …and one move is one obstacle trick: the passes of OTHER objects made during it are used up too (a Matty over a sakura
-    // tree in front of a shop also went over and back under the shop's awning, window and trim, and the over-then-under
-    // fallback called three Mattys for one flip: the bot's run on Clappy Park, 2026-11-18)
-    if (p.part && p.part.length) { const a0 = Math.min(...p.part.map(c => c.t)) - 0.3, a1 = Math.max(...p.part.map(c => c.t)) + 0.35, own = p.part[0].obj;
-      for (const c of this.crossLog) if (c.obj !== own && c.t >= a0 && c.t <= a1) c.used = true; }
-    // a hit on the way out is a bump too (owner, 2026-11-21, from pilots' grades: 11 calls the game graded clean were graded bump,
-    // and in four the quad hit something between the end of the move and the call, which is made a little later): any contact
-    // during the move, and a real knock (BUMP_AFTER) after it up to now
-    const contacts = this.contacts.filter(c => c.t >= p.t0 - 0.05 && (c.t <= p.tDone + 0.05 || (c.t <= t + 1e-6 && (c.impact || 0) >= BUMP_AFTER)));
-    const g = this.grade(p, contacts, p.toks);
-    for (const k of p.toks) { const m = k.rateSum / k.n, v = Math.sqrt(Math.max(0, k.rateSq / k.n - m * m)); const cv = v / (m || 1); if (cv > 0.45) { g.clean = Math.max(0, g.clean - Math.round((cv - 0.45) * 40)); g.notes.push('uneven rotation speed'); } }
-    if (g.exec === 'CLEAN' && g.clean < 70) g.exec = 'SLOPPY';
-    const crosses = this.crossWindow(p.t0);
-    const near = (p.hold === HOLD_OBST && !p.clen) ? this.nearMiss(p.toks, crosses) : null;
-    const latency = +(t - p.tDone).toFixed(3);
-    if (!p.toks.length) { g.clean = Math.max(g.clean, 90); if (g.exec === 'SLOPPY') g.exec = 'CLEAN'; }
-    this.pushDebug({ t: +t.toFixed(2), toks: p.toks.map(tk => tk.ax + (tk.dir > 0 ? '+' : '-') + Math.round(tk.raw) + (tk.inv ? 'i' : '') + (tk.maxGap > 0.15 ? `(stall ${tk.maxGap.toFixed(2)}s)` : '')).join(' '),
-      cross: crosses.map(c => `${c.name}:${c.kind}${c.dir > 0 ? '→' : '←'}@${(c.t - p.t0).toFixed(1)}s`).join(' '), result: [p.name], near, latency });
-    if (near) this.emit({ name: 'near', near });
-    this.pushReview(rv); this.watcher.learn(p, rv);
-    // Half Matty Pendulum (owner, 2026-11-18): the third Half Matty in a row on the same object, each starting within
-    // PENDULUM_GAP of the last one's end and nothing else in between, is called as one Pendulum (scored once, not as a
-    // third halved Half Matty). Any other trick breaks the chain.
-    const pd = pendulumStep(this.hmChain, p), name = pd.name; this.hmChain = pd.chain;
-    this.emit({ name, exec: g.exec, clean: g.clean, obstacle: p.obstacle || null, toks: p.toks, notes: g.notes, latency, draft: !!p.draft || name === 'Half Matty Pendulum', watch: { conf: rv.conf, votes: rv.votes, fails: rv.checks.filter(k => !k.ok).map(k => k.id), t0: rv.t0, t1: rv.t1 } });   // t0 / t1: the window the Watcher judged (the detector's clock)
+    return W;
   }
-  pushReview(rv) { this.reviews.push(rv); if (this.reviews.length > 20) this.reviews.shift(); }
-  drainReviews() { const r = this.reviews; this.reviews = []; return r; }
-  pushDebug(x) { (this.debug = this.debug || []).push(x); if (this.debug.length > 12) this.debug.shift(); }
-  provisional() { return this.pend.map(p => p.name); }
-  busy() { return this.pend.length > 0 || this.cur.some(c => c && c.raw > 45) || !!this.live || !!(this.wallRide && this.wallRide.emitted) || !!(this.slide && this.slide.dist > 0.3) || !!this.pendingFly || !!this.dead || !!this.deadPend || !!(this.stick && this.time - this.stick.t0 > 0.5); }
-}
+  function learnScore(runs, profile) {
+    let hits = 0,
+      want = 0,
+      bad = 0,
+      calls = 0;
+    const missed = [],
+      hitNames = [];
+    for (const run of runs)
+      for (const w of run._win || (run._win = learnWindows(run))) {
+        const ev = (
+          run.detect
+            ? run.detect(profile, w).filter(e => e.t >= w.a - 0.2 && e.t <= w.b + 2)
+            : replayTrace(run.rows, {
+                world: run.world,
+                camTilt: run.camTilt,
+                pilot: profile,
+                from: w.a,
+                to: w.b,
+                tail: 1.8,
+                debug: false,
+                open: true
+              }).events
+        ).filter(e => e.name !== 'near' && e.name !== 'Crash');
+        calls += ev.length;
+        for (const l of w.labels) {
+          const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t - (e.dur || 0) <= l.b + 2.2);
+          if (l.want) {
+            want++;
+            if (inSpan.some(e => e.name === l.want)) {
+              hits++;
+              hitNames.push(l.want);
+            } else missed.push(l.want);
+          }
+          if (l.not && l.not !== l.want && inSpan.some(e => e.name === l.not)) bad++;
+        }
+      }
+    return { hits, want, bad, calls, missed, hitNames, value: hits - bad * 1.5 - calls * 0.2 };
+  }
+  // Greedy and careful: one small step at a time, kept only when it clearly helps. `tick` lets the game breathe between replays.
+  async function learnFromLabels(runs, profile, opts = {}) {
+    runs = runs.filter(
+      r => r && Array.isArray(r.labels) && ((typeof r.detect === 'function' && r.span) || (r.rows && r.rows.length > 50 && r.world))
+    );
+    let cur = learnClone(profile);
+    const base = learnScore(runs, cur),
+      report = {
+        labels: base.want,
+        before: base.hits,
+        after: base.hits,
+        changes: [],
+        fixed: [],
+        still: base.missed.slice(),
+        wrongBefore: base.bad,
+        wrongAfter: base.bad
+      };
+    if (!base.want || base.hits === base.want) return { profile: cur, report, changed: false };
+    let best = base;
+    for (let round = 0; round < (opts.rounds ?? 5); round++) {
+      let pick = null;
+      for (const st of LEARN_STEPS) {
+        const cand = learnClone(cur);
+        for (let k = 0; k < 3; k++) {
+          // a knob may need more than one notch before anything changes: take the smallest that helps
+          if (!st.step(cand)) break;
+          if (opts.tick) await opts.tick();
+          const sc = learnScore(runs, cand);
+          // labels are weights, not vetoes (owner, 2026-11-18): a notch must find more of the pilot's tricks, and what it costs
+          // (confirmed tricks no longer found, rejected calls back, 1.5 each) may be at most a quarter of what it finds
+          const kept = sc.hitNames.slice();
+          let lostN = 0;
+          for (const nm of best.hitNames) {
+            const x = kept.indexOf(nm);
+            if (x < 0) lostN++;
+            else kept.splice(x, 1);
+          }
+          const newHits = kept.length,
+            cost = lostN + 1.5 * Math.max(0, sc.bad - best.bad),
+            fair = newHits > 0 && cost <= 0.25 * newHits;
+          if (sc.bad > best.bad && !fair) break; // brought back rejected calls it cannot pay for: further is worse
+          if (sc.hits > best.hits && fair && sc.value > best.value) {
+            if (!pick || sc.value > pick.sc.value) pick = { st, cand: learnClone(cand), sc };
+            break;
+          }
+        }
+      }
+      if (!pick) break;
+      cur = pick.cand;
+      best = pick.sc;
+      report.changes.push(pick.st.what);
+      if (best.hits === best.want) break;
+    }
+    report.after = best.hits;
+    report.still = best.missed.slice();
+    report.wrongAfter = best.bad;
+    {
+      const m = base.missed.slice();
+      for (const n of best.missed) {
+        const i = m.indexOf(n);
+        if (i >= 0) m.splice(i, 1);
+      }
+      report.fixed = m;
+    }
+    cur.learn.labels = base.want;
+    return { profile: cur, report, changed: report.changes.length > 0 };
+  }
 
-// ================================================================= THE WATCHER (second, live judge)
-// The detector proposes a trick from the rotation pattern and the obstacle passes. The Watcher cross-checks the proposal
-// against the other live sources of the same moment, each one an independent witness:
-//   path    where the quad went relative to the object (sim truth: passes, loops, rise, travel direction)
-//   view    what the FPV camera saw (object kept in view, inverted, looking at the sky / ground), camera tilt included
-//   sticks  what the pilot actually commanded (deliberate stick on the rotating axis, throttle punches and cuts)
-//   timing  how long each phase took compared with the prowhooper.com demo GIFs, scaled to this pilot's own speed
-// and against each trick's TPW library description (the hard checks: things the trick cannot do without).
-// A hard check that fails vetoes the call (the detector then takes its next-best reading). Otherwise every source that has
-// something to say votes; the votes are averaged per source (one source, one vote) into a confidence. Two candidates that
-// tie on the rotation pattern are settled by that confidence, and a call that most witnesses contradict is dropped.
-// Video Review never runs it (no world, no sticks): det.watcherOn = false.
-//
-// demo timing (seconds per phase, measured from the GIFs: docs/tricktionary-reference.md) and the demo pilot's rates
-const DEMO_TIMING = {
-  'Flip': [['P', 0.4]], 'Double Flip': [['P', 0.85]], 'Roll': [['R', 0.36]], 'Double Roll': [['R', 0.8]], 'Yaw Spin': [['Y', 1.0]],
-  'Inverted Rewind': [['*', 0.3], ['*', 0.3]], 'Vanny Roll': [['Y', 0.56], ['R', 0.5], ['Y', 0.64]],
-  "Rubik's Cube": [['P', 0.3], ['R', 0.53], ['P', 0.4]], "Cubik's Rube": [['R', 0.26], ['P', 0.7], ['R', 0.42]],
-  'Juicy Flick': [['P', 0.27], ['R', 0.34]], 'Snapback': [['P', 0.3], ['R', 0.37]],
-  'Inverted Yaw Spin': [['R', 0.26], ['Y', 0.56], ['R', 0.3]], 'Half Matty': [['R', 0.25], ['P', 0.6]], '540 Half Matty': [['R', 0.6], ['P', 0.6]],
-  'Immelmann': [['P', 0.6], ['R', 0.4]],
-};
-const DEMO_RATE = { R: 950, P: 850, Y: 600 };   // typical demo rotation speed per axis (°/s), same source
-const WATCH_GENERIC = [
-  { id: 'landed', src: 'path', label: 'landed upright', fn: W => W.endsUpright() },
-  { id: 'sticks', src: 'sticks', label: 'rotation came from the sticks (not a bump)', fn: W => W.commanded() },
-  { id: 'timing', src: 'timing', label: 'timed like the demo (at your speed)', fn: W => W.demoTiming() },
-  { id: 'air', src: 'path', label: 'held steady in the air between segments', fn: W => W.heldBetween() },
-];
-const WATCH = {
-  'Snapback': [
-    { id: 'under', src: 'path', label: 'passed under the object first, upright and flying forward', hard: 'pre', fn: W => W.underFirst() },
-    { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
-    { id: 'orbit2', src: 'path', label: 'not part of an orbit/trippy', hard: 'post', fn: W => W.notOrbit() },
-    { id: 'noloop', src: 'path', label: 'snapped back right there (no half loop up and over)', hard: 'post', fn: W => W.noLoopOver(1.6) },
-    { id: 'track', src: 'view', label: 'kept the object in view', hard: 'post', fn: W => W.tracked(0.35) },
-    { id: 'sky', src: 'view', label: 'looked up past the object', fn: W => W.looked('up') },
-    { id: 'face', src: 'view', label: 'finished looking back at it', fn: W => W.endsFacing() },
-    { id: 'quick', src: 'timing', label: 'quick pitch back to inverted', fn: W => W.quick('P', 0.7) },
-    { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() },
-  ],
-  'Juicy Flick': [
-    { id: 'orbit', src: 'path', label: 'not part of an orbit/trippy', hard: 'pre', fn: W => W.notOrbit() },
-    { id: 'down', src: 'view', label: 'flicked nose-down through the ground view', fn: W => W.looked('down') },
-    { id: 'inv', src: 'view', label: 'reached inverted', fn: W => W.inverted() },
-    { id: 'quick', src: 'timing', label: 'quick flick', fn: W => W.quick('P', 0.75) },
-    { id: 'punch', src: 'sticks', label: 'throttle on through the flick', fn: W => W.throttle('punch', W.t0 - 0.15, W.t0 + 0.4) },
-    { id: 'roll', src: 'sticks', label: 'clean 180 roll to finish', fn: W => W.cleanRoll() },
-    { id: 'back', src: 'path', label: 'carried on flying backward', fn: W => W.endsBackward() },
-  ],
-  'Matty Flip': [
-    { id: 'track', src: 'view', label: 'kept the object in view on the way down', fn: W => W.trackedBetween('O', 'U', 0.4) },
-    { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
-    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
-    { id: 'cut', src: 'sticks', label: 'throttle cut over the top', fn: W => W.throttle('cut', W.t0 - 0.4, W.t1) },
-  ],
-  'Beginner Matty': [
-    { id: 'noflip', src: 'path', label: 'no flip, just the backward swing', fn: W => ({ ok: !W.toks.some(k => k.ax === 'P' && k.raw > 150) }) },
-    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
-    { id: 'track', src: 'view', label: 'kept the object in view', fn: W => W.tracked(0.4) },
-  ],
-  'Half Matty': [
-    { id: 'face', src: 'view', label: 'facing the object as it went under', fn: W => W.facingAt('U') },
-    { id: 'back', src: 'path', label: 'flying backward under it', fn: W => W.endsBackward() },
-  ],
-  'Stall Matty Rewind': [
-    { id: 'seg', src: 'path', label: 'segmented front flip (stall in the middle)', fn: W => ({ ok: W.toks.some(k => (k.maxGap || 0) >= 0.2) || (W.toks.length >= 2 && W.toks[1].t0 - W.toks[0].t1 >= 0.2) }) },
-    { id: 'back', src: 'path', label: 'rewound backward past the object', fn: W => W.endsBackward() },
-    { id: 'cut', src: 'sticks', label: 'throttle cut before the stall', fn: W => W.throttle('cut', W.t0 - 0.5, W.t1) },
-  ],
-  'Split S': [
-    { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
-    { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() },
-  ],
-  '540 Split S': [
-    { id: 'invtop', src: 'view', label: 'rolled inverted over the top', fn: W => W.invertedNear('O', -0.3, 0.8) },
-    { id: 'dive', src: 'path', label: 'dove down the back', fn: W => W.dove() },
-  ],
-  'Powerloop': [
-    { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
-    { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
-    { id: 'punch', src: 'sticks', label: 'throttle up the side', fn: W => W.throttle('punch', W.t0 - 0.5, W.t1) },
-  ],
-  'Immelmann': [
-    { id: 'invtop', src: 'view', label: 'inverted over the top', fn: W => W.invertedAt('O') },
-    { id: 'roll', src: 'sticks', label: 'clean 180 roll at the peak', fn: W => W.cleanRoll() },
-  ],
-  'Maverick Loop': [
-    { id: 'uptop', src: 'view', label: 'upright and looking forward over the top', fn: W => W.uprightAt('O') },
-    { id: 'sweep', src: 'path', label: 'the path looped all the way round', fn: W => W.loopSweep(270) },
-  ],
-  'Whiplash': [
-    { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
-    { id: 'holds', src: 'view', label: 'still level, still looking at the pole, still backing away after the whip', hard: 'post', fn: W => W.whipHolds() },
-    { id: 'noorbit', src: 'path', label: 'not just circling the pole', hard: 'post', fn: W => W.notOrbit() },
-    { id: 'track', src: 'view', label: 'kept the pole in view', fn: W => ({ ok: true }) },
-  ],
-  'Cradle': [
-    { id: 'noover', src: 'path', label: 'no over/under-the-object loop around it', hard: 'post', fn: W => W.noOverNear(0.8) },
-  ],
-  'Jump Rope': [
-    { id: 'side', src: 'path', label: 'sideways over/under the object', fn: W => ({ ok: (W.part || []).every(c => c.latDot > 0.6), val: Math.round(Math.min(...(W.part || [{ latDot: 0 }]).map(c => c.latDot)) * 100) + '%' }) },
-  ],
-  'Inverted Yaw Spin': [
-    { id: 'inv', src: 'view', label: 'stayed inverted through the spin', fn: W => W.invertedDuring('Y', 0.7) },
-  ],
-};
-class Watcher {
-  constructor(det) { this.det = det; this.style = { R: null, P: null, Y: null }; }
-  get on() { return this.det.watcherOn !== false; }
-  ctx(name, c) {
-    const det = this.det, toks = c.toks || [], part = c.part || null;
-    const t0 = c.t0 ?? (toks.length ? toks[0].t0 : part ? part[0].t : det.time);
-    const t1 = c.tDone ?? Math.max(toks.length ? toks[toks.length - 1].t1 : -1e9, part ? part[part.length - 1].t : -1e9, t0);
-    const objId = c.obj ?? (part && part.length ? part[0].obj : null);
-    const W = new WatchCtx(det, this, name, toks, part, t0, t1, objId, c.err); W.poleId = c.poleObj; return W;
-  }
-  pre(name, c) {
-    if (!this.on) return true;
-    const L = WATCH[name]; if (!L) return true;
-    const W = this.ctx(name, c);
-    for (const k of L) if (k.hard === 'pre') { const r = k.fn(W); if (!r.ok) return false; }
-    return true;
-  }
-  judge(p, hardOnly) {
-    const W = this.ctx(p.name, p), L = [...(WATCH[p.name] || []), ...(p.toks && p.toks.length ? WATCH_GENERIC : [])];
-    const checks = [];
-    for (const k of L) { if (hardOnly && !k.hard) continue; let r; try { r = k.fn(W); } catch (e) { r = null; }
-      if (!r || r.na) continue;   // this witness has nothing to say here (no sticks recorded, no object, no demo timing)
-      checks.push({ id: k.id, src: k.src, label: k.label, ok: !!r.ok, val: r.val, hard: !!k.hard, w: r.w ?? 1 }); }
-    const fail = checks.find(k => k.hard && !k.ok);
-    const by = {}; for (const k of checks) if (!k.hard) { const b = by[k.src] || (by[k.src] = { n: 0, ok: 0 }); b.n += k.w; b.ok += k.ok ? k.w : 0; }
-    if (p.toks && p.toks.length && p.err != null) by.rotation = { n: 1, ok: clamp(1 - p.err * 2, 0, 1) };   // the pattern matcher is a witness too
-    if (LIBRARY && LIBRARY.by[p.name] && LIBRARY.by[p.name].pos && this.det.lib) {   // the library: how much does this move look like the examples of this trick (and not another)?
-      const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05), m = sig ? libMatch(sig) : [], me = m.find(x => x.name === p.name);
-      if (me) { let v = clamp(1 - (me.pos - 0.15) / (LIB_THR * 1.4), 0, 1); const other = m.find(x => x.name !== p.name); if (other && other.pos < me.pos - 0.08) v *= 0.6; if (me.neg < me.pos) v *= 0.6; by.library = { n: 1, ok: v }; } }
-    // The learned witness does NOT vote yet (2026-11-21): the library's pilot examples are measured over whole label tiles (a
-    // Roll example runs 1.8-3.8 s with other motion in it), a live call over the detector's own tight window, and a clean 360
-    // roll measured that way got 14 %. It votes once it is trained on call-window signatures (WITNESS.live, set by the trainer).
-    if (WITNESS && WITNESS.live && WITNESS.vote.has(p.name)) { const sig = this.det.libSigOf(W.t0 - 0.05, W.t1 + 0.05), pw = sig ? witnessProb(sig, p.name) : null; if (pw != null) by.learned = { n: 1, ok: clamp(pw / 0.25, 0, 1) }; }
-    const votes = Object.entries(by).map(([src, b]) => [src, b.ok / b.n]), VW = { library: 2 };   // the library leans on the demo GIFs: it counts double
-    const wsum = votes.reduce((a, v) => a + (VW[v[0]] || 1), 0), conf = votes.length ? votes.reduce((a, v) => a + v[1] * (VW[v[0]] || 1), 0) / wsum : 1;
-    // the veto stays with the measured witnesses: the library only moves the confidence (it is still young)
-    const vv = votes.filter(v => v[0] !== 'library' && v[0] !== 'learned'), vconf = vv.length ? vv.reduce((a, v) => a + v[1], 0) / vv.length : 1, out = vv.length >= 3 && vconf < 0.3;
-    return { name: p.name, veto: !!fail || out, why: fail ? fail.label : (out ? 'most witnesses disagree' : null),
-      checks, votes: Object.fromEntries(votes.map(([k, v]) => [k, +v.toFixed(2)])), conf: +conf.toFixed(2), t0: +W.t0.toFixed(3), t1: +W.t1.toFixed(3) };
-  }
-  review(p) { if (!this.on) return { name: p.name, veto: false, checks: [], votes: {}, conf: 1 }; return this.judge(p, false); }
-  // this pilot's own rotation speed per axis, learned live from tricks every witness agreed on (feeds the timing witness)
-  learn(p, rv) {
-    if (!this.on || rv.conf < 0.6) return;
-    for (const k of p.toks || []) { const dur = k.t1 - k.t0; if (dur < 0.08 || k.raw < 150) continue; const r = k.raw / dur, o = this.style[k.ax];
-      this.style[k.ax] = o == null ? r : o * 0.85 + r * 0.15; }
-  }
-  speedFactor(ax) { const r = this.style[ax] ?? this.det.pilotRate?.[ax] ?? null; return r ? clamp(DEMO_RATE[ax] / r, 0.6, 3) : 1.4; }
-}
-class WatchCtx {
-  constructor(det, wa, name, toks, part, t0, t1, objId, err) { Object.assign(this, { det, wa, name, toks, part, t0, t1, objId, err }); }
-  get obj() { if (this._o === undefined) this._o = this.objId != null ? this.det.world.objs.find(o => o.id === this.objId) || null : null; return this._o; }
-  // the point of the object the pilot is looking at from position p (bar/branch line at mid height; tree canopy centre)
-  objPt(p) {
-    const o = this.obj; if (!o || !o.obstacle) return null;
-    const { a, b, under, over } = o.obstacle, y = (under + over) / 2;
-    if (o.round) return v3(o.round.c.x, y, o.round.c.z);
-    const ab = v3(b.x - a.x, 0, b.z - a.z), L2 = ab.x * ab.x + ab.z * ab.z || 1, f = clamp(((p.x - a.x) * ab.x + (p.z - a.z) * ab.z) / L2, 0, 1);
-    return v3(a.x + ab.x * f, y, a.z + ab.z * f);
-  }
-  fr(a, b) { return this.det.fbIn(a, b); }
-  view(x) { const pt = this.objPt(x.p); return pt ? this.det.viewOf(x.p, x.up, x.f, pt).ang : 180; }
-  cam(x) { const c = Math.cos(this.det.camTilt * D2R), s = Math.sin(this.det.camTilt * D2R); return norm(add(mul(x.f, c), mul(x.up, s))); }
-  cross(kind) { return (this.part || []).find(c => c.kind === kind) || this.det.crossLog.find(c => c.kind === kind && (this.objId == null || c.obj === this.objId) && c.t >= this.t0 - 1.2 && c.t <= this.t1 + 0.6) || null; }
-  // ---- checks: each returns { ok, val }
-  underFirst() {
-    const c = this.part && this.part[0]; if (!c || c.kind !== 'U') return { ok: false, val: 'no pass under' };
-    const okT = c.t <= this.t0 + 0.25 && c.t >= this.t0 - 1.0;
-    return { ok: okT && c.upY > 0.5 && c.fwdDot > 0.2, val: `${(c.t - this.t0).toFixed(2)} s, fwd ${c.fwdDot.toFixed(1)}` };
-  }
-  notOrbit() {
-    const d = this.det, a = this.t0 - 0.4, b = this.t1 + 0.4;
-    // flying straight past a pole sweeps < 180° round it (≈160° inside the orbit radius), so only more than that is an orbit
-    const seg = d.orbSegs.some(s => s.t1 > a && s.t0 < b && s.acc > 300) || Object.values(d.orb).some(o => o && o.acc > 300 && o.t1 > a);
-    return { ok: !seg };
-  }
-  noLoopOver(maxRise) {
-    const over = this.det.crossLog.some(c => c.kind === 'O' && c.obj === this.objId && c.t > this.t0 - 0.1 && c.t < this.t1 + 0.6);
-    const ys = this.fr(this.t0, this.t1).map(x => x.p.y), rise = ys.length ? Math.max(...ys) - ys[0] : 0;
-    return { ok: !over && rise < maxRise, val: over ? 'went over it' : `rose ${rise.toFixed(1)} m` };
-  }
-  tracked(frac) { const F = this.fr(this.t0, this.t1); if (!F.length || this.objId == null) return { ok: this.objId == null, val: 'n/a' };
-    const f = F.filter(x => this.view(x) < 70).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
-  trackedBetween(k1, k2, frac) { const a = this.cross(k1), b = this.cross(k2); if (!a || !b || b.t <= a.t) return { ok: true, val: 'n/a' };
-    const F = this.fr(a.t, b.t); if (!F.length) return { ok: true, val: 'n/a' }; const f = F.filter(x => this.view(x) < 70).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
-  facingAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; const F = this.fr(c.t - 0.35, c.t - 0.05);
-    const ok = F.some(x => this.view(x) < 75); return { ok }; }
-  quick(ax, maxT) { const T = this.toks.filter(k => k.ax === ax).reduce((s, k) => s + (k.t1 - k.t0), 0); return { ok: T > 0 && T <= maxT, val: T.toFixed(2) + ' s' }; }
-  looked(dir) { const F = this.fr(this.t0, this.t1); const ok = F.some(x => { const c = this.cam(x); return dir === 'up' ? c.y > 0.55 : c.y < -0.55; }); return { ok }; }
-  inverted() { return { ok: this.fr(this.t0, this.t1 + 0.1).some(x => x.up.y < -0.4) }; }
-  invertedAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; return { ok: c.upY < -0.2, val: 'up ' + c.upY.toFixed(2) }; }
-  invertedNear(kind, a, b) { const c = this.cross(kind); if (!c) return { na: true }; return { ok: this.fr(c.t + a, c.t + b).some(x => x.up.y < -0.3) }; }
-  uprightAt(kind) { const c = this.cross(kind); if (!c) return { ok: true, val: 'n/a' }; return { ok: c.upY > 0.3, val: 'up ' + c.upY.toFixed(2) }; }
-  invertedDuring(ax, frac) { const k = this.toks.find(x => x.ax === ax); if (!k) return { ok: true, val: 'n/a' }; const F = this.fr(k.t0, k.t1); if (!F.length) return { ok: true };
-    const f = F.filter(x => x.up.y < -0.2).length / F.length; return { ok: f >= frac, val: Math.round(f * 100) + '%' }; }
-  cleanRoll() { const R = this.toks.filter(k => k.ax === 'R'); if (!R.length) return { ok: false, val: 'no roll' };
-    const k = R[R.length - 1], rate = k.rateSum / k.n, off = k.off / Math.max(1, k.raw); return { ok: rate >= 220 && off < 0.8, val: `${Math.round(rate)}°/s` }; }
-  endsUpright() { return { ok: this.fr(this.t1, this.t1 + 0.6).some(x => x.up.y > 0.5) }; }
-  endsFacing() { if (this.objId == null) return { ok: true, val: 'n/a' }; return { ok: this.fr(this.t1 - 0.05, this.t1 + 0.4).some(x => this.view(x) < 75) }; }
-  endsBackward() { const F = this.fr(this.t1 - 0.1, this.t1 + 0.5).filter(x => Math.hypot(x.v.x, x.v.z) > 0.7); if (!F.length) return { ok: true, val: 'slow' };
-    const b = F.filter(x => (x.v.x * x.f.x + x.v.z * x.f.z) / (Math.hypot(x.v.x, x.v.z) * (Math.hypot(x.f.x, x.f.z) || 1)) < -0.2).length / F.length; return { ok: b >= 0.5, val: Math.round(b * 100) + '%' }; }
-  heldBetween() {   // the space between two segments: the quad keeps the attitude the last segment left it in
-    const G = []; for (let i = 1; i < this.toks.length; i++) { const a = this.toks[i - 1].t1, b = this.toks[i].t0; if (b - a > 0.12) G.push([a, b]); }
-    if (!G.length) return { na: true };
-    const worst = Math.max(...G.map(([a, b]) => this.det.sweptBetween(a, b) / (b - a)));
-    return { ok: worst < 120, val: G.map(([a, b]) => (b - a).toFixed(2)).join('/') + ' s air' };
-  }
-  whipHolds() { const P = this.det.poles.find(p => p.id === this.poleId); if (!P) return { na: true }; const F = this.fr(this.t1, this.t1 + 0.6); if (F.length < 10) return { na: true };
-    const lvl = F.filter(x => x.up.y > 0.5).length / F.length, see = this.det.poleView(P, this.t1, this.t1 + 0.6, 65), bk = this.det.backFrac(this.t1, this.t1 + 0.6), slow = F.every(x => Math.hypot(x.v.x, x.v.z) < 0.8);
-    return { ok: lvl >= 0.7 && see >= 0.6 && (bk >= 0.5 || slow), val: `level ${Math.round(lvl * 100)}% view ${Math.round(see * 100)}%` }; }
-  noOverNear(after) { const o = this.det.crossLog.some(c => c.kind === 'O' && c.t > this.t0 - 0.5 && c.t < this.t1 + after); return { ok: !o }; }
-  loopSweep(min) { const ps = this.det.pathSweep(this.t0 - 0.3, this.t1 + 0.3); return { ok: Math.abs(ps.sweep) >= min, val: Math.round(Math.abs(ps.sweep)) + '°' }; }
-  // ---- sticks witness. Frames carry the pilot's sticks; no stick movement anywhere near = nothing recorded (n/a)
-  sticks(a, b) { const F = this.fr(a, b).filter(x => x.rc); if (F.length < 3) return null;
-    const live = F.some(x => Math.abs(x.rc.roll) > 0.05 || Math.abs(x.rc.pitch) > 0.05 || Math.abs(x.rc.yaw) > 0.05) && Math.max(...F.map(x => x.rc.thr)) - Math.min(...F.map(x => x.rc.thr)) > 0.005;
-    return live ? F : null; }
-  commanded() {
-    if (!this.toks.length) return { na: true }; const F = this.sticks(this.t0 - 0.1, this.t1); if (!F) return { na: true };
-    const key = { R: 'roll', P: 'pitch', Y: 'yaw' }; let good = 0;
-    for (const k of this.toks) { const G = F.filter(x => x.t >= k.t0 && x.t <= k.t1); if (!G.length) { good++; continue; }
-      // stick on that axis, pushed the way the quad turned (pitch stick back = nose up = P+; roll right = R+; yaw stick sign is the sim's)
-      const sg = k.ax === 'P' ? -1 : 1, f = G.filter(x => Math.abs(x.rc[key[k.ax]]) > 0.2 && Math.sign(x.rc[key[k.ax]]) * sg === k.dir).length / G.length;
-      if (f >= 0.3) good++; }
-    return { ok: good === this.toks.length, val: `${good}/${this.toks.length} rotations` };
-  }
-  throttle(kind, a, b) { const F = this.sticks(a - 0.6, b + 0.2); if (!F) return { na: true };
-    const base = F.filter(x => x.t < a).map(x => x.rc.thr), hov = base.length ? base.reduce((s, x) => s + x, 0) / base.length : 0.35, G = F.filter(x => x.t >= a && x.t <= b);
-    if (!G.length) return { na: true };
-    if (kind === 'punch') { const m = Math.max(...G.map(x => x.rc.thr)); return { ok: m > hov + 0.08 || m > 0.55, val: Math.round(m * 100) + '%' }; }
-    const m = Math.min(...G.map(x => x.rc.thr)); return { ok: m < Math.min(0.2, hov - 0.1), val: Math.round(m * 100) + '%' }; }
-  // ---- timing witness: phase lengths vs the demo GIFs, scaled to this pilot's speed on each axis (learned live)
-  demoTiming() {
-    const D = DEMO_TIMING[this.name]; if (!D || !this.toks.length) return { na: true };
-    const T = this.toks.filter(k => k.raw >= 100); if (T.length < D.length) return { na: true };
-    let ok = 0; const vals = [];
-    for (let i = 0; i < D.length; i++) { const [ax, sec] = D[i], k = T[i]; if (ax !== '*' && k.ax !== ax) return { na: true };
-      const want = sec * this.wa.speedFactor(k.ax), dur = k.t1 - k.t0; vals.push(dur.toFixed(2)); if (dur >= want * 0.3 && dur <= want * 2.6) ok++; }
-    return { ok: ok === D.length, val: vals.join('/') + ' s' };
-  }
-  dove() { const c = this.cross('O'), u = this.cross('U'); if (!c || !u) return { ok: true, val: 'n/a' }; return { ok: this.fr(c.t, u.t).some(x => x.v.y < -1.0) }; }
-}
-
-// context tricks read only from how the quad moved around the rotation (a stall, a climb before it): no touch, no pass.
-// One of them never takes part of a longer trick's rotations (pilots, 2026-11-22: Rubik's Cubes read as 360 Stall Rewind
-// or Eject Roll: the half flip in looks like the stall or the climb)
-const SOFT_CTX = new Set(CONTEXT_TRICKS.filter(t => t.req && (t.req.stallIn || t.req.climbBefore) && !t.req.tap).map(t => t.name));
-const coversToks = (c, b) => c.toks.length > b.toks.length && b.toks.every(x => c.toks.some(y => y.ax === x.ax && y.t0 < x.t1 - 0.02 && y.t1 > x.t0 + 0.02));
-function better(c, b) {
-  if (!b) return true;
-  if ((c.clen || 0) !== (b.clen || 0)) {
-    if (b.clen && SOFT_CTX.has(b.name) && coversToks(c, b)) return true;
-    if (c.clen && SOFT_CTX.has(c.name) && coversToks(b, c)) return false;
-    return (c.clen || 0) > (b.clen || 0); }
-  if ((c.toks.length) !== (b.toks.length)) return c.toks.length > b.toks.length;
-  return trickPoints(c.name) > trickPoints(b.name);
-}
-// how the trick has to finish at its last obstacle pass: upright, and flying forward or backward
-function endOK(tr, c) {
-  if (!tr.end || !c) return true;
-  if (c.upY !== undefined && c.upY < 0.45) return false;
-  if (!c.fwdDot) return true;                      // too slow to tell: don't block
-  return tr.end === 'back' ? c.fwdDot < -0.2 : c.fwdDot > 0.2;
-}
-function dropSmall(toks) { // ignore small correction rotations (< 110°) anywhere, then re-merge
-  const out = [];
-  for (const t of toks) { if (t.raw < 110) continue; const l = out[out.length - 1];
-    if (l && l.ax === t.ax && l.dir === t.dir) { out[out.length - 1] = { ...l, raw: l.raw + t.raw, t1: t.t1, maxGap: Math.max(l.maxGap || 0, t.t0 - l.t1) }; } else out.push(t); }
-  return out;
-}
-function trimNinety(toks) {
-  let a = 0, b = toks.length;
-  while (a < b && toks[a].deg <= 90) a++;
-  while (b > a && toks[b - 1].deg <= 90) b--;
-  return toks.slice(a, b);
-}
-
-// ================================================================= SCORING (TPW calculator rules)
-const EXEC_MULT = { CLEAN: 1, SLOPPY: 0.65, MISSED: 0, BUMP: 0.5, CRASH: 0 };
-const REPEAT_MULT = [1, 0.75, 0.5, 0];          // nth time a trick is landed in a run
-const OBST_REPEAT = [1, 1, 1, 1, 0.66, 0.33, 0]; // consecutive tricks on the same obstacle
-const SWITCH_BONUS = [[21, 2.0], [18, 1.7], [15, 1.5], [12, 1.35], [9, 1.2], [6, 1.1], [3, 1.05]];
-const TOTW_MULT = [2, 2, 1.5, 1];             // Trick of the Week: 200 / 200 / 150 / 100 %, then 0 (the official rules, 2026-11-25)
-const STREAK_MAX = 2;                          // the streak multiplier tops out at x2 (owner, 2026-11-25, from the official rules' "maxes out at 200 %")
-const KWAD = { K: 'Half Matty', W: 'Wall Tap', A: 'Trippy Switch', D: 'Barani' };
-// Daily K.W.A.D. (owner, agreed 2026-11-20): four tricks a day per map, the same for every pilot, from the date (the board's UTC
-// day) and the map. K and W are open-air tricks flown anywhere (K the simplest, W a step up); A and D are obstacle tricks on a NAMED
-// object of that map (A one of the three classics, D a harder one, on another object where the map has two). Only tricks the bot's
-// flights are called on every time (test/stress.js), and only objects where the bot's flight of every pool trick is called on that
-// object (KWAD_SPOTS, made by tools/kwadspots.js: object -> the pool tricks NOT to ask for there; test/kwad.js checks it). The bonus
-// is the calculator's: 250 a letter, 2000 more for all four. A map with no table (the hidden ones) keeps the book's fixed set.
-const KWAD_K = ['Flip', 'Roll', 'Yaw Spin', 'Inverted Rewind'], KWAD_W = ['Double Flip', 'Double Roll', 'Juicy Flick', 'Inverted Yaw Spin', 'Vanny Roll', "Rubik's Cube"];
-const KWAD_A = ['Powerloop', 'Matty Flip', 'Split S'], KWAD_D = ['Power Flip', 'Maverick Loop', 'Matty 360', 'Immelmann', 'Power Roll'], KWAD_OBJ_TRICKS = [...KWAD_A, ...KWAD_D];
-// a call on a part of the named object counts for it: "Footbridge Rail" / "Footbridge Stairs" are the Footbridge (owner, 2026-11-27: pilots'
-// powerloops round the bridge are mostly called on its rail, which sits over the deck, so today's Powerloop on the Footbridge never lit)
-const kwadOn = (obs, ob) => !!obs && (obs === ob || obs.startsWith(ob + ' '));
-const KWAD_SPOTS = {"playground": {"Test Bar 1.6 m": [], "Test Bar 2.2 m": [], "Swing Set": [], "Monkey Bars": [], "Jungle Gym": [], "Power Lines": []}, "moose": {"Swing Set": [], "Climbing Bars": [], "Power Lines": []}, "clappy": {"Footbridge": [], "Alley Walkway": [], "Overhead Wires": [], "Test Bar 2.2 m": []}, "warehouse": {"Rack Beam": [], "Catwalk": ["Split S"], "Crane Bridge": [], "Hanging Sign": [], "Cable Tray": [], "Yard Gate": []}, "ship": {"Sawhorse Barricade": [], "Lifeboat": [], "Crime Scene Tape": []}, "slackvegan": {"Bakery Low Gate": [], "Water Tower": [], "Laundry Line": []}, "murderdome": {"Blood Oath Gantry": [], "Witness Me Finish": [], "Ring Truss": []}};
-function dailyKwad(map, day, has) {
-  const T = KWAD_SPOTS[map]; if (!T || !/^\d{4}-\d\d-\d\d$/.test(String(day))) return null;
-  const objs = Object.keys(T).filter(o => !has || has(o)); if (!objs.length) return null;
-  let h = 2166136261; for (const c of day + '|' + map) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
-  let z = h >>> 0; const r = () => { z = (z + 0x6D2B79F5) | 0; let t = Math.imul(z ^ (z >>> 15), 1 | z); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }, pick = a => a[Math.floor(r() * a.length) % a.length];
-  const K = pick(KWAD_K), Wt = pick(KWAD_W), oA = pick(objs), okA = KWAD_A.filter(t => !T[oA].includes(t)), A = pick(okA.length ? okA : KWAD_A);
-  const rest = objs.filter(o => o !== oA), oD = rest.length ? pick(rest) : oA, okD = KWAD_D.filter(t => !T[oD].includes(t)), D = pick(okD.length ? okD : KWAD_D);
-  return { day, map, K: { trick: K }, W: { trick: Wt }, A: { trick: A, obj: oA }, D: { trick: D, obj: oD } };
-}
-// Owner's chain bonuses (2026-11-20, not in the TPW calculator; kept apart from the trick score like K.W.A.D.): every 5th of the
-// same trick in a row in one combo is a set: INFINITY LOOPS for Powerloops, BIG BEN for Matty Flips, worth 2000 × the set's
-// number (5 → 2000, 10 → 4000 more, 15 → 6000 more…). Another trick, a crash, a miss or the combo banking starts over.
-const CHAIN_BONUS = { Powerloop: 'INFINITY LOOPS', 'Matty Flip': 'BIG BEN' }, CHAIN_SET = 5, CHAIN_PTS = 2000;
-const BURRITO_JR = 4.0;   // s before a Burrito Roll's roll in which its opening Jump Rope's over pass must lie
-const SWEEP_LOOK = 3.0;   // s either side of a slow flip / roll the sweep witness looks for upright
-const PENDULUM_GAP = 1.6;   // s from one Half Matty's end to the next one's start, for the Pendulum
-function pendulumStep(chain, p) {
-  if (p.name !== 'Half Matty') return { name: p.name, chain: [] };
-  const ob = p.obstacle || null, H = (chain || []).filter(h => h.obstacle === ob), run = H.length && p.t0 - H[H.length - 1].t <= PENDULUM_GAP ? H : [];
-  return run.length >= 2 ? { name: 'Half Matty Pendulum', chain: [] } : { name: p.name, chain: [...run, { t: p.tDone, obstacle: ob }] };
-}
-// Gap points (owner, 2026-11-20; not in the TPW calculator, kept on their own line like K.W.A.D. and the chain bonuses): every gap
-// flown through, armed, is a small trick that keeps the combo alive, worth GAP_MIN..GAP_MAX by how tight it is for the pilot's
-// whoop (its short side in quad widths: ~3 widths or less = 75, 15 or more = 25), halved each time the same gap repeats in one combo.
-const GAP_MIN = 25, GAP_MAX = 150, GAP_STEP = 0.1524, GAP_PER = 25;   /* the site's Gaps (owner, 2026-11-23): 150 through 6 in or less on the short side, 25 less per 6 in more (125 at 12 in, 100 at 18 in), never under 25 */
-// Gap call-out names (owner, 2026-11-27: "proper gap names per map"): GAP_NAMES by the object's name (after " opening" / "mouth" are
-// dropped); a gap the Surveyor found under something (`low`) is "Under the <thing>"; otherwise the object's name with trailing numbers
-// dropped. The Trick Park keeps its sizes (its names read like a lab sheet). The call-out shows it as "<NAME> GAP" unless it already
-// reads as a place ("Under the …", "Tunnel", "Door", …).
-const GAP_NAMES = {
-  'Split Birch': 'Split Birch', 'Swing Set': 'Through the Swing Set', 'Tire': 'Tire Tunnel', 'Trunk Gap': 'Trunk Gap',
-  'Race Gate': 'Race Gate', 'Alley': 'Alley Run', 'Cube top': 'Cube Top', 'Cube west': 'Cube Side', 'Cube north': 'Cube Side', 'Cube east': 'Cube Side',
-  'Cube south': 'Cube Side', 'Trailer underside': 'Under the Trailer', 'Box Truck underside': 'Under the Box Truck', 'Rack Upright': 'Under the Rack',
-  'Container Tunnel': 'Container Tunnel', 'War Rig Cab window': 'War Rig Window', 'The Pit Hole': 'The Pit', 'Witness Me Finish': 'Witness Me',
-  'Blood Oath Gantry': 'Blood Oath', 'Labyrinth Entrance': 'Into the Labyrinth', 'Labyrinth Exit': 'Out of the Labyrinth', 'Spine Top': 'Down the Spine',
-  'Spine Bottom': 'Out of the Spine', 'Lobby Arch': 'Lobby Arch', 'Circular Gap': 'Sky Lobby Round Window', 'Spine Window': 'Spine Window',
-  'Subway Car Door': 'Subway Car Door', 'Subway Car End Door': 'Subway Car End Door', 'Yellow Fever Gate': 'Yellow Fever Gate',
-  'Bus Shelter': 'Through the Bus Shelter', 'Footbridge Portal West': 'Through the Bridge Portal', 'Footbridge Portal East': 'Through the Bridge Portal', 'Footbridge Tower': 'Through the Bridge Tower', 'Footbridge Tower Top Gap': 'Over the Tower Beam', 'Campus Bridge Portal West': 'Through the Campus Bridge Portal', 'Campus Bridge Portal East': 'Through the Campus Bridge Portal', 'Campus Bridge Tower': 'Through the Campus Bridge Tower', 'Campus Bridge Tower Top Gap': 'Over the Campus Tower Beam', 'Campus Breezeway': 'Through the Breezeway', 'Campus Arcade': 'Through the Arcade', 'Campus Passage': 'Through the Campus Passage', 'Bell Tower': 'Through the Bell Tower', 'Truss Frame': 'Through the Truss', 'Pagoda Window': 'Through the Pagoda', 'Pagoda Upper Window': 'Through the Pagoda Top', 'Pagoda Well': 'Up Through the Pagoda', 'Campus Arch': 'Through the Campus Arch', 'Lifeboat Squeeze': 'Lifeboat Squeeze', 'Chandelier Hoop': 'Chandelier Hoop', 'Slide Tube': 'Slide Tube', 'Tunnel': 'Tunnel',
-};
-const GAP_PLACE = /^(under|through|into|out of|down)\b|\b(gap|tunnel|door|doors|doorway|window|arch|squeeze|run|hoop|tube|slot|grid|skylight|bay|alley|spine|pit|witness me|blood oath|top|side|gate|frame|ring)$/i;
-function gapName(name, low) {
-  let n = String(name || 'Gap').replace(/\s+(opening|mouth)$/i, '').trim();
-  if (!GAP_NAMES[n] && !/ \d+(\.\d+)? m$/.test(n)) n = n.replace(/\s+(\d+|[A-Z]\d?)$/, '').replace(/\s+(\d+|[A-Z]\d?)$/, '').replace(/ Car \d+ /, ' Car ').replace(/\s+(North|South|East|West)$/, '').trim();
-  if (GAP_NAMES[n]) return GAP_NAMES[n];
-  if (/ \d+(\.\d+)? m$/.test(n)) return n;   // the Trick Park: "Gap Gate 0.7 m", "Knife Slot 0.2 m"
-  return low ? 'Under the ' + n : n;
-}
-function gapLabel(name, low) { const n = gapName(name, low); return GAP_PLACE.test(n) || / \d+(\.\d+)? m$/.test(n) ? n : n + ' Gap'; }
-function gapPoints(narrow) { const over = Math.max(0, (narrow - GAP_STEP) / GAP_STEP); return Math.max(GAP_MIN, Math.min(GAP_MAX, Math.round((GAP_MAX - GAP_PER * over) / 5) * 5)); }
-// INVERTED (owner, 2026-11-25): in 3D mode, every full second upside-down (up.y under INV_UP: within ~45 deg of flat on its back) in
-// the air, armed, scores INV_PTS. Any touch, a crash or disarming ends the stretch; seconds already scored stay. step() returns how
-// many seconds this step completed (0 or 1) and keeps `run`, the seconds in the current stretch.
-const INV_PTS = 200, INV_UP = -0.7, INV_STEP = 50, INV_MAX = 1000;
-// the longer it lasts, the more each second pays (owner, 2026-11-27): second n of a stretch pays INV_PTS + INV_STEP x (n - 1), up to INV_MAX
-const invPts = n => Math.min(INV_MAX, INV_PTS + INV_STEP * Math.max(0, (n | 0) - 1));
-class InvertedTimer {
-  constructor() { this.t = 0; this.run = 0; this.on = false; }
-  stop() { const r = this.run; this.t = 0; this.run = 0; this.on = false; return r; }
-  step(dt, s) {   // s: { mode3d, armed, crashed, contact, upY }
-    if (!s.mode3d || !s.armed || s.crashed || s.contact || !(s.upY < INV_UP)) { this.stop(); return 0; }
-    this.on = true; this.t += dt; if (this.t < 1) return 0;
-    this.t -= 1; this.run++; return 1;
-  }
-}
-class ScoreKeeper {
-  constructor(totw, kwad) { this.totw = totw || ['Split S', 'Powerloop', 'Matty Flip']; this.kw = kwad || null; this.reset(); }   // kwad: the day's set (dailyKwad); none = the book's fixed four
-  reset() {
-    this.total = 0; this.trickScore = 0; this.streak = 1; this.streakCount = 0; this.maxStreak = 1; this.counts = {}; this.prev = null; this.b2b = 1;
-    this.lastObstacle = null; this.obstRun = 0; this.uniqueObs = new Set(); this.kwad = {}; this.kwadBonus = 0; this.chain = null; this.chainBonus = 0; this.chains = []; this.gapBonus = 0; this.gapN = 0; this.gapSeen = {}; this.commBonus = 0; this.commN = 0; this.invBonus = 0; this.invN = 0; this.invBest = 0; this.commSeen = {}; this.comms = []; this.gapBest = null; this.log = []; this.totwCounts = {}; this.biggest = null;
-  }
-  add(ev) {
-    const base = ev.basePts ?? trickPoints(ev.name);
-    if (ev.exec === 'MISSED') { this.streak = 1; this.streakCount = 0; }   // a failed trick breaks the streak (official rules); it scores nothing below and is no repeat
-    if (ev.exec === 'CRASH') { this.streak = 1; this.streakCount = 0; this.prev = null; this.chain = null; this.log.push({ ...ev, net: 0 }); return { ...ev, net: 0, base: 0, streak: this.streak }; }
-    if (!base) return null;
-    const execM = EXEC_MULT[ev.exec] ?? 1;
-    const n = this.counts[ev.name] || 0;
-    const totwIdx = this.totw.indexOf(ev.name);
-    let repeatM = REPEAT_MULT[Math.min(n, 3)], totwM = 1;
-    if (totwIdx >= 0) { const c = this.totwCounts[ev.name] || 0; totwM = TOTW_MULT[c] ?? 0; repeatM = 1; }
-    this.b2b = (this.prev === ev.name) ? this.b2b + 1 : 1;
-    const b2bM = Math.pow(0.5, this.b2b - 1);
-    let obsM = 1;
-    if (ev.obstacle) { this.obstRun = (this.lastObstacle === ev.obstacle) ? this.obstRun + 1 : 0; obsM = OBST_REPEAT[Math.min(this.obstRun, 6)]; this.lastObstacle = ev.obstacle; this.uniqueObs.add(ev.obstacle); }
-    const streakM = this.streak;
-    const net = Math.round(base * execM * repeatM * totwM * b2bM * obsM * streakM);
-    // the streak, by the official rules (owner, 2026-11-25; it was the spreadsheet's): every clean or sloppy trick adds its BASE value
-    // / 10000 (850 points: +8.5 %) for the tricks after it, up to STREAK_MAX; a repeat worth 0 % adds nothing (owner); a bump ends it
-    if (ev.exec === 'BUMP') { this.streak = 1; this.streakCount = 0; }
-    else if (ev.exec === 'CLEAN' || ev.exec === 'SLOPPY') { if (repeatM * totwM > 0) { this.streak = Math.min(STREAK_MAX, this.streak + base / 10000); this.streakCount++; } }
-    this.maxStreak = Math.max(this.maxStreak, this.streak);
-    if (ev.exec !== 'MISSED') { this.counts[ev.name] = n + 1; if (totwIdx >= 0) this.totwCounts[ev.name] = (this.totwCounts[ev.name] || 0) + 1; }
-    this.last = { i: this.log.length, streak0: streakM, execM };   // for lateBump
-    this.prev = ev.name;
-    let kwadHit = null;
-    for (const L in KWAD) { const k = this.kw ? this.kw[L] : KWAD[L], nm = k && (k.trick || k), ob = k && k.obj;   // a daily A / D letter needs its named object
-      if (nm === ev.name && (!ob || kwadOn(ev.obstacle, ob)) && !this.kwad[L] && ev.exec !== 'MISSED') { this.kwad[L] = true; this.kwadBonus += 250; kwadHit = L; if (Object.keys(this.kwad).length === 4) this.kwadBonus += 2000; } }
-    let chainHit = null;
-    if (CHAIN_BONUS[ev.name] && ev.exec !== 'MISSED') {
-      this.chain = this.chain && this.chain.name === ev.name ? { name: ev.name, n: this.chain.n + 1 } : { name: ev.name, n: 1 };
-      if (this.chain.n % CHAIN_SET === 0) { const k = this.chain.n / CHAIN_SET, pts = CHAIN_PTS * k; this.chainBonus += pts; chainHit = { title: CHAIN_BONUS[ev.name], n: this.chain.n, pts }; this.chains.push(chainHit); }
-    } else this.chain = null;
-    this.trickScore += net;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus);
-    const rec = { ...ev, base, net, execM, repeatM, b2bM, obsM, streakM, totwM, kwadHit, chainHit };
-    if (!this.biggest || net > this.biggest.net) this.biggest = rec;
-    this.log.push(rec);
-    return rec;
-  }
-  chainBreak() { this.chain = null; this.gapSeen = {}; this.commSeen = {}; }
-  // a confirmed community trick (a trick challenge two other pilots matched: CHALLENGES): its own line, like gaps, so the TPW trick
-  // score stays the calculator's. The same one again in one combo is halved each time, like a gap.
-  community(name, pts) {
-    const rep = this.commSeen[name] || 0, base = clamp(Math.round(+pts || CH_PTS), 0, 5000), got = Math.round(base * Math.pow(0.5, rep)); this.commSeen[name] = rep + 1;
-    this.commBonus += got; this.commN++; const r = { name, pts: got, base, repeat: rep }; this.comms.push(r);
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return r;
-  }   // the combo banked: a new set starts from one, and every gap is fresh again
-  gap(c, qW) {   // a gap flown through: { label, pts, base, repeat }
-    const k = c.obj, rep = this.gapSeen[k] || 0, base = gapPoints(c.narrow ?? 1, qW), pts = Math.round(base * Math.pow(0.5, rep)); this.gapSeen[k] = rep + 1;
-    this.gapBonus += pts; this.gapN++; const r = { label: gapLabel(c.name, c.low), pts, base, repeat: rep };
-    if (!this.gapBest || base > this.gapBest.base) this.gapBest = r;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return r;
-  }
-  // The last trick scored clean or sloppy, and the quad knocked into something on the way out (owner, 2026-11-21: pilots graded
-  // such calls "bump"): it is a BUMP after all. Its points drop to a bump's and the streak is what a bump leaves it at.
-  // Returns the points taken back, or 0 when there was nothing to change.
-  lateBump() {
-    const L = this.last, e = L && this.log[L.i]; if (!e || (e.exec !== 'CLEAN' && e.exec !== 'SLOPPY') || !(L.execM > 0)) return 0;
-    const net = Math.round(e.net * EXEC_MULT.BUMP / L.execM), back = e.net - net;
-    e.exec = 'BUMP'; e.execM = EXEC_MULT.BUMP; e.net = net; e.late = true; this.trickScore -= back; this.streak = 1; this.streakCount = 0; this.last = null;
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return back;
-  }
-  // INVERTED (owner, 2026-11-25; 3D mode only): one more full second upside-down in the air. INV_PTS each, no repeat penalty, no
-  // streak, its own line like gaps. run = seconds in this stretch so far.
-  inverted(run) { const p = invPts(run || 1); this.invBonus += p; this.invN++; this.invBest = Math.max(this.invBest, run | 0);
-    this.total = Math.round(this.trickScore * this.switchMult() + this.kwadBonus + this.chainBonus + this.gapBonus + this.commBonus + this.invBonus); return p; }
-  // a bump or a ground tap BETWEEN tricks (official rules): no trick loses points, the streak ends. True when there was one to lose.
-  bumpBetween() { const had = this.streak > 1; this.streak = 1; this.streakCount = 0; this.last = null; return had; }
-  switchMult() { const u = this.uniqueObs.size; for (const [k, m] of SWITCH_BONUS) if (u >= k) return m; return 1; }
-}
-
-// ================================================================= Betaflight diff import
-// Betaflight's filters and PID extras from a diff (CLI names, text values) or a Blackbox header (numbers, "min,max" pairs)
-const BF_LPF = ['PT1', 'BIQUAD', 'PT2', 'PT3'];
-function bfFilters(set, found = []) {
-  const o = {}, has = k => set[k] !== undefined && set[k] !== '', num = k => +String(set[k]).split(',')[0];
-  const typ = k => { const v = String(set[k]).toUpperCase(); return BF_LPF.includes(v) ? v : BF_LPF[+v] || 'PT1'; };
-  const pair = (k, kmin, kmax) => has(k) && String(set[k]).includes(',') ? String(set[k]).split(',').map(Number) : [has(kmin) ? +set[kmin] : undefined, has(kmax) ? +set[kmax] : undefined];
-  for (const [pre, key, dflt] of [['gyro', 'gyroLpf', 180], ['dterm', 'dtermLpf', 90]]) {
-    const [lo, hi] = pair(pre + '_lpf1_dyn_hz', pre + '_lpf1_dyn_min_hz', pre + '_lpf1_dyn_max_hz'), st = has(pre + '_lpf1_static_hz') ? num(pre + '_lpf1_static_hz') : undefined;
-    if (lo > 0) { o[key + 'Hz'] = lo; o[key + 'MaxHz'] = hi > lo ? hi : 0; found.push(pre + '_lpf1_dyn_hz'); }   // Betaflight: a dynamic lowpass wins over the static one
-    else if (st !== undefined || lo === 0) { o[key + 'Hz'] = st || 0; o[key + 'MaxHz'] = 0; found.push(pre + '_lpf1_static_hz'); }
-    if (has(pre + '_lpf1_dyn_expo')) o[key + 'Expo'] = num(pre + '_lpf1_dyn_expo');
-    if (has(pre + '_lpf1_type')) o[key + 'Type'] = typ(pre + '_lpf1_type');
-    if (has(pre + '_lpf2_static_hz')) { o[key + '2Hz'] = num(pre + '_lpf2_static_hz'); found.push(pre + '_lpf2_static_hz'); }
-    if (has(pre + '_lpf2_type')) o[key + '2Type'] = typ(pre + '_lpf2_type');
-    void dflt;
-  }
-  if (has('tpa_rate')) { o.tpaRate = num('tpa_rate'); found.push('tpa_rate'); }
-  if (has('tpa_breakpoint')) o.tpaBreakpoint = Math.max(0, Math.min(1, (num('tpa_breakpoint') - 1000) / 1000));
-  if (has('tpa_mode')) o.tpaMode = /^(PD|0)$/i.test(set.tpa_mode) ? 'PD' : 'D';
-  for (const [k, key] of [['anti_gravity_gain', 'antiGravity'], ['thrust_linear', 'thrustLinear'], ['throttle_boost', 'throttleBoost'], ['motor_output_limit', 'motorOutputLimit']])
-    if (has(k)) { o[key] = num(k); found.push(k); }
-  return o;
-}
-// Betaflight 4.5's stock filters and extras (what a fresh flight controller flies)
-const BF_STOCK = { gyroLpfHz: 250, gyroLpfMaxHz: 500, gyroLpfExpo: 5, gyroLpfType: 'PT1', gyroLpf2Hz: 500, gyroLpf2Type: 'PT1',
-  dtermLpfHz: 75, dtermLpfMaxHz: 150, dtermLpfExpo: 5, dtermLpfType: 'PT1', dtermLpf2Hz: 150, dtermLpf2Type: 'PT1',
-  tpaRate: 65, tpaBreakpoint: 0.35, tpaMode: 'D', antiGravity: 80, thrustLinear: 0, throttleBoost: 5, motorOutputLimit: 100 };
-// the sim's own (what an untouched tune flies: the physics as it always was)
-const BF_SIM = { gyroLpfHz: 180, gyroLpfMaxHz: 0, gyroLpfExpo: 5, gyroLpfType: 'PT1', gyroLpf2Hz: 0, gyroLpf2Type: 'PT1',
-  dtermLpfHz: 90, dtermLpfMaxHz: 0, dtermLpfExpo: 5, dtermLpfType: 'PT1', dtermLpf2Hz: 0, dtermLpf2Type: 'PT1',
-  tpaRate: 0, tpaBreakpoint: 0.35, tpaMode: 'D', antiGravity: 0, thrustLinear: 0, throttleBoost: 0, motorOutputLimit: 100, simMaster: 1, simPI: 1, simD: 1, simFF: 1 };
-function importDiff(text, tune) {
-  const t = JSON.parse(JSON.stringify(tune)); const set = {}; const found = [];
-  for (const line of text.split(/\r?\n/)) { const m = line.match(/^\s*set\s+(\w+)\s*=\s*(.+?)\s*$/i) || line.match(/^\s*H\s+(\w+):(.*)$/); if (m) set[m[1].toLowerCase()] = m[2].trim(); }
-  // Blackbox headers carry the PIDs as "rollPID:41,70,37" and the feedforward as "ff_weight:111,110,111"
-  for (const ax of ['roll', 'pitch', 'yaw']) { const v = set[ax.toLowerCase() + 'pid']; if (v) { const [p, i, d] = v.split(',').map(Number); if (isFinite(p)) set['p_' + ax] = p; if (isFinite(i)) set['i_' + ax] = i; if (isFinite(d)) set['d_' + ax] = d; } }
-  if (set.ff_weight && set.ff_weight.includes(',')) ['roll', 'pitch', 'yaw'].forEach((ax, j) => { const v = +set.ff_weight.split(',')[j]; if (isFinite(v)) set['f_' + ax] = v; });
-  const num = k => set[k] !== undefined ? +set[k] : undefined;
-  for (const ax of ['roll', 'pitch', 'yaw']) {
-    for (const [k, f] of [['p', 'p'], ['i', 'i'], ['d', 'd'], ['f', 'f']]) { const v = num(`${k}_${ax}`); if (v !== undefined) { t.pid[ax][f] = v; found.push(`${k}_${ax}`); } }
-    const d4 = num(`d_max_${ax}`); // BF 4.3+ d_max / d_min — use d_max if present
-    if (d4 !== undefined && d4 > 0) t.pid[ax].d = Math.max(t.pid[ax].d, d4);
-  }
-  if (set.rates_type) { t.ratesType = set.rates_type.toUpperCase() === 'ACTUAL' ? 'ACTUAL' : (set.rates_type.toUpperCase() === 'BETAFLIGHT' ? 'BETAFLIGHT' : t.ratesType); found.push('rates_type'); }
-  for (const ax of ['roll', 'pitch', 'yaw']) {
-    const rc = num(`${ax}_rc_rate`), sr = num(`${ax}_srate`), ex = num(`${ax}_expo`);
-    const r = t.rates[ax];
-    if (t.ratesType === 'ACTUAL') { if (rc !== undefined) r.center = rc * 10; if (sr !== undefined) r.max = sr * 10; if (ex !== undefined) r.expo = ex / 100; }
-    else { if (rc !== undefined) r.rcRate = rc / 100; if (sr !== undefined) r.superRate = sr / 100; if (ex !== undefined) r.rcExpo = ex / 100; }
-    if (rc !== undefined) found.push(`${ax}_rc_rate`);
-  }
-  if (num('dshot_idle_value') !== undefined) { t.idle = num('dshot_idle_value') / 10000; found.push('dshot_idle_value'); }
-  if (num('thr_mid') !== undefined) t.thrMid = num('thr_mid') / 100;
-  if (num('thr_expo') !== undefined) t.thrExpo = num('thr_expo') / 100;
-  if (set.iterm_relax) t.itermRelax = !/^(OFF|0)$/i.test(set.iterm_relax);
-  Object.assign(t, bfFilters(set, found));
-  return { tune: t, found };
-}
-
-const EVENT_TRICKS_DRAFT = ['Rollback', 'Juicy Rollback', 'Inverted Uh-uh', 'Corner Climb', 'Disarm Flip', 'Disarm Roll', 'Disarm Spin', 'Dead Pirate Spin', 'Disarm Loop', 'Juicy Tornado', 'Wall Stick', 'Jump Rope', 'Cinnamon Roll', 'Double Dutch', 'Side Loop', 'Burrito Roll', 'Beginner Switch', 'Orbits', 'Trippy Spin', 'Trippy Switch', 'Double Rolling Trippy Spin',
-  'Cradle', 'Whiplash', 'Pole Dance', 'Side-Lock Rewind', 'Reverse Knife Edge', 'Reverse Wall Ride'];
-// Where each trick can be flown in the playground, and what the prowhooper.com demo GIF used (docs/tricktionary-reference.md).
-const OVER_UNDER = ['Tree', 'Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower', 'Covered Walkway', 'the pilot'];
-const SPOT_BY_CAT = {
-  'Open Air Tricks': ['open air'], 'Powerloops': OVER_UNDER, 'Maverick Loops': OVER_UNDER, 'Matty Flips': [...OVER_UNDER, 'Picnic Table'],
-  'SplitS': OVER_UNDER, 'Pole Dancing': ['Flagpole', 'Tree', 'Lamp Post', 'Hoop Pole', 'the pilot'], 'Jump Roping': ['Swing Set', 'Monkey Bars', 'Jungle Gym', 'Slide Tower'],
-  'Rewinds': ['Tree', 'Lamp Post', 'Slide Tower', 'the pilot', 'Brick Building'], 'Wall Tricks': ['Graffiti Wall', 'Brick Building', 'Fence'],
-  'Gaps': ['Wall Slot', 'Hoop'], 'Other Tricks': ['open air'],
-};
-const SPOT_OVERRIDE = {
-  'Stall Rewind': ['Tree', 'Lamp Post', 'Brick Building'], 'Building Dive': ['Brick Building'], 'Ceiling Tap': ['Slide Tower roof'],
-  'Maverick Tap Rewind': ['Swing Set', 'Monkey Bars', 'Slide Tower'], 'Power Switch Tap': ['Swing Set', 'Monkey Bars', 'Slide Tower'],
-  'Face Punch': ['the pilot'], 'Slide Disarm': ['the ground'], 'Perch': ['Brick Building roof'], 'Eject Roll': ['Tree', 'Lamp Post', 'Slide Tower', 'Brick Building'],
-  'Stellar Eject Roll': ['Tree', 'Lamp Post', 'Brick Building'], 'Blind Loop': OVER_UNDER, 'Inverted Yaw Tracking': ['Tree', 'Lamp Post', 'the pilot'],
-  'Juicy Flick': ['open air (best tracking an object)'], 'Snapback': OVER_UNDER, 'Forani': OVER_UNDER, 'True Barani': OVER_UNDER,
-};
-const DEMO_SPOT = {
-  'Flip': 'garage (open air)', 'Double Flip': 'backyard', 'Roll': 'at the pilot', 'Double Roll': 'backyard', 'Segmented Flips/Rolls': 'street',
-  'Yaw Spin': 'through an LED cube', 'Inverted Rewind': 'backyard', 'Vanny Roll': 'street', "Rubik's Cube": 'street', "Cubik's Rube": 'street',
-  'Juicy Flick': 'sidewalk', 'Snapback': 'under a tree', 'Inverted Yaw Spin': 'street', 'Inverted Yaw Tracking': 'tree',
-  'Powerloop': 'tall statue in a fountain', 'Immelmann': "through the pilot's legs", 'Power Split': 'tree', 'Power Flip': 'tree',
-  'Reversed Power Flip': 'indoor cube', 'Power Swap': "through the pilot's legs", 'Power Switch': 'tree', 'Power Roll': 'tree',
-  'Inverted 360 Powerloop': 'tree', 'Barani': 'tree', 'Maverick Loop': 'tree', 'Mavvy Roll': 'tree', 'Half Mavvy': 'indoor gate tower',
-  "Mavik's Loop": 'living room', 'Mavani': 'tree', 'Donkey Loop': 'tree', 'Beginner Matty': 'chair', 'Matty Flip': 'gap between two cars',
-  'Matty Twister': 'tree branch', 'Half Matty': "through the pilot's legs", '540 Half Matty': 'tree', 'Matty 360': 'indoor gate',
-  'Forani': 'the pilot (park)', 'Split S': 'tree', '540 Split S': 'tree branch', 'Splitback': 'gazebo', 'Split Yaw': 'gazebo',
-  'Split Stall Matty Rewind': 'gazebo', 'Orbits': 'tree', 'Cradle': 'the pilot', 'Side-Lock Rewind': 'the pilot', 'Whiplash': 'tree',
-  'Pole Dance': 'tree', 'Trippy Spin': 'tree', 'Trippy Switch': 'tree trunk', 'Double Rolling Trippy Spin': 'tree trunk',
-  'Jump Rope': 'indoor striped pole', 'Cinnamon Roll': 'indoor striped pole', 'Burrito Roll': 'play structure slide', 'Side Loop': 'play structure slide',
-  'Double Dutch': 'indoor cube', 'Stall Flip Rewind': 'indoor staircase', 'Stall 360 Rewind': 'the pilot', 'Stall Matty Rewind': 'tree',
-  'Stall Half Matty Rewind': 'the pilot', 'Building Dive': 'apartment building', 'Wall Ride': 'garage door', 'Wall Tap': 'garage wall', 'Roll Tap': 'fence',
-  'Loop Tap': 'fence', 'Ceiling Tap': 'hallway ceiling', 'Reverse Wall Ride': 'house wall',
-  'Downtown Tap': 'house wall', 'Maverick Tap Rewind': 'indoor beam', 'Power Switch Tap': 'indoor beam', 'Reverse Knife Edge': 'indoor gate',
-  'Ninja Star': 'gap between two tree trunks', 'Eject Roll': 'indoor cube', 'Blind Loop': 'tree (site name: Blind Loop)', 'True Barani': 'tree', 'Stall Rewind': 'house wall', 'Beginner Switch': 'gazebo',
-};
-function trickSpots(name, cat) { const n = name.trim(); return { on: SPOT_OVERRIDE[n] || SPOT_BY_CAT[(cat || '').trim()] || ['open air'], demo: DEMO_SPOT[n] || null }; }
-const DETECTABLE = [...new Set([...OBSTACLE_TRICKS.map(t => t.name), ...OPEN_TRICKS.map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT, 'Maverick Loop', 'Mavvy Roll', 'Beginner Matty', 'Knife Edge', 'Ninja Star',
-  'Wall Tap', 'Wall Ride', 'Building Dive', 'Stall Rewind', 'Slide Disarm', 'Perch', 'Segmented Flips/Rolls', 'Face Punch', 'INVERTED'])];
-const DRAFT = new Set([...OBSTACLE_TRICKS.filter(t => t.draft).map(t => t.name), ...CONTEXT_TRICKS.map(t => t.name), ...EVENT_TRICKS_DRAFT]);
-function hoverInfo(p) {
-  let lo = 0, hi = 1; const V = 3.75 * (p.bat.cells || 1);   // mid-pack voltage
-  for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; const t = motorSteady(p, V * mid).thrust * 4; if (t > p.mass * G) hi = mid; else lo = mid; }
-  const s = motorSteady(p, V * hi); const amps = 4 * s.current * hi + 0.35;
-  return { duty: hi, amps, minutes: (p.bat.cap * 0.8 / 1000) / amps * 60 * 0.62 };
-}
-// ---- Replay: recorded rows (TRACE_COLS) through a fresh detector at 1 kHz. Shared by the Node tools and the game.
-// Bot replica (2026-11-17, the pilot's idea): re-fly a stretch of a recorded flight with the REAL physics and the pilot's
-// own recorded sticks, from the recorded position, attitude, velocity and rates, so one checked trick becomes a small,
-// self-contained bot flight that can be flown again for training and validation. A trace has no motor speeds, PID
-// integrators or battery state, so the first `warm` seconds fly "on rails" (state pinned to the recording at every row)
-// while those settle; from `from` the quad flies free on the sticks alone. Rows come back in the trace's columns, with how
-// far the free flight drifted from the recording (metres, degrees). Sticks hold between rows (the trace is 100 Hz).
-function replicaFly(rows, opts) {
-  const { params, tune, world } = opts, warm = opts.warm ?? 0.8, from = opts.from, to = opts.to; if (!rows || rows.length < 10 || !(to > from)) return null;
-  let k = rows.findIndex(r => r[0] >= from - warm); if (k < 0) return null; const hasV = rows[0].length >= 24, hasS = rows[0].length >= 27;
-  const d = new Drone(params, tune || {}, world); d.reset({ pos: v3(rows[k][1], rows[k][2], rows[k][3]), yaw: 0 }); if (opts.soc != null) d.soc = opts.soc;
-  const pin = (r, r1) => { d.pos = v3(r[1], r[2], r[3]); d.q = { w: r[4], x: r[5], y: r[6], z: r[7] }; d.w = v3(r[9] * D2R, -r[10] * D2R, -r[8] * D2R);
-    d.vel = hasV ? v3(r[21], r[22], r[23]) : r1 ? v3((r1[1] - r[1]) / (r1[0] - r[0]), (r1[2] - r[2]) / (r1[0] - r[0]), (r1[3] - r[3]) / (r1[0] - r[0])) : v3(); };
-  const qAng = (a, b) => 2 * Math.acos(Math.min(1, Math.abs(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z))) * R2D;
-  const out = [], drift = { pos: 0, ang: 0, at: null }; d.time = rows[k][0]; d.armed = true; d.crashed = false;
-  for (let i = k; i < rows.length - 1 && rows[i][0] <= to; i++) {
-    const r = rows[i], r1 = rows[i + 1], free = r[0] >= from; if (!free) pin(r, r1);
-    d.armed = !!r[13] || r[13] == null; const rc = { thr: r[11], roll: hasS ? r[24] : 0, pitch: hasS ? r[25] : 0, yaw: hasS ? r[26] : 0 };
-    const n = Math.max(1, Math.round((r1[0] - r[0]) * 1000)); let hit = null;
-    for (let j = 0; j < n; j++) { d.step(rc, 0.001); if (d.contactThisStep && d.contactNormal) hit = { n: d.contactNormal, obj: d.contactOwner ?? -1, imp: d.lastImpact || 0, g: d.contactGround ? 1 : 0 }; }
-    d.time = r1[0]; const R = d.pilotRates(), f4 = x => +x.toFixed(4), f3 = x => +x.toFixed(3);
-    out.push([f3(d.time), f4(d.pos.x), f4(d.pos.y), f4(d.pos.z), +d.q.w.toFixed(5), +d.q.x.toFixed(5), +d.q.y.toFixed(5), +d.q.z.toFixed(5), Math.round(R[0]), Math.round(R[1]), Math.round(R[2]), r1[11],
-      hit ? 1 : 0, d.armed ? 1 : 0, d.crashed ? 1 : 0, hit ? f3(hit.n.x) : 0, hit ? f3(hit.n.y) : 0, hit ? f3(hit.n.z) : 0, hit ? hit.obj : -1, hit ? +hit.imp.toFixed(2) : 0, hit ? hit.g : 0,
-      f3(d.vel.x), f3(d.vel.y), f3(d.vel.z), hasS ? r1[24] : 0, hasS ? r1[25] : 0, hasS ? r1[26] : 0]);
-    if (free) { const e = Math.hypot(d.pos.x - r1[1], d.pos.y - r1[2], d.pos.z - r1[3]), a = qAng(d.q, { w: r1[4], x: r1[5], y: r1[6], z: r1[7] });
-      if (e > drift.pos) drift.pos = +e.toFixed(3); if (a > drift.ang) { drift.ang = +a.toFixed(1); drift.at = r1[0]; } }
-  }
-  return { rows: out, drift, from, to, warm, crashed: d.crashed };
-}
-function replayTrace(rows, opts = {}) {
-  const det = new StreamDetector(opts.world); det.camTilt = opts.camTilt ?? 20; if (opts.pilot) det.setPilot(opts.pilot);
-  if (opts.hook) opts.hook(det);
-  const d = Object.create(Drone.prototype); d.armed = true; d.crashed = false; d.contactThisStep = false;
-  const dt = 0.001, out = [], dbg = [], maybes = [], chals = [], hasV = rows[0].length >= 24;
-  let k = 0, prev = null, lastRow = -1;
-  const t0 = opts.from ?? rows[0][0], t1 = Math.min(opts.to ?? Infinity, rows[rows.length - 1][0]);
-  while (k < rows.length - 2 && rows[k + 1][0] <= t0) k++;
-  for (let t = t0; t < t1 + (opts.tail ?? 1.6); t += dt) {
-    while (k < rows.length - 2 && rows[k + 1][0] <= t) k++;
-    const a = rows[k], b = rows[Math.min(k + 1, rows.length - 1)];
-    const span = b[0] - a[0], f = span > 0 ? Math.min(1, Math.max(0, (t - a[0]) / span)) : 0;
-    const jump = Math.hypot(b[1] - a[1], b[2] - a[2], b[3] - a[3]) > 1.5;
-    const L = i => (jump ? (f < 0.5 ? a[i] : b[i]) : a[i] + (b[i] - a[i]) * f);
-    d.pos = v3(L(1), L(2), L(3)); d.q = qnorm({ w: L(4), x: L(5), y: L(6), z: L(7) });
-    const rr = [L(8), L(9), L(10)].map(v => v * D2R); d.w = v3(rr[1], -rr[2], -rr[0]);
-    if (jump && f >= 0.5 && !d._j) { det.prevSide = {}; d._j = true; prev = null; } if (!jump) d._j = false;
-    d.vel = hasV ? v3(L(21), L(22), L(23)) : (prev ? mul(sub(d.pos, prev), 1 / dt) : v3()); prev = d.pos;
-    const src = f < 0.5 ? a : b; d.armed = !!src[13]; d.crashed = !!src[14];
-    const ri = f < 0.5 ? k : k + 1; d.contactThisStep = false;   // contacts: once per recorded row that had one
-    if (src[12] && ri !== lastRow) { lastRow = ri; d.contactThisStep = true;
-      if (src.length >= 21) { d.contactNormal = v3(src[15], src[16], src[17]); d.contactOwner = src[18]; d.lastImpact = src[19]; d.contactGround = !!src[20]; }
-      else { d.contactNormal = v3(0, 1, 0); d.contactGround = true; d.lastImpact = 1; d.contactOwner = -1; } }
-    // sticks (format v2 traces carry them; older ones don't): give the detector the pilot's inputs too
-    const rc = src.length >= 27 ? { thr: src[11], roll: src[24], pitch: src[25], yaw: src[26] } : { thr: src[11] ?? 0, roll: 0, pitch: 0, yaw: 0 };
-    if (d._wasArmed !== undefined && d._wasArmed !== d.armed) det.onArmChange(d, d.armed);   // the game tells the detector about arming (Slide Disarm, Perch)
-    d._wasArmed = d.armed;
-    det.update(d, dt, rc); det.postStep(d);
-    for (const e of det.drain()) out.push({ ...e, t });
-    if (det.maybes && det.maybes.length) for (const m of det.drainMaybes()) maybes.push({ ...m, t });
-    if (det.chals && det.chals.length) for (const c of det.drainChallenges()) chals.push({ ...c, t });
-    if (opts.debug !== false && det.debug && det.debug.length && det.debug[det.debug.length - 1] !== dbg[dbg.length - 1]?.src) dbg.push({ ...det.debug[det.debug.length - 1], tAbs: t, src: det.debug[det.debug.length - 1] });
-  }
-  // a lap trick still being flown when the stretch ends (a long trippy labelled early, re-flown in a window): what it would be
-  // called so far, marked `open` (the tools count it as found; nothing is scored from it)
-  { const L = det.live; if (L && L.laps >= 1 && opts.open) out.push({ name: L.name, exec: 'OPEN', laps: L.laps, dur: +Math.max(0, L.t1 - L.t0).toFixed(2), obstacle: L.pole, toks: [], live: true, open: true, t: t1 + (opts.tail ?? 1.6) }); }
-  return { events: out, debug: dbg, det, maybes, chals };
-}
-
-// ---- Learning from the pilot's own review labels.
-// A review label says "this stretch of my flight was trick X" (or "that call was not a trick"), and the flight's trace
-// carries everything that happened in it: attitude, rotation, position (so every over/under pass and gap is measured
-// again on replay) and the sticks. The learner re-flies each labelled stretch through the detector with a slightly
-// looser pilot profile and keeps a loosening only if it turns labelled misses into hits WITHOUT turning a "not a
-// trick" into a call, losing a call the pilot confirmed, or adding calls in those stretches. Knobs (never tighter than
-// the defaults, each with a hard cap): angle tolerance, how short a full roll/flip may read, how long ago an over/under
-// pass may be and still belong to the trick, how slow a rotation may be, and how much air between segments.
-const LEARN_STEPS = [
-  { key: 'tol', what: 'angle tolerance', step: L => L.learn.tol < LEARN_MAX.tol && (L.learn.tol += 10) },
-  { key: 'rev', what: 'short-reading rolls and flips', step: L => L.learn.rev < LEARN_MAX.rev && (L.learn.rev += 15) },
-  { key: 'crossBack', what: 'time allowed between an over/under pass and the trick', step: L => L.learn.crossBack < LEARN_MAX.crossBack - 1e-6 && (L.learn.crossBack = +(L.learn.crossBack + 0.4).toFixed(2)) },
-  ...['R', 'P', 'Y'].map(ax => ({ key: 'rate' + ax, what: { R: 'slower rolls', P: 'slower flips and loops', Y: 'slower yaw spins' }[ax], step: L => { const r = (L.rate = L.rate || {}), cur = r[ax] || 360; if (cur <= 190) return false; r[ax] = Math.round(cur * 0.8); return true; } })),
-  { key: 'air', what: 'air between segments', step: L => { const a = L.air || 0.45; if (a >= 0.85) return false; L.air = +(a + 0.15).toFixed(2); return true; } },
-];
-const learnClone = p => { const c = JSON.parse(JSON.stringify(p || {})); c.learn = { tol: 0, rev: 0, crossBack: 0, ...(c.learn || {}) }; return c; };
-// runs: [{ rows, world, camTilt, labels: [{ actual, target, verdict, repStart, t }] }]. Returns the stretches to re-fly.
-function learnWindows(run) {
-  const T0 = run.span ? run.span[0] : run.rows[0][0], T1 = run.span ? run.span[1] : run.rows[run.rows.length - 1][0], L = run.labels.filter(l => l && Number.isFinite(l.repStart) && Number.isFinite(l.t) && !l.undone && (l.verdict === 'yes' || l.verdict === 'no') && (l.actual || l.verdict === 'no'))   /* decided labels only: an undecided trick teaches nothing */
-    .map(l => ({ a: Math.max(T0, Math.min(l.repStart, l.t) - 0.4), b: Math.min(T1, Math.max(l.repStart, l.t) + 0.6), want: l.actual && l.actual !== 'not a trick' && !l.custom ? l.actual : null,   /* a trick the pilot named themselves has no rule to loosen */ not: l.verdict === 'no' ? l.target : null, laps: l.laps })).sort((x, y) => x.a - y.a);
-  const W = []; for (const l of L) { const w = W[W.length - 1], a = Math.max(T0, l.a - 4), b = Math.min(T1, l.b + 1.2); if (w && a <= w.b) { w.b = Math.max(w.b, b); w.labels.push(l); } else W.push({ a, b, labels: [l] }); }
-  return W;
-}
-function learnScore(runs, profile) {
-  let hits = 0, want = 0, bad = 0, calls = 0; const missed = [], hitNames = [];
-  for (const run of runs) for (const w of (run._win || (run._win = learnWindows(run)))) {
-    const ev = (run.detect ? run.detect(profile, w).filter(e => e.t >= w.a - 0.2 && e.t <= w.b + 2) : replayTrace(run.rows, { world: run.world, camTilt: run.camTilt, pilot: profile, from: w.a, to: w.b, tail: 1.8, debug: false, open: true }).events).filter(e => e.name !== 'near' && e.name !== 'Crash');
-    calls += ev.length;
-    for (const l of w.labels) {
-      const inSpan = ev.filter(e => e.t >= l.a - 0.3 && e.t - (e.dur || 0) <= l.b + 2.2);
-      if (l.want) { want++; if (inSpan.some(e => e.name === l.want)) { hits++; hitNames.push(l.want); } else missed.push(l.want); }
-      if (l.not && l.not !== l.want && inSpan.some(e => e.name === l.not)) bad++;
-    } }
-  return { hits, want, bad, calls, missed, hitNames, value: hits - bad * 1.5 - calls * 0.2 };
-}
-// Greedy and careful: one small step at a time, kept only when it clearly helps. `tick` lets the game breathe between replays.
-async function learnFromLabels(runs, profile, opts = {}) {
-  runs = runs.filter(r => r && Array.isArray(r.labels) && (typeof r.detect === 'function' && r.span || r.rows && r.rows.length > 50 && r.world)); let cur = learnClone(profile);
-  const base = learnScore(runs, cur), report = { labels: base.want, before: base.hits, after: base.hits, changes: [], fixed: [], still: base.missed.slice(), wrongBefore: base.bad, wrongAfter: base.bad };
-  if (!base.want || base.hits === base.want) return { profile: cur, report, changed: false };
-  let best = base;
-  for (let round = 0; round < (opts.rounds ?? 5); round++) {
-    let pick = null;
-    for (const st of LEARN_STEPS) { const cand = learnClone(cur);
-      for (let k = 0; k < 3; k++) {   // a knob may need more than one notch before anything changes: take the smallest that helps
-        if (!st.step(cand)) break; if (opts.tick) await opts.tick();
-        const sc = learnScore(runs, cand);
-        // labels are weights, not vetoes (owner, 2026-11-18): a notch must find more of the pilot's tricks, and what it costs
-        // (confirmed tricks no longer found, rejected calls back, 1.5 each) may be at most a quarter of what it finds
-        const kept = sc.hitNames.slice(); let lostN = 0; for (const nm of best.hitNames) { const x = kept.indexOf(nm); if (x < 0) lostN++; else kept.splice(x, 1); }
-        const newHits = kept.length, cost = lostN + 1.5 * Math.max(0, sc.bad - best.bad), fair = newHits > 0 && cost <= 0.25 * newHits;
-        if (sc.bad > best.bad && !fair) break;   // brought back rejected calls it cannot pay for: further is worse
-        if (sc.hits > best.hits && fair && sc.value > best.value) { if (!pick || sc.value > pick.sc.value) pick = { st, cand: learnClone(cand), sc }; break; } } }
-    if (!pick) break;
-    cur = pick.cand; best = pick.sc; report.changes.push(pick.st.what);
-    if (best.hits === best.want) break;
-  }
-  report.after = best.hits; report.still = best.missed.slice(); report.wrongAfter = best.bad;
-  { const m = base.missed.slice(); for (const n of best.missed) { const i = m.indexOf(n); if (i >= 0) m.splice(i, 1); } report.fixed = m; }
-  cur.learn.labels = base.want;
-  return { profile: cur, report, changed: report.changes.length > 0 };
-}
-
-root.Sim = { gapName, GAP_NAMES, canonTrick, canonReviver, TRICK_ALIAS, badName, setChallenges, get challenges() { return CHALLENGES; }, CH_PASS, CH_LIVE, CH_PTS, CH_CONFIRM, BUMP_AFTER, BUMP_LATE, INV_PTS, INV_UP, INV_STEP, INV_MAX, invPts, InvertedTimer, STREAK_MAX, TOTW_MULT, REPEAT_MULT, EXEC_MULT, setWitness, witnessProb, witFeats, get WITNESS() { return WITNESS; }, gapLabel, gapPoints, GAP_MIN, GAP_MAX, libMo, pendulumStep, PENDULUM_GAP, EXTRA_TRICKS, bfFilters, BF_STOCK, BF_SIM, setShakeA, get SHAKE_A() { return SHAKE_A; }, batteryFits, electronicsFit, fitParts, BROWNOUT, replicaFly, FEEL_KEYS, libSig, libUps, libDist, libMatch, setLibrary, get library() { return LIBRARY; }, LIB_THR, replayTrace, learnFromLabels, learnScore, learnWindows, LEARN_STEPS, LEARN_MAX, setCommunity, mergeProfiles, get community() { return COMMUNITY; }, surveyObstacles, trickSpots, DETECTABLE, DRAFT, CONTEXT_TRICKS, hoverInfo, PARTS, PRESETS, defaultTune, buildDrone, Drone, FlightController, applyRate, throttleCurve, ocv, buildPlayground,
-  primDist,
-  inflowRatio, TrickDetector: StreamDetector, LegacyTrickDetector: TrickDetector, ScoreKeeper, OBSTACLE_TRICKS, OPEN_TRICKS, parsePattern, KWAD, KWAD_OBJ_TRICKS, KWAD_SPOTS, KWAD_K, KWAD_W, KWAD_A, KWAD_D, dailyKwad, importDiff, trickPoints, v3, qrot, qinv, qaxis, qmul, qnorm, D2R, R2D, len, sub, add, mul, dot, makeBox, makeCapsule, makeSphere, sphereVs, cross, norm };
+  root.Sim = {
+    gapName,
+    GAP_NAMES,
+    canonTrick,
+    canonReviver,
+    TRICK_ALIAS,
+    badName,
+    setChallenges,
+    get challenges() {
+      return CHALLENGES;
+    },
+    CH_PASS,
+    CH_LIVE,
+    CH_PTS,
+    CH_CONFIRM,
+    BUMP_AFTER,
+    BUMP_LATE,
+    INV_PTS,
+    INV_UP,
+    INV_STEP,
+    INV_MAX,
+    invPts,
+    InvertedTimer,
+    STREAK_MAX,
+    TOTW_MULT,
+    REPEAT_MULT,
+    EXEC_MULT,
+    setWitness,
+    witnessProb,
+    witFeats,
+    get WITNESS() {
+      return WITNESS;
+    },
+    gapLabel,
+    gapPoints,
+    GAP_MIN,
+    GAP_MAX,
+    libMo,
+    pendulumStep,
+    PENDULUM_GAP,
+    EXTRA_TRICKS,
+    bfFilters,
+    BF_STOCK,
+    BF_SIM,
+    setShakeA,
+    get SHAKE_A() {
+      return SHAKE_A;
+    },
+    batteryFits,
+    electronicsFit,
+    fitParts,
+    BROWNOUT,
+    replicaFly,
+    FEEL_KEYS,
+    libSig,
+    libUps,
+    libDist,
+    libMatch,
+    setLibrary,
+    get library() {
+      return LIBRARY;
+    },
+    LIB_THR,
+    replayTrace,
+    learnFromLabels,
+    learnScore,
+    learnWindows,
+    LEARN_STEPS,
+    LEARN_MAX,
+    setCommunity,
+    mergeProfiles,
+    get community() {
+      return COMMUNITY;
+    },
+    surveyObstacles,
+    trickSpots,
+    DETECTABLE,
+    DRAFT,
+    CONTEXT_TRICKS,
+    hoverInfo,
+    PARTS,
+    PRESETS,
+    defaultTune,
+    buildDrone,
+    Drone,
+    FlightController,
+    applyRate,
+    throttleCurve,
+    ocv,
+    buildPlayground,
+    primDist,
+    inflowRatio,
+    TrickDetector: StreamDetector,
+    LegacyTrickDetector: TrickDetector,
+    ScoreKeeper,
+    OBSTACLE_TRICKS,
+    OPEN_TRICKS,
+    parsePattern,
+    KWAD,
+    KWAD_OBJ_TRICKS,
+    KWAD_SPOTS,
+    KWAD_K,
+    KWAD_W,
+    KWAD_A,
+    KWAD_D,
+    dailyKwad,
+    importDiff,
+    trickPoints,
+    v3,
+    qrot,
+    qinv,
+    qaxis,
+    qmul,
+    qnorm,
+    D2R,
+    R2D,
+    len,
+    sub,
+    add,
+    mul,
+    dot,
+    makeBox,
+    makeCapsule,
+    makeSphere,
+    sphereVs,
+    cross,
+    norm
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

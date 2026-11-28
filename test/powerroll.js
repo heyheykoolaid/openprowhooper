@@ -26,5 +26,5 @@ r = det([loop, roll]).matchObstacle([loop, roll], [cr('U', -1.1, -1), cr('O', 0.
 r = det([loop, roll]).matchObstacle([loop, roll], UOU); ok('the call carries the rotations it used', r && r.toks.length === 2 && r.toks.includes(loop) && r.toks.includes(roll));
 // the reviewers' hint (game.js TELL_APART) names the difference
 const src = require('fs').readFileSync(require('path').join(__dirname, '../src/game.js'), 'utf8');
-ok("the review hint tells Rubik's Cube and Power Roll apart", /\["Rubik's Cube", 'Power Roll', "A Power Roll goes round an over\/under object/.test(src));
+ok("the review hint tells Rubik's Cube and Power Roll apart", /\[\s*"Rubik's Cube",\s*'Power Roll',\s*"A Power Roll goes round an over\/under object/.test(src));
 console.log(`${pass}/${pass + fail} power roll checks`); process.exit(fail ? 1 : 0);

@@ -9,6 +9,8 @@
     "replay": "node test/replay.js",
     "calibrate": "node test/calibrate.js",
     "bench": "node test/benchmark.js",
-    "stress": "node test/stress.js"
+    "stress": "node test/stress.js",
+    "format": "npx --yes prettier@3.3.3 --write \"src/*.js\"",
+    "format:check": "npx --yes prettier@3.3.3 --check \"src/*.js\""
   }
 }

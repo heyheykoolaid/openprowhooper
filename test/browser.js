@@ -40,10 +40,10 @@ if (S && S.MAPS) for (const id of Object.keys(S.MAPS)) { let w = null, err = '';
 const game = scripts.find(s => s.module);
 { let err = ''; try { new vm.Script(game.code, { filename: 'game module' }); } catch (e) { err = e.message; } check('the game module compiles', !err, err); }
 
-// Node-only names anywhere in the page's script (outside three.js), unless guarded by typeof on the same line
+// Node-only names anywhere in the page's script (outside three.js), unless guarded by typeof on that line or in the dozen before it (the source is one statement a line since 2026-11-28)
 const NODE = /\b(process\.(env|argv|exit|cwd|platform|versions)|require\(|__dirname|__filename|module\.exports|Buffer\.from)/;
 const hits = [];
 for (const s of scripts) { if (s.code.length > 400000 && /three\.module|THREE\.REVISION|REVISION\s*=/.test(s.code.slice(0, 2000))) continue;
-  s.code.split('\n').forEach((l, i) => { if (NODE.test(l) && !/typeof\s+(process|require|module|__dirname|Buffer)/.test(l)) hits.push(`html line ${s.line + i}: ${l.trim().slice(0, 110)}`); }); }
+  const L = s.code.split('\n'); L.forEach((l, i) => { if (NODE.test(l) && !/typeof\s+(process|require|module|__dirname|Buffer)/.test(L.slice(Math.max(0, i - 12), i + 1).join('\n'))) hits.push(`html line ${s.line + i}: ${l.trim().slice(0, 110)}`); }); }
 check('no unguarded Node-only names in the page', !hits.length, hits.slice(0, 5).join(' | '));
 console.log(`\n${ok}/${n} browser checks`); if (ok !== n) process.exit(1);
