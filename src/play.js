@@ -164,7 +164,7 @@ const KM_NEAR = 22, KM_FAR = 40;
 function kmFade(c, r) { const p = drone && drone.pos; if (!p) return 1; const d = Math.max(0, Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) - r);
   return d <= KM_NEAR ? 1 : d >= KM_FAR ? 0 : 1 - (d - KM_NEAR) / (KM_FAR - KM_NEAR); }
 function kwadMarkSync(t) {
-  const open = mode === 'fly' && !race.on && store.get('kwadGlow', true) && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
+  const open = (mode === 'fly' || mode === 'viewer') && !race.on && store.get('kwadGlow', true) && score && score.kw ? ['A', 'D'].filter(L => score.kw[L] && score.kw[L].obj && !score.kwad[L]) : [];
   const sig = MAP_ID + '|' + open.map(L => L + score.kw[L].obj).join(',');
   if (sig !== KM.sig) {
     KM.sig = sig; if (KM.grp) { scene.remove(KM.grp); KM.grp.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } }); } KM.grp = null; KM.parts = [];
@@ -195,11 +195,15 @@ function onTrick(ev) {
   if (!r) return;
   comboAdd(r); if (r.exec === 'BUMP') comboEnd(true);   // a bump ends the combo and the streak (official rules)
   lateTrick = r.exec === 'CLEAN' || r.exec === 'SLOPPY' ? { until: drone.time + S.BUMP_LATE, name: r.name, i: recap.events.length - 1 } : null;
+  trickPop(r); if (r.chainHit) { combo.pts += r.chainHit.pts; renderCombo(); }
+  updateBreakdown();
+}
+// a scored trick's call-out (and its K.W.A.D. / chain-bonus call-outs): live, and in the FLIGHT VIEWER (viewer.js)
+function trickPop(r) {
   const mults = []; if (r.totwM > 1) mults.push(`TotW ×${r.totwM}`); if (r.repeatM < 1) mults.push(`repeat ×${r.repeatM}`); if (r.b2bM < 1) mults.push(`b2b ×${r.b2bM}`); if (r.obsM < 1) mults.push(`same obstacle ×${r.obsM}`); if (r.streakM > 1.0001) mults.push(`streak ×${r.streakM.toFixed(2)}`);
   flash(`<b>${r.name.toUpperCase()}</b>${r.draft ? '<small class="draftTag">new rule</small>' : ''}<div class="pRow"><span class="ex ${r.exec}">${r.exec}${r.clean !== undefined ? ' ' + r.clean + '%' : ''}</span><em>+${r.net}</em></div>${r.obstacle ? `<small>on ${r.obstacle}</small>` : ''}${mults.length ? `<small>${mults.join(' · ')}</small>` : ''}${r.kwadHit ? `<small class="kw">K.W.A.D. letter ${r.kwadHit}!</small>` : ''}`, r.exec);
   if (r.kwadHit) { kwadShow(); if (Object.keys(score.kwad).length === 4) setTimeout(() => flash('<b>K.W.A.D. COMPLETE!</b><small>all four letters · +2,000 bonus</small>', 'metal chainBonus'), 350); }
-  if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); combo.pts += c.pts; renderCombo(); }
-  updateBreakdown();
+  if (r.chainHit) { const c = r.chainHit; setTimeout(() => flash(`<b>${c.title}!!!</b><small>${c.n} in a row · +${c.pts.toLocaleString()} bonus</small>`, 'metal chainBonus'), 350); }
 }
 function updateBreakdown() {
   const rows = score.log.slice(-14).reverse().map(r => `<tr><td>${r.name}</td><td>${r.base ?? 0}</td><td class="${r.exec}">${r.exec}</td><td>${r.execM ?? 0}</td><td>${r.repeatM ?? '-'}</td><td>${r.b2bM ?? '-'}</td><td>${r.obsM ?? '-'}</td><td>${r.totwM ?? '-'}</td><td>${r.streakM ? r.streakM.toFixed(2) : '-'}</td><td><b>${r.net}</b></td></tr>`).join('');
@@ -379,13 +383,14 @@ function frame(now) {
     if (drone.armed) flightTime += dt;
     if (session && session.started) { session.timeLeft -= dt; if (session.timeLeft <= 0) { detFlush(now); endSession(); } }
     updateAudio(); hud(); passFeed(); stickHud(rc); if (race.on) raceHud();
-  } else if (actx) for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
+  } else if (actx && mode !== 'viewer') for (const g of gains) g.gain.setTargetAtTime(0, actx.currentTime, 0.05);
   if (mode === 'judge') judgeStep(dt);
   if (mode !== 'fly') detFlush(now);
   if (mode === 'editor') { editorFrame(dt); return; }
   if (mode === 'mapedit') { mapEditFrame(dt); return; }
   if (mode === 'bbreplay') brStep(dt);
   if (mode === 'recap') recapStep(dt);
+  if (mode === 'viewer') fvStep(dt);
   if (mode === 'fly' && warm.on) warmTick();
   if (race.on) raceVisuals(dt);
   if (mode === 'fly' || mode === 'paused') ghostStep(mode === 'fly' ? dt : 0);

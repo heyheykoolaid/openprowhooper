@@ -5,7 +5,7 @@ Browser tiny-whoop FPV sim with Tony Hawk-style trick scoring based on Tyrantt's
 No framework: `src/sim.js` (pure JS, runs in Node for tests) + the game module (Three.js, browser), which is ONE script
 built from these files in order: `game.js` (state, renderer), `worldview.js`, `input.js`, `play.js` (audio, HUD, loop),
 `menus.js`, `judge.js`, `videoreview.js`, `shell.js`, `training.js`, `ghsync.js`, `bblab.js`, `pauseask.js`, `raceedit.js`,
-`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`, `hub.js`, `challenge.js`. They share one scope. `python3 build.py` inlines everything into
+`mapedit.js`, `bbreplay.js`, `feellab.js`, `recap.js`, `dropoff.js`, `hub.js`, `challenge.js`, `viewer.js`. They share one scope. `python3 build.py` inlines everything into
 `dist/index.html` and a single-file `dist/standalone.html`.
 
 ## Golden rules
@@ -1717,3 +1717,16 @@ upside-down. Now a Maverick Loop (no roll) needs the over pass upright (`upY` > 
 lowest up.y on the way round above -0.3 (never on its back). Mavvy Roll keeps the old test. Re-flown on the 16 flights with Maverick labels:
 real ones found 1 -> 2 of 2, rejected calls still made 8 -> 0; bot 20/20, bench 96.7 % unchanged. The owner's two wire Mavericks of
 2026-11-27 (flight mwzgipl4ivz3) had not uploaded yet when this was written: re-fly them when they do.
+
+## FLIGHT VIEWER (owner, 2026-11-27; src/viewer.js, the Review Hub's `viewer` section, owner key)
+"a list of all the flights, and i can just watch them back with the hud and scoring as if it was the live flight", "with playback
+controls". The hub lists every shared flight the desk reads (the last 5 days, up to 120; `deskDetails(120)`), and one opens in
+mode `viewer`: the trace drives the quad in the ordinary flying view (`fvRow` interpolates the 100 Hz rows; idle gaps are skipped),
+the live HUD runs (`hud()`, the OSD from the trace, the stick overlay, motor sound from the throttle), and the calls the game made
+THEN (plus crashes from the trace) go through a fresh `ScoreKeeper` with that day's K.W.A.D. set (`fvScore`) as the playhead
+reaches them, with the live call-outs (`trickPop`, split out of `onTrick` in play.js), combos (banked 3 s after the last trick on
+the flight's clock), streak and K.W.A.D. glow. Seeking rebuilds score and combo from the start silently (`fvRebuild`), so live and
+scrubbed agree. The bar (`#fvBar`): ✕, ◂ ▸ the flight before / after in the list (another map reloads into it), ⏮, −5, ⏯, +5,
+a timeline with a tick per call (orange bump, red crash) to click or drag, ×0.25-×4, FPV / chase, sticks. Keys: Space, ← → (Shift 1 s),
+, . (0.1 s, paused), [ ], Home / End, C, V, H, Tab (the score breakdown), Esc. Nothing is reviewed, saved or sent. Not in it: gap
+points and INVERTED (not in the flight files) and combos kept alive by passes. `window.__pw.fv`.

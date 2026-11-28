@@ -550,7 +550,7 @@ async function deskLoad() {
 // the desk's data is read while the Flight desk or the Review Hub is open (the hub's owner sections list the same flights)
 const deskAway = () => $('#deskScreen').classList.contains('hide') && $('#hubScreen').classList.contains('hide');
 const deskHub = () => { if (!$('#hubScreen').classList.contains('hide')) hubRender(); };
-async function deskDetails() { const todo = (desk.list || []).slice(0, 60).filter(it => !desk.info[it.file]);
+async function deskDetails(n = 60) { const todo = (desk.list || []).slice(0, n).filter(it => !desk.info[it.file]);
   for (let i = 0; i < todo.length; i += 20) { if (deskAway()) return; const part = todo.slice(i, i + 20);
     let got = {}; try { got = await deskGetMany(part.map(it => `telemetry/inbox/flight/${it.day}/${it.file}`)); } catch { /* shown as unreadable */ }
     for (const it of part) { const p = got[`telemetry/inbox/flight/${it.day}/${it.file}`];

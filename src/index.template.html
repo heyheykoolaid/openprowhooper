@@ -348,6 +348,15 @@ body.meOn #music { display: none !important; }
 .chTry { background: rgba(255, 211, 77, .12); border: 1px solid rgba(255, 211, 77, .4); border-radius: 8px; padding: 8px 12px; }
 @media (max-width: 640px) { .chT td.chAct { white-space: normal; text-align: left; } }
 #hubBtn.dot::after { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ffd34d; margin-left: 8px; vertical-align: middle; }
+#fvBar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(1100px, calc(100vw - 24px)); z-index: 30; background: #12141aee; border: 1px solid #2c2f3a; border-radius: 12px; padding: 6px 10px 8px; color: #eee; font: 13px system-ui, sans-serif; box-sizing: border-box; }
+#fvBar .fvTop { display: flex; gap: 10px; align-items: baseline; margin-bottom: 5px; } #fvBar .fvTop b { color: #ffd23f; letter-spacing: 1px; } #fvBar .fvTop span { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#fvBar .fvRow { display: flex; gap: 5px; align-items: center; } #fvBar button { padding: 4px 8px; min-width: 30px; font-size: 13px; } #fvBar button.on { background: #ffd23f; color: #111; } #fvBar .fvSep { width: 6px; }
+#fvTrack { position: relative; flex: 1; height: 22px; background: #23262f; border-radius: 6px; cursor: pointer; touch-action: none; min-width: 120px; }
+#fvTrack i { position: absolute; top: 4px; width: 2px; height: 14px; margin-left: -1px; background: #7fd1ff; pointer-events: none; } #fvTrack i.cr { background: #ff5050; } #fvTrack i.bp { background: #ffb347; }
+#fvTrack b { position: absolute; top: -2px; width: 3px; height: 26px; margin-left: -1.5px; background: #ff3b3b; pointer-events: none; }
+#fvTime { min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
+body.fvOn #hudPause, body.fvOn #passFeed { display: none; }
+body.fvOn #stickView { bottom: 90px; } body.fvOn #hudStack { bottom: 186px; } body.fvOn #osd { bottom: 84px; } body.fvOn #comboBank { margin-bottom: 84px; }
 #hubNav { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 8px; align-items: center; background: #12141aee; border: 1px solid #2c2f3a; border-radius: 10px; padding: 6px 10px; color: #eee; font: 13px system-ui, sans-serif; }
 #hubNav span { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .hubCols { grid-template-columns: 1fr; } .hubSide { flex-direction: row; flex-wrap: wrap; border-right: 0; } }
@@ -526,6 +535,7 @@ setTimeout(() => window.__pwBootFail(''), 12000);
 <button id="fbTab" title="Send feedback about anything in the game">Feedback</button>
 <div id="fbModal" class="hide"></div><div id="pilotModal" class="hide"></div><div id="procModal" class="hide"></div><div id="fbToast"></div>
 <div id="mapEditUI" class="hide"><button id="meExit" data-me="done" title="Leave the Map Editor (Esc)">✕ Exit</button><div id="meBar"></div><div id="meLib" class="rvSide"></div><div id="meSide" class="rvSide"></div><div id="meHint"></div></div>
+<div id="fvBar" class="hide"></div>
 <div id="recapUI" class="hide"><div id="hubNav" class="hide"></div><div id="recapSide" class="rvSide"></div><div id="recapNow"></div><canvas id="recapSticks" width="260" height="120"></canvas><div id="recapBar"></div></div>
 <div id="warmBox" class="hide"></div>
 

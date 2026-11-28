@@ -16,6 +16,7 @@ const HUB_SECS = [
   { id: 'disagree', name: 'Disagreements', who: 'owner', hint: 'Moments where pilots\' labels do not agree. Each answer is shown; yours is pooled with theirs (the hub never picks a winner).' },
   { id: 'trick', name: 'Per trick', who: 'owner', hint: 'Every labelled example of one trick, one after another: confirmed, rejected and waiting.' },
   { id: 'bot', name: 'Bot flights', who: 'owner', hint: 'The bot flies a trick from the library (or its script); you say whether it was that trick.' },
+  { id: 'viewer', name: 'FLIGHT VIEWER', who: 'owner', hint: 'Every shared flight, newest first. Open one to watch it back as it was flown: the live HUD, score, streak, combo, call-outs and K.W.A.D. letters from the calls the game made then, with play / pause, scrubbing, ±5 s, frame steps and speeds from ×0.25 to ×4. Nothing is reviewed or sent from here.' },
   { id: 'feedback', name: 'Feedback', who: 'owner', hint: "Pilots' written feedback, the last 7 days." },
 ];
 const HUB_UNDO_S = 10, HUB_MINE = 12;
@@ -71,6 +72,7 @@ function hubItems(sec) {
   if (sec === 'flights' && desk.list) { const dn = store.get('deskDone', {});
     for (const it of desk.list) { const i = desk.info[it.file]; if (!i || i.bad) continue; const labs = deskLabsFor(i.id), nl = labs.reduce((s, x) => s + (x.L || []).length, 0);
       out.push({ key: 'flights:' + it.file, title: `${i.name || '(no name)'} · ${i.calls} call${i.calls === 1 ? '' : 's'}`, sub: `${hubMapT(i.map)} · ${hubAgo(it.at)}${i.secs ? ' · ' + Math.round(i.secs) + ' s' : ''}${i.flagged ? ` · ${i.flagged} flagged` : ''} · ${nl ? nl + ' label' + (nl === 1 ? '' : 's') : 'no labels yet'}`, map: i.map, pilot: String(i.name || '').toLowerCase(), tricks: (i.p.events || []).map(e => e && e.name).filter(Boolean), at: it.at, done: !!dn[it.file], open: () => deskPick(it.file) }); } }
+  if (sec === 'viewer') out.push(...fvItems());
   if (sec === 'community') for (const [m, C] of Object.entries(JG.byMap)) C.forEach((c, k) => out.push({ key: 'community:' + jgKey(c), title: c.name, sub: `${c.of} · ${hubMapT(m)} · ${c.why}`, map: m, pilot: String(c.of).toLowerCase(), tricks: [c.name], at: c.at || 0, done: !!JG.done[jgKey(c)], open: () => { JG.view = m; judgeClip(k); } }));
   if (sec === 'disagree') for (const d of hubDisagreements()) out.push(d);
   if (sec === 'trick' && HUB.trick) for (const d of hubTrickMoments(HUB.trick)) out.push(d);
@@ -119,7 +121,8 @@ async function hubLoad(sec) {
   try {
     if (sec === 'mine' || sec === 'trick') { await hubKeepRun(); await hubLoadMine(); }
     if (sec === 'board' && (!LB.runs || LB.day !== lbToday())) { await lbLoad(lbToday()); if (!LB.runs) HUB.msg.board = LB.msg || 'The board could not be reached.'; }
-    if (sec === 'queue' || (['flights', 'disagree', 'trick'].includes(sec) && hubOwner())) { if (!deskVia()) HUB.msg[sec] = hubOwner() ? 'Save your owner key in Options → Owner.' : anonOn() || !pilotName() ? 'The review queue needs a pilot name (Options).' : desk.noGuest ? 'The review queue opens for everyone once the game\'s relay is updated. Check back soon.' : 'The review queue could not be reached just now.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) { await deskDetails(); await deskLabels(); } if (desk.msg) HUB.msg[sec] = desk.msg; }
+    if (sec === 'queue' || (['flights', 'disagree', 'trick', 'viewer'].includes(sec) && hubOwner())) { if (!deskVia()) HUB.msg[sec] = hubOwner() ? 'Save your owner key in Options → Owner.' : anonOn() || !pilotName() ? 'The review queue needs a pilot name (Options).' : desk.noGuest ? 'The review queue opens for everyone once the game\'s relay is updated. Check back soon.' : 'The review queue could not be reached just now.'; else if (!desk.list && !desk.busy) await deskLoad(); else if (desk.list) { await deskDetails(); await deskLabels(); } if (desk.msg) HUB.msg[sec] = desk.msg; }
+    if (sec === 'viewer' && hubOwner() && desk.list) await deskDetails(120);   // FLIGHT VIEWER: every listed flight, not only the first 60
     if (sec === 'community' && hubOwner() && !JG.byMap[MAP_ID]) await judgeLoad(MAP_ID);
     if (sec === 'feedback' && hubOwner() && !desk.fb && deskVia()) await deskFeedback();
   } catch { HUB.msg[sec] = 'Could not load this just now.'; }
@@ -133,7 +136,7 @@ function hubOpen(sec) {
   if (deskVia() && !desk.list && HUB.sec !== 'queue') hubLoad('queue');   // the queue's count shows in the side bar
   if (!LB.runs && HUB.sec !== 'board') hubLoad('board');
 }
-function hubCount(id) { if (id === 'bot' || id === 'feedback' || id === 'trick') return id === 'feedback' && desk.fb ? desk.fb.length : null;
+function hubCount(id) { if (id === 'bot' || id === 'feedback' || id === 'trick' || id === 'viewer') return id === 'feedback' && desk.fb ? desk.fb.length : null;
   if ((id === 'queue' || id === 'flights' || id === 'disagree') && !desk.list) return null; if (id === 'mine' && !HUB.mine) return null; if (id === 'board' && !LB.runs) return null; if (id === 'community' && !Object.keys(JG.byMap).length) return null;
   return hubItems(id).filter(i => !i.done).length; }
 function hubRender() {
@@ -164,9 +167,9 @@ function hubReloadTo(map, sec, key) {
 }
 async function hubOpenItem(list, k) {
   const it = list[k]; if (!it) { hubOpen(); return; }
-  const guestSec = ['board', 'queue', 'flights', 'community', 'disagree', 'trick'].includes(HUB.sec) && !String(it.key).startsWith('trick:mine:');
+  const guestSec = ['board', 'queue', 'flights', 'community', 'disagree', 'trick', 'viewer'].includes(HUB.sec) && !String(it.key).startsWith('trick:mine:');
   if (it.map && S.MAPS[it.map] && (it.map !== MAP_ID || (guestSec && MAP_EDITS))) { hubReloadTo(it.map, HUB.sec, it.key); return; }
-  HUB.nav = { list, k, key: it.key, title: it.title, open: true };
+  HUB.nav = { list, k, key: it.key, title: it.title, open: true }; if (HUB.sec === 'viewer') { FV.list = list; FV.idx = k; }
   try { await it.open(); } catch { HUB.nav = null; flash('<b>THAT COULD NOT BE OPENED</b>', 'near'); hubOpen(); return; }
   if (mode !== 'recap') { HUB.nav = null; return; }   // the item opened its own screen (or nothing): no player to step through
   hubNavRender();
@@ -236,7 +239,7 @@ addEventListener('keydown', e => {
     e.preventDefault(); recapSetCall(it.i, e.code === 'KeyY' ? it.e.name : 'not a trick'); renderRecap(); }
 }, true);
 setTimeout(async () => { const P = store.get('hubPending', null); if (!P) return; store.set('hubPending', null); if (!hubSecs().some(s => s.id === P.sec)) return;
-  hubOpen(P.sec); await hubLoad(P.sec); if (P.sec === 'queue' || P.sec === 'flights' || P.sec === 'disagree') await deskDetails();
+  hubOpen(P.sec); await hubLoad(P.sec); if (P.sec === 'queue' || P.sec === 'flights' || P.sec === 'disagree' || P.sec === 'viewer') await deskDetails(P.sec === 'viewer' ? 120 : 60);
   const L = hubFilter(hubItems(P.sec)), k = L.findIndex(it => it.key === P.key); if (k >= 0) hubOpenItem(L, k); }, 1700);
 window.__pw = window.__pw || {}; window.__pw.hub = { state: HUB, items: s => hubItems(s), open: s => hubOpen(s), openItem: (s, k) => { HUB.sec = s; const L = hubFilter(hubItems(s)); return hubOpenItem(L, k); }, keep: () => hubKeepRun(), load: s => hubLoad(s), mine: () => hubLoadMine() };
 
